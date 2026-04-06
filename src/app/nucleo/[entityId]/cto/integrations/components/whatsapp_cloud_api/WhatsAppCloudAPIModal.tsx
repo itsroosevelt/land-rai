@@ -204,6 +204,13 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
     };
 
     const handleConnectFacebook = async () => {
+        const facebookAppId = process.env.NEXT_PUBLIC_META_APP_ID;
+        if (!facebookAppId) {
+            toast.error("Error: NEXT_PUBLIC_META_APP_ID no está configurado en las variables de entorno.");
+            toast.error("Error: NEXT_PUBLIC_META_APP_ID no configurado en Vercel.");
+            return;
+        }
+
         if (devMode) {
             setStep(4);
             return;
@@ -211,13 +218,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
 
         const FB = (window as any).FB;
         if (!FB) {
-            toast.error("El SDK de Meta no está listo. Por favor, recarga la página.");
-            return;
-        }
-
-        const facebookAppId = process.env.NEXT_PUBLIC_META_APP_ID;
-        if (!facebookAppId) {
-            toast.error("Error crítico: Meta App ID no configurado.");
+            toast.error("El SDK de Meta no está listo. Verifica tu AdBlocker o recarga la página.");
             return;
         }
 
