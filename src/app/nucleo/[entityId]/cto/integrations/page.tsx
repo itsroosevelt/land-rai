@@ -7,11 +7,14 @@ import { useParams } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
 
 import { Category, Integration, INTEGRATIONS, CATEGORIES } from './config';
 import { WhatsAppCloudAPIModal } from './components/whatsapp_cloud_api/WhatsAppCloudAPIModal';
 import { WhatsAppQRBusinessModal } from './components/whatsapp_qr_business/WhatsAppQRBusinessModal';
 import { WhatsAppQRPersonalModal } from './components/whatsapp_qr_personal/WhatsAppQRPersonalModal';
+import { MessengerModal } from './components/messenger/MessengerModal';
+import { InstagramModal } from './components/instagram/InstagramModal';
 
 export default function IntegrationsPage() {
     const { currentUser } = useAuth();
@@ -59,6 +62,10 @@ export default function IntegrationsPage() {
     }, [currentUser, activeEntity]);
 
     const handleConnect = async (integration: Integration) => {
+        if (!['whatsapp', 'whatsapp_qr_business', 'whatsapp_qr_personal', 'messenger', 'instagram'].includes(integration.id)) {
+            toast.info(`${integration.name}: Esta integración estará disponible próximamente en Roosevelt.`);
+            return;
+        }
         setActiveIntegration(integration);
         setIsModalOpen(true);
     };
@@ -94,12 +101,12 @@ export default function IntegrationsPage() {
                             </p>
                         </div>
                         
-                        <div className="flex bg-neutral-900/40 backdrop-blur-md border border-white/5 p-1 rounded-full">
-                            {CATEGORIES.slice(0, 3).map(cat => (
+                        <div className="flex bg-neutral-900/40 backdrop-blur-md border border-white/5 p-1 rounded-full overflow-x-auto no-scrollbar max-w-full">
+                            {CATEGORIES.map(cat => (
                                 <button
                                     key={cat}
                                     onClick={() => setSelectedCategory(cat)}
-                                    className={`px-6 py-2 rounded-full text-xs font-medium transition-all duration-300 ${
+                                    className={`px-6 py-2 rounded-full text-xs font-medium transition-all duration-300 whitespace-nowrap ${
                                         selectedCategory === cat ? 'bg-white text-black shadow-lg' : 'text-neutral-500 hover:text-white'
                                     }`}
                                 >
@@ -160,6 +167,20 @@ export default function IntegrationsPage() {
                     activeIntegration={activeIntegration} 
                     // @ts-ignore
                     integrationData={activeIntegration ? connectedIntegrations[activeIntegration.id] : null}
+                />
+            )}
+            {activeIntegration?.id === 'messenger' && (
+                <MessengerModal 
+                    isOpen={isModalOpen} 
+                    onClose={() => setIsModalOpen(false)} 
+                    activeIntegration={activeIntegration} 
+                />
+            )}
+            {activeIntegration?.id === 'instagram' && (
+                <InstagramModal 
+                    isOpen={isModalOpen} 
+                    onClose={() => setIsModalOpen(false)} 
+                    activeIntegration={activeIntegration} 
                 />
             )}
         </div>
