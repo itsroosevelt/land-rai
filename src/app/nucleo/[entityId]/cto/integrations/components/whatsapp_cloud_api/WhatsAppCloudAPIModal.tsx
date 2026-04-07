@@ -740,7 +740,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
 
                                         <div className="flex items-center gap-6">
                                             <button onClick={handleConnectFacebook} className="px-8 h-12 rounded-full text-[10px] font-bold uppercase tracking-[0.3em] bg-primary hover:bg-primary/80 transition-all text-white shadow-[0_0_20px_rgba(37,99,235,0.3)]">Acceder a Meta</button>
-                                            <button onClick={handleConnectFacebook} className="text-[9px] text-white/40 font-bold uppercase tracking-[0.3em] hover:text-white transition-colors">Vincular Luego</button>
+                                            <button onClick={() => { setConnectionMode('manual'); setStep(1); }} className="text-[9px] text-white/40 font-bold uppercase tracking-[0.3em] hover:text-white transition-colors">Conectar Manualmente</button>
                                         </div>
                                     </motion.div>
                                 ) : (step === 2 && wizardPath === 'existing') ? (

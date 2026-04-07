@@ -94,7 +94,7 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
             setGmailAddress('');
             toast.success("Bandeja de entrada desconectada.", { id: toastId });
         } catch (e) {
-            toast.error("Error al desconectar.");
+            toast.error("Error al desconectar.", { id: toastId });
         }
     };
 

@@ -90,7 +90,7 @@ export default function TwitterModal({ isOpen, onClose, activeEntity, currentUse
             setTwitterHandle('');
             toast.success("X desconectado al 100%.", { id: toastId });
         } catch (e) {
-            toast.error("Error al desconectar.");
+            toast.error("Error al desconectar.", { id: toastId });
         }
     };
 

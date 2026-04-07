@@ -35,6 +35,10 @@ export default function InboxSidebar({ selectedFolder, setSelectedFolder, cards 
     const channels = [
         { id: 'whatsapp1', label: 'WhatsApp Main', type: 'whatsapp' },
         { id: 'ig1', label: 'Instagram CS', type: 'instagram' },
+        { id: 'messenger', label: 'Messenger', type: 'messenger' },
+        { id: 'telegram', label: 'Telegram', type: 'telegram' },
+        { id: 'twitter', label: 'X (Twitter)', type: 'twitter' },
+        { id: 'gmail', label: 'Gmail', type: 'gmail' },
     ];
 
     return (

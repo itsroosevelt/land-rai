@@ -86,7 +86,7 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
             return;
         }
 
-        const _unused_toastId = toast.loading("Conectando con Meta Auth Portal...");
+        toast.loading("Conectando con Meta Auth Portal...", { id: "meta-auth" });
 
         FB.login((response: any) => {
             const processAuth = async () => {
@@ -117,6 +117,14 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
                                 }
 
                                 toast.loading(`Vinculando ${pageName}...`, { id: "meta-auth" });
+                                
+                                // 2. SUBSCRIBE PAGE TO APP (CRITICAL FOR WEBHOOKS)
+                                FB.api(`/${pageId}/subscribed_apps`, 'post', {
+                                    subscribed_fields: ['messages', 'messaging_postbacks', 'message_deliveries', 'message_reads'],
+                                    access_token: pageAccessToken
+                                }, (subRes: any) => {
+                                    console.log('[Meta] Subscription result:', subRes);
+                                });
 
                                 const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/messenger`);
                                 await setDoc(configRef, {

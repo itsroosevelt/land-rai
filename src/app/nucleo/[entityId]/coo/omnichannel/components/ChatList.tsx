@@ -43,6 +43,14 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
             filtered = filtered.filter(c => (c.channel || c.source || '').toLowerCase().includes('whatsapp'));
         } else if (selectedFolder === 'ig1') {
             filtered = filtered.filter(c => (c.channel || c.source || '').toLowerCase().includes('instagram'));
+        } else if (selectedFolder === 'messenger') {
+            filtered = filtered.filter(c => (c.channel || c.source || '').toLowerCase().includes('messenger'));
+        } else if (selectedFolder === 'telegram') {
+            filtered = filtered.filter(c => (c.channel || c.source || '').toLowerCase().includes('telegram'));
+        } else if (selectedFolder === 'twitter') {
+            filtered = filtered.filter(c => (c.channel || c.source || '').toLowerCase().includes('x') || (c.channel || c.source || '').toLowerCase().includes('twitter'));
+        } else if (selectedFolder === 'gmail') {
+            filtered = filtered.filter(c => (c.channel || c.source || '').toLowerCase().includes('gmail'));
         } else if (selectedFolder.startsWith('label:')) {
             const labelFilter = selectedFolder.replace('label:', '');
             filtered = filtered.filter(c => c.labels?.includes(labelFilter));
@@ -205,7 +213,10 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
                                     <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border border-[#0d0d0d] flex items-center justify-center
                                         ${chat.channel.toLowerCase().includes('whatsapp') ? 'bg-green-500' :
                                             chat.channel.toLowerCase().includes('instagram') ? 'bg-pink-500' :
-                                                chat.channel.toLowerCase().includes('messenger') ? 'bg-blue-500' : 'bg-neutral-500'}
+                                                chat.channel.toLowerCase().includes('messenger') ? 'bg-blue-600' :
+                                                    chat.channel.toLowerCase().includes('telegram') ? 'bg-sky-400' :
+                                                        chat.channel.toLowerCase().includes('gmail') ? 'bg-red-500' :
+                                                            chat.channel.toLowerCase().includes('twitter') || chat.channel.toLowerCase().includes('x') ? 'bg-white' : 'bg-neutral-500'}
                                     `}>
                                         <MessageCircle size={6} className="text-white fill-current" />
                                     </div>

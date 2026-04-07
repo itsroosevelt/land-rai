@@ -90,7 +90,7 @@ export default function TelegramModal({ isOpen, onClose, activeEntity, currentUs
             setBotToken('');
             toast.success("Telegram desconectado al 100%.", { id: toastId });
         } catch (e) {
-            toast.error("Error al desconectar.");
+            toast.error("Error al desconectar.", { id: toastId });
         }
     };
 

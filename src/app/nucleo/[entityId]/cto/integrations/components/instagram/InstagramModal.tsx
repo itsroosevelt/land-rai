@@ -86,7 +86,7 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
             return;
         }
 
-        const _unused_toastId = toast.loading("Abriendo portal de Instagram...");
+        toast.loading("Abriendo portal de Instagram...", { id: "meta-auth" });
 
         FB.login((response: any) => {
             const processAuth = async () => {
@@ -118,6 +118,14 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                                     }
 
                                     toast.loading(`Sincronizando feed de ${pageName}...`, { id: "meta-auth" });
+                                    
+                                    // 2. SUBSCRIBE PAGE TO APP (CRITICAL FOR INSTAGRAM WEBHOOKS)
+                                    FB.api(`/${pageWithIg.id}/subscribed_apps`, 'post', {
+                                        subscribed_fields: ['messages', 'messaging_postbacks', 'message_deliveries', 'message_reads'],
+                                        access_token: pageAccessToken
+                                    }, (subRes: any) => {
+                                        console.log('[Meta] IG Subscription result:', subRes);
+                                    });
 
                                     const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/instagram`);
                                     await setDoc(configRef, {
