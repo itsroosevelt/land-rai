@@ -234,10 +234,12 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
 
                     // 1. Fetch WABA and Phone Number details from Meta
                     FB.api('/me/whatsapp_business_accounts', (wabaRes: any) => {
+                        console.log("[Meta API] /me/whatsapp_business_accounts response:", wabaRes);
                         if (wabaRes && wabaRes.data && wabaRes.data.length > 0) {
                             const wabaId = wabaRes.data[0].id; // We take the first one for simplicity or let user choose (future)
                             
                             FB.api(`/${wabaId}/phone_numbers`, async (phoneRes: any) => {
+                                console.log(`[Meta API] /${wabaId}/phone_numbers response:`, phoneRes);
                                 if (phoneRes && phoneRes.data && phoneRes.data.length > 0) {
                                     const phone = phoneRes.data[0];
                                     const phoneNumberId = phone.id;
