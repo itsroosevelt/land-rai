@@ -61,11 +61,24 @@ export async function POST(req: Request) {
         let tenantRef: admin.firestore.DocumentReference | null = null;
         let provider: 'messenger' | 'instagram' = 'messenger';
         
-        const messengerSnap = await db.collectionGroup('integrations').where('pageId', '==', targetId).limit(1).get();
+        // SUPPORT BOTH STRING AND NUMBER IDS (Agnostic normalization)
+        const numericId = parseInt(targetId);
+        
+        // 1. MESSENGER PAGE SEARCH
+        const messengerSnap = await db.collectionGroup('integrations')
+            .where('pageId', 'in', [targetId, numericId])
+            .limit(1)
+            .get();
+            
         if (!messengerSnap.empty) {
             tenantRef = messengerSnap.docs[0].ref;
         } else {
-            const instagramSnap = await db.collectionGroup('integrations').where('instagramId', '==', targetId).limit(1).get();
+            // 2. INSTAGRAM ACCOUNT SEARCH
+            const instagramSnap = await db.collectionGroup('integrations')
+                .where('instagramId', 'in', [targetId, numericId])
+                .limit(1)
+                .get();
+                
             if (!instagramSnap.empty) {
                 tenantRef = instagramSnap.docs[0].ref;
                 provider = 'instagram';
@@ -74,7 +87,12 @@ export async function POST(req: Request) {
 
         if (!tenantRef) {
             debugLog(`[POST] ❌ ABORT: Could not resolve tenant for Target ID ${targetId}.`);
-            return NextResponse.json({ success: false, error: 'Tenant not mapped' });
+            return NextResponse.json({ 
+                success: false, 
+                error: 'Tenant not mapped',
+                triedId: targetId,
+                triedNumeric: numericId
+            });
         }
 
         const pathParts = tenantRef.path.split('/');
