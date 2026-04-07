@@ -6,6 +6,7 @@ import * as fs from 'fs';
 if (!admin.apps.length) {
     try {
         const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+        let serviceAccountBase64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
         let serviceAccountEnv = process.env.FIREBASE_SERVICE_ACCOUNT;
         
         const possiblePaths = [
@@ -15,7 +16,29 @@ if (!admin.apps.length) {
         let serviceAccountPath = possiblePaths.find(p => fs.existsSync(p));
         let initialized = false;
 
-        if (serviceAccountEnv) {
+        // Bypasses all Vercel UI formatting issues completely
+        if (serviceAccountBase64) {
+            try {
+                const decodedToken = Buffer.from(serviceAccountBase64, 'base64').toString('utf8');
+                const parsedServiceAccount = JSON.parse(decodedToken);
+                
+                // Ensure project_id exactly as other methods
+                if (!parsedServiceAccount.project_id) {
+                    parsedServiceAccount.project_id = projectId || process.env.FIREBASE_PROJECT_ID;
+                }
+
+                admin.initializeApp({
+                    credential: admin.credential.cert(parsedServiceAccount),
+                    projectId
+                });
+                console.log(`[Firebase Admin] 🏆 SUCCESS: Initialized from BASE64 ENV (Ultra-Safe Mode).`);
+                initialized = true;
+            } catch (b64Err: any) {
+                console.error('[Firebase Admin] ❌ Error initializing from BASE64 ENV:', b64Err.message);
+            }
+        }
+
+        if (!initialized && serviceAccountEnv) {
             try {
                 // Remove possible wrapping quotes (handles some OS/env issues)
                 let cleanedEnv = serviceAccountEnv.trim();
