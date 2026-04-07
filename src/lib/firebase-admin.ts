@@ -26,19 +26,20 @@ if (!admin.apps.length) {
                 
                 let parsedServiceAccount;
                 try {
-                    // Strategy 1: Standard double-escaped newlines in JSON
+                    // Strategy 1: Standard JSON parsing (the variable should be valid JSON)
                     parsedServiceAccount = JSON.parse(cleanedEnv);
-                } catch (firstErr) {
-                    // Strategy 2: Attempt to unescape \n sequences in the raw string if Strategy 1 fails
-                    // This handles cases where Vercel/CI might have double-escaped the JSON entry
+                    
+                    // Strategy 2: AFTER PARSING, fix the private_key specifically
+                    // Vercel/CI can double-escape newlines. cert() REQUIRES real 0x0A newlines.
+                    if (parsedServiceAccount.private_key && typeof parsedServiceAccount.private_key === 'string') {
+                        // Handle both literal \\n and already parsed \n sequences
+                        parsedServiceAccount.private_key = parsedServiceAccount.private_key.replace(/\\n/g, '\n');
+                    }
+                } catch (firstErr: any) {
+                    // Fallback Strategy: If Vercel has somehow mangled the whole string (rare)
+                    console.warn('[Firebase Admin] 🟡 ENV is not valid JSON, trying emergency unescape.');
                     const fixedRaw = cleanedEnv.replace(/\\n/g, '\n');
                     parsedServiceAccount = JSON.parse(fixedRaw);
-                }
-
-                // Strategy 3: Ensure the private_key specifically has real newlines
-                // Firebase Admin SDK cert() is very picky about the 0x0A character
-                if (parsedServiceAccount.private_key && typeof parsedServiceAccount.private_key === 'string') {
-                    parsedServiceAccount.private_key = parsedServiceAccount.private_key.replace(/\\n/g, '\n');
                 }
 
                 // Ensure project_id is present because cert() absolutely requires it
