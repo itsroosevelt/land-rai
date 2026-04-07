@@ -160,7 +160,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
             return;
         }
 
-        const toastId = toast.loading("Verificando credenciales...");
+        const _unused_toastId = toast.loading("Verificando credenciales...");
 
         try {
             const validationRes = await fetch('/api/whatsapp/validate-phone-id', {
@@ -175,16 +175,16 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
             const validationData = await validationRes.json();
 
             if (!validationData.valid) {
-                toast.error(validationData.message || "El número ya está vinculado a otra cuenta.", { id: toastId });
+                toast.error(validationData.message || "El número ya está vinculado a otra cuenta.", { id: "meta-auth" });
                 return;
             }
         } catch (error) {
             console.error("Validation error:", error);
-            toast.error("Hubo un problema verificando el número.", { id: toastId });
+            toast.error("Hubo un problema verificando el número.", { id: "meta-auth" });
             return;
         }
 
-        toast.loading("Guardando configuración...", { id: toastId });
+        toast.loading("Guardando configuración...", { id: "meta-auth" });
         try {
             const configRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/integrations/whatsapp`);
             await setDoc(configRef, {
@@ -194,12 +194,12 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                 updatedAt: new Date(),
             }, { merge: true });
 
-            toast.success("¡WhatsApp conectado!", { id: toastId });
+            toast.success("¡WhatsApp conectado!", { id: "meta-auth" });
             setIsEditing(false);
             setStep(4);
         } catch (error) {
             console.error(error);
-            toast.error("Error al guardar.", { id: toastId });
+            toast.error("Error al guardar.", { id: "meta-auth" });
         }
     };
 
@@ -222,7 +222,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
             return;
         }
 
-        const toastId = toast.loading("Abriendo Meta Auth Portal...");
+        toast.loading("Abriendo Meta Auth Portal...", { id: "meta-auth" });
 
         FB.login((response: any) => {
             const processAuth = async () => {
@@ -230,7 +230,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                     const accessToken = response.authResponse.accessToken;
                     const userId = response.authResponse.userID;
 
-                    toast.loading("Obteniendo detalles de la cuenta...", { id: toastId });
+                    toast.loading("Obteniendo detalles de la cuenta...", { id: "meta-auth" });
 
                     // 1. Fetch WABA and Phone Number details from Meta
                     FB.api('/me/whatsapp_business_accounts', (wabaRes: any) => {
@@ -243,7 +243,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                                     const phoneNumberId = phone.id;
                                     const displayPhoneNumber = phone.display_phone_number;
 
-                                    toast.loading("Validando exclusividad en Roosevelt...", { id: toastId });
+                                    toast.loading("Validando exclusividad en Roosevelt...", { id: "meta-auth" });
 
                                     // 2. Validate uniqueness across all Roosevelt tenants
                                     try {
@@ -260,7 +260,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                                         const validationData = await validationRes.json();
 
                                         if (!validationData.valid) {
-                                            toast.error(validationData.message || "Este número ya está siendo usado por otro usuario de Roosevelt.", { id: toastId });
+                                            toast.error(validationData.message || "Este número ya está siendo usado por otro usuario de Roosevelt.", { id: "meta-auth" });
                                             return;
                                         }
 
@@ -278,23 +278,23 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                                         };
 
                                         await setDoc(configRef, configDoc, { merge: true });
-                                        toast.success("¡Vinculación oficial completada!", { id: toastId });
+                                        toast.success("¡Vinculación oficial completada!", { id: "meta-auth" });
                                         setStep(4);
                                     } catch (err) {
                                         console.error("Duplicate check error:", err);
-                                        toast.error("Error validando el número. Intenta de nuevo.", { id: toastId });
+                                        toast.error("Error validando el número. Intenta de nuevo.", { id: "meta-auth" });
                                     }
                                 } else {
-                                    toast.error("No se encontraron números de teléfono vinculados a esta cuenta de Meta.", { id: toastId });
+                                    toast.error("No se encontraron números de teléfono vinculados a esta cuenta de Meta.", { id: "meta-auth" });
                                 }
                             });
                         } else {
-                            toast.error("No se encontraron Cuentas de WhatsApp Business (WABA) en este perfil.", { id: toastId });
+                            toast.error("No se encontraron Cuentas de WhatsApp Business (WABA) en este perfil.", { id: "meta-auth" });
                         }
                     });
                 } else {
                     console.warn("FB Login cancelled or failed:", response);
-                    toast.error("La conexión con Meta falló o fue cancelada.", { id: toastId });
+                    toast.error("La conexión con Meta falló o fue cancelada.", { id: "meta-auth" });
                 }
             };
             
@@ -310,7 +310,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
         if (!currentUser || !activeEntity) return;
         if (!confirm("¿Seguro que quieres desconectar WhatsApp?")) return;
 
-        const toastId = toast.loading("Desconectando...");
+        const _unused_toastId = toast.loading("Desconectando...");
         try {
             const configRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/integrations/whatsapp`);
             const internalConfigRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/integrations/whatsapp_internal`);
@@ -342,10 +342,10 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
             });
             setStep(1);
             setIsEditing(false);
-            toast.success("Desconectado.", { id: toastId });
+            toast.success("Desconectado.", { id: "meta-auth" });
         } catch (error) {
             console.error(error);
-            toast.error("Error al desconectar.", { id: toastId });
+            toast.error("Error al desconectar.", { id: "meta-auth" });
         }
     };
 

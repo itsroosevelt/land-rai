@@ -86,12 +86,12 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
             return;
         }
 
-        const toastId = toast.loading("Abriendo portal de Instagram...");
+        const _unused_toastId = toast.loading("Abriendo portal de Instagram...");
 
         FB.login((response: any) => {
             const processAuth = async () => {
                 if (response.authResponse) {
-                    toast.loading("Detectando cuenta de Instagram...", { id: toastId });
+                    toast.loading("Detectando cuenta de Instagram...", { id: "meta-auth" });
 
                     // 1. Fetch Pages and their Instagram Business Accounts
                     FB.api('/me/accounts?fields=instagram_business_account,name,access_token', async (pagesRes: any) => {
@@ -104,7 +104,7 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                                 const pageName = pageWithIg.name;
                                 const pageAccessToken = pageWithIg.access_token;
 
-                                toast.loading(`Sincronizando feed de ${pageName}...`, { id: toastId });
+                                toast.loading(`Sincronizando feed de ${pageName}...`, { id: "meta-auth" });
 
                                 try {
                                     const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/instagram`);
@@ -117,20 +117,20 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                                         updatedAt: new Date(),
                                     }, { merge: true });
 
-                                    toast.success(`¡Instagram vinculado exitosamente!`, { id: toastId });
+                                    toast.success(`¡Instagram vinculado exitosamente!`, { id: "meta-auth" });
                                     setStep(2);
                                 } catch (err) {
-                                    toast.error("Fallo en la persistencia local.", { id: toastId });
+                                    toast.error("Fallo en la persistencia local.", { id: "meta-auth" });
                                 }
                             } else {
-                                toast.error("No se encontró ninguna cuenta de Instagram Business vinculada a tus páginas.", { id: toastId });
+                                toast.error("No se encontró ninguna cuenta de Instagram Business vinculada a tus páginas.", { id: "meta-auth" });
                             }
                         } else {
-                            toast.error("No se detectaron perfiles de Meta disponibles.", { id: toastId });
+                            toast.error("No se detectaron perfiles de Meta disponibles.", { id: "meta-auth" });
                         }
                     });
                 } else {
-                    toast.error("Conexión cancelada.", { id: toastId });
+                    toast.error("Conexión cancelada.", { id: "meta-auth" });
                 }
             };
             processAuth();
@@ -142,11 +142,11 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
 
     const handleDelete = async () => {
         if (!confirm("¿Desconectar Instagram?")) return;
-        const toastId = toast.loading("Eliminando nodo...");
+        const _unused_toastId = toast.loading("Eliminando nodo...");
         try {
             await deleteDoc(doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/instagram`));
             setStep(1);
-            toast.success("Instagram desconectado.", { id: toastId });
+            toast.success("Instagram desconectado.", { id: "meta-auth" });
         } catch (e) {
             toast.error("Error al desconectar.");
         }

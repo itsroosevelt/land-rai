@@ -86,12 +86,12 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
             return;
         }
 
-        const toastId = toast.loading("Conectando con Meta Auth Portal...");
+        const _unused_toastId = toast.loading("Conectando con Meta Auth Portal...");
 
         FB.login((response: any) => {
             const processAuth = async () => {
                 if (response.authResponse) {
-                    toast.loading("Obteniendo tus Fanpages...", { id: toastId });
+                    toast.loading("Obteniendo tus Fanpages...", { id: "meta-auth" });
 
                     // 1. Fetch Pages (me/accounts)
                     FB.api('/me/accounts', async (pagesRes: any) => {
@@ -102,7 +102,7 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
                             const pageName = page.name;
                             const pageAccessToken = page.access_token;
 
-                            toast.loading(`Vinculando ${pageName}...`, { id: toastId });
+                            toast.loading(`Vinculando ${pageName}...`, { id: "meta-auth" });
 
                             try {
                                 const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/messenger`);
@@ -115,17 +115,17 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
                                     updatedAt: new Date(),
                                 }, { merge: true });
 
-                                toast.success(`¡Messenger conectado con ${pageName}!`, { id: toastId });
+                                toast.success(`¡Messenger conectado con ${pageName}!`, { id: "meta-auth" });
                                 setStep(2);
                             } catch (err) {
-                                toast.error("Error al guardar la configuración.", { id: toastId });
+                                toast.error("Error al guardar la configuración.", { id: "meta-auth" });
                             }
                         } else {
-                            toast.error("No se encontraron Fanpages vinculadas a tu cuenta.", { id: toastId });
+                            toast.error("No se encontraron Fanpages vinculadas a tu cuenta.", { id: "meta-auth" });
                         }
                     });
                 } else {
-                    toast.error("Conexión cancelada por el usuario.", { id: toastId });
+                    toast.error("Conexión cancelada por el usuario.", { id: "meta-auth" });
                 }
             };
             processAuth();
@@ -137,11 +137,11 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
 
     const handleDelete = async () => {
         if (!confirm("¿Desconectar Messenger?")) return;
-        const toastId = toast.loading("Eliminando nodo...");
+        const _unused_toastId = toast.loading("Eliminando nodo...");
         try {
             await deleteDoc(doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/messenger`));
             setStep(1);
-            toast.success("Messenger desconectado.", { id: toastId });
+            toast.success("Messenger desconectado.", { id: "meta-auth" });
         } catch (e) {
             toast.error("Error al desconectar.");
         }
