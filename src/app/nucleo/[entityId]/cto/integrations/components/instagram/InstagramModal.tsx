@@ -6,7 +6,7 @@ import { Integration } from '../../config';
 import { useAuth } from '@/contexts/AuthContext';
 import { useParams } from 'next/navigation';
 import { db } from '@/lib/firebase';
-import { doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, onSnapshot, collectionGroup, query, where, getDocs } from 'firebase/firestore';
 
 interface Props {
     isOpen: boolean;
@@ -104,9 +104,21 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                                 const pageName = pageWithIg.name;
                                 const pageAccessToken = pageWithIg.access_token;
 
-                                toast.loading(`Sincronizando feed de ${pageName}...`, { id: "meta-auth" });
+                                toast.loading(`Verificando disponibilidad de la cuenta...`, { id: "meta-auth" });
 
                                 try {
+                                    const igQuery = query(collectionGroup(db, 'integrations'), where('instagramId', '==', instagramId));
+                                    const igSnap = await getDocs(igQuery);
+                                    
+                                    const isUsedByAnotherTenant = !igSnap.empty && !igSnap.docs.every((d: any) => d.ref.path.includes(activeEntity));
+                                    
+                                    if (isUsedByAnotherTenant) {
+                                        toast.error("Esta cuenta de Instagram ya está vinculada a otro negocio en Roosevelt.", { id: "meta-auth" });
+                                        return;
+                                    }
+
+                                    toast.loading(`Sincronizando feed de ${pageName}...`, { id: "meta-auth" });
+
                                     const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/instagram`);
                                     await setDoc(configRef, {
                                         instagramId,
@@ -120,7 +132,8 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                                     toast.success(`¡Instagram vinculado exitosamente!`, { id: "meta-auth" });
                                     setStep(2);
                                 } catch (err) {
-                                    toast.error("Fallo en la persistencia local.", { id: "meta-auth" });
+                                    console.error(err);
+                                    toast.error("Fallo al verificar o guardar la persistencia local.", { id: "meta-auth" });
                                 }
                             } else {
                                 toast.error("No se encontró ninguna cuenta de Instagram Business vinculada a tus páginas.", { id: "meta-auth" });
@@ -142,13 +155,13 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
 
     const handleDelete = async () => {
         if (!confirm("¿Desconectar Instagram?")) return;
-        const _unused_toastId = toast.loading("Eliminando nodo...");
+        const toastId = toast.loading("Eliminando nodo...");
         try {
             await deleteDoc(doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/instagram`));
             setStep(1);
-            toast.success("Instagram desconectado.", { id: "meta-auth" });
+            toast.success("Instagram desconectado.", { id: toastId });
         } catch (e) {
-            toast.error("Error al desconectar.");
+            toast.error("Error al desconectar.", { id: toastId });
         }
     };
 

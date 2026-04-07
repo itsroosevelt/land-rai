@@ -4,36 +4,65 @@ import { db } from './firebase-admin'; // Use admin to fetch tokens on server
 
 // --- Meta (Instagram & Messenger) ---
 
-/**
- * Generic function to make requests to Meta Graph API
- */
-async function callMetaSendApi(messageData: object, token?: string): Promise<any> {
-    const accessToken = token || process.env.META_PAGE_ACCESS_TOKEN;
+// --- Meta (Instagram & Messenger) ---
 
-    if (!accessToken) {
+export interface MetaSendOptions {
+    type?: 'text' | 'image';
+    userId?: string;
+    entityId?: string;
+    provider?: 'messenger' | 'instagram';
+}
+
+export async function sendMetaMessage(
+    recipientId: string, 
+    text: string, 
+    options: MetaSendOptions | string = {}
+): Promise<any> {
+    if (!text) return;
+    let token = process.env.META_PAGE_ACCESS_TOKEN;
+    
+    // Backwards compatibility with the old signature
+    if (typeof options === 'string') {
+        token = options;
+        options = {};
+    }
+
+    if (options.userId && options.entityId && options.provider) {
+        try {
+            const configPath = `users/${options.userId}/entities/${options.entityId}/integrations/${options.provider}`;
+            const configDoc = await db.doc(configPath).get();
+            if (configDoc.exists) {
+                const data = configDoc.data();
+                if (data?.accessToken) {
+                    token = data.accessToken;
+                    console.log(`[sendMetaMessage] Loaded token for ${options.provider} in tenant ${options.entityId}`);
+                }
+            }
+        } catch (err) {
+            console.error(`[sendMetaMessage] Error resolving config:`, err);
+        }
+    }
+
+    if (!token) {
         console.error('Missing Access Token (Meta/Instagram).');
         throw new Error('Access Token is not configured.');
     }
 
-    const url = `https://graph.facebook.com/v19.0/me/messages?access_token=${accessToken}`;
+    const messageData = {
+        recipient: { id: recipientId },
+        message: { text: text }
+    };
+    
+    const url = `https://graph.facebook.com/v21.0/me/messages?access_token=${token}`;
 
     try {
         const response = await axios.post(url, messageData);
-        return response.data;
+        return { ...response.data, sentTo: recipientId };
     } catch (error: any) {
         const errorData = error.response?.data || error.message;
         console.error('Meta API Error:', JSON.stringify(errorData, null, 2));
         throw new Error(`Meta API Error: ${JSON.stringify(errorData)}`);
     }
-}
-
-export async function sendMetaMessage(recipientId: string, text: string, token?: string): Promise<any> {
-    if (!text) return;
-    const messageData = {
-        recipient: { id: recipientId },
-        message: { text: text }
-    };
-    return await callMetaSendApi(messageData, token);
 }
 
 // --- WhatsApp Business Cloud API (Multi-Tenant Aware) ---

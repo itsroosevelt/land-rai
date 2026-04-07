@@ -15,6 +15,9 @@ import { WhatsAppQRBusinessModal } from './components/whatsapp_qr_business/Whats
 import { WhatsAppQRPersonalModal } from './components/whatsapp_qr_personal/WhatsAppQRPersonalModal';
 import { MessengerModal } from './components/messenger/MessengerModal';
 import { InstagramModal } from './components/instagram/InstagramModal';
+import TelegramModal from './components/telegram/TelegramModal';
+import TwitterModal from './components/twitter/TwitterModal';
+import GmailModal from './components/gmail/GmailModal';
 
 export default function IntegrationsPage() {
     const { currentUser } = useAuth();
@@ -62,7 +65,7 @@ export default function IntegrationsPage() {
     }, [currentUser, activeEntity]);
 
     const handleConnect = async (integration: Integration) => {
-        if (!['whatsapp', 'whatsapp_qr_business', 'whatsapp_qr_personal', 'messenger', 'instagram'].includes(integration.id)) {
+        if (!['whatsapp', 'whatsapp_qr_business', 'whatsapp_qr_personal', 'messenger', 'instagram', 'telegram', 'x_twitter', 'gmail'].includes(integration.id)) {
             toast.info(`${integration.name}: Esta integración estará disponible próximamente en Roosevelt.`);
             return;
         }
@@ -181,6 +184,30 @@ export default function IntegrationsPage() {
                     isOpen={isModalOpen} 
                     onClose={() => setIsModalOpen(false)} 
                     activeIntegration={activeIntegration} 
+                />
+            )}
+            {activeIntegration?.id === 'telegram' && (
+                <TelegramModal 
+                    isOpen={isModalOpen}
+                    onClose={() => { setIsModalOpen(false); setActiveIntegration(null); }}
+                    activeEntity={activeEntity}
+                    currentUser={currentUser}
+                />
+            )}
+            {activeIntegration?.id === 'x_twitter' && (
+                <TwitterModal 
+                    isOpen={isModalOpen}
+                    onClose={() => { setIsModalOpen(false); setActiveIntegration(null); }}
+                    activeEntity={activeEntity}
+                    currentUser={currentUser}
+                />
+            )}
+            {activeIntegration?.id === 'gmail' && (
+                <GmailModal 
+                    isOpen={isModalOpen}
+                    onClose={() => { setIsModalOpen(false); setActiveIntegration(null); }}
+                    activeEntity={activeEntity}
+                    currentUser={currentUser}
                 />
             )}
         </div>

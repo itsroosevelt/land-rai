@@ -6,7 +6,7 @@ import { Integration } from '../../config';
 import { useAuth } from '@/contexts/AuthContext';
 import { useParams } from 'next/navigation';
 import { db } from '@/lib/firebase';
-import { doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, onSnapshot, collectionGroup, query, where, getDocs } from 'firebase/firestore';
 
 interface Props {
     isOpen: boolean;
@@ -102,9 +102,22 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
                             const pageName = page.name;
                             const pageAccessToken = page.access_token;
 
-                            toast.loading(`Vinculando ${pageName}...`, { id: "meta-auth" });
+                            toast.loading(`Verificando disponibilidad de ${pageName}...`, { id: "meta-auth" });
 
                             try {
+                                const pagesQuery = query(collectionGroup(db, 'integrations'), where('pageId', '==', pageId));
+                                const pagesSnap = await getDocs(pagesQuery);
+                                
+                                const isUsedByAnotherTenant = !pagesSnap.empty && !pagesSnap.docs.every((d: any) => d.ref.path.includes(activeEntity));
+                                
+                                if (isUsedByAnotherTenant) {
+                                    toast.error("Esta Fanpage ya está vinculada a otro negocio en Roosevelt.", { id: "meta-auth" });
+                                    // Make sure Facebook SDK logs out to clear invalid session state if desired, but blocking the save is enough:
+                                    return;
+                                }
+
+                                toast.loading(`Vinculando ${pageName}...`, { id: "meta-auth" });
+
                                 const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/messenger`);
                                 await setDoc(configRef, {
                                     pageId,
@@ -118,7 +131,8 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
                                 toast.success(`¡Messenger conectado con ${pageName}!`, { id: "meta-auth" });
                                 setStep(2);
                             } catch (err) {
-                                toast.error("Error al guardar la configuración.", { id: "meta-auth" });
+                                console.error(err);
+                                toast.error("Error al procesar la vinculación.", { id: "meta-auth" });
                             }
                         } else {
                             toast.error("No se encontraron Fanpages vinculadas a tu cuenta.", { id: "meta-auth" });
@@ -137,13 +151,13 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
 
     const handleDelete = async () => {
         if (!confirm("¿Desconectar Messenger?")) return;
-        const _unused_toastId = toast.loading("Eliminando nodo...");
+        const toastId = toast.loading("Eliminando nodo...");
         try {
             await deleteDoc(doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/messenger`));
             setStep(1);
-            toast.success("Messenger desconectado.", { id: "meta-auth" });
+            toast.success("Messenger desconectado.", { id: toastId });
         } catch (e) {
-            toast.error("Error al desconectar.");
+            toast.error("Error al desconectar.", { id: toastId });
         }
     };
 
