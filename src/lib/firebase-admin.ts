@@ -26,14 +26,30 @@ if (!admin.apps.length) {
                 
                 let parsedServiceAccount;
                 try {
-                    // Strategy 1: Standard JSON parsing (the variable should be valid JSON)
+                    // Strategy 1: Standard JSON parsing
                     parsedServiceAccount = JSON.parse(cleanedEnv);
                     
-                    // Strategy 2: AFTER PARSING, fix the private_key specifically
-                    // Vercel/CI can double-escape newlines. cert() REQUIRES real 0x0A newlines.
+                    // Strategy 2: SUPER PEM CLEANER (AFTER PARSING)
+                    // Vercel/CI environment variables are notorious for escape issues (\n, \\n, or literal breaks)
                     if (parsedServiceAccount.private_key && typeof parsedServiceAccount.private_key === 'string') {
-                        // Handle both literal \\n and already parsed \n sequences
-                        parsedServiceAccount.private_key = parsedServiceAccount.private_key.replace(/\\n/g, '\n');
+                        let key = parsedServiceAccount.private_key;
+                        
+                        // Rule A: Remove any wrapping quotes that survived JSON.parse (rare but happens in some shells)
+                        key = key.trim().replace(/^['"]|['"]$/g, '');
+                        
+                        // Rule B: Unescape any literal \n sequences. Use a loop to handle multiple escapes like \\n
+                        while (key.includes('\\n')) {
+                            key = key.replace(/\\n/g, '\n');
+                        }
+                        
+                        // Rule C: Ensure standard PEM format (headers/footers must be on their own lines)
+                        // If it's a single line, we must wrap it correctly
+                        if (!key.includes('\n') && key.includes('-----BEGIN PRIVATE KEY-----')) {
+                             key = key.replace('-----BEGIN PRIVATE KEY-----', '-----BEGIN PRIVATE KEY-----\n')
+                                      .replace('-----END PRIVATE KEY-----', '\n-----END PRIVATE KEY-----');
+                        }
+                        
+                        parsedServiceAccount.private_key = key;
                     }
                 } catch (firstErr: any) {
                     // Fallback Strategy: If Vercel has somehow mangled the whole string (rare)
