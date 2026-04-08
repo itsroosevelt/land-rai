@@ -29,31 +29,6 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
         status: 'Offline'
     });
 
-    // Facebook SDK Initialization
-    useEffect(() => {
-        const appId = process.env.NEXT_PUBLIC_META_APP_ID;
-        if (!appId) return;
-
-        (window as any).fbAsyncInit = function() {
-            (window as any).FB.init({
-                appId: appId,
-                cookie: true,
-                xfbml: true,
-                version: 'v21.0'
-            });
-        };
-
-        if (!(window as any).FB) {
-            (function(d, s, id) {
-                var js, fjs = d.getElementsByTagName(s)[0];
-                if (d.getElementById(id)) return;
-                js = d.createElement(s) as HTMLScriptElement;
-                js.id = id;
-                js.src = "https://connect.facebook.net/en_US/sdk.js";
-                fjs.parentNode?.insertBefore(js, fjs);
-            }(document, 'script', 'facebook-jssdk'));
-        }
-    }, []);
 
     // Firestore Sync
     useEffect(() => {

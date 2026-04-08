@@ -10,27 +10,18 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 const entityPath = 'users/g02IGViHitZjPKlOuCG7j5J3uK33/entities/roosevelt';
 
-async function checkRecent() {
-    console.log('--- Checking Cards in Roosevelt ---');
-    const groupsRef = db.collection(`${entityPath}/kanban-groups`);
-    const groupsSnap = await groupsRef.get();
+async function check() {
+    console.log('--- Diagnosis:Checking for messages in the last 3 hours ---');
+    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000); 
+    const contactSnap = await db.collection(`${entityPath}/contacts`).where('updatedAt', '>', threeHoursAgo).get();
     
-    for (const groupDoc of groupsSnap.docs) {
-        console.log(`\nGroup: ${groupDoc.id} (${groupDoc.data().name})`);
-        const cardsSnap = await groupDoc.ref.collection('cards').orderBy('updatedAt', 'desc').limit(5).get();
-        cardsSnap.forEach(cardDoc => {
-            const data = cardDoc.data();
-            console.log(`  Card: ${data.contactName} (${data.source || 'unknown'}) - Last Msg: ${data.lastMessage}`);
-            console.log(`  Updated At: ${data.updatedAt?.toDate ? data.updatedAt.toDate() : data.updatedAt}`);
+    if (contactSnap.empty) {
+        console.log('RESULT: No messages found.');
+    } else {
+        contactSnap.forEach(doc => {
+            const data = doc.data();
+            console.log(`RESULT: [FOUND] Contact: ${data.name}, Msg: "${data.lastMessage}", Time: ${data.updatedAt.toDate()}`);
         });
     }
-
-    console.log('\n--- Checking Contacts ---');
-    const contactsSnap = await db.collection(`${entityPath}/contacts`).orderBy('updatedAt', 'desc').limit(5).get();
-    contactsSnap.forEach(doc => {
-        const data = doc.data();
-        console.log(`  Contact: ${data.name} (Origin: ${data.origin}) - Created: ${data.createdAt}`);
-    });
 }
-
-checkRecent().catch(console.error);
+check().catch(console.error);

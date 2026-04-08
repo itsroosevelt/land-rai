@@ -60,6 +60,19 @@ export default function RootLayout({
           </AuthProvider>
         </ThemeProvider>
         <Script src="https://terminal.jup.ag/main-v3.js" strategy="lazyOnload" />
+        <Script id="facebook-jssdk" src="https://connect.facebook.net/en_US/sdk.js" strategy="afterInteractive" />
+        <Script id="meta-sdk-init" strategy="afterInteractive">
+          {`
+            window.fbAsyncInit = function() {
+              FB.init({
+                appId: '${process.env.NEXT_PUBLIC_META_APP_ID}',
+                cookie: true,
+                xfbml: true,
+                version: 'v21.0'
+              });
+            };
+          `}
+        </Script>
       </body>
     </html>
   );
