@@ -49,20 +49,39 @@ export default function TelegramModal({ isOpen, onClose, activeEntity, currentUs
         }
 
         setIsLoading(true);
-        const toastId = toast.loading("Verificando Telegram Bot...");
+        const toastId = toast.loading("Activando Protocolo Telegram...");
 
         try {
+            // 1. Check if used by another tenant
             const queryRef = query(collectionGroup(db, 'integrations'), where('botToken', '==', botToken));
             const snap = await getDocs(queryRef);
             
             const isUsedByAnotherTenant = !snap.empty && !snap.docs.every((d: any) => d.ref.path.includes(activeEntity));
                                     
             if (isUsedByAnotherTenant) {
-                toast.error("Este Bot de Telegram ya está siendo utilizado por otro nodo en Roosevelt.", { id: toastId });
+                toast.error("Este Bot ya está siendo utilizado en otro nodo.", { id: toastId });
                 setIsLoading(false);
                 return;
             }
 
+            // 2. Register Webhook via Backend
+            const setupRes = await fetch('/api/telegram/setup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    botToken,
+                    userId: currentUser?.uid,
+                    entityId: activeEntity,
+                    domain: window.location.host
+                })
+            });
+
+            const setupData = await setupRes.json();
+            if (!setupData.success) {
+                throw new Error(setupData.error || 'Error en el registro del webhook');
+            }
+
+            // 3. Save Configuration
             const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/telegram`);
             await setDoc(configRef, {
                 botToken,
@@ -71,11 +90,11 @@ export default function TelegramModal({ isOpen, onClose, activeEntity, currentUs
                 updatedAt: new Date(),
             }, { merge: true });
 
-            toast.success("¡Telegram vinculado correctamente!", { id: toastId });
+            toast.success("¡Protocolo Telegram Activado!", { id: toastId });
             setStep(3);
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            toast.error("Fallo al conectar con Telegram localmente.", { id: toastId });
+            toast.error(`Error: ${error.message}`, { id: toastId });
         } finally {
             setIsLoading(false);
         }

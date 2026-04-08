@@ -260,11 +260,14 @@ function IntegrationCard({
 
             {/* Content */}
             <h3 className="text-xl font-medium text-white mb-2">{integration.name}</h3>
-            {isConnected && integrationData?.phoneNumber && (
+            {isConnected && (integrationData?.phoneNumber || integrationData?.pageName || integrationData?.gmailAddress || integrationData?.botToken) && (
                 <div className="flex items-center gap-2 mb-2">
                     <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-[10px] text-green-400 font-mono tracking-wider">
-                        +{integrationData.phoneNumber}
+                    <span className="text-[10px] text-green-400 font-mono tracking-wider uppercase">
+                        {integrationData.pageName || 
+                         (integrationData.phoneNumber ? `+${integrationData.phoneNumber}` : '') || 
+                         integrationData.gmailAddress || 
+                         (integrationData.botToken ? 'Bot Activo' : '')}
                     </span>
                 </div>
             )}

@@ -1,8 +1,6 @@
 
 import axios from 'axios';
-import { db } from './firebase-admin'; // Use admin to fetch tokens on server
-
-// --- Meta (Instagram & Messenger) ---
+import { db, admin } from './firebase-admin'; // Use admin to fetch tokens on server
 
 // --- Meta (Instagram & Messenger) ---
 
@@ -107,8 +105,6 @@ export async function sendWhatsAppMessage(
                 if (internalDoc.exists) data = internalDoc.data();
             }
 
-            // Explicitly removed backup discovery scan to enforce tenant isolation and improve speed
-
             if (data?.accessToken && data?.phoneNumberId) {
                 token = data.accessToken;
                 phoneNumberId = data.phoneNumberId;
@@ -183,5 +179,48 @@ export async function sendWhatsAppMessage(
         const errorData = error.response?.data || error.message;
         console.error('WhatsApp API Error:', JSON.stringify(errorData, null, 2));
         throw new Error(`WhatsApp API Error: ${JSON.stringify(errorData)}`);
+    }
+}
+
+// --- Telegram Bot API ---
+
+export async function sendTelegramMessage(
+    chatId: string,
+    text: string,
+    options: { userId?: string; entityId?: string; botToken?: string } = {}
+): Promise<any> {
+    if (!text) return;
+    let token = options.botToken;
+
+    if (options.userId && options.entityId && !token) {
+        try {
+            const configPath = `users/${options.userId}/entities/${options.entityId}/integrations/telegram`;
+            const configDoc = await db.doc(configPath).get();
+            if (configDoc.exists) {
+                token = configDoc.data()?.botToken;
+            }
+        } catch (err) {
+            console.error(`[sendTelegramMessage] Error resolving config:`, err);
+        }
+    }
+
+    if (!token) {
+        throw new Error('Telegram Bot Token is not configured for this entity.');
+    }
+
+    const url = `https://api.telegram.org/bot${token}/sendMessage`;
+    const payload = {
+        chat_id: chatId,
+        text: text,
+        parse_mode: 'HTML'
+    };
+
+    try {
+        const response = await axios.post(url, payload);
+        return { ...response.data, sentTo: chatId };
+    } catch (error: any) {
+        const errorData = error.response?.data || error.message;
+        console.error('Telegram API Error:', JSON.stringify(errorData, null, 2));
+        throw new Error(`Telegram API Error: ${JSON.stringify(errorData)}`);
     }
 }
