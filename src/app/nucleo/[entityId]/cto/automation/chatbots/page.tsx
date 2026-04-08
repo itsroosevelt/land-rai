@@ -30,43 +30,49 @@ const ChatbotsPage = () => {
   const [bots, setBots] = useState<Bot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [updatingBots, setUpdatingBots] = useState<string[]>([]);
-  const [botToDelete, setBotToDelete] = useState<Bot | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
-  const [whatsappStatus, setWhatsappStatus] = useState<'connected' | 'offline' | 'loading'>('loading');
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'offline' | 'loading'>('loading');
+  const [activeChannels, setActiveChannels] = useState<string[]>([]);
 
   useEffect(() => {
-    const checkWhatsApp = async () => {
+    const checkConnections = async () => {
       if (!currentUser || !activeEntity) return;
       try {
         const tenantPath = `users/${currentUser.uid}/entities/${activeEntity}`;
-        const integrationTypes = ['whatsapp', 'whatsapp_internal', 'whatsapp_qr_business', 'whatsapp_qr_personal'];
+        const integrationTypes = [
+            'whatsapp', 'whatsapp_internal', 'whatsapp_qr_business', 'whatsapp_qr_personal',
+            'messenger', 'instagram', 'telegram', 'gmail'
+        ];
         
-        // Check all possible integration paths
         const snapshots = await Promise.all(
           integrationTypes.map(type => getDoc(doc(db, tenantPath, 'integrations', type)))
         );
         
-        const isConnected = snapshots.some(snap => {
-          if (!snap.exists()) return false;
-          const status = snap.data().status;
-          const validStatuses = ['Connected', 'connected', 'Internal', 'active', 'Active', 'Online', 'online'];
-          return validStatuses.includes(status);
+        const connectedChannels: string[] = [];
+        snapshots.forEach((snap, index) => {
+          if (snap.exists()) {
+            const status = snap.data().status;
+            const validStatuses = ['Connected', 'connected', 'Internal', 'active', 'Active', 'Online', 'online'];
+            if (validStatuses.includes(status)) {
+                connectedChannels.push(integrationTypes[index]);
+            }
+          }
         });
         
-        if (isConnected) {
-          setWhatsappStatus('connected');
+        setActiveChannels(connectedChannels);
+        if (connectedChannels.length > 0) {
+          setConnectionStatus('connected');
         } else {
-          setWhatsappStatus('offline');
+          setConnectionStatus('offline');
         }
       } catch (error) {
-        console.error("Error checking WhatsApp status:", error);
-        setWhatsappStatus('offline');
+        console.error("Error checking connection status:", error);
+        setConnectionStatus('offline');
       }
     };
     
-    // Check initially and then every 30 seconds to keep it fresh
-    checkWhatsApp();
-    const interval = setInterval(checkWhatsApp, 30000);
+    checkConnections();
+    const interval = setInterval(checkConnections, 30000);
     return () => clearInterval(interval);
   }, [currentUser, activeEntity]);
 
@@ -151,10 +157,10 @@ const ChatbotsPage = () => {
   };
 
   const handleToggleBotStatus = async (bot: Bot) => {
-    // GUARD: Block activation if WhatsApp is not connected
-    if (!bot.isActive && whatsappStatus !== 'connected') {
-        toast.error('No puedes activar un chatbot sin una conexión de WhatsApp activa.', {
-            description: 'Por favor, conecta WhatsApp en la sección de Integraciones primero.',
+    // GUARD: Block activation if no omnichannel service is connected
+    if (!bot.isActive && connectionStatus !== 'connected') {
+        toast.error('No puedes activar un chatbot sin al menos una conexión activa.', {
+            description: 'Por favor, conecta WhatsApp, Instagram, Messenger o Telegram en la sección de Integraciones primero.',
             duration: 5000,
         });
         return;
@@ -221,17 +227,17 @@ const ChatbotsPage = () => {
           </Button>
           <h1 className="text-xl font-medium tracking-tight">Mis Chatbots</h1>
           <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${
-            whatsappStatus === 'connected' 
+            connectionStatus === 'connected' 
               ? 'bg-green-500/10 border-green-500/20 text-green-400' 
-              : whatsappStatus === 'loading'
+              : connectionStatus === 'loading'
                 ? 'bg-neutral-800 border-neutral-700 text-neutral-500'
                 : 'bg-red-500/10 border-red-500/20 text-red-400'
           }`}>
             <div className={`w-1.5 h-1.5 rounded-full ${
-              whatsappStatus === 'connected' ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+              connectionStatus === 'connected' ? 'bg-green-500 animate-pulse' : 'bg-red-500'
             }`} />
             <span className="text-[10px] uppercase tracking-wider font-bold">
-              WhatsApp: {whatsappStatus === 'connected' ? 'Conectado' : whatsappStatus === 'loading' ? 'Verificando...' : 'Sin Conexión'}
+              {connectionStatus === 'connected' ? `OMNICANAL: ${activeChannels.length} ACTIVOS` : connectionStatus === 'loading' ? 'Verificando...' : 'SIN CONEXIÓN'}
             </span>
           </div>
         </div>
