@@ -74,9 +74,9 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
 
             toast.loading("Accediendo a Meta...", { id: "meta-auth" });
 
-            FB.login((response: any) => {
+            (window as any).FB.login((response: any) => {
                 if (response.authResponse) {
-                    FB.api('/me/accounts?fields=instagram_business_account{id,username,name},name,access_token', async (pagesRes: any) => {
+                    (window as any).FB.api('/me/accounts?fields=instagram_business_account{id,username,name},name,access_token', async (pagesRes: any) => {
                         if (pagesRes && pagesRes.data) {
                             const pagesWithIg = pagesRes.data.filter((p: any) => p.instagram_business_account);
                             if (pagesWithIg.length === 0) {
@@ -119,7 +119,7 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                 return;
             }
 
-            FB.api(`/${pageWithIg.id}/subscribed_apps`, 'post', {
+            (window as any).FB.api(`/${pageWithIg.id}/subscribed_apps`, 'post', {
                 subscribed_fields: ['messages', 'messaging_postbacks', 'message_deliveries', 'message_reads'],
                 access_token: pageAccessToken
             });
