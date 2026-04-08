@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db, admin } from '@/lib/firebase-admin';
 import { sendMetaMessage } from '@/lib/sendProviders';
+import { processChatbotFlow } from '@/lib/chatbotEngine';
 
 const DEBUG_FILE = '/tmp/meta_webhook.log';
 
@@ -181,20 +182,22 @@ export async function POST(req: Request) {
             
             let numericId = String(Date.now()).slice(-10); // Simple ID for MVP
             
-            // CAPTURE REAL PROFILE NAME FROM META
+            // CAPTURE REAL PROFILE NAME FROM META (Resilient)
             let contactName = `Usuario ${provider === 'instagram' ? 'IG' : 'FB'}`;
             try {
                 if (tenantData?.accessToken) {
-                    const fields = provider === 'instagram' ? 'name,username' : 'first_name,last_name';
+                    const fields = provider === 'instagram' ? 'name,username' : 'first_name,last_name,name';
                     const profileRes = await fetch(`https://graph.facebook.com/v21.0/${senderId}?fields=${fields}&access_token=${tenantData.accessToken}`);
                     const profileData = await profileRes.json();
                     
                     if (profileData && !profileData.error) {
                         if (provider === 'instagram') {
-                            contactName = profileData.name || profileData.username || contactName;
+                            contactName = profileData.username ? `@${profileData.username}` : (profileData.name || contactName);
                         } else {
-                            contactName = `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim() || contactName;
+                            contactName = profileData.name || `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim() || contactName;
                         }
+                    } else if (profileData.error) {
+                        debugLog(`[Profile Fetch] Meta Error: ${profileData.error.message}`);
                     }
                 }
             } catch (err) {
@@ -231,11 +234,13 @@ export async function POST(req: Request) {
             groupId = destinationGroupId;
         }
 
-        // TRIGGER META CHATBOT
+        // 4. TRIGGER UNIVERSAL CHATBOT
         if (groupId && cardId) {
-            debugLog(`[POST] Triggering ${provider} chatbot for ${entityId}...`);
-            triggerMetaChatbot(senderId, text, groupId, cardId, userId, entityId, provider).catch(error => {
-                 debugLog(`[Chatbot Engine Error] ${error}`);
+            debugLog(`[POST] Triggering universal chatbot for ${provider} in tenant ${entityId}...`);
+            processChatbotFlow({
+                userId, entityId, groupId, cardId, platform: provider, from: senderId, text: text
+            }).catch(error => {
+                 debugLog(`[Universal Engine Error] ${error}`);
             });
         }
 
@@ -249,52 +254,3 @@ export async function POST(req: Request) {
     }
 }
 
-async function triggerMetaChatbot(from: string, text: string, groupId: string, cardId: string, userId: string, entityId: string, provider: 'messenger' | 'instagram') {
-    const entityPath = `users/${userId}/entities/${entityId}`;
-
-    // Read bot
-    const botsRef = db.collection(`${entityPath}/chatbots`);
-    const botsSnapshot = await botsRef.where('isActive', '==', true).limit(1).get();
-    const activeBotDoc = botsSnapshot.empty ? null : botsSnapshot.docs[0];
-
-    if (!activeBotDoc) return;
-
-    const flow = activeBotDoc.data().flow || { nodes: [], edges: [] };
-    const cardRef = db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`);
-    const cardData = (await cardRef.get()).data() || {};
-    
-    // Very basic Chatbot iteration to prove concept
-    const executeNode = async (nodeId: string) => {
-        const node = flow.nodes.find((n: any) => n.id === nodeId);
-        if (!node) return;
-
-        if (node.type === 'startNode') {
-            const edge = flow.edges.find((e: any) => e.source === node.id);
-            if (edge) await executeNode(edge.target);
-            return;
-        }
-
-        if (node.type === 'textMessageNode') {
-            const msg = node.data?.content || node.data?.text || 'Hola';
-            // Send via meta!
-            await sendMetaMessage(from, msg, { userId, entityId, provider, type: 'text' });
-
-            await cardRef.update({
-                messages: admin.firestore.FieldValue.arrayUnion({
-                    sender: 'agent', text: msg, timestamp: new Date(), platform: provider
-                }),
-                lastMessage: msg.substring(0, 47) + '...',
-                updatedAt: new Date(),
-                unreadCount: 0,
-                'chatbotState.currentNodeId': node.id,
-                'chatbotState.waitingForInput': true
-            });
-            return;
-        }
-    };
-    
-    // Auto-run from start (MVP implementation)
-    // Here we'd map standard Chatbot node logic identical to WhatsApp
-    const startNode = flow.nodes.find((n: any) => n.type === 'startNode');
-    if (startNode) await executeNode(startNode.id);
-}

@@ -127,7 +127,7 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
                 };
                 processAuth();
             }, {
-                scope: 'pages_messaging,pages_show_list,pages_manage_metadata,pages_read_engagement',
+                scope: 'public_profile,pages_messaging,pages_show_list,pages_manage_metadata,pages_read_engagement',
                 return_scopes: true
             });
         };
@@ -218,13 +218,14 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
                                         <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-10">{config.pageName}</p>
                                         
                                         <div className="w-full space-y-4 px-2">
-                                            <div className="h-24 bg-white/5 border border-white/10 rounded-[32px] flex items-center px-8 justify-between backdrop-blur-sm">
-                                                <div className="text-left">
+                                            <div className="h-28 bg-white/5 border border-white/10 rounded-[32px] flex items-center px-8 justify-between backdrop-blur-sm relative overflow-hidden group/card">
+                                                <div className="absolute inset-0 bg-[#0084FF]/5 opacity-0 group-hover/card:opacity-100 transition-opacity" />
+                                                <div className="text-left relative z-10">
                                                     <span className="text-[9px] uppercase tracking-[0.2em] text-[#0084FF] block mb-2 font-black">PÁGINA VINCULADA</span>
-                                                    <p className="text-2xl font-light text-white tracking-tight leading-none uppercase">{config.pageName || 'Fanpage Activa'}</p>
-                                                    <span className="text-[9px] text-white/20 mt-2 block font-mono">ID: {config.pageId}</span>
+                                                    <p className="text-2xl font-light text-white tracking-tight leading-none truncate max-w-[200px]">{config.pageName || 'Fanpage Activa'}</p>
+                                                    <span className="text-[9px] text-white/40 mt-3 block font-medium italic">Listo para recibir mensajes</span>
                                                 </div>
-                                                <div className="p-4 bg-green-500/5 border border-green-500/10 rounded-2xl"><ShieldCheck className="w-6 h-6 text-green-500/40" /></div>
+                                                <div className="p-4 bg-green-500/5 border border-green-500/10 rounded-2xl relative z-10"><ShieldCheck className="w-6 h-6 text-green-500/40" /></div>
                                             </div>
 
                                             <div className="flex items-center gap-4 pt-10">

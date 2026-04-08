@@ -22,6 +22,8 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
     const [step, setStep] = useState<number>(1);
     const [initialLoading, setInitialLoading] = useState(true);
     const [updatedAt, setUpdatedAt] = useState<any>(null);
+    const [availablePages, setAvailablePages] = useState<any[]>([]);
+    const [isSelectingPage, setIsSelectingPage] = useState(false);
     const [config, setConfig] = useState<any>({
         instagramId: '',
         pageName: '',
@@ -60,84 +62,82 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
 
         const startLogin = () => {
             const FB = (window as any).FB;
-            const isFBReady = (window as any).FB_READY;
-
-            if (!FB || !isFBReady) {
+            if (!FB || !(window as any).FB_READY) {
                 if (retries < maxRetries) {
                     retries++;
-                    toast.loading(`Sincronizando con Meta (${retries}/${maxRetries})...`, { id: "meta-wait" });
                     setTimeout(startLogin, 500);
                 } else {
-                    toast.dismiss("meta-wait");
                     toast.error("El SDK de Meta no responde.");
                 }
                 return;
             }
 
-            toast.dismiss("meta-wait");
-            toast.loading("Abriendo portal de Instagram...", { id: "meta-auth" });
+            toast.loading("Accediendo a Meta...", { id: "meta-auth" });
 
             FB.login((response: any) => {
-                const processAuth = async () => {
-                    if (response.authResponse) {
-                        toast.loading("Detectando cuenta de Instagram...", { id: "meta-auth" });
-
-                        FB.api('/me/accounts?fields=instagram_business_account{id,username,name},name,access_token', async (pagesRes: any) => {
-                            if (pagesRes && pagesRes.data) {
-                                const pageWithIg = pagesRes.data.find((p: any) => p.instagram_business_account);
-
-                                if (pageWithIg) {
-                                    const instagramId = pageWithIg.instagram_business_account.id;
-                                    const pageName = pageWithIg.instagram_business_account.username || pageWithIg.instagram_business_account.name || pageWithIg.name;
-                                    const pageAccessToken = pageWithIg.access_token;
-
-                                    try {
-                                        const igQuery = query(collectionGroup(db, 'integrations'), where('instagramId', '==', instagramId));
-                                        const igSnap = await getDocs(igQuery);
-                                        const isUsedByAnotherTenant = !igSnap.empty && !igSnap.docs.every((d: any) => d.ref.path.includes(activeEntity));
-                                        
-                                        if (isUsedByAnotherTenant) {
-                                            toast.error("Cuenta ya vinculada a otro negocio.", { id: "meta-auth" });
-                                            return;
-                                        }
-
-                                        FB.api(`/${pageWithIg.id}/subscribed_apps`, 'post', {
-                                            subscribed_fields: ['messages', 'messaging_postbacks', 'message_deliveries', 'message_reads'],
-                                            access_token: pageAccessToken
-                                        });
-
-                                        const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/instagram`);
-                                        await setDoc(configRef, {
-                                            instagramId, 
-                                            pageName: pageWithIg.instagram_business_account.username ? `@${pageWithIg.instagram_business_account.username}` : (pageWithIg.instagram_business_account.name || pageWithIg.name), 
-                                            accessToken: pageAccessToken,
-                                            status: 'Connected', provider: 'instagram', updatedAt: new Date(),
-                                        }, { merge: true });
-
-                                        toast.success(`¡Instagram vinculado!`, { id: "meta-auth" });
-                                        setStep(2);
-                                    } catch (err) {
-                                        toast.error("Error al procesar la vinculación.", { id: "meta-auth" });
-                                    }
-                                } else {
-                                    toast.error("No se encontró cuenta de Instagram Business.", { id: "meta-auth" });
-                                }
-                            } else {
-                                toast.error("No se detectaron perfiles.", { id: "meta-auth" });
+                if (response.authResponse) {
+                    FB.api('/me/accounts?fields=instagram_business_account{id,username,name},name,access_token', async (pagesRes: any) => {
+                        if (pagesRes && pagesRes.data) {
+                            const pagesWithIg = pagesRes.data.filter((p: any) => p.instagram_business_account);
+                            if (pagesWithIg.length === 0) {
+                                toast.error("No se encontró cuenta de Instagram Business.", { id: "meta-auth" });
+                                return;
                             }
-                        });
-                    } else {
-                        toast.error("Conexión cancelada.", { id: "meta-auth" });
-                    }
-                };
-                processAuth();
+                            if (pagesWithIg.length > 1) {
+                                setAvailablePages(pagesWithIg);
+                                setIsSelectingPage(true);
+                                toast.dismiss("meta-auth");
+                            } else {
+                                await connectPage(pagesWithIg[0]);
+                            }
+                        }
+                    });
+                } else {
+                    toast.error("Conexión cancelada.", { id: "meta-auth" });
+                }
             }, {
-                scope: 'instagram_basic,instagram_manage_messages,pages_show_list,pages_read_engagement',
+                scope: 'public_profile,instagram_basic,instagram_manage_messages,pages_show_list,pages_read_engagement,pages_manage_metadata',
                 return_scopes: true
             });
         };
 
         startLogin();
+    };
+
+    const connectPage = async (pageWithIg: any) => {
+        const instagramId = pageWithIg.instagram_business_account.id;
+        const pageAccessToken = pageWithIg.access_token;
+        toast.loading(`Vinculando @${pageWithIg.instagram_business_account.username}...`, { id: "meta-auth" });
+
+        try {
+            const igQuery = query(collectionGroup(db, 'integrations'), where('instagramId', '==', instagramId));
+            const igSnap = await getDocs(igQuery);
+            const isUsedByAnotherTenant = !igSnap.empty && !igSnap.docs.every((d: any) => d.ref.path.includes(activeEntity));
+            
+            if (isUsedByAnotherTenant) {
+                toast.error("Cuenta ya vinculada a otro negocio.", { id: "meta-auth" });
+                return;
+            }
+
+            FB.api(`/${pageWithIg.id}/subscribed_apps`, 'post', {
+                subscribed_fields: ['messages', 'messaging_postbacks', 'message_deliveries', 'message_reads'],
+                access_token: pageAccessToken
+            });
+
+            const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/instagram`);
+            await setDoc(configRef, {
+                instagramId, 
+                pageName: pageWithIg.instagram_business_account.username ? `@${pageWithIg.instagram_business_account.username}` : (pageWithIg.instagram_business_account.name || pageWithIg.name), 
+                accessToken: pageAccessToken,
+                status: 'Connected', provider: 'instagram', updatedAt: new Date(),
+            }, { merge: true });
+
+            toast.success(`¡Instagram vinculado!`, { id: "meta-auth" });
+            setStep(2);
+            setIsSelectingPage(false);
+        } catch (err) {
+            toast.error("Error al procesar la vinculación.", { id: "meta-auth" });
+        }
     };
 
     const handleDelete = async () => {
@@ -195,23 +195,55 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                                     </div>
                                 ) : step === 1 ? (
                                     <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-                                        <h3 className="text-3xl font-extralight text-white tracking-tighter mb-2 italic uppercase">Vincular Professional Account</h3>
-                                        <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-12">Portal de Acceso Meta</p>
-                                        
-                                        <div className="space-y-6 mb-12">
-                                            <div className="flex items-start gap-4">
-                                                <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center text-[10px] font-bold text-white/40 shrink-0">1</div>
-                                                <p className="text-xs text-white/60 font-light mt-1 text-left leading-relaxed">Asegúrate de que tu Instagram sea una <span className="text-white">Cuenta Profesional</span> y esté vinculada a una Fanpage.</p>
-                                            </div>
-                                            <div className="flex items-start gap-4">
-                                                <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center text-[10px] font-bold text-white/40 shrink-0">2</div>
-                                                <p className="text-xs text-white/60 font-light mt-1 text-left leading-relaxed">Roosevelt detectará automáticamente el ID de negocio para la automatización.</p>
-                                            </div>
-                                        </div>
+                                        {isSelectingPage ? (
+                                            <>
+                                                <h3 className="text-3xl font-extralight text-white tracking-tighter mb-2 italic uppercase">Seleccionar Cuenta</h3>
+                                                <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-8">Varias cuentas detectadas</p>
+                                                <div className="space-y-3 max-h-[300px] overflow-y-auto no-scrollbar pr-2 mb-8">
+                                                    {availablePages.map((p) => (
+                                                        <button 
+                                                            key={p.id} 
+                                                            onClick={() => connectPage(p)}
+                                                            className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-between hover:bg-white/10 transition-all group"
+                                                        >
+                                                            <div className="flex items-center gap-4 text-left">
+                                                                <div className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center border border-white/10 font-bold text-[#E4405F]">
+                                                                   IG
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-white text-sm font-medium">@{p.instagram_business_account.username || p.name}</p>
+                                                                    <p className="text-[10px] text-white/30 uppercase tracking-tighter">Página: {p.name}</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center group-hover:border-[#E4405F]/50 group-hover:text-[#E4405F]">
+                                                                →
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                <button onClick={() => setIsSelectingPage(false)} className="text-[9px] text-white/30 hover:text-white uppercase tracking-widest font-bold underline underline-offset-4">Volver atrás</button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <h3 className="text-3xl font-extralight text-white tracking-tighter mb-2 italic uppercase">Vincular Professional Account</h3>
+                                                <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-12">Portal de Acceso Meta</p>
+                                                
+                                                <div className="space-y-6 mb-12 text-left">
+                                                    <div className="flex items-start gap-4">
+                                                        <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center text-[10px] font-bold text-white/40 shrink-0">1</div>
+                                                        <p className="text-xs text-white/60 font-light mt-1 text-left leading-relaxed">Asegúrate de que tu Instagram sea una <span className="text-white">Cuenta Profesional</span> y esté vinculada a una Fanpage.</p>
+                                                    </div>
+                                                    <div className="flex items-start gap-4">
+                                                        <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center text-[10px] font-bold text-white/40 shrink-0">2</div>
+                                                        <p className="text-xs text-white/60 font-light mt-1 text-left leading-relaxed">Roosevelt te permitirá elegir entre tus perfiles de Udreamms para la automatización.</p>
+                                                    </div>
+                                                </div>
 
-                                        <button onClick={handleConnectInstagram} className="w-full h-16 bg-gradient-to-r from-[#E4405F] to-[#F58529] hover:opacity-90 text-white text-[11px] font-bold uppercase tracking-[0.3em] rounded-full transition-all shadow-[0_0_20px_rgba(228,64,95,0.2)]">
-                                            CONECTAR CON INSTAGRAM
-                                        </button>
+                                                <button onClick={handleConnectInstagram} className="w-full h-16 bg-gradient-to-r from-[#E4405F] to-[#F58529] hover:opacity-90 text-white text-[11px] font-bold uppercase tracking-[0.3em] rounded-full transition-all shadow-[0_0_20px_rgba(228,64,95,0.2)]">
+                                                    CONECTAR CON INSTAGRAM
+                                                </button>
+                                            </>
+                                        )}
                                     </motion.div>
                                 ) : (
                                     <motion.div key="step2" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center text-center">

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db, admin } from '@/lib/firebase-admin';
+import { processChatbotFlow } from '@/lib/chatbotEngine';
 
 export async function GET(req: Request) {
     return new Response('Telegram Webhook Active', { status: 200 });
@@ -108,6 +109,18 @@ export async function POST(req: Request) {
                 updatedAt: new Date().toISOString(),
                 createdAt: new Date().toISOString()
             }, { merge: true });
+
+            cardId = newCardRef.id;
+            groupId = destinationGroupId;
+        }
+
+        // 2. TRIGGER UNIVERSAL CHATBOT
+        if (groupId && cardId) {
+            processChatbotFlow({
+                userId, entityId, groupId, cardId, platform: 'telegram', from: telegramChatId, text: text
+            }).catch(error => {
+                 console.error(`[Telegram Chatbot Error] ${error}`);
+            });
         }
 
         return NextResponse.json({ success: true });
