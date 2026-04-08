@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
-const CLIENT_ID = process.env.GMAIL_CLIENT_ID;
-const REDIRECT_URI = process.env.GMAIL_REDIRECT_URI;
+const CLIENT_ID = process.env.GMAIL_CLIENT_ID?.replace(/\"/g, '').trim();
+const REDIRECT_URI = process.env.GMAIL_REDIRECT_URI?.replace(/\"/g, '').trim();
 
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);

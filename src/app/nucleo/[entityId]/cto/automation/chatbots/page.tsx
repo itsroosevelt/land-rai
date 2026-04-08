@@ -30,6 +30,7 @@ const ChatbotsPage = () => {
   const [bots, setBots] = useState<Bot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [updatingBots, setUpdatingBots] = useState<string[]>([]);
+  const [botToDelete, setBotToDelete] = useState<Bot | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'offline' | 'loading'>('loading');
   const [activeChannels, setActiveChannels] = useState<string[]>([]);
