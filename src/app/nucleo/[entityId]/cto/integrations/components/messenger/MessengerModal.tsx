@@ -22,6 +22,8 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
     const [step, setStep] = useState<number>(1);
     const [initialLoading, setInitialLoading] = useState(true);
     const [updatedAt, setUpdatedAt] = useState<any>(null);
+    const [availablePages, setAvailablePages] = useState<any[]>([]);
+    const [isSelectingPage, setIsSelectingPage] = useState(false);
     const [config, setConfig] = useState<any>({
         pageId: '',
         pageName: '',
@@ -77,55 +79,26 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
             toast.dismiss("meta-wait");
             toast.loading("Conectando con Meta Auth Portal...", { id: "meta-auth" });
 
-            FB.login((response: any) => {
-                const processAuth = async () => {
-                    if (response.authResponse) {
-                        toast.loading("Obteniendo tus Fanpages...", { id: "meta-auth" });
+            (window as any).FB.login((response: any) => {
+                if (response.authResponse) {
+                    toast.loading("Obteniendo tus Fanpages...", { id: "meta-auth" });
 
-                        FB.api('/me/accounts', async (pagesRes: any) => {
-                            if (pagesRes && pagesRes.data && pagesRes.data.length > 0) {
-                                const page = pagesRes.data[0];
-                                const pageId = page.id;
-                                const pageName = page.name;
-                                const pageAccessToken = page.access_token;
-
-                                toast.loading(`Vinculando ${pageName}...`, { id: "meta-auth" });
-
-                                try {
-                                    const pagesQuery = query(collectionGroup(db, 'integrations'), where('pageId', '==', pageId));
-                                    const pagesSnap = await getDocs(pagesQuery);
-                                    const isUsedByAnotherTenant = !pagesSnap.empty && !pagesSnap.docs.every((d: any) => d.ref.path.includes(activeEntity));
-                                    
-                                    if (isUsedByAnotherTenant) {
-                                        toast.error("Esta Fanpage ya está vinculada.", { id: "meta-auth" });
-                                        return;
-                                    }
-
-                                    FB.api(`/${pageId}/subscribed_apps`, 'post', {
-                                        subscribed_fields: ['messages', 'messaging_postbacks', 'message_deliveries', 'message_reads'],
-                                        access_token: pageAccessToken
-                                    });
-
-                                    const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/messenger`);
-                                    await setDoc(configRef, {
-                                        pageId, pageName, accessToken: pageAccessToken,
-                                        status: 'Connected', provider: 'messenger', updatedAt: new Date(),
-                                    }, { merge: true });
-
-                                    toast.success(`¡Messenger vinculado!`, { id: "meta-auth" });
-                                    setStep(2);
-                                } catch (err) {
-                                    toast.error("Error al procesar la vinculación.", { id: "meta-auth" });
-                                }
+                    (window as any).FB.api('/me/accounts', async (pagesRes: any) => {
+                        if (pagesRes && pagesRes.data && pagesRes.data.length > 0) {
+                            if (pagesRes.data.length > 1) {
+                                setAvailablePages(pagesRes.data);
+                                setIsSelectingPage(true);
+                                toast.dismiss("meta-auth");
                             } else {
-                                toast.error("No se encontraron Fanpages.", { id: "meta-auth" });
+                                await connectPage(pagesRes.data[0]);
                             }
-                        });
-                    } else {
-                        toast.error("Conexión cancelada.", { id: "meta-auth" });
-                    }
-                };
-                processAuth();
+                        } else {
+                            toast.error("No se encontraron Fanpages.", { id: "meta-auth" });
+                        }
+                    });
+                } else {
+                    toast.error("Conexión cancelada.", { id: "meta-auth" });
+                }
             }, {
                 scope: 'public_profile,pages_messaging,pages_show_list,pages_manage_metadata,pages_read_engagement',
                 return_scopes: true
@@ -133,6 +106,42 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
         };
 
         startLogin();
+    };
+
+    const connectPage = async (page: any) => {
+        const pageId = page.id;
+        const pageName = page.name;
+        const pageAccessToken = page.access_token;
+
+        toast.loading(`Vinculando ${pageName}...`, { id: "meta-auth" });
+
+        try {
+            const pagesQuery = query(collectionGroup(db, 'integrations'), where('pageId', '==', pageId));
+            const pagesSnap = await getDocs(pagesQuery);
+            const isUsedByAnotherTenant = !pagesSnap.empty && !pagesSnap.docs.every((d: any) => d.ref.path.includes(activeEntity));
+            
+            if (isUsedByAnotherTenant) {
+                toast.error("Esta Fanpage ya está vinculada.", { id: "meta-auth" });
+                return;
+            }
+
+            (window as any).FB.api(`/${pageId}/subscribed_apps`, 'post', {
+                subscribed_fields: ['messages', 'messaging_postbacks', 'message_deliveries', 'message_reads'],
+                access_token: pageAccessToken
+            });
+
+            const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/messenger`);
+            await setDoc(configRef, {
+                pageId, pageName, accessToken: pageAccessToken,
+                status: 'Connected', provider: 'messenger', updatedAt: new Date(),
+            }, { merge: true });
+
+            toast.success(`¡Messenger vinculado!`, { id: "meta-auth" });
+            setStep(2);
+            setIsSelectingPage(false);
+        } catch (err) {
+            toast.error("Error al procesar la vinculación.", { id: "meta-auth" });
+        }
     };
 
     const handleDelete = async () => {
@@ -190,23 +199,55 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
                                     </div>
                                 ) : step === 1 ? (
                                     <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-                                        <h3 className="text-3xl font-extralight text-white tracking-tighter mb-2 italic uppercase">Vincular Fanpage</h3>
-                                        <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-12">Portal de Acceso Meta</p>
-                                        
-                                        <div className="space-y-6 mb-12">
-                                            <div className="flex items-start gap-4">
-                                                <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center text-[10px] font-bold text-white/40 shrink-0">1</div>
-                                                <p className="text-xs text-white/60 font-light mt-1">Otorga permisos de Roosevelt para leer tus páginas.</p>
-                                            </div>
-                                            <div className="flex items-start gap-4">
-                                                <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center text-[10px] font-bold text-white/40 shrink-0">2</div>
-                                                <p className="text-xs text-white/60 font-light mt-1">Detectaremos automáticamente la Fanpage activa.</p>
-                                            </div>
-                                        </div>
-
-                                        <button onClick={handleConnectMessenger} className="w-full h-16 bg-[#0084FF] hover:bg-[#0073e6] text-white text-[11px] font-bold uppercase tracking-[0.3em] rounded-full transition-all shadow-[0_0_20px_rgba(0,132,255,0.2)]">
-                                            CONECTAR CON META
-                                        </button>
+                                        {isSelectingPage ? (
+                                            <>
+                                                <h3 className="text-3xl font-extralight text-white tracking-tighter mb-2 italic uppercase">Seleccionar Fanpage</h3>
+                                                <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-8">Varias páginas detectadas</p>
+                                                <div className="space-y-3 max-h-[300px] overflow-y-auto no-scrollbar pr-2 mb-8">
+                                                    {availablePages.map((p) => (
+                                                        <button 
+                                                            key={p.id} 
+                                                            onClick={() => connectPage(p)}
+                                                            className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-between hover:bg-white/10 transition-all group"
+                                                        >
+                                                            <div className="flex items-center gap-4 text-left">
+                                                                <div className="w-10 h-10 bg-[#0084FF]/10 rounded-full flex items-center justify-center border border-[#0084FF]/20 font-bold text-[#0084FF]">
+                                                                   FB
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-white text-sm font-medium">{p.name}</p>
+                                                                    <p className="text-[10px] text-white/30 uppercase tracking-tighter">ID: {p.id}</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center group-hover:border-[#0084FF]/50 group-hover:text-[#0084FF]">
+                                                                →
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                <button onClick={() => setIsSelectingPage(false)} className="text-[9px] text-white/30 hover:text-white uppercase tracking-widest font-bold underline underline-offset-4">Volver atrás</button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <h3 className="text-3xl font-extralight text-white tracking-tighter mb-2 italic uppercase">Vincular Fanpage</h3>
+                                                <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-12">Portal de Acceso Meta</p>
+                                                
+                                                <div className="space-y-6 mb-12">
+                                                    <div className="flex items-start gap-4">
+                                                        <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center text-[10px] font-bold text-white/40 shrink-0">1</div>
+                                                        <p className="text-xs text-white/60 font-light mt-1">Otorga permisos de Roosevelt para leer tus páginas.</p>
+                                                    </div>
+                                                    <div className="flex items-start gap-4">
+                                                        <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center text-[10px] font-bold text-white/40 shrink-0">2</div>
+                                                        <p className="text-xs text-white/60 font-light mt-1">Elegirás la Fanpage específica para automatizar.</p>
+                                                    </div>
+                                                </div>
+        
+                                                <button onClick={handleConnectMessenger} className="w-full h-16 bg-[#0084FF] hover:bg-[#0073e6] text-white text-[11px] font-bold uppercase tracking-[0.3em] rounded-full transition-all shadow-[0_0_20px_rgba(0,132,255,0.2)]">
+                                                    CONECTAR CON META
+                                                </button>
+                                            </>
+                                        )}
                                     </motion.div>
                                 ) : (
                                     <motion.div key="step2" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center text-center">
