@@ -34,9 +34,13 @@ export async function POST(req: Request) {
 
         try {
             if (targetPlatform === 'instagram' || targetPlatform === 'messenger') {
-                console.log(`[Omnichannel API] Sending to ${targetPlatform} (ID: ${toNumber})`);
+                console.log(`[Omnichannel API] Sending to ${targetPlatform} (ID: ${toNumber}) for tenant ${entityId}`);
                 const { sendMetaMessage } = await import('@/lib/sendProviders');
-                responseData = await sendMetaMessage(toNumber, message);
+                responseData = await sendMetaMessage(toNumber, message, { 
+                    userId, 
+                    entityId, 
+                    provider: targetPlatform as 'messenger' | 'instagram' 
+                });
                 messageId = responseData?.message_id;
             } else {
                 const { sendWhatsAppMessage } = await import('@/lib/sendProviders');
