@@ -77,10 +77,21 @@ export default function RootLayout({
                 version: 'v21.0'
               });
               
-              FB.getLoginStatus(function() {
+              // Solo ejecutar verificación de estado si estamos en HTTPS (Meta lo exige)
+              if (window.location.protocol === 'https:' || window.location.hostname === 'localhost') {
+                try {
+                  FB.getLoginStatus(function() {
+                    window.FB_READY = true;
+                    console.log('🚀 [ROOSEVELT META SDK]: Inicializado.');
+                  });
+                } catch (e) {
+                  console.warn('🚀 [ROOSEVELT META SDK]: getLoginStatus bloqueado por el navegador.');
+                  window.FB_READY = true; // Forzamos listo para no bloquear modales
+                }
+              } else {
                 window.FB_READY = true;
-                console.log('🚀 [ROOSEVELT META SDK]: Inicializado y verificado.');
-              });
+                console.log('🚀 [ROOSEVELT META SDK]: Modo HTTP detectado, omitiendo verificación de estado.');
+              }
             };
             (function(d, s, id) {
               var js, fjs = d.getElementsByTagName(s)[0];

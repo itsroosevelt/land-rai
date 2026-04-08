@@ -160,7 +160,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
             return;
         }
 
-        const _unused_toastId = toast.loading("Verificando credenciales...");
+        const _unused_toastId = toast.loading("Verificando credenciales...", { id: "wa-config" });
 
         try {
             const validationRes = await fetch('/api/whatsapp/validate-phone-id', {
@@ -175,16 +175,16 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
             const validationData = await validationRes.json();
 
             if (!validationData.valid) {
-                toast.error(validationData.message || "El número ya está vinculado a otra cuenta.", { id: "meta-auth" });
+                toast.error(validationData.message || "El número ya está vinculado a otra cuenta.", { id: "wa-config" });
                 return;
             }
         } catch (error) {
             console.error("Validation error:", error);
-            toast.error("Hubo un problema verificando el número.", { id: "meta-auth" });
+            toast.error("Hubo un problema verificando el número.", { id: "wa-config" });
             return;
         }
 
-        toast.loading("Guardando configuración...", { id: "meta-auth" });
+        toast.loading("Guardando configuración...", { id: "wa-config" });
         try {
             const configRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/integrations/whatsapp`);
             await setDoc(configRef, {
@@ -194,12 +194,12 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                 updatedAt: new Date(),
             }, { merge: true });
 
-            toast.success("¡WhatsApp conectado!", { id: "meta-auth" });
+            toast.success("¡WhatsApp conectado!", { id: "wa-config" });
             setIsEditing(false);
             setStep(4);
         } catch (error) {
             console.error(error);
-            toast.error("Error al guardar.", { id: "meta-auth" });
+            toast.error("Error al guardar.", { id: "wa-config" });
         }
     };
 
@@ -312,7 +312,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
         if (!currentUser || !activeEntity) return;
         if (!confirm("¿Seguro que quieres desconectar WhatsApp?")) return;
 
-        const _unused_toastId = toast.loading("Desconectando...");
+        const _unused_toastId = toast.loading("Desconectando...", { id: "wa-config" });
         try {
             const configRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/integrations/whatsapp`);
             const internalConfigRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/integrations/whatsapp_internal`);
@@ -344,10 +344,10 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
             });
             setStep(1);
             setIsEditing(false);
-            toast.success("Desconectado.", { id: "meta-auth" });
+            toast.success("Desconectado.", { id: "wa-config" });
         } catch (error) {
             console.error(error);
-            toast.error("Error al desconectar.", { id: "meta-auth" });
+            toast.error("Error al desconectar.", { id: "wa-config" });
         }
     };
 
@@ -441,9 +441,9 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                     <div className="p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-[8px] font-black uppercase text-neutral-500">URL DE CALLBACK</span>
-                            <button onClick={() => { navigator.clipboard.writeText(`https://us-central1-roosevelt-491004.cloudfunctions.net/metaWebhook?u=${currentUser?.uid}&e=${activeEntity}`); toast.success("URL copiada"); }} className="p-1 hover:bg-white/5 rounded-md"><Copy className="w-3 h-3 text-blue-500" /></button>
+                            <button onClick={() => { navigator.clipboard.writeText(`https://${window.location.host}/api/whatsapp/webhook?u=${currentUser?.uid}&e=${activeEntity}`); toast.success("URL copiada"); }} className="p-1 hover:bg-white/5 rounded-md"><Copy className="w-3 h-3 text-blue-500" /></button>
                         </div>
-                        <p className="text-[9px] font-mono text-blue-300 truncate tracking-tighter">https://us-central1-roosevelt-491004.cloudfunctions.net/metaWebhook?u={currentUser?.uid}&e={activeEntity}</p>
+                        <p className="text-[9px] font-mono text-blue-300 truncate tracking-tighter">https://{window.location.host}/api/whatsapp/webhook?u={currentUser?.uid}&e={activeEntity}</p>
                     </div>
                     <div className="p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
                         <div className="flex items-center justify-between mb-2">
