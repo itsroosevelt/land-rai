@@ -1,12 +1,12 @@
 import { admin, db } from './firebase-admin';
-import { sendMetaMessage, sendWhatsAppMessage, sendTelegramMessage } from './sendProviders';
+import { sendMetaMessage, sendWhatsAppMessage, sendTelegramMessage, sendGmailMessage } from './sendProviders';
 
 export interface ChatbotContext {
     userId: string;
     entityId: string;
     groupId: string;
     cardId: string;
-    platform: 'whatsapp' | 'messenger' | 'instagram' | 'telegram';
+    platform: 'whatsapp' | 'messenger' | 'instagram' | 'telegram' | 'gmail';
     from: string;
     text: string;
 }
@@ -60,6 +60,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             if (platform === 'whatsapp') return await sendWhatsAppMessage(from, content, opts);
             if (platform === 'messenger' || platform === 'instagram') return await sendMetaMessage(from, content, { ...opts, provider: platform });
             if (platform === 'telegram') return await sendTelegramMessage(from, content, opts);
+            if (platform === 'gmail') return await sendGmailMessage(from, content, opts);
             return null;
         };
 

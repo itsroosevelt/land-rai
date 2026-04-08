@@ -43,44 +43,21 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
     }, [isOpen, currentUser, activeEntity]);
 
     const handleConnect = async () => {
-        const email = window.prompt("Simulación OAuth: Ingresa la cuenta de @gmail a vincular:");
-        if (!email) return;
-
-        const cleanEmail = email.trim().toLowerCase();
-        if (!cleanEmail.includes('@gmail.com') && !cleanEmail.includes('@')) {
-            toast.error("Formato de correo no válido.");
-            return;
-        }
-
         setIsLoading(true);
-        const toastId = toast.loading("Verificando permisos de Gmail...");
+        const toastId = toast.loading("Abriendo portal de seguridad de Google...");
 
         try {
-            const queryRef = query(collectionGroup(db, 'integrations'), where('gmailAddress', '==', cleanEmail));
-            const snap = await getDocs(queryRef);
+            const res = await fetch(`/api/gmail/auth-url?u=${currentUser.uid}&e=${activeEntity}`);
+            const { url } = await res.json();
             
-            const isUsedByAnotherTenant = !snap.empty && !snap.docs.every((d: any) => d.ref.path.includes(activeEntity));
-                                    
-            if (isUsedByAnotherTenant) {
-                toast.error("Esta cuenta de Gmail ya está administrada por otro inquilino.", { id: toastId });
-                setIsLoading(false);
-                return;
+            if (url) {
+                window.location.href = url;
+            } else {
+                throw new Error("No se pudo generar el enlace de acceso.");
             }
-
-            const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/gmail`);
-            await setDoc(configRef, {
-                gmailAddress: cleanEmail,
-                status: 'Connected',
-                provider: 'gmail',
-                updatedAt: new Date(),
-            }, { merge: true });
-
-            toast.success("¡Email vinculado correctamente!", { id: toastId });
-            setStep(3);
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            toast.error("Fallo al conectar con Gmail.", { id: toastId });
-        } finally {
+            toast.error(error.message || "Fallo al conectar con Google.", { id: toastId });
             setIsLoading(false);
         }
     };

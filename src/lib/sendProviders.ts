@@ -1,6 +1,7 @@
 
 import axios from 'axios';
 import { db, admin } from './firebase-admin'; // Use admin to fetch tokens on server
+import { getGmailAccessToken } from './googleAuth';
 
 // --- Meta (Instagram & Messenger) ---
 
@@ -222,5 +223,45 @@ export async function sendTelegramMessage(
         const errorData = error.response?.data || error.message;
         console.error('Telegram API Error:', JSON.stringify(errorData, null, 2));
         throw new Error(`Telegram API Error: ${JSON.stringify(errorData)}`);
+    }
+}
+
+// --- Gmail API ---
+
+export async function sendGmailMessage(
+    to: string,
+    text: string,
+    options: { userId: string; entityId: string; subject?: string }
+): Promise<any> {
+    if (!text) return;
+    
+    try {
+        const accessToken = await getGmailAccessToken(options.userId, options.entityId);
+        
+        // Gmail requires a base64url encoded raw message for its 'send' endpoint
+        const subject = options.subject || 'Respuesta de Roosevelt';
+        const str = [
+            `To: ${to}`,
+            'Content-Type: text/html; charset=utf-8',
+            'MIME-Version: 1.0',
+            `Subject: ${subject}`,
+            '',
+            text
+        ].join('\n');
+
+        const encodedMail = Buffer.from(str).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+        const url = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
+        const response = await axios.post(url, { raw: encodedMail }, {
+            headers: { 
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        return { ...response.data, sentTo: to };
+    } catch (error: any) {
+        console.error('Gmail Send API Error:', error.response?.data || error.message);
+        throw new Error('Fallo al enviar correo desde Gmail.');
     }
 }
