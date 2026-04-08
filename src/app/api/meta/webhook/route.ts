@@ -18,23 +18,17 @@ export async function GET(req: Request) {
 
     const expectedToken = process.env.kamban_VERIFY_TOKEN || 'vg37e'; 
 
-    // Registro de diagnóstico GET
-    await db.collection('_webhook_debug').add({
-        type: 'VERIFICATION_ATTEMPT',
-        mode,
-        receivedToken: token,
-        expectedToken,
-        success: token === expectedToken,
-        timestamp: admin.firestore.FieldValue.serverTimestamp()
-    }).catch(() => {});
-
     if (mode === 'subscribe' && token === expectedToken) {
+        console.log('[Meta Webhook] Verification successful');
         return new Response(challenge, { status: 200 });
     }
+    console.error('[Meta Webhook] Verification failed. Check your token.');
     return new Response('Forbidden', { status: 403 });
 }
 
 export async function POST(req: Request) {
+    console.log('[Meta Webhook] INCOMING HIT');
+
     try {
         const rawBody = await req.text();
         let body;
@@ -43,13 +37,6 @@ export async function POST(req: Request) {
         } catch (e) {
             return NextResponse.json({ success: false, error: 'Invalid JSON' });
         }
-
-        // Registro de diagnóstico POST
-        await db.collection('_webhook_debug').add({
-            type: 'INCOMING_MESSAGE',
-            payload: body,
-            timestamp: admin.firestore.FieldValue.serverTimestamp()
-        }).catch(() => {});
 
         const entry = body.entry?.[0];
         if (!entry) return NextResponse.json({ success: true });

@@ -63,10 +63,13 @@ export default function RootLayout({
         <Script id="meta-sdk-core" strategy="afterInteractive">
           {`
             window.fbAsyncInit = function() {
-              // Si la variable de entorno falla (Vercel), usamos el ID hardcoded como respaldo de seguridad
-              const envAppId = '${process.env.NEXT_PUBLIC_META_APP_ID}';
-              const appId = (!envAppId || envAppId === 'undefined') ? '1239485381164246' : envAppId;
+              const appId = '${process.env.NEXT_PUBLIC_META_APP_ID}';
               
+              if (!appId || appId === 'undefined') {
+                console.error('🚀 [ROOSEVELT META SDK]: Error - NEXT_PUBLIC_META_APP_ID no configurado.');
+                return;
+              }
+
               FB.init({
                 appId: appId,
                 cookie: true,
@@ -77,10 +80,6 @@ export default function RootLayout({
               FB.getLoginStatus(function() {
                 window.FB_READY = true;
                 console.log('🚀 [ROOSEVELT META SDK]: Inicializado y verificado.');
-                console.log('📡 [META CONFIG]: App ID cargado (últimos 4):', appId.slice(-4));
-                if (appId === '1239485381164246' && envAppId === 'undefined') {
-                  console.warn('⚠️ [ROOSEVELT INFO]: Usando App ID de respaldo (la variable en Vercel está vacía).');
-                }
               });
             };
             (function(d, s, id) {
