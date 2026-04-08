@@ -64,6 +64,8 @@ export async function POST(req: Request) {
         // SUPPORT BOTH STRING AND NUMBER IDS (Agnostic normalization)
         const numericId = parseInt(targetId);
         
+        let tenantData: any = null;
+        
         // 1. MESSENGER PAGE SEARCH
         const messengerSnap = await db.collectionGroup('integrations')
             .where('pageId', 'in', [targetId, numericId])
@@ -72,6 +74,7 @@ export async function POST(req: Request) {
             
         if (!messengerSnap.empty) {
             tenantRef = messengerSnap.docs[0].ref;
+            tenantData = messengerSnap.docs[0].data();
         } else {
             // 2. INSTAGRAM ACCOUNT SEARCH
             const instagramSnap = await db.collectionGroup('integrations')
@@ -81,6 +84,7 @@ export async function POST(req: Request) {
                 
             if (!instagramSnap.empty) {
                 tenantRef = instagramSnap.docs[0].ref;
+                tenantData = instagramSnap.docs[0].data();
                 provider = 'instagram';
             }
         }
@@ -175,7 +179,26 @@ export async function POST(req: Request) {
             const newCardRef = db.collection(`${entityPath}/kanban-groups/${destinationGroupId}/cards`).doc();
             
             let numericId = String(Date.now()).slice(-10); // Simple ID for MVP
-            const contactName = `Usuario ${provider === 'instagram' ? 'IG' : 'FB'}`;
+            
+            // CAPTURE REAL PROFILE NAME FROM META
+            let contactName = `Usuario ${provider === 'instagram' ? 'IG' : 'FB'}`;
+            try {
+                if (tenantData?.accessToken) {
+                    const fields = provider === 'instagram' ? 'name,username' : 'first_name,last_name';
+                    const profileRes = await fetch(`https://graph.facebook.com/v21.0/${senderId}?fields=${fields}&access_token=${tenantData.accessToken}`);
+                    const profileData = await profileRes.json();
+                    
+                    if (profileData && !profileData.error) {
+                        if (provider === 'instagram') {
+                            contactName = profileData.name || profileData.username || contactName;
+                        } else {
+                            contactName = `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim() || contactName;
+                        }
+                    }
+                }
+            } catch (err) {
+                debugLog(`[Profile Fetch] Failed to get name: ${err}`);
+            }
 
             await newCardRef.set({
                 crmId: numericId,
