@@ -60,8 +60,7 @@ export default function RootLayout({
           </AuthProvider>
         </ThemeProvider>
         <Script src="https://terminal.jup.ag/main-v3.js" strategy="lazyOnload" />
-        <Script id="facebook-jssdk" src="https://connect.facebook.net/en_US/sdk.js" strategy="afterInteractive" />
-        <Script id="meta-sdk-init" strategy="afterInteractive">
+        <Script id="meta-sdk-core" strategy="afterInteractive">
           {`
             window.fbAsyncInit = function() {
               FB.init({
@@ -71,6 +70,13 @@ export default function RootLayout({
                 version: 'v21.0'
               });
             };
+            (function(d, s, id) {
+              var js, fjs = d.getElementsByTagName(s)[0];
+              if (d.getElementById(id)) return;
+              js = d.createElement(s); js.id = id;
+              js.src = "https://connect.facebook.net/en_US/sdk.js";
+              fjs.parentNode.insertBefore(js, fjs);
+            }(document, 'script', 'facebook-jssdk'));
           `}
         </Script>
       </body>
