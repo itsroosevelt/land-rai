@@ -220,8 +220,9 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
                                         <div className="w-full space-y-4 px-2">
                                             <div className="h-24 bg-white/5 border border-white/10 rounded-[32px] flex items-center px-8 justify-between backdrop-blur-sm">
                                                 <div className="text-left">
-                                                    <span className="text-[9px] uppercase tracking-[0.2em] text-white/40 block mb-2 font-bold opacity-60">IDENTIFICADOR DE PÁGINA</span>
-                                                    <p className="text-2xl font-light text-white tracking-widest">{config.pageId}</p>
+                                                    <span className="text-[9px] uppercase tracking-[0.2em] text-[#0084FF] block mb-2 font-black">PÁGINA VINCULADA</span>
+                                                    <p className="text-2xl font-light text-white tracking-tight leading-none uppercase">{config.pageName || 'Fanpage Activa'}</p>
+                                                    <span className="text-[9px] text-white/20 mt-2 block font-mono">ID: {config.pageId}</span>
                                                 </div>
                                                 <div className="p-4 bg-green-500/5 border border-green-500/10 rounded-2xl"><ShieldCheck className="w-6 h-6 text-green-500/40" /></div>
                                             </div>

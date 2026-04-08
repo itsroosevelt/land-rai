@@ -90,12 +90,13 @@ export async function POST(req: Request) {
         }
 
         if (!tenantRef) {
-            debugLog(`[POST] ❌ ABORT: Could not resolve tenant for Target ID ${targetId}.`);
+            debugLog(`[POST] ❌ ALERTA: No se pudo resolver el tenant. Target ID recibido: ${targetId}.`);
+            debugLog(`[POST] Sugerencia: Verifica que el Instagram ID '${targetId}' esté registrado en Firestore.`);
             return NextResponse.json({ 
                 success: false, 
                 error: 'Tenant not mapped',
-                triedId: targetId,
-                triedNumeric: numericId
+                incomingId: targetId,
+                note: 'Ensure this ID is correctly stored in your integrations collection'
             });
         }
 

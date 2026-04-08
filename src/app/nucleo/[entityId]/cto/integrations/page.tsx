@@ -132,8 +132,8 @@ export default function IntegrationsPage() {
                     </div>
                 </div>
 
-                {/* Grid Section */}
-                <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* Grid Section - Reduced Width (4 Columns) */}
+                <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <AnimatePresence mode="popLayout">
                         {filteredIntegrations.map((integration, idx) => (
                             <IntegrationCard 
@@ -230,12 +230,12 @@ function IntegrationCard({
             layout
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className={`relative group p-6 rounded-[32px] border transition-all duration-500 flex flex-col h-full bg-[#0a0a0a] ${
+            className={`relative group px-6 py-4 rounded-[32px] border transition-all duration-500 flex flex-col h-full bg-[#0a0a0a] ${
                 isConnected ? 'border-blue-500/30 ring-1 ring-blue-500/20' : 'border-white/5 hover:border-white/20'
             }`}
         >
             {/* Status Badge */}
-            <div className="flex justify-between items-start mb-6">
+            <div className="flex justify-between items-start mb-4">
                 <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-[9px] uppercase font-black border transition-all ${
                     isConnected ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/10 text-neutral-600'
                 }`}>
@@ -250,7 +250,7 @@ function IntegrationCard({
             </div>
 
             {/* Icon */}
-            <div className="mb-6 relative">
+            <div className="mb-4 relative">
                  <div className="w-16 h-16 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-center group-hover:scale-110 transition-transform duration-500 group-hover:border-white/10 overflow-hidden relative">
                     {integration.icon}
                     {/* Glossy reflection overlay */}
@@ -260,18 +260,7 @@ function IntegrationCard({
 
             {/* Content */}
             <h3 className="text-xl font-medium text-white mb-2">{integration.name}</h3>
-            {isConnected && (integrationData?.phoneNumber || integrationData?.pageName || integrationData?.gmailAddress || integrationData?.botToken) && (
-                <div className="flex items-center gap-2 mb-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-[10px] text-green-400 font-mono tracking-wider uppercase">
-                        {integrationData.pageName || 
-                         (integrationData.phoneNumber ? `+${integrationData.phoneNumber}` : '') || 
-                         integrationData.gmailAddress || 
-                         (integrationData.botToken ? 'Bot Activo' : '')}
-                    </span>
-                </div>
-            )}
-            <p className="text-neutral-500 text-xs leading-relaxed mb-8 flex-grow">
+            <p className="text-neutral-500 text-[11px] leading-relaxed mb-6 flex-grow">
                 {integration.description}
             </p>
 
