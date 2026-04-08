@@ -16,27 +16,40 @@ export async function GET(req: Request) {
     const token = searchParams.get('hub.verify_token');
     const challenge = searchParams.get('hub.challenge');
 
-    const expectedToken = process.env.kamban_VERIFY_TOKEN || 'vg37e'; // Shared global token
+    const expectedToken = process.env.kamban_VERIFY_TOKEN || 'vg37e'; 
+
+    // Registro de diagnóstico GET
+    await db.collection('_webhook_debug').add({
+        type: 'VERIFICATION_ATTEMPT',
+        mode,
+        receivedToken: token,
+        expectedToken,
+        success: token === expectedToken,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+    }).catch(() => {});
 
     if (mode === 'subscribe' && token === expectedToken) {
-        debugLog(`Verification successful (GET)`);
         return new Response(challenge, { status: 200 });
     }
-    debugLog(`Verification failed (GET) | Expected: ${expectedToken}, Got: ${token}`);
     return new Response('Forbidden', { status: 403 });
 }
 
 export async function POST(req: Request) {
-    debugLog('--- [Meta Master Webhook] INCOMING HIT ---');
-
     try {
+        const rawBody = await req.text();
         let body;
         try {
-            const rawBody = await req.text();
             body = JSON.parse(rawBody);
-        } catch (parseError: any) {
-            return NextResponse.json({ success: false, error: 'Invalid JSON' }, { status: 400 });
+        } catch (e) {
+            return NextResponse.json({ success: false, error: 'Invalid JSON' });
         }
+
+        // Registro de diagnóstico POST
+        await db.collection('_webhook_debug').add({
+            type: 'INCOMING_MESSAGE',
+            payload: body,
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+        }).catch(() => {});
 
         const entry = body.entry?.[0];
         if (!entry) return NextResponse.json({ success: true });
