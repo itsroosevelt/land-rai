@@ -63,14 +63,20 @@ export default function RootLayout({
         <Script id="meta-sdk-core" strategy="afterInteractive">
           {`
             window.fbAsyncInit = function() {
+              const appId = '${process.env.NEXT_PUBLIC_META_APP_ID}';
               FB.init({
-                appId: '${process.env.NEXT_PUBLIC_META_APP_ID}',
+                appId: appId,
                 cookie: true,
                 xfbml: true,
                 version: 'v21.0'
               });
-              window.FB_READY = true;
-              console.log('🚀 [ROOSEVELT META SDK]: Inicializado y listo.');
+              
+              // Verificación forzada de inicialización
+              FB.getLoginStatus(function() {
+                window.FB_READY = true;
+                console.log('🚀 [ROOSEVELT META SDK]: Inicializado y verificado.');
+                console.log('📡 [META CONFIG]: App ID cargado (últimos 4):', appId.slice(-4) || 'NO ENCONTRADO');
+              });
             };
             (function(d, s, id) {
               var js, fjs = d.getElementsByTagName(s)[0];

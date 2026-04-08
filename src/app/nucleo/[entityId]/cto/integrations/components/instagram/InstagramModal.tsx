@@ -55,87 +55,87 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
     }, [isOpen, currentUser, activeEntity]);
 
     const handleConnectInstagram = async () => {
-        const FB = (window as any).FB;
-        const isFBReady = (window as any).FB_READY;
+        let retries = 0;
+        const maxRetries = 6;
 
-        if (!FB || !isFBReady) {
-            toast.error("El SDK de Meta se está inicializando. Por favor, espera un segundo y vuelve a intentar.");
-            return;
-        }
+        const startLogin = () => {
+            const FB = (window as any).FB;
+            const isFBReady = (window as any).FB_READY;
 
-        toast.loading("Abriendo portal de Instagram...", { id: "meta-auth" });
+            if (!FB || !isFBReady) {
+                if (retries < maxRetries) {
+                    retries++;
+                    toast.loading(`Sincronizando con Meta (${retries}/${maxRetries})...`, { id: "meta-wait" });
+                    setTimeout(startLogin, 500);
+                } else {
+                    toast.dismiss("meta-wait");
+                    toast.error("El SDK de Meta no responde.");
+                }
+                return;
+            }
 
-        FB.login((response: any) => {
-            const processAuth = async () => {
-                if (response.authResponse) {
-                    toast.loading("Detectando cuenta de Instagram...", { id: "meta-auth" });
+            toast.dismiss("meta-wait");
+            toast.loading("Abriendo portal de Instagram...", { id: "meta-auth" });
 
-                    // 1. Fetch Pages and their Instagram Business Accounts
-                    FB.api('/me/accounts?fields=instagram_business_account,name,access_token', async (pagesRes: any) => {
-                        if (pagesRes && pagesRes.data) {
-                            // Find the first page that has an Instagram Business Account linked
-                            const pageWithIg = pagesRes.data.find((p: any) => p.instagram_business_account);
+            FB.login((response: any) => {
+                const processAuth = async () => {
+                    if (response.authResponse) {
+                        toast.loading("Detectando cuenta de Instagram...", { id: "meta-auth" });
 
-                            if (pageWithIg) {
-                                const instagramId = pageWithIg.instagram_business_account.id;
-                                const pageName = pageWithIg.name;
-                                const pageAccessToken = pageWithIg.access_token;
+                        FB.api('/me/accounts?fields=instagram_business_account,name,access_token', async (pagesRes: any) => {
+                            if (pagesRes && pagesRes.data) {
+                                const pageWithIg = pagesRes.data.find((p: any) => p.instagram_business_account);
 
-                                toast.loading(`Verificando disponibilidad de la cuenta...`, { id: "meta-auth" });
+                                if (pageWithIg) {
+                                    const instagramId = pageWithIg.instagram_business_account.id;
+                                    const pageName = pageWithIg.name;
+                                    const pageAccessToken = pageWithIg.access_token;
 
-                                try {
-                                    const igQuery = query(collectionGroup(db, 'integrations'), where('instagramId', '==', instagramId));
-                                    const igSnap = await getDocs(igQuery);
-                                    
-                                    const isUsedByAnotherTenant = !igSnap.empty && !igSnap.docs.every((d: any) => d.ref.path.includes(activeEntity));
-                                    
-                                    if (isUsedByAnotherTenant) {
-                                        toast.error("Esta cuenta de Instagram ya está vinculada a otro negocio en Roosevelt.", { id: "meta-auth" });
-                                        return;
+                                    try {
+                                        const igQuery = query(collectionGroup(db, 'integrations'), where('instagramId', '==', instagramId));
+                                        const igSnap = await getDocs(igQuery);
+                                        const isUsedByAnotherTenant = !igSnap.empty && !igSnap.docs.every((d: any) => d.ref.path.includes(activeEntity));
+                                        
+                                        if (isUsedByAnotherTenant) {
+                                            toast.error("Cuenta ya vinculada a otro negocio.", { id: "meta-auth" });
+                                            return;
+                                        }
+
+                                        FB.api(`/${pageWithIg.id}/subscribed_apps`, 'post', {
+                                            subscribed_fields: ['messages', 'messaging_postbacks', 'message_deliveries', 'message_reads'],
+                                            access_token: pageAccessToken
+                                        });
+
+                                        const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/instagram`);
+                                        await setDoc(configRef, {
+                                            instagramId, pageName, accessToken: pageAccessToken,
+                                            status: 'Connected', provider: 'instagram', updatedAt: new Date(),
+                                        }, { merge: true });
+
+                                        toast.success(`¡Instagram vinculado!`, { id: "meta-auth" });
+                                        setStep(2);
+                                    } catch (err) {
+                                        toast.error("Error al procesar la vinculación.", { id: "meta-auth" });
                                     }
-
-                                    toast.loading(`Sincronizando feed de ${pageName}...`, { id: "meta-auth" });
-                                    
-                                    // 2. SUBSCRIBE PAGE TO APP (CRITICAL FOR INSTAGRAM WEBHOOKS)
-                                    FB.api(`/${pageWithIg.id}/subscribed_apps`, 'post', {
-                                        subscribed_fields: ['messages', 'messaging_postbacks', 'message_deliveries', 'message_reads'],
-                                        access_token: pageAccessToken
-                                    }, (subRes: any) => {
-                                        console.log('[Meta] IG Subscription result:', subRes);
-                                    });
-
-                                    const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/instagram`);
-                                    await setDoc(configRef, {
-                                        instagramId,
-                                        pageName,
-                                        accessToken: pageAccessToken,
-                                        status: 'Connected',
-                                        provider: 'instagram',
-                                        updatedAt: new Date(),
-                                    }, { merge: true });
-
-                                    toast.success(`¡Instagram vinculado exitosamente!`, { id: "meta-auth" });
-                                    setStep(2);
-                                } catch (err) {
-                                    console.error(err);
-                                    toast.error("Fallo al verificar o guardar la persistencia local.", { id: "meta-auth" });
+                                } else {
+                                    toast.error("No se encontró cuenta de Instagram Business.", { id: "meta-auth" });
                                 }
                             } else {
-                                toast.error("No se encontró ninguna cuenta de Instagram Business vinculada a tus páginas.", { id: "meta-auth" });
+                                toast.error("No se detectaron perfiles.", { id: "meta-auth" });
                             }
-                        } else {
-                            toast.error("No se detectaron perfiles de Meta disponibles.", { id: "meta-auth" });
-                        }
-                    });
-                } else {
-                    toast.error("Conexión cancelada.", { id: "meta-auth" });
-                }
-            };
-            processAuth();
-        }, {
-            scope: 'instagram_basic,instagram_manage_messages,pages_show_list,pages_read_engagement',
-            return_scopes: true
-        });
+                        });
+                    } else {
+                        toast.error("Conexión cancelada.", { id: "meta-auth" });
+                    }
+                };
+                processAuth();
+            }, {
+                scope: 'instagram_basic,instagram_manage_messages,pages_show_list,pages_read_engagement',
+                return_scopes: true
+            });
+        };
+
+        startLogin();
     };
 
     const handleDelete = async () => {

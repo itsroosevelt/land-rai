@@ -55,83 +55,84 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
     }, [isOpen, currentUser, activeEntity]);
 
     const handleConnectMessenger = async () => {
-        const FB = (window as any).FB;
-        const isFBReady = (window as any).FB_READY;
+        let retries = 0;
+        const maxRetries = 6;
 
-        if (!FB || !isFBReady) {
-            toast.error("El SDK de Meta se está inicializando. Por favor, espera un segundo y vuelve a intentar.");
-            return;
-        }
+        const startLogin = () => {
+            const FB = (window as any).FB;
+            const isFBReady = (window as any).FB_READY;
 
-        toast.loading("Conectando con Meta Auth Portal...", { id: "meta-auth" });
+            if (!FB || !isFBReady) {
+                if (retries < maxRetries) {
+                    retries++;
+                    toast.loading(`Sincronizando con Meta (${retries}/${maxRetries})...`, { id: "meta-wait" });
+                    setTimeout(startLogin, 500);
+                } else {
+                    toast.dismiss("meta-wait");
+                    toast.error("El SDK de Meta no responde.");
+                }
+                return;
+            }
 
-        FB.login((response: any) => {
-            const processAuth = async () => {
-                if (response.authResponse) {
-                    toast.loading("Obteniendo tus Fanpages...", { id: "meta-auth" });
+            toast.dismiss("meta-wait");
+            toast.loading("Conectando con Meta Auth Portal...", { id: "meta-auth" });
 
-                    // 1. Fetch Pages (me/accounts)
-                    FB.api('/me/accounts', async (pagesRes: any) => {
-                        if (pagesRes && pagesRes.data && pagesRes.data.length > 0) {
-                            // Automatically pick the first one (MVP) or we could add a selector
-                            const page = pagesRes.data[0];
-                            const pageId = page.id;
-                            const pageName = page.name;
-                            const pageAccessToken = page.access_token;
+            FB.login((response: any) => {
+                const processAuth = async () => {
+                    if (response.authResponse) {
+                        toast.loading("Obteniendo tus Fanpages...", { id: "meta-auth" });
 
-                            toast.loading(`Verificando disponibilidad de ${pageName}...`, { id: "meta-auth" });
-
-                            try {
-                                const pagesQuery = query(collectionGroup(db, 'integrations'), where('pageId', '==', pageId));
-                                const pagesSnap = await getDocs(pagesQuery);
-                                
-                                const isUsedByAnotherTenant = !pagesSnap.empty && !pagesSnap.docs.every((d: any) => d.ref.path.includes(activeEntity));
-                                
-                                if (isUsedByAnotherTenant) {
-                                    toast.error("Esta Fanpage ya está vinculada a otro negocio en Roosevelt.", { id: "meta-auth" });
-                                    // Make sure Facebook SDK logs out to clear invalid session state if desired, but blocking the save is enough:
-                                    return;
-                                }
+                        FB.api('/me/accounts', async (pagesRes: any) => {
+                            if (pagesRes && pagesRes.data && pagesRes.data.length > 0) {
+                                const page = pagesRes.data[0];
+                                const pageId = page.id;
+                                const pageName = page.name;
+                                const pageAccessToken = page.access_token;
 
                                 toast.loading(`Vinculando ${pageName}...`, { id: "meta-auth" });
-                                
-                                // 2. SUBSCRIBE PAGE TO APP (CRITICAL FOR WEBHOOKS)
-                                FB.api(`/${pageId}/subscribed_apps`, 'post', {
-                                    subscribed_fields: ['messages', 'messaging_postbacks', 'message_deliveries', 'message_reads'],
-                                    access_token: pageAccessToken
-                                }, (subRes: any) => {
-                                    console.log('[Meta] Subscription result:', subRes);
-                                });
 
-                                const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/messenger`);
-                                await setDoc(configRef, {
-                                    pageId,
-                                    pageName,
-                                    accessToken: pageAccessToken,
-                                    status: 'Connected',
-                                    provider: 'messenger',
-                                    updatedAt: new Date(),
-                                }, { merge: true });
+                                try {
+                                    const pagesQuery = query(collectionGroup(db, 'integrations'), where('pageId', '==', pageId));
+                                    const pagesSnap = await getDocs(pagesQuery);
+                                    const isUsedByAnotherTenant = !pagesSnap.empty && !pagesSnap.docs.every((d: any) => d.ref.path.includes(activeEntity));
+                                    
+                                    if (isUsedByAnotherTenant) {
+                                        toast.error("Esta Fanpage ya está vinculada.", { id: "meta-auth" });
+                                        return;
+                                    }
 
-                                toast.success(`¡Messenger conectado con ${pageName}!`, { id: "meta-auth" });
-                                setStep(2);
-                            } catch (err) {
-                                console.error(err);
-                                toast.error("Error al procesar la vinculación.", { id: "meta-auth" });
+                                    FB.api(`/${pageId}/subscribed_apps`, 'post', {
+                                        subscribed_fields: ['messages', 'messaging_postbacks', 'message_deliveries', 'message_reads'],
+                                        access_token: pageAccessToken
+                                    });
+
+                                    const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/messenger`);
+                                    await setDoc(configRef, {
+                                        pageId, pageName, accessToken: pageAccessToken,
+                                        status: 'Connected', provider: 'messenger', updatedAt: new Date(),
+                                    }, { merge: true });
+
+                                    toast.success(`¡Messenger vinculado!`, { id: "meta-auth" });
+                                    setStep(2);
+                                } catch (err) {
+                                    toast.error("Error al procesar la vinculación.", { id: "meta-auth" });
+                                }
+                            } else {
+                                toast.error("No se encontraron Fanpages.", { id: "meta-auth" });
                             }
-                        } else {
-                            toast.error("No se encontraron Fanpages vinculadas a tu cuenta.", { id: "meta-auth" });
-                        }
-                    });
-                } else {
-                    toast.error("Conexión cancelada por el usuario.", { id: "meta-auth" });
-                }
-            };
-            processAuth();
-        }, {
-            scope: 'pages_messaging,pages_show_list,pages_manage_metadata,pages_read_engagement',
-            return_scopes: true
-        });
+                        });
+                    } else {
+                        toast.error("Conexión cancelada.", { id: "meta-auth" });
+                    }
+                };
+                processAuth();
+            }, {
+                scope: 'pages_messaging,pages_show_list,pages_manage_metadata,pages_read_engagement',
+                return_scopes: true
+            });
+        };
+
+        startLogin();
     };
 
     const handleDelete = async () => {
