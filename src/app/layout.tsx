@@ -69,6 +69,8 @@ export default function RootLayout({
                 xfbml: true,
                 version: 'v21.0'
               });
+              window.FB_READY = true;
+              console.log('🚀 [ROOSEVELT META SDK]: Inicializado y listo.');
             };
             (function(d, s, id) {
               var js, fjs = d.getElementsByTagName(s)[0];

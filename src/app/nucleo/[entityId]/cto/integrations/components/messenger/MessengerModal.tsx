@@ -56,8 +56,10 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
 
     const handleConnectMessenger = async () => {
         const FB = (window as any).FB;
-        if (!FB) {
-            toast.error("El SDK de Meta no está listo. Recarga la página.");
+        const isFBReady = (window as any).FB_READY;
+
+        if (!FB || !isFBReady) {
+            toast.error("El SDK de Meta se está inicializando. Por favor, espera un segundo y vuelve a intentar.");
             return;
         }
 
