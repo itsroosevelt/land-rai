@@ -128,10 +128,14 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
 
             const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/instagram`);
             await setDoc(configRef, {
-                instagramId, 
-                pageName: pageWithIg.instagram_business_account.username ? `@${pageWithIg.instagram_business_account.username}` : (pageWithIg.instagram_business_account.name || pageWithIg.name), 
+                instagramId,
+                instagramName: pageWithIg.instagram_business_account.name,
+                instagramUsername: pageWithIg.instagram_business_account.username,
+                pageName: pageWithIg.instagram_business_account.name || pageWithIg.name, 
                 accessToken: pageAccessToken,
-                status: 'Connected', provider: 'instagram', updatedAt: new Date(),
+                status: 'Connected', 
+                provider: 'instagram', 
+                updatedAt: new Date(),
             }, { merge: true });
 
             toast.success(`¡Instagram vinculado!`, { id: "meta-auth" });
@@ -301,7 +305,7 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                                                 <div className="absolute inset-0 bg-[#E4405F]/5 opacity-0 group-hover/card:opacity-100 transition-opacity" />
                                                 <div className="text-left relative z-10">
                                                     <span className="text-[9px] uppercase tracking-[0.2em] text-[#E4405F] block mb-2 font-black">CANAL ACTIVO</span>
-                                                    <p className="text-2xl font-light text-white tracking-tight leading-none truncate max-w-[200px]">{config.pageName || 'Perfil Conectado'}</p>
+                                                    <p className="text-2xl font-light text-white tracking-tight leading-none truncate max-w-[250px]">{config.instagramName || config.pageName || 'Perfil Conectado'}</p>
                                                     <span className="text-[9px] text-white/40 mt-3 block font-medium italic">Listo para recibir mensajes</span>
                                                 </div>
                                                 <div className="p-4 bg-green-500/5 border border-green-500/10 rounded-2xl relative z-10"><ShieldCheck className="w-6 h-6 text-green-500/40" /></div>
