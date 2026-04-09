@@ -157,13 +157,46 @@ export async function POST(req: Request) {
         let groupId = targetGroupId;
 
         if (targetCardDoc && targetGroupId) {
+            // REFRESH NAME LOGIC: If contact exists but has a generic name, try to fetch real name again
+            let updatedName = existingContactName;
+            if (!existingContactName || existingContactName.toLowerCase().includes('usuario')) {
+                try {
+                    if (tenantData?.accessToken) {
+                        const fields = provider === 'instagram' ? 'name,username' : 'first_name,last_name,name';
+                        const profileRes = await fetch(`https://graph.facebook.com/v21.0/${senderId}?fields=${fields}&access_token=${tenantData.accessToken}`);
+                        const profileData = await profileRes.json();
+                        
+                        if (profileData && !profileData.error) {
+                            if (provider === 'instagram') {
+                                updatedName = profileData.username ? `@${profileData.username}` : (profileData.name || updatedName);
+                            } else {
+                                updatedName = profileData.name || `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim() || updatedName;
+                            }
+                        }
+                    }
+                } catch (err) {
+                    debugLog(`[Name Refresh] Failed to refresh name: ${err}`);
+                }
+            }
+
             await targetCardDoc.ref.update({
+                contactName: updatedName,
                 lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
                 updatedAt: new Date(),
                 unreadCount: admin.firestore.FieldValue.increment(1),
                 messages: admin.firestore.FieldValue.arrayUnion(newMessage),
-                status: 'open'
+                status: 'open',
+                source: provider.toUpperCase()
             });
+
+            // Sincronizar campo source y nombre con el contacto existente
+            if (existingContactId) {
+                await db.collection(`${entityPath}/contacts`).doc(existingContactId).update({
+                    name: updatedName,
+                    source: provider.toUpperCase(),
+                    updatedAt: new Date().toISOString()
+                });
+            }
         } else {
             // Create NEW card in Inbox
             let destinationGroupId = targetGroupId;
@@ -215,7 +248,7 @@ export async function POST(req: Request) {
                 messages: [newMessage],
                 unreadCount: 1,
                 status: 'open',
-                source: provider,
+                source: provider.toUpperCase(),
                 primary_channel: provider
             });
 
@@ -225,7 +258,7 @@ export async function POST(req: Request) {
                 metaSenderId: senderId,
                 kanbanGroupId: destinationGroupId,
                 kanbanCardId: newCardRef.id,
-                origin: provider,
+                source: provider.toUpperCase(),
                 updatedAt: new Date().toISOString(),
                 createdAt: new Date().toISOString()
             }, { merge: true });

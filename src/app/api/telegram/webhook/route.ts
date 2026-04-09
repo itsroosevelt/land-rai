@@ -64,8 +64,17 @@ export async function POST(req: Request) {
                     updatedAt: new Date(),
                     unreadCount: admin.firestore.FieldValue.increment(1),
                     messages: admin.firestore.FieldValue.arrayUnion(newMessage),
-                    status: 'open'
+                    status: 'open',
+                    source: 'TELEGRAM'
                 });
+
+                // Sincronizar campo source con el contacto existente
+                if (contactId) {
+                    await db.collection(`${entityPath}/contacts`).doc(contactId).update({
+                        source: 'TELEGRAM',
+                        updatedAt: new Date().toISOString()
+                    });
+                }
             }
         } else {
             // Create New Contact & Card
@@ -95,7 +104,7 @@ export async function POST(req: Request) {
                 messages: [newMessage],
                 unreadCount: 1,
                 status: 'open',
-                source: 'telegram',
+                source: 'TELEGRAM',
                 primary_channel: 'telegram'
             });
 
@@ -105,7 +114,7 @@ export async function POST(req: Request) {
                 telegramChatId: telegramChatId,
                 kanbanGroupId: destinationGroupId,
                 kanbanCardId: newCardRef.id,
-                origin: 'telegram',
+                source: 'TELEGRAM',
                 updatedAt: new Date().toISOString(),
                 createdAt: new Date().toISOString()
             }, { merge: true });
