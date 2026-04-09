@@ -85,12 +85,10 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                                 toast.dismiss("meta-auth");
                                 return;
                             }
-                            if (pagesWithIg.length > 1) {
+                            if (pagesWithIg.length > 0) {
                                 setAvailablePages(pagesWithIg);
                                 setIsSelectingPage(true);
                                 toast.dismiss("meta-auth");
-                            } else {
-                                await connectPage(pagesWithIg[0]);
                             }
                         }
                     });

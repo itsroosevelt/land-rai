@@ -85,13 +85,9 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
 
                     (window as any).FB.api('/me/accounts', async (pagesRes: any) => {
                         if (pagesRes && pagesRes.data && pagesRes.data.length > 0) {
-                            if (pagesRes.data.length > 1) {
-                                setAvailablePages(pagesRes.data);
-                                setIsSelectingPage(true);
-                                toast.dismiss("meta-auth");
-                            } else {
-                                await connectPage(pagesRes.data[0]);
-                            }
+                            setAvailablePages(pagesRes.data);
+                            setIsSelectingPage(true);
+                            toast.dismiss("meta-auth");
                         } else {
                             toast.error("No se encontraron Fanpages.", { id: "meta-auth" });
                         }
