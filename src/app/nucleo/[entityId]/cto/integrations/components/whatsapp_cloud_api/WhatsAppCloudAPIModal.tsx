@@ -18,7 +18,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
     const { currentUser } = useAuth();
     const params = useParams();
     const activeEntity = params?.entityId as string;
-    
+
     const [step, setStep] = useState<number>(1);
     const [isEditing, setIsEditing] = useState(false);
     const [initialLoading, setInitialLoading] = useState(true);
@@ -49,7 +49,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
     // Validations
     const validateField = (name: string, value: string) => {
         let error = '';
-        const bareValue = value.replace(/\s/g, ''); 
+        const bareValue = value.replace(/\s/g, '');
 
         switch (name) {
             case 'phoneNumberId':
@@ -74,7 +74,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
         const appId = process.env.NEXT_PUBLIC_META_APP_ID;
         if (!appId) return;
 
-        (window as any).fbAsyncInit = function() {
+        (window as any).fbAsyncInit = function () {
             (window as any).FB.init({
                 appId: appId,
                 cookie: true,
@@ -83,7 +83,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
             });
         };
 
-        (function(d, s, id) {
+        (function (d, s, id) {
             var js, fjs = d.getElementsByTagName(s)[0];
             if (d.getElementById(id)) return;
             js = d.createElement(s) as HTMLScriptElement;
@@ -100,7 +100,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
 
         const configRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/integrations/whatsapp`);
         const internalConfigRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/integrations/whatsapp_internal`);
-        
+
         let unsubInternal: any = null;
 
         const unsub = onSnapshot(configRef, (snap) => {
@@ -237,7 +237,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                         console.log("[Meta API] /me/whatsapp_business_accounts response:", wabaRes);
                         if (wabaRes && wabaRes.data && wabaRes.data.length > 0) {
                             const wabaId = wabaRes.data[0].id; // We take the first one for simplicity or let user choose (future)
-                            
+
                             FB.api(`/${wabaId}/phone_numbers`, async (phoneRes: any) => {
                                 console.log(`[Meta API] /${wabaId}/phone_numbers response:`, phoneRes);
                                 if (phoneRes && phoneRes.data && phoneRes.data.length > 0) {
@@ -299,7 +299,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                     toast.error("La conexión con Meta falló o fue cancelada.", { id: "meta-auth" });
                 }
             };
-            
+
             processAuth();
         }, {
             scope: 'whatsapp_business_management,whatsapp_business_messaging,business_management',
@@ -316,7 +316,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
         try {
             const configRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/integrations/whatsapp`);
             const internalConfigRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/integrations/whatsapp_internal`);
-            
+
             await Promise.all([
                 deleteDoc(configRef),
                 deleteDoc(internalConfigRef)
@@ -324,17 +324,17 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
 
             // Turn off any active chatbots
             const botsRef = collection(db, `users/${currentUser.uid}/entities/${activeEntity}/chatbots`);
-            
+
             // Handle both true and 'true' just in case
             const qReal = query(botsRef, where('isActive', '==', true));
             const qStr = query(botsRef, where('isActive', '==', 'true'));
-            
+
             const [snapsReal, snapsStr] = await Promise.all([getDocs(qReal), getDocs(qStr)]);
-            
+
             const updatePromises: Promise<void>[] = [];
             snapsReal.forEach(bot => updatePromises.push(updateDoc(bot.ref, { isActive: false })));
             snapsStr.forEach(bot => updatePromises.push(updateDoc(bot.ref, { isActive: false })));
-            
+
             await Promise.all(updatePromises);
 
             setWaConfig({
@@ -375,7 +375,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                     <div className="space-y-2">
                         <div className="flex justify-between px-1">
                             <label className="text-[9px] font-black uppercase tracking-widest text-neutral-500">TU NÚMERO DE TELÉFONO</label>
-                             <a href="https://developers.facebook.com/apps/" target="_blank" rel="noreferrer" className="text-[8px] text-blue-500 font-bold uppercase italic tracking-tighter">EXPLORADOR API</a>
+                            <a href="https://developers.facebook.com/apps/" target="_blank" rel="noreferrer" className="text-[8px] text-blue-500 font-bold uppercase italic tracking-tighter">EXPLORADOR API</a>
                         </div>
                         <input
                             type="text" placeholder="Ej: +1 385 888 2799"
@@ -431,29 +431,6 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                 </div>
             </div>
 
-            <div className="bg-white/5 border border-white/10 rounded-[28px] p-6 mb-8 relative overflow-hidden group text-left">
-                <div className="absolute top-0 right-0 w-[200px] h-full bg-blue-500/5 blur-[50px] pointer-events-none" />
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 bg-blue-500/10 rounded-lg"><QrCode className="w-4 h-4 text-blue-400" /></div>
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Para configurar el Webhook en Meta:</h4>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-[8px] font-black uppercase text-neutral-500">URL DE CALLBACK</span>
-                            <button onClick={() => { navigator.clipboard.writeText(`https://${window.location.host}/api/whatsapp/webhook?u=${currentUser?.uid}&e=${activeEntity}`); toast.success("URL copiada"); }} className="p-1 hover:bg-white/5 rounded-md"><Copy className="w-3 h-3 text-blue-500" /></button>
-                        </div>
-                        <p className="text-[9px] font-mono text-blue-300 truncate tracking-tighter">https://{window.location.host}/api/whatsapp/webhook?u={currentUser?.uid}&e={activeEntity}</p>
-                    </div>
-                    <div className="p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-[8px] font-black uppercase text-neutral-500">VERIFY TOKEN</span>
-                            <button onClick={() => { navigator.clipboard.writeText(waConfig.verifyToken); toast.success("Token copiado"); }} className="p-1 hover:bg-white/5 rounded-md"><Copy className="w-3 h-3 text-blue-500" /></button>
-                        </div>
-                        <p className="text-[9px] font-mono text-blue-300">{waConfig.verifyToken}</p>
-                    </div>
-                </div>
-            </div>
 
             {isEditing ? (
                 <div className="grid grid-cols-2 gap-4">
@@ -512,7 +489,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                                 <p className="text-[11px] text-white/40 font-light leading-relaxed mb-10 tracking-wide max-w-[200px]">
                                     Conecta la infraestructura de Meta directamente a Roosevelt para una comunicación autónoma y escalable.
                                 </p>
-                                
+
                                 <div className="mt-auto">
                                     <div className="bg-white/5 rounded-2xl p-5 border border-white/10 backdrop-blur-sm group hover:border-primary/30 transition-all duration-500">
                                         <div className="flex items-center gap-2 mb-2">
@@ -576,7 +553,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                                     {step === 4 && !isEditing && (
                                         <button
                                             onClick={() => {
-                                                setTempConfig({...waConfig});
+                                                setTempConfig({ ...waConfig });
                                                 setIsEditing(true);
                                             }}
                                             className="p-2 hover:bg-white/5 rounded-full transition-colors text-neutral-400 hover:text-blue-500"
@@ -594,7 +571,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                                     </motion.div>
                                 ) : (step === 1 || isEditing) ? (
                                     <motion.div key={isEditing ? "edit" : "step1"} initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="flex-1 flex flex-col font-sans">
-                                        
+
                                         {isEditing || connectionMode === 'manual' ? (
                                             <>
                                                 <div className="mb-6">
@@ -612,7 +589,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                                                         <p className="text-[10px] text-white/20 uppercase tracking-[0.4em] font-bold">Autonomous Protocol 01</p>
                                                     </div>
                                                 </div>
-                                                
+
                                                 <div className="space-y-4 flex-1">
                                                     <button
                                                         onClick={() => setAccountAction('new')}
@@ -639,20 +616,20 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                                                         </div>
                                                     </button>
                                                 </div>
-                                                
+
                                                 <div className="flex flex-col gap-6 mt-12">
-                                                    <button 
+                                                    <button
                                                         onClick={() => {
                                                             setWizardPath(accountAction === 'new' ? 'new' : 'existing');
                                                             setStep(2);
-                                                        }} 
+                                                        }}
                                                         className="bg-white/5 hover:bg-white/10 text-white px-10 h-12 rounded-full text-[10px] font-bold uppercase tracking-[0.3em] transition-all border border-white/10 backdrop-blur-md shadow-xl w-fit group"
                                                     >
                                                         <span className="flex items-center gap-3">
                                                             Sincronizar <CheckCircle2 className="w-3 h-3 group-hover:scale-110 transition-transform" />
                                                         </span>
                                                     </button>
-                                                    
+
                                                     <div className="flex items-center gap-4">
                                                         <button onClick={handleConnectFacebook} className="text-[9px] text-white/40 font-bold uppercase tracking-[0.2em] hover:text-primary transition-colors">Direct OAuth Link</button>
                                                         <span className="w-1 h-1 rounded-full bg-white/10" />
@@ -675,10 +652,10 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                                                 <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-white/50">Privilegios</span>
                                             </div>
                                         </div>
-                                        
+
                                         <h3 className="text-3xl font-extralight text-white tracking-tighter mb-4">Verificación de Nodo</h3>
                                         <p className="text-[11px] text-white/30 font-light mb-10 leading-relaxed max-w-md uppercase tracking-wider">Confirma la naturaleza del número de teléfono para asignar el protocolo de enrutamiento adecuado.</p>
-                                        
+
                                         <div className="space-y-3 mb-10">
                                             {['new', 'personal', 'none'].map((status) => (
                                                 <button
@@ -695,10 +672,10 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                                                 </button>
                                             ))}
                                         </div>
-                                        
+
                                         <div className="flex items-center justify-between mt-auto">
-                                            <button 
-                                                onClick={() => setStep(3)} 
+                                            <button
+                                                onClick={() => setStep(3)}
                                                 disabled={!phoneStatus}
                                                 className="px-10 h-12 rounded-full text-[10px] font-bold uppercase tracking-[0.3em] bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-white shadow-xl disabled:opacity-20"
                                             >
@@ -747,7 +724,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                                     <motion.div key="existing-choice" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex-1 flex flex-col text-left font-sans">
                                         <h3 className="text-3xl font-extralight text-white tracking-tighter mb-4 italic">Protocolo de Migración</h3>
                                         <p className="text-[11px] text-white/30 font-light mb-10 uppercase tracking-widest">Identifica el núcleo de origen para la transferencia de datos.</p>
-                                        
+
                                         <div className="space-y-4 mb-10">
                                             {['internal', 'other'].map((opt) => (
                                                 <button
@@ -767,9 +744,9 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                                                 </button>
                                             ))}
                                         </div>
-                                        
-                                        <button 
-                                            onClick={() => setStep(3)} 
+
+                                        <button
+                                            onClick={() => setStep(3)}
                                             disabled={!bspChoice}
                                             className="px-10 h-14 rounded-full text-[10px] font-bold uppercase tracking-[0.3em] bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-white shadow-xl disabled:opacity-10 w-fit"
                                         >
@@ -780,7 +757,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                                     <motion.div key="existing-migrate" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex-1 flex flex-col text-left font-sans">
                                         <h3 className="text-3xl font-extralight text-white tracking-tighter mb-4">Migración de Infraestructura</h3>
                                         <p className="text-[11px] text-white/30 font-light mb-10 uppercase tracking-widest italic">Sincronización de plantillas y calificación de calidad.</p>
-                                        
+
                                         <div className="bg-white/5 border border-white/10 rounded-[28px] p-8 mb-10">
                                             <div className="flex items-start gap-4">
                                                 <div className="p-2 bg-primary/20 rounded-lg"><AlertCircle className="w-5 h-5 text-primary" /></div>
@@ -805,11 +782,11 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                                             </div>
                                         </div>
 
-                                        <button 
+                                        <button
                                             onClick={handleConnectFacebook}
                                             className="bg-primary hover:bg-primary/80 text-white w-fit px-12 h-14 rounded-full text-[10px] font-bold uppercase tracking-[0.3em] transition-all flex items-center gap-4 shadow-[0_0_30px_rgba(37,99,235,0.2)]"
                                         >
-                                            <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M22.675 0h-21.35c-.732 0-1.325.593-1.325 1.325v21.351c0 .731.593 1.324 1.325 1.324h11.495v-9.294h-3.128v-3.622h3.128v-2.671c0-3.1 1.893-4.788 4.659-4.788 1.325 0 2.463.099 2.795.143v3.24l-1.918.001c-1.504 0-1.795.715-1.795 1.763v2.313h3.587l-.467 3.622h-3.12v9.293h6.116c.73 0 1.323-.593 1.323-1.325v-21.35c0-.732-.593-1.325-1.325-1.325z"/></svg>
+                                            <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M22.675 0h-21.35c-.732 0-1.325.593-1.325 1.325v21.351c0 .731.593 1.324 1.325 1.324h11.495v-9.294h-3.128v-3.622h3.128v-2.671c0-3.1 1.893-4.788 4.659-4.788 1.325 0 2.463.099 2.795.143v3.24l-1.918.001c-1.504 0-1.795.715-1.795 1.763v2.313h3.587l-.467 3.622h-3.12v9.293h6.116c.73 0 1.323-.593 1.323-1.325v-21.35c0-.732-.593-1.325-1.325-1.325z" /></svg>
                                             Authorize Meta Migration
                                         </button>
                                     </motion.div>
@@ -822,7 +799,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                                         </div>
                                         <h3 className="text-3xl font-extralight text-white tracking-tighter mb-2 italic uppercase">Canal Sincronizado</h3>
                                         <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-10">Nodo Activo en la Red Roosevelt</p>
-                                        
+
                                         <div className="w-full space-y-4 px-2">
                                             <div className="h-24 bg-white/5 border border-white/10 rounded-[32px] flex items-center px-8 justify-between relative overflow-hidden backdrop-blur-sm">
                                                 <div className="text-left relative z-10">
