@@ -51,7 +51,34 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
             const { url } = await res.json();
             
             if (url) {
-                window.location.href = url;
+                // Lógica de Ventana Emergente (Popup)
+                const width = 600;
+                const height = 700;
+                const left = window.screenX + (window.outerWidth - width) / 2;
+                const top = window.screenY + (window.outerHeight - height) / 2;
+                
+                const popup = window.open(
+                    url, 
+                    'google-auth', 
+                    `width=${width},height=${height},left=${left},top=${top}`
+                );
+
+                if (popup) {
+                    toast.info("Completa el acceso en la ventana emergente.", { id: toastId });
+                    
+                    // Monitorear cierre de ventana
+                    const checkPopup = setInterval(() => {
+                        if (popup.closed) {
+                            clearInterval(checkPopup);
+                            setIsLoading(false);
+                            // Nota: El onSnapshot del useEffect detectará el cambio en Firestore 
+                            // y pasará al Step 3 automáticamente.
+                        }
+                    }, 1000);
+                } else {
+                    // Fallback si el navegador bloquea el popup
+                    window.location.href = url;
+                }
             } else {
                 throw new Error("No se pudo generar el enlace de acceso.");
             }
