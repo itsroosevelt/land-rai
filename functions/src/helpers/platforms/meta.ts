@@ -3,10 +3,10 @@ import { MessagingAdapter } from './types';
 import * as metaAPI from '../metaAPI';
 
 export class MetaAdapter implements MessagingAdapter {
-    private ctx: { userId?: string, entityId?: string };
+    private ctx: { userId?: string, entityId?: string, provider?: 'messenger' | 'instagram' };
 
     constructor(platform: string = 'messenger', userId?: string, entityId?: string) {
-        this.ctx = { userId, entityId };
+        this.ctx = { userId, entityId, provider: platform as any };
     }
 
     async sendMessage(to: string, text: string): Promise<any> {

@@ -288,26 +288,44 @@ export async function executeBotFlow(
         }
 
         // --- RESTART COMMAND (For testing purposes) ---
-        const isRestartCommand = currentMsg.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === 'reinicia todo ahora' || currentMsg.trim().toLowerCase() === 'reiniciar' || currentMsg.trim().toLowerCase() === 'reset';
+        const isRestartCommand = input === 'reinicia todo ahora' || input === 'reiniciar' || input === 'reset';
 
         // --- ABSOLUTE RESTART COMMAND ---
         if (isRestartCommand) {
             functions.logger.info(`[Bot Engine] Absolute Restart requested for ${to}`);
             await cardRef.update({
                 botState: admin.firestore.FieldValue.delete(),
+                chatbotState: admin.firestore.FieldValue.delete(), // Bilingual support
                 customFields: admin.firestore.FieldValue.delete(),
-                contactName: "Amigo",
                 lastBotInteraction: admin.firestore.FieldValue.delete(),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
             });
 
             await adapter.sendMessage(to, "🔄 Reinicio completado, empezamos de nuevo.");
             await logBotMessage(to, "🔄 Reinicio completado, empezamos de nuevo.", cardData.id, cardData.groupId, cardRef, 'text');
-            currentMsg = ""; // Clear to avoid being used by the fresh flow
-            return; // STOP execution here to wait for next user message
+
+            // RE-EJECUTAR EL FLOW DESDE EL INICIO (Master Fix)
+            const freshBot = await getActiveBot(userId, entityId);
+            if (freshBot) {
+                await executeBotFlow(freshBot, userId, entityId, to, { ...cardData, botState: undefined, chatbotState: undefined }, "");
+            }
+            return;
         }
 
-        let currentNodeId = cardData.botState?.currentNodeId;
+        // --- BILINGUAL STATE RESOLUTION ---
+        // If botState doesn't exist but legacy chatbotState does, we migrate it or use it as fallback
+        let botState = cardData.botState;
+        if (!botState && cardData.chatbotState) {
+            functions.logger.info(`[Bot Engine] 🔄 Migrating legacy chatbotState to botState for ${to}`);
+            botState = {
+                status: cardData.chatbotState.status || 'active',
+                currentNodeId: cardData.chatbotState.currentNodeId,
+                lastInteraction: cardData.chatbotState.lastInteraction || admin.firestore.Timestamp.now(),
+                retryCount: 0
+            };
+        }
+
+        let currentNodeId = botState?.currentNodeId;
         let nextNodeId: string | null = null;
         let shouldContinue = true;
         let executionCount = 0;

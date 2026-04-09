@@ -56,6 +56,7 @@ export async function handleKanbanUpdateOmni(message: UnifiedMessage, userId?: s
     if (existingCard) {
         cardRef = existingCard.ref;
         await cardRef.update({
+            [`platform_ids.${source_platform}`]: external_id, // Ensure mapping exists
             lastMessage: message_text || `[${message_type.toUpperCase()}]`,
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             unreadCount: admin.firestore.FieldValue.increment(1),

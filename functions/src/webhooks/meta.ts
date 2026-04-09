@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { normalizeMetaMessage, normalizeWhatsAppMessage } from '../helpers/messageNormalizer';
+import { getMetaProfile } from '../helpers/metaAPI';
 import { handleKanbanUpdateOmni } from '../helpers/kanbanOperations';
 import { tryTriggerBot } from '../helpers/botEngine';
 import { resolveTenant } from '../helpers/tenantResolver';
@@ -91,7 +92,7 @@ export const metaWebhook = functions.https.onRequest(async (req, res) => {
                                 phoneId: phoneNumberId,
                                 raw: JSON.stringify(body).substring(0, 1500)
                             });
-                        } catch (logErr) {}
+                        } catch (logErr) { }
 
                         // C. PROCESAR MENSAJES
                         const contactName = value.contacts?.[0]?.profile?.name || 'Cliente WhatsApp';
@@ -101,7 +102,7 @@ export const metaWebhook = functions.https.onRequest(async (req, res) => {
                             const unified = normalizeWhatsAppMessage(msg, contactName);
                             // handleKanbanUpdateOmni se encarga de buscar/crear cards y sincronizar CRM
                             const result = await handleKanbanUpdateOmni(unified, u, e);
-                            
+
                             if (result?.success) {
                                 await tryTriggerBot(u, e, 'whatsapp', unified.external_id, unified.message_text, msg.id, { mediaUrl: unified.media_url, type: unified.message_type });
                             }
@@ -110,6 +111,7 @@ export const metaWebhook = functions.https.onRequest(async (req, res) => {
                 } else if (entry.messaging) {
                     const event = entry.messaging[0];
                     const recipientId = event.recipient?.id;
+                    const senderId = event.sender?.id;
 
                     let u = req.query['u'] as string;
                     let e = req.query['e'] as string;
@@ -123,7 +125,13 @@ export const metaWebhook = functions.https.onRequest(async (req, res) => {
                     }
 
                     if (u && e) {
-                        const unified = normalizeMetaMessage(event, platform as any);
+                        // Fetch real profile name
+                        let profile = null;
+                        if (senderId) {
+                            profile = await getMetaProfile(senderId, undefined, { userId: u, entityId: e, provider: platform as any });
+                        }
+
+                        const unified = normalizeMetaMessage(event, platform as any, profile);
                         const result = await handleKanbanUpdateOmni(unified, u, e);
                         if (result?.success) {
                             await tryTriggerBot(u, e, platform as any, unified.external_id, unified.message_text, event.message?.mid, { type: unified.message_type });
