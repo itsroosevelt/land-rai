@@ -24,6 +24,7 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
     const [updatedAt, setUpdatedAt] = useState<any>(null);
     const [availablePages, setAvailablePages] = useState<any[]>([]);
     const [isSelectingPage, setIsSelectingPage] = useState(false);
+    const [showNoIgError, setShowNoIgError] = useState(false);
     const [config, setConfig] = useState<any>({
         instagramId: '',
         pageName: '',
@@ -80,7 +81,8 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                         if (pagesRes && pagesRes.data) {
                             const pagesWithIg = pagesRes.data.filter((p: any) => p.instagram_business_account);
                             if (pagesWithIg.length === 0) {
-                                toast.error("No se encontró cuenta de Instagram Business.", { id: "meta-auth" });
+                                setShowNoIgError(true);
+                                toast.dismiss("meta-auth");
                                 return;
                             }
                             if (pagesWithIg.length > 1) {
@@ -223,6 +225,43 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                                                 </div>
                                                 <button onClick={() => setIsSelectingPage(false)} className="text-[9px] text-white/30 hover:text-white uppercase tracking-widest font-bold underline underline-offset-4">Volver atrás</button>
                                             </>
+                                        ) : showNoIgError ? (
+                                            <motion.div key="noIgError" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center text-center">
+                                                <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mb-8 relative">
+                                                    <div className="absolute inset-0 rounded-full border border-red-500/20 animate-pulse" />
+                                                    <Instagram className="w-10 h-10 text-red-500" />
+                                                </div>
+                                                <h3 className="text-3xl font-extralight text-white tracking-tighter mb-2 italic uppercase">Perfil No Detectado</h3>
+                                                <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-8 italic">Configuración Requerida en Meta</p>
+                                                
+                                                <div className="bg-white/5 border border-white/10 rounded-[32px] p-8 mb-10 backdrop-blur-sm text-left w-full">
+                                                    <p className="text-xs text-white/60 font-light leading-relaxed mb-6">
+                                                        Tu cuenta de Facebook no tiene un <span className="text-white font-medium">Perfil de Instagram Professional</span> vinculado. 
+                                                        Para usar la automatización de Roosevelt, debes realizar esta conexión primero en el Business Suite.
+                                                    </p>
+                                                    <div className="flex items-center gap-3 p-4 bg-red-500/5 border border-red-500/10 rounded-2xl">
+                                                        <Circle className="w-2 h-2 text-red-500 fill-red-500" />
+                                                        <span className="text-[9px] uppercase tracking-widest text-red-400 font-bold">Acción Requerida: Vincular Instagram a Fanpage</span>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex flex-col gap-4 w-full">
+                                                    <a 
+                                                        href="https://business.facebook.com/latest/inbox/instagram_direct?asset_id=520950477768651&business_id=1785184582003764&ir_qe_exposed=1"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="w-full h-16 bg-white text-black text-[11px] font-bold uppercase tracking-[0.3em] rounded-full flex items-center justify-center transition-all hover:bg-neutral-200"
+                                                    >
+                                                        Crea tu perfil aquí
+                                                    </a>
+                                                    <button 
+                                                        onClick={() => setShowNoIgError(false)}
+                                                        className="text-[9px] text-white/30 hover:text-white uppercase tracking-widest font-bold underline underline-offset-8 transition-colors"
+                                                    >
+                                                        Intentar de nuevo
+                                                    </button>
+                                                </div>
+                                            </motion.div>
                                         ) : (
                                             <>
                                                 <h3 className="text-3xl font-extralight text-white tracking-tighter mb-2 italic uppercase">Vincular Professional Account</h3>

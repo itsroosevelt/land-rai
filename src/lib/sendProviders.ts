@@ -56,7 +56,11 @@ export async function sendMetaMessage(
 
     try {
         const response = await axios.post(url, messageData);
-        return { ...response.data, sentTo: recipientId };
+        return { 
+            ...response.data, 
+            message_id: response.data.message_id || response.data.id,
+            sentTo: recipientId 
+        };
     } catch (error: any) {
         const errorData = error.response?.data || error.message;
         console.error('Meta API Error:', JSON.stringify(errorData, null, 2));
@@ -218,7 +222,11 @@ export async function sendTelegramMessage(
 
     try {
         const response = await axios.post(url, payload);
-        return { ...response.data, sentTo: chatId };
+        return { 
+            ...response.data, 
+            message_id: response.data.result?.message_id,
+            sentTo: chatId 
+        };
     } catch (error: any) {
         const errorData = error.response?.data || error.message;
         console.error('Telegram API Error:', JSON.stringify(errorData, null, 2));

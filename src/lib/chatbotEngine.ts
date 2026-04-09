@@ -79,12 +79,17 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                 const msg = replaceVars(node.data?.content || node.data?.text || 'Hola');
                 const res = await dispatchMessage(msg);
 
+                const messagePayload = {
+                    sender: 'agent',
+                    text: msg,
+                    timestamp: new Date(),
+                    platform: platform,
+                    messageId: res?.message_id || res?.messageId || res?.whatsappMessageId || `bot_${Date.now()}`
+                };
+
                 await cardRef.update({
-                    messages: admin.firestore.FieldValue.arrayUnion({
-                        sender: 'agent', text: msg, timestamp: new Date(), platform: platform,
-                        messageId: res?.whatsappMessageId || res?.messageId || null
-                    }),
-                    lastMessage: msg.substring(0, 47) + '...',
+                    messages: admin.firestore.FieldValue.arrayUnion(messagePayload),
+                    lastMessage: msg.length > 50 ? msg.substring(0, 47) + '...' : msg,
                     updatedAt: new Date(),
                     unreadCount: 0,
                     'chatbotState.currentNodeId': node.id,
@@ -178,8 +183,15 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                     await cardRef.update({ 'chatbotState.waitingForInput': false });
                     await executeNode(edge.target);
                 } else {
-                    const startNode = flow.nodes.find((n: any) => n.type === 'startNode');
-                    if (startNode) await executeNode(startNode.id);
+                    // FALLBACK: If no specific handle matched, look for ANY outgoing edge (default path)
+                    const fallbackEdge = flow.edges.find((e: any) => e.source === node?.id);
+                    if (fallbackEdge) {
+                        await cardRef.update({ 'chatbotState.waitingForInput': false });
+                        await executeNode(fallbackEdge.target);
+                    } else {
+                        const startNode = flow.nodes.find((n: any) => n.type === 'startNode');
+                        if (startNode) await executeNode(startNode.id);
+                    }
                 }
             }
         } else {
