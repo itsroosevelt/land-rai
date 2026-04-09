@@ -13,19 +13,20 @@ export interface MetaSendOptions {
 }
 
 export async function sendMetaMessage(
-    recipientId: string, 
-    text: string, 
+    recipientId: string,
+    text: string,
     options: MetaSendOptions | string = {}
 ): Promise<any> {
     if (!text) return;
     let token = process.env.META_PAGE_ACCESS_TOKEN;
-    
+
     // Backwards compatibility with the old signature
     if (typeof options === 'string') {
         token = options;
         options = {};
     }
 
+    let targetNodeId: string | undefined;
     if (options.userId && options.entityId && options.provider) {
         try {
             const configPath = `users/${options.userId}/entities/${options.entityId}/integrations/${options.provider}`;
@@ -34,6 +35,8 @@ export async function sendMetaMessage(
                 const data = configDoc.data();
                 if (data?.accessToken) {
                     token = data.accessToken;
+                    // Extraemos el ID del nodo para soportar Tokens de Sistema
+                    targetNodeId = options.provider === 'messenger' ? data.pageId : data.instagramId;
                     console.log(`[sendMetaMessage] Loaded token for ${options.provider} in tenant ${options.entityId}`);
                 }
             }
@@ -51,19 +54,41 @@ export async function sendMetaMessage(
         recipient: { id: recipientId },
         message: { text: text }
     };
-    
-    const url = `https://graph.facebook.com/v21.0/me/messages?access_token=${token}`;
+
+    // Si no tenemos el ID del nodo, intentamos con 'me' como fallback (solo funciona con User Tokens)
+    const node = targetNodeId || 'me';
+    const url = `https://graph.facebook.com/v21.0/${node}/messages?access_token=${token}`;
 
     try {
         const response = await axios.post(url, messageData);
-        return { 
-            ...response.data, 
+        return {
+            ...response.data,
             message_id: response.data.message_id || response.data.id,
-            sentTo: recipientId 
+            sentTo: recipientId
         };
     } catch (error: any) {
         const errorData = error.response?.data || error.message;
         console.error('Meta API Error:', JSON.stringify(errorData, null, 2));
+
+        // Self-documenting error in Firestore for easier debugging
+        if (options.userId && options.entityId && options.provider) {
+            try {
+                const searchSnap = await db.collectionGroup('cards')
+                    .where(`platform_ids.${options.provider}`, '==', recipientId)
+                    .limit(1)
+                    .get();
+
+                if (!searchSnap.empty) {
+                    await searchSnap.docs[0].ref.update({
+                        'botState.lastError': JSON.stringify(errorData),
+                        'botState.lastErrorAt': new Date()
+                    });
+                }
+            } catch (fsErr) {
+                console.error('[sendMetaMessage] Failed to log error to Firestore:', fsErr);
+            }
+        }
+
         throw new Error(`Meta API Error: ${JSON.stringify(errorData)}`);
     }
 }
@@ -222,10 +247,10 @@ export async function sendTelegramMessage(
 
     try {
         const response = await axios.post(url, payload);
-        return { 
-            ...response.data, 
+        return {
+            ...response.data,
             message_id: response.data.result?.message_id,
-            sentTo: chatId 
+            sentTo: chatId
         };
     } catch (error: any) {
         const errorData = error.response?.data || error.message;
@@ -242,10 +267,10 @@ export async function sendGmailMessage(
     options: { userId: string; entityId: string; subject?: string }
 ): Promise<any> {
     if (!text) return;
-    
+
     try {
         const accessToken = await getGmailAccessToken(options.userId, options.entityId);
-        
+
         // Gmail requires a base64url encoded raw message for its 'send' endpoint
         const subject = options.subject || 'Respuesta de Roosevelt';
         const str = [
@@ -261,7 +286,7 @@ export async function sendGmailMessage(
 
         const url = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
         const response = await axios.post(url, { raw: encodedMail }, {
-            headers: { 
+            headers: {
                 Authorization: `Bearer ${accessToken}`,
                 'Content-Type': 'application/json'
             }

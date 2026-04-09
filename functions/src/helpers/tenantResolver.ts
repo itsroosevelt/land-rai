@@ -16,8 +16,14 @@ export interface TenantContext {
  */
 export async function resolveTenant(platform: string, platformId: string | number, secondaryId?: string | number): Promise<TenantContext | null> {
     const db = admin.firestore();
-    const fieldName = platform === 'whatsapp' ? 'phoneNumberId' : 'id';
-    
+    // 0. MAP FIELD NAMES ACCORDING TO PLATFORM (Master Mold Agnostic Search)
+    let fieldName = 'id';
+    if (platform === 'whatsapp') fieldName = 'phoneNumberId';
+    else if (platform === 'instagram') fieldName = 'instagramId';
+    else if (platform === 'messenger') fieldName = 'pageId';
+    else if (platform === 'telegram') fieldName = 'botToken';
+    else if (platform === 'x_twitter') fieldName = 'twitterHandle';
+
     // 1. MODERN VAULT SEARCH (Preferred)
     try {
         let integrationsSnap = await db.collectionGroup("integrations")
@@ -57,7 +63,7 @@ export async function resolveTenant(platform: string, platformId: string | numbe
     try {
         const mappingPath = `system_mappings/${platform === 'whatsapp' ? 'whatsapp_numbers' : platform + '_mappings'}/numbers/${platformId}`;
         const legacySnap = await db.doc(mappingPath).get();
-        
+
         if (legacySnap.exists) {
             const data = legacySnap.data() as any;
             if (data.userId && data.entityId) {

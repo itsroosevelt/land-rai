@@ -17,7 +17,7 @@ export async function GET(req: Request) {
     const token = searchParams.get('hub.verify_token');
     const challenge = searchParams.get('hub.challenge');
 
-    const expectedToken = process.env.kamban_VERIFY_TOKEN || 'vg37e'; 
+    const expectedToken = process.env.kamban_VERIFY_TOKEN || 'vg37e';
 
     if (mode === 'subscribe' && token === expectedToken) {
         console.log('[Meta Webhook] Verification successful');
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
 
         const targetId = entry.id; // Page ID or Instagram Account ID
         const messaging = entry.messaging?.[0];
-        
+
         if (!messaging || !messaging.sender || !messaging.message) {
             return NextResponse.json({ success: true, ignored: 'not_a_message' });
         }
@@ -61,18 +61,18 @@ export async function POST(req: Request) {
         // Search for the Tenant globally
         let tenantRef: admin.firestore.DocumentReference | null = null;
         let provider: 'messenger' | 'instagram' = 'messenger';
-        
+
         // SUPPORT BOTH STRING AND NUMBER IDS (Agnostic normalization)
         const numericId = parseInt(targetId);
-        
+
         let tenantData: any = null;
-        
+
         // 1. MESSENGER PAGE SEARCH
         const messengerSnap = await db.collectionGroup('integrations')
             .where('pageId', 'in', [targetId, numericId])
             .limit(1)
             .get();
-            
+
         if (!messengerSnap.empty) {
             tenantRef = messengerSnap.docs[0].ref;
             tenantData = messengerSnap.docs[0].data();
@@ -82,7 +82,7 @@ export async function POST(req: Request) {
                 .where('instagramId', 'in', [targetId, numericId])
                 .limit(1)
                 .get();
-                
+
             if (!instagramSnap.empty) {
                 tenantRef = instagramSnap.docs[0].ref;
                 tenantData = instagramSnap.docs[0].data();
@@ -93,8 +93,8 @@ export async function POST(req: Request) {
         if (!tenantRef) {
             debugLog(`[POST] ❌ ALERTA: No se pudo resolver el tenant. Target ID recibido: ${targetId}.`);
             debugLog(`[POST] Sugerencia: Verifica que el Instagram ID '${targetId}' esté registrado en Firestore.`);
-            return NextResponse.json({ 
-                success: false, 
+            return NextResponse.json({
+                success: false,
                 error: 'Tenant not mapped',
                 incomingId: targetId,
                 note: 'Ensure this ID is correctly stored in your integrations collection'
@@ -104,7 +104,7 @@ export async function POST(req: Request) {
         const pathParts = tenantRef.path.split('/');
         const uIdx = pathParts.indexOf('users');
         const eIdx = pathParts.indexOf('entities');
-        
+
         if (uIdx === -1 || eIdx === -1) return NextResponse.json({ success: false });
 
         const userId = pathParts[uIdx + 1];
@@ -165,7 +165,7 @@ export async function POST(req: Request) {
                         const fields = provider === 'instagram' ? 'name,username' : 'first_name,last_name,name';
                         const profileRes = await fetch(`https://graph.facebook.com/v21.0/${senderId}?fields=${fields}&access_token=${tenantData.accessToken}`);
                         const profileData = await profileRes.json();
-                        
+
                         if (profileData && !profileData.error) {
                             if (provider === 'instagram') {
                                 updatedName = profileData.username ? `@${profileData.username}` : (profileData.name || updatedName);
@@ -203,7 +203,7 @@ export async function POST(req: Request) {
             if (!destinationGroupId) {
                 const fallbackGroup = groupsSnapshot.docs.find(g => (g.data().name || '').toLowerCase().includes('inbox')) || groupsSnapshot.docs[0];
                 destinationGroupId = fallbackGroup ? fallbackGroup.id : 'default_inbox';
-                
+
                 if (destinationGroupId === 'default_inbox') {
                     await db.collection(`${entityPath}/kanban-groups`).doc('default_inbox').set({
                         name: 'Inbox', order: 0, color: '#3B82F6', createdAt: admin.firestore.FieldValue.serverTimestamp()
@@ -212,9 +212,9 @@ export async function POST(req: Request) {
             }
 
             const newCardRef = db.collection(`${entityPath}/kanban-groups/${destinationGroupId}/cards`).doc();
-            
+
             let numericId = String(Date.now()).slice(-10); // Simple ID for MVP
-            
+
             // CAPTURE REAL PROFILE NAME FROM META (Resilient)
             let contactName = `Usuario ${provider === 'instagram' ? 'IG' : 'FB'}`;
             try {
@@ -222,7 +222,7 @@ export async function POST(req: Request) {
                     const fields = provider === 'instagram' ? 'name,username' : 'first_name,last_name,name';
                     const profileRes = await fetch(`https://graph.facebook.com/v21.0/${senderId}?fields=${fields}&access_token=${tenantData.accessToken}`);
                     const profileData = await profileRes.json();
-                    
+
                     if (profileData && !profileData.error) {
                         if (provider === 'instagram') {
                             contactName = profileData.username ? `@${profileData.username}` : (profileData.name || contactName);
@@ -241,7 +241,7 @@ export async function POST(req: Request) {
                 crmId: numericId,
                 contactName: contactName,
                 contactNumber: senderId,
-                metaSenderId: senderId, 
+                metaSenderId: senderId,
                 lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
                 updatedAt: new Date(),
                 createdAt: new Date(),
@@ -249,7 +249,8 @@ export async function POST(req: Request) {
                 unreadCount: 1,
                 status: 'open',
                 source: provider.toUpperCase(),
-                primary_channel: provider
+                primary_channel: provider,
+                platform_ids: { [provider]: senderId }
             });
 
             await db.collection(`${entityPath}/contacts`).doc(numericId).set({
@@ -269,18 +270,22 @@ export async function POST(req: Request) {
 
         // 4. TRIGGER UNIVERSAL CHATBOT
         if (groupId && cardId) {
-            debugLog(`[POST] Triggering universal chatbot for ${provider} in tenant ${entityId}...`);
-            processChatbotFlow({
-                userId, entityId, groupId, cardId, platform: provider, from: senderId, text: text
-            }).catch(error => {
-                 debugLog(`[Universal Engine Error] ${error}`);
-            });
+            console.log(`[Meta Webhook] 🤖 Triggering chatbot for ${provider} | User: ${userId} | Entity: ${entityId}`);
+            try {
+                await processChatbotFlow({
+                    userId, entityId, groupId, cardId, platform: provider, from: senderId, text: text
+                });
+                console.log(`[Meta Webhook] ✅ Chatbot process completed for ${senderId}`);
+            } catch (botError: any) {
+                console.error(`[Meta Webhook] ❌ Chatbot Error for ${senderId}:`, botError.message);
+                debugLog(`[Universal Engine Error] ${botError}`);
+            }
         }
 
         return NextResponse.json({ success: true });
     } catch (error: any) {
-        return NextResponse.json({ 
-            success: false, 
+        return NextResponse.json({
+            success: false,
             error: 'Webhook Crash: ' + (error.message || 'Unknown'),
             details: error.stack?.split('\n').slice(0, 2)
         }, { status: 500 });

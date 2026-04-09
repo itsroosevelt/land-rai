@@ -77,7 +77,7 @@ export async function resolveCardRef(
 export async function getActiveBot(userId: string, entityId: string): Promise<any | null> {
     const db = admin.firestore();
     const botsSnapshot = await db.collection(`users/${userId}/entities/${entityId}/chatbots`)
-        .where('isActive', '==', true)
+        .where('isActive', 'in', [true, 'true'])
         .get();
 
     if (botsSnapshot.empty) return null;

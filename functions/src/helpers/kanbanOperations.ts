@@ -21,8 +21,8 @@ export async function handleKanbanUpdateOmni(message: UnifiedMessage, userId?: s
 
     // 1. RESOLVE THE REAL GROUP FROM YOUR UI (Search by name or priority)
     // We search for 'Inbox' or 'Bandeja de Entrada' - keeping consistent with Rule 1.
-    const inboxGroupDoc = allGroupsSnap.docs.find(g => 
-        (g.data().name || '').toLowerCase().includes('inbox') || 
+    const inboxGroupDoc = allGroupsSnap.docs.find(g =>
+        (g.data().name || '').toLowerCase().includes('inbox') ||
         (g.data().name || '').toLowerCase().includes('bandeja')
     );
 
@@ -39,11 +39,18 @@ export async function handleKanbanUpdateOmni(message: UnifiedMessage, userId?: s
         inboxGroupId = newGroup.id;
     }
 
-    // 2. SEARCH FOR EXISTING CARD
-    const cardSearchSnap = await db.collectionGroup('cards')
+    // 2. SEARCH FOR EXISTING CARD (Agnostic & Resilient Lookup)
+    let cardSearchSnap = await db.collectionGroup('cards')
         .where(`platform_ids.${source_platform}`, '==', external_id)
         .get();
-    
+
+    // Fallback: Check for legacy Meta mapping if modern platform_ids lookup failed
+    if (cardSearchSnap.empty && (source_platform === 'instagram' || source_platform === 'messenger')) {
+        cardSearchSnap = await db.collectionGroup('cards')
+            .where('metaSenderId', '==', external_id)
+            .get();
+    }
+
     const existingCard = cardSearchSnap.docs.find(d => d.ref.path.includes(vaultPath));
 
     if (existingCard) {
@@ -111,7 +118,7 @@ export const moveCard = functions.https.onCall(async (data, context) => {
     const newCardRef = db.collection(vaultPath).doc(destGroupId).collection('cards').doc(cardId);
     await db.runTransaction(async (t) => {
         const snap = await t.get(cardRef);
-        if(!snap.exists) return;
+        if (!snap.exists) return;
         t.set(newCardRef, { ...snap.data(), groupId: destGroupId, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
         t.delete(cardRef);
     });
