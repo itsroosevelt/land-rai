@@ -78,8 +78,10 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
             (window as any).FB.login((response: any) => {
                 if (response.authResponse) {
                     (window as any).FB.api('/me/accounts?fields=instagram_business_account{id,username,name},name,access_token', async (pagesRes: any) => {
+                        console.log('[META_DEBUG] Raw API Response:', JSON.stringify(pagesRes, null, 2));
                         if (pagesRes && pagesRes.data) {
                             const pagesWithIg = pagesRes.data.filter((p: any) => p.instagram_business_account);
+                            console.log('[META_DEBUG] Pages with IG:', pagesWithIg.length);
                             if (pagesWithIg.length === 0) {
                                 setShowNoIgError(true);
                                 toast.dismiss("meta-auth");
