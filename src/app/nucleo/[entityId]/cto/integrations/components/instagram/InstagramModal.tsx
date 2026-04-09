@@ -213,8 +213,11 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                                                                    IG
                                                                 </div>
                                                                 <div>
-                                                                    <p className="text-white text-sm font-medium">@{p.instagram_business_account.username || p.name}</p>
-                                                                    <p className="text-[10px] text-white/30 uppercase tracking-tighter">Página: {p.name}</p>
+                                                                    <p className="text-white text-sm font-medium">{p.instagram_business_account.name || p.instagram_business_account.username}</p>
+                                                                    <div className="flex flex-col gap-0.5">
+                                                                        <p className="text-[10px] text-white/30 uppercase tracking-tighter">ID: {p.instagram_business_account.id}</p>
+                                                                        <p className="text-[10px] text-[#E4405F]/40 font-bold uppercase tracking-widest text-[8px]">@{p.instagram_business_account.username}</p>
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                             <div className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center group-hover:border-[#E4405F]/50 group-hover:text-[#E4405F]">
