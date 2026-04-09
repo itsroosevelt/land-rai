@@ -186,7 +186,8 @@ export async function POST(req: Request) {
                 unreadCount: admin.firestore.FieldValue.increment(1),
                 messages: admin.firestore.FieldValue.arrayUnion(newMessage),
                 status: 'open',
-                source: provider.toUpperCase()
+                source: provider.toUpperCase(),
+                platform_ids: { [provider]: senderId }
             });
 
             // Sincronizar campo source y nombre con el contacto existente
