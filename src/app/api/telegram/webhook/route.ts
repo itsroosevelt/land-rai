@@ -103,7 +103,7 @@ export async function POST(req: Request) {
         const newMessage = {
             sender: 'user',
             text: text,
-            timestamp: new Date(),
+            timestamp: admin.firestore.Timestamp.now(),
             messageId: message?.message_id ? `tg_${message.message_id}` : `tg_cb_${Date.now()}`,
             platform: 'telegram'
         };
@@ -112,18 +112,20 @@ export async function POST(req: Request) {
             const cardRef = targetCardDoc.ref;
             await cardRef.update({
                 lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
-                updatedAt: new Date(),
+                updatedAt: admin.firestore.Timestamp.now(),
                 unreadCount: admin.firestore.FieldValue.increment(1),
                 messages: admin.firestore.FieldValue.arrayUnion(newMessage),
                 status: 'open',
-                source: 'TELEGRAM'
+                source: 'TELEGRAM',
+                [`platform_ids.telegram`]: telegramChatId
             });
 
             // Sync contact source
             if (contactId) {
                 await db.collection(`${entityPath}/contacts`).doc(contactId).update({
                     source: 'TELEGRAM',
-                    updatedAt: new Date().toISOString()
+                    telegramChatId: telegramChatId,
+                    updatedAt: admin.firestore.Timestamp.now()
                 });
             }
         } else {
@@ -149,8 +151,8 @@ export async function POST(req: Request) {
                 contactNumber: telegramChatId,
                 telegramChatId: telegramChatId,
                 lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
-                updatedAt: new Date(),
-                createdAt: new Date(),
+                updatedAt: admin.firestore.Timestamp.now(),
+                createdAt: admin.firestore.Timestamp.now(),
                 messages: [newMessage],
                 unreadCount: 1,
                 status: 'open',
@@ -166,8 +168,8 @@ export async function POST(req: Request) {
                 kanbanGroupId: destinationGroupId,
                 kanbanCardId: newCardRef.id,
                 source: 'TELEGRAM',
-                updatedAt: new Date().toISOString(),
-                createdAt: new Date().toISOString()
+                updatedAt: admin.firestore.Timestamp.now(),
+                createdAt: admin.firestore.Timestamp.now()
             }, { merge: true });
 
             cardId = newCardRef.id;

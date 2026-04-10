@@ -253,7 +253,7 @@ export async function POST(req: Request) {
         const newMessage = {
             sender: 'user',
             text: text,
-            timestamp: new Date(),
+            timestamp: admin.firestore.Timestamp.now(),
             messageId: messaging.message?.mid || `mid_${Date.now()}`,
             platform: provider
         };
@@ -266,20 +266,22 @@ export async function POST(req: Request) {
             await targetCardDoc.ref.update({
                 contactName: resolvedName || existingContactName,
                 lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
-                updatedAt: new Date(),
+                updatedAt: admin.firestore.Timestamp.now(),
                 unreadCount: admin.firestore.FieldValue.increment(1),
                 messages: admin.firestore.FieldValue.arrayUnion(newMessage),
                 status: 'open',
                 source: provider.toUpperCase(),
-                platform_ids: { [provider]: senderId }
+                // FIX: Dot-notation to PRESERVE existing platform IDs (e.g. whatsapp ID stays intact)
+                [`platform_ids.${provider}`]: senderId
             });
 
-            // Sincronizar campo source y nombre con el contacto existente
+            // Sincronizar metaSenderId, source y nombre con el contacto existente
             if (existingContactId) {
                 await db.collection(`${entityPath}/contacts`).doc(existingContactId).update({
                     name: resolvedName || existingContactName,
+                    metaSenderId: senderId,
                     source: provider.toUpperCase(),
-                    updatedAt: new Date().toISOString()
+                    updatedAt: admin.firestore.Timestamp.now()
                 });
             }
         } else {
@@ -305,8 +307,8 @@ export async function POST(req: Request) {
                 contactNumber: senderId,
                 metaSenderId: senderId,
                 lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
-                updatedAt: new Date(),
-                createdAt: new Date(),
+                updatedAt: admin.firestore.Timestamp.now(),
+                createdAt: admin.firestore.Timestamp.now(),
                 messages: [newMessage],
                 unreadCount: 1,
                 status: 'open',
@@ -322,11 +324,11 @@ export async function POST(req: Request) {
                 kanbanGroupId: destinationGroupId,
                 kanbanCardId: newCardRef.id,
                 source: provider.toUpperCase(),
-                updatedAt: new Date().toISOString(),
+                updatedAt: admin.firestore.Timestamp.now(),
             };
 
             if (!existingContactId) {
-                contactPayload.createdAt = new Date().toISOString();
+                contactPayload.createdAt = admin.firestore.Timestamp.now();
             }
 
             await db.collection(`${entityPath}/contacts`).doc(contactIdToUse).set(contactPayload, { merge: true });
