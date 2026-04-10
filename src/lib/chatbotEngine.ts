@@ -18,12 +18,13 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
 
     console.log(`[ChatbotEngine] 🚀 START | Platform: ${platform} | From: ${from} | Text: "${text}"`);
 
-    // 0. QUICK RESET PASS (Bypass locks)
+    // 0. QUICK RESET DETECTION
     const inputRaw = text || '';
     const input = inputRaw.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     const isReset = input === 'reiniciar' || input === 'menu' || input === 'reset' || input === 'reinicia todo ahora';
 
     try {
+        // 1. Core Data Retrieval
         console.log(`[ChatbotEngine] 🔍 Searching active bot for ${entityId}...`);
         const botsRef = db.collection(`${entityPath}/chatbots`);
         const botsSnapshot = await botsRef.where('isActive', 'in', [true, 'true']).get();
@@ -40,44 +41,9 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             return timeB - timeA;
         });
         const activeBot = bots[0];
-        console.log(`[ChatbotEngine] 🤖 Active Bot detected: ${activeBot.id} (Total: ${botsSnapshot.size})`);
         const flow = activeBot.flow || { nodes: [], edges: [] };
 
         const cardRef = db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`);
-
-        if (isReset) {
-            console.log(`[ChatbotEngine] ♻️ EXECUTING RESET for card ${cardId}`);
-
-            const resetConfirmText = "🔄 Reinicio completado, empezamos de nuevo.";
-            try {
-                await dispatchMessage(resetConfirmText);
-            } catch (err) {
-                console.error(`[ChatbotEngine] ❌ Failed to send reset confirmation:`, err);
-            }
-
-            await cardRef.update({
-                'botState': admin.firestore.FieldValue.delete(),
-                'chatbotState': admin.firestore.FieldValue.delete(),
-                'customFields': admin.firestore.FieldValue.delete(),
-                'lastBotInteraction': admin.firestore.FieldValue.delete(),
-                'botOutcome': admin.firestore.FieldValue.delete(),
-                'lastError': admin.firestore.FieldValue.delete(),
-                'botLock': admin.firestore.FieldValue.delete(),
-                'updatedAt': new Date(),
-                messages: admin.firestore.FieldValue.arrayUnion({
-                    sender: 'agent',
-                    text: resetConfirmText,
-                    platform,
-                    timestamp: new Date(),
-                    messageId: `bot_sys_${Date.now()}`
-                })
-            });
-
-            const startNode = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
-            if (startNode) await executeFlow(startNode.id);
-            return;
-        }
-
         const cardSnap = await cardRef.get();
         if (!cardSnap.exists) {
             console.error(`[ChatbotEngine] ❌ Card ${cardId} NOT found in Firestore.`);
@@ -86,27 +52,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
         const cardData = cardSnap.data() || {};
         const currentState = cardData.botState || {};
 
-        // 0. DEDUPLICATION (Skip if message already processed)
-        if (messageId && cardData.messages?.some((m: any) => m.messageId === messageId && m.sender === 'user')) {
-            console.warn(`[ChatbotEngine] ⏩ Message ${messageId} already processed for card ${cardId}. Skipping.`);
-            return;
-        }
-
-        // 1. CONCURRENCY LOCK (15 seconds)
-        const now = new Date();
-        if (cardData.botLock) {
-            const lockTime = cardData.botLock.toDate?.() || new Date(cardData.botLock);
-            const diff = (now.getTime() - lockTime.getTime()) / 1000;
-            if (diff < 15) {
-                console.warn(`[ChatbotEngine] 🔒 Card ${cardId} is LOCKED (diff: ${diff.toFixed(1)}s). Aborting.`);
-                return;
-            }
-        }
-        await cardRef.update({ botLock: now });
-
-        console.log(`[ChatbotEngine] 🗂️ Card Data loaded. Bot Status: ${currentState.status || 'none'}`);
-
-        // Helper: Variable Injection (Agnostic)
+        // 2. HELPERS (Must be declared before reset block)
         const replaceVars = (val: string) => {
             if (!val) return '';
             let p = val;
@@ -123,7 +69,6 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             return p;
         };
 
-        // Helper: Message Sender Dispatcher
         const dispatchMessage = async (content: string, options: any = {}) => {
             console.log(`[ChatbotEngine] 📤 Sending "${content.substring(0, 30)}..." to ${from}`);
             try {
@@ -142,23 +87,15 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             }
         };
 
-        // Execution Engine (With Continuation Loop)
         const executeFlow = async (startNodeId: string) => {
             let currentNodeId: string | null = startNodeId;
             let executionCount = 0;
             const MAX_STEPS = 15;
 
-            console.log(`[ChatbotEngine] 🔄 FLOW START at node: ${startNodeId}`);
-
             while (currentNodeId && executionCount < MAX_STEPS) {
                 executionCount++;
                 const node = flow.nodes.find((n: any) => n.id === currentNodeId);
-                if (!node) {
-                    console.warn(`[ChatbotEngine] ⚠️ Node ${currentNodeId} NOT FOUND.`);
-                    break;
-                }
-
-                console.log(`[ChatbotEngine] 📍 Executing [${node.type}] (${node.id})`);
+                if (!node) break;
 
                 if (node.type === 'startNode' || node.type === 'start') {
                     const edge = flow.edges.find((e: any) => e.source === node.id);
@@ -175,7 +112,6 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                         const res = await dispatchMessage(msg);
                         messageId = res?.message_id || res?.messageId || messageId;
                     } catch (err: any) {
-                        console.error(`[ChatbotEngine] ❌ TextNode Dispatch Failure:`, err.message);
                         sendError = err.message;
                     }
 
@@ -232,7 +168,6 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                         'botState.lastInteraction': new Date(),
                         updatedAt: new Date()
                     });
-                    console.log(`[ChatbotEngine] ⏸️ FLOW PAUSE (Input Needed) @ ${node.id}`);
                     return;
                 }
 
@@ -246,7 +181,6 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                         'botState.variableName': node.data?.variableName || 'last_input',
                         'botState.lastInteraction': new Date()
                     });
-                    console.log(`[ChatbotEngine] ⏸️ FLOW PAUSE (Capture Needed) @ ${node.id}`);
                     return;
                 }
 
@@ -278,22 +212,66 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                         'botState.currentNodeId': node.id,
                         'botState.waitingForInput': false
                     });
-                    console.log(`[ChatbotEngine] 🏁 FLOW COMPLETED @ ${node.id}`);
                     return;
                 }
 
                 break;
             }
-            if (executionCount >= MAX_STEPS) console.warn('[ChatbotEngine] ⚠️ FLOW ABORTED: MAX_STEPS reached.');
-
-            // Clear lock after successful flow execution
-            await cardRef.update({ botLock: admin.firestore.FieldValue.delete() });
         };
 
+        // 3. PRIORITY RESET
+        if (isReset) {
+            console.log(`[ChatbotEngine] ♻️ EXECUTING RESET for card ${cardId}`);
+            const resetConfirmText = "🔄 Reinicio completado, empezamos de nuevo.";
+            try {
+                await dispatchMessage(resetConfirmText);
+            } catch (err) {
+                console.error(`[ChatbotEngine] ❌ Failed to send reset confirmation:`, err);
+            }
 
+            await cardRef.update({
+                'botState': admin.firestore.FieldValue.delete(),
+                'chatbotState': admin.firestore.FieldValue.delete(),
+                'customFields': admin.firestore.FieldValue.delete(),
+                'lastBotInteraction': admin.firestore.FieldValue.delete(),
+                'botOutcome': admin.firestore.FieldValue.delete(),
+                'lastError': admin.firestore.FieldValue.delete(),
+                'botLock': admin.firestore.FieldValue.delete(),
+                'updatedAt': new Date(),
+                messages: admin.firestore.FieldValue.arrayUnion({
+                    sender: 'agent',
+                    text: resetConfirmText,
+                    platform,
+                    timestamp: new Date(),
+                    messageId: `bot_sys_${Date.now()}`
+                })
+            });
+
+            const startNode = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
+            if (startNode) await executeFlow(startNode.id);
+            return;
+        }
+
+        // 4. DEDUPLICATION & LOCK
+        if (messageId && cardData.messages?.some((m: any) => m.messageId === messageId && m.sender === 'user')) {
+            console.warn(`[ChatbotEngine] ⏩ Message ${messageId} already processed. Skipping.`);
+            return;
+        }
+
+        const now = new Date();
+        if (cardData.botLock) {
+            const lockTime = cardData.botLock.toDate?.() || new Date(cardData.botLock);
+            const diff = (now.getTime() - lockTime.getTime()) / 1000;
+            if (diff < 15) {
+                console.warn(`[ChatbotEngine] 🔒 Card ${cardId} is LOCKED (${diff.toFixed(1)}s).`);
+                return;
+            }
+        }
+        await cardRef.update({ botLock: now });
+
+        // 5. FLOW LOGIC (RESUME OR START)
         if (currentState.waitingForInput && currentState.currentNodeId) {
             const node = flow.nodes.find((n: any) => n.id === currentState.currentNodeId);
-            console.log(`[ChatbotEngine] 📝 RESUMING @ ${node?.id}`);
             if (node?.type === 'captureInputNode') {
                 const varName = currentState.variableName || 'input';
                 await cardRef.update({ [`customFields.${varName}`]: text, 'botState.waitingForInput': false });
@@ -314,21 +292,16 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             }
         } else if (currentState.status !== 'completed' && currentState.status !== 'active') {
             const startNode = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
-            if (startNode) {
-                console.log(`[ChatbotEngine] 🚀 FRESH START for ${cardId}`);
-                await executeFlow(startNode.id);
-            }
+            if (startNode) await executeFlow(startNode.id);
         } else if (currentState.status === 'completed') {
-            console.log(`[ChatbotEngine] ℹ️ Conversation is COMPLETED. Use RESET to restart.`);
+            console.log(`[ChatbotEngine] ℹ️ Conversation COMPLETED.`);
         } else {
-            console.log(`[ChatbotEngine] ⏩ Skipping start: Flow is already active at node ${currentState.currentNodeId}.`);
+            console.log(`[ChatbotEngine] ⏩ Skipping start: Flow is active @ ${currentState.currentNodeId}.`);
         }
 
     } catch (err: any) {
         console.error(`[ChatbotEngine] 💥 CRITICAL FAILURE:`, err.message);
-        console.error(err.stack);
     } finally {
-        // ALWAYS release lock
         try {
             const cardRef = db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`);
             await cardRef.update({ botLock: admin.firestore.FieldValue.delete() });
