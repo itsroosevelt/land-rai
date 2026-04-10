@@ -253,7 +253,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
         }
 
         // 4. DEDUPLICATION & LOCK
-        if (messageId && cardData.messages?.some((m: any) => m.messageId === messageId && m.sender === 'user')) {
+        if (messageId && currentState.lastProcessedMessageId === messageId) {
             console.warn(`[ChatbotEngine] ⏩ Message ${messageId} already processed. Skipping.`);
             return;
         }
@@ -267,7 +267,10 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                 return;
             }
         }
-        await cardRef.update({ botLock: now });
+        await cardRef.update({
+            botLock: now,
+            'botState.lastProcessedMessageId': messageId
+        });
 
         // 5. FLOW LOGIC (RESUME OR START)
         if (currentState.waitingForInput && currentState.currentNodeId) {
