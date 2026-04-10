@@ -13,7 +13,18 @@ const functions = require("firebase-functions");
  */
 async function resolveTenant(platform, platformId, secondaryId) {
     const db = admin.firestore();
-    const fieldName = platform === 'whatsapp' ? 'phoneNumberId' : 'id';
+    // 0. MAP FIELD NAMES ACCORDING TO PLATFORM (Master Mold Agnostic Search)
+    let fieldName = 'id';
+    if (platform === 'whatsapp')
+        fieldName = 'phoneNumberId';
+    else if (platform === 'instagram')
+        fieldName = 'instagramId';
+    else if (platform === 'messenger')
+        fieldName = 'pageId';
+    else if (platform === 'telegram')
+        fieldName = 'botToken';
+    else if (platform === 'x_twitter')
+        fieldName = 'twitterHandle';
     // 1. MODERN VAULT SEARCH (Preferred)
     try {
         let integrationsSnap = await db.collectionGroup("integrations")

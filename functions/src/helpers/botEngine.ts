@@ -48,29 +48,58 @@ export async function resolveCardRef(
     platform: string = 'whatsapp'
 ): Promise<FirebaseFirestore.DocumentReference | null> {
     const db = admin.firestore();
+    const vaultPath = `users/${userId}/entities/${entityId}/kanban-groups`;
 
-    // Strategy A: By platform_ids.{platform}
+    // Strategy A: By platform_ids.{platform} — FILTERED by tenant vaultPath
+    // Requires a Firestore index on platform_ids.{platform} — might fail if index not ready
     try {
         const snap = await db.collectionGroup('cards')
             .where(`platform_ids.${platform}`, '==', contactNumber)
-            .limit(1)
             .get();
-        if (!snap.empty) return snap.docs[0].ref;
-    } catch (e) {
-        functions.logger.warn(`[resolveCardRef] index for platform_ids.${platform} not ready.`);
+        const tenantDoc = snap.docs.find(d => d.ref.path.includes(vaultPath));
+        if (tenantDoc) {
+            functions.logger.info(`[resolveCardRef] ✅ Found via collectionGroup index: ${tenantDoc.ref.path}`);
+            return tenantDoc.ref;
+        }
+    } catch (e: any) {
+        functions.logger.warn(`[resolveCardRef] ⚠️ index for platform_ids.${platform} not ready: ${e.message}`);
     }
 
-    // Strategy B: Legacy contactNumber match
+    // Strategy B: Legacy contactNumber match (WhatsApp only)
     if (platform === 'whatsapp') {
         try {
             const snap = await db.collectionGroup('cards')
                 .where('contactNumber', '==', contactNumber)
-                .limit(1)
                 .get();
-            if (!snap.empty) return snap.docs[0].ref;
+            const tenantDoc = snap.docs.find(d => d.ref.path.includes(vaultPath));
+            if (tenantDoc) {
+                functions.logger.info(`[resolveCardRef] ✅ Found via contactNumber index: ${tenantDoc.ref.path}`);
+                return tenantDoc.ref;
+            }
         } catch (e) { }
     }
 
+    // Strategy C: ⚡ DIRECT SCAN — no index required
+    // Iterates tenant groups and searches cards by platform_ids field.
+    // This is the fallback for messenger/instagram where no index may exist.
+    try {
+        functions.logger.info(`[resolveCardRef] 🔍 Falling back to direct scan for ${platform}:${contactNumber}`);
+        const groupsSnap = await db.collection(vaultPath).get();
+        for (const groupDoc of groupsSnap.docs) {
+            const cardsSnap = await groupDoc.ref.collection('cards')
+                .where(`platform_ids.${platform}`, '==', contactNumber)
+                .limit(1)
+                .get();
+            if (!cardsSnap.empty) {
+                functions.logger.info(`[resolveCardRef] ✅ Found via direct scan in group ${groupDoc.id}: ${cardsSnap.docs[0].ref.path}`);
+                return cardsSnap.docs[0].ref;
+            }
+        }
+    } catch (e: any) {
+        functions.logger.error(`[resolveCardRef] ❌ Direct scan failed: ${e.message}`);
+    }
+
+    functions.logger.warn(`[resolveCardRef] ❌ Could not find card for ${platform}:${contactNumber} in tenant ${userId}/${entityId}`);
     return null;
 }
 
@@ -217,21 +246,32 @@ export async function tryTriggerBot(
 
     const now = new Date();
     const FORTY_EIGHT_HOURS_IN_MS = 48 * 60 * 60 * 1000;
+    const ONE_HOUR_IN_MS = 60 * 60 * 1000;
 
     const input = messageText.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     const isCommand = input === 'reinicia todo ahora' || input === 'reiniciar' || input === 'reset';
 
-    const botStatus = cardData.botState?.status || 'none';
+    // BILINGUAL STATUS RESOLUTION: Read both new and legacy state
+    const botStatus = cardData.botState?.status || cardData.chatbotState?.status || 'none';
+    const lastInteraction = cardData.botState?.lastInteraction || cardData.chatbotState?.lastInteraction;
     let shouldTrigger = false;
 
     if (isCommand) {
+        // Command always triggers
         shouldTrigger = true;
     } else if (botStatus === 'completed') {
-        shouldTrigger = false;
+        // If 'completed', allow a restart after 1 hour of inactivity (no permanent block)
+        if (lastInteraction) {
+            const lastInt = lastInteraction.toDate ? lastInteraction.toDate() : new Date(0);
+            if ((now.getTime() - lastInt.getTime()) > ONE_HOUR_IN_MS) {
+                functions.logger.info(`[Bot Engine] Completed bot restarting after inactivity for ${externalId}`);
+                shouldTrigger = true;
+            }
+        }
     } else if (botStatus === 'none' || botStatus === 'active') {
         shouldTrigger = true;
-    } else if (cardData.botState?.lastInteraction) {
-        const lastInt = cardData.botState.lastInteraction.toDate ? cardData.botState.lastInteraction.toDate() : new Date(0);
+    } else if (lastInteraction) {
+        const lastInt = lastInteraction.toDate ? lastInteraction.toDate() : new Date(0);
         if ((now.getTime() - lastInt.getTime()) > FORTY_EIGHT_HOURS_IN_MS) {
             shouldTrigger = true;
         }
@@ -239,12 +279,18 @@ export async function tryTriggerBot(
 
     if (shouldTrigger) {
         // Reset state if it's starting a fresh session
-        if (botStatus === 'none' && cardData.botState) {
-            await cardRef.update({ botState: admin.firestore.FieldValue.delete() });
+        if (botStatus === 'none' && (cardData.botState || cardData.chatbotState)) {
+            await cardRef.update({
+                botState: admin.firestore.FieldValue.delete(),
+                chatbotState: admin.firestore.FieldValue.delete()
+            });
             delete cardData.botState;
+            delete cardData.chatbotState;
         }
 
         await executeBotFlow(activeBot, userId, entityId, externalId, cardData, messageText, messageId, metadata);
+    } else {
+        functions.logger.info(`[Bot Engine] Bot NOT triggered. Status: ${botStatus}, isCommand: ${isCommand}, externalId: ${externalId}`);
     }
 }
 
@@ -288,7 +334,7 @@ export async function executeBotFlow(
         }
 
         // --- RESTART COMMAND (For testing purposes) ---
-        const isRestartCommand = input === 'reinicia todo ahora' || input === 'reiniciar' || input === 'reset';
+        const isRestartCommand = currentMsg.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === 'reinicia todo ahora' || currentMsg.trim().toLowerCase() === 'reiniciar' || currentMsg.trim().toLowerCase() === 'reset';
 
         // --- ABSOLUTE RESTART COMMAND ---
         if (isRestartCommand) {
@@ -298,11 +344,13 @@ export async function executeBotFlow(
                 chatbotState: admin.firestore.FieldValue.delete(), // Bilingual support
                 customFields: admin.firestore.FieldValue.delete(),
                 lastBotInteraction: admin.firestore.FieldValue.delete(),
+                botOutcome: admin.firestore.FieldValue.delete(), // Clear outcomes
+                lastError: admin.firestore.FieldValue.delete(),   // Clear trace of errors
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
             });
 
             await adapter.sendMessage(to, "🔄 Reinicio completado, empezamos de nuevo.");
-            await logBotMessage(to, "🔄 Reinicio completado, empezamos de nuevo.", cardData.id, cardData.groupId, cardRef, 'text');
+            await logBotMessage(to, "🔄 Reinicio completado, empezamos de nuevo.", cardData.id, cardData.groupId, cardRef, 'text', undefined, userId, entityId, platform);
 
             // RE-EJECUTAR EL FLOW DESDE EL INICIO (Master Fix)
             const freshBot = await getActiveBot(userId, entityId);
@@ -1117,21 +1165,32 @@ async function logBotMessage(contactNumber: string, message: string, cardId?: st
     const docRef = existingRef || (userId && entityId ? await resolveCardRef(userId, entityId, contactNumber, platform || 'whatsapp') : null);
 
     if (docRef) {
-        // ⚠️ NOTE: FieldValue.serverTimestamp() is NOT allowed inside arrayUnion.
-        // Use Timestamp.now() instead so the write succeeds.
-        await docRef.update({
-            lastMessage: message.substring(0, 100),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            messages: admin.firestore.FieldValue.arrayUnion({
+        try {
+            // Build the message object — only include metadata if it has real value
+            const msgObj: any = {
                 sender: 'agent',
                 text: message,
                 type: type,
-                metadata: metadata || null,
+                messageId: `bot_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                 timestamp: admin.firestore.Timestamp.now()
-            }),
-            unreadCount: 0
-        });
+            };
+            if (metadata && Object.keys(metadata).length > 0) {
+                msgObj.metadata = metadata;
+            }
+
+            // ⚠️ NOTE: FieldValue.serverTimestamp() is NOT allowed inside arrayUnion.
+            // Use Timestamp.now() instead so the write succeeds.
+            await docRef.update({
+                lastMessage: message.substring(0, 100),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                messages: admin.firestore.FieldValue.arrayUnion(msgObj),
+                unreadCount: 0
+            });
+            functions.logger.info(`[logBotMessage] ✅ Bot message logged to ${docRef.path}: "${message.substring(0, 60)}"`);
+        } catch (err: any) {
+            functions.logger.error(`[logBotMessage] ❌ FAILED to write bot message to Firestore. Path: ${docRef.path}. Error: ${err.message}`, { message, type, metadata });
+        }
     } else {
-        functions.logger.warn(`[logBotMessage] Could not resolve cardRef for ${contactNumber}. Bot message NOT logged.`);
+        functions.logger.warn(`[logBotMessage] Could not resolve cardRef for ${contactNumber} (platform: ${platform}). Bot message NOT logged.`);
     }
 }

@@ -34,14 +34,21 @@ async function handleKanbanUpdateOmni(message, userId, entityId) {
         });
         inboxGroupId = newGroup.id;
     }
-    // 2. SEARCH FOR EXISTING CARD
-    const cardSearchSnap = await db.collectionGroup('cards')
+    // 2. SEARCH FOR EXISTING CARD (Agnostic & Resilient Lookup)
+    let cardSearchSnap = await db.collectionGroup('cards')
         .where(`platform_ids.${source_platform}`, '==', external_id)
         .get();
+    // Fallback: Check for legacy Meta mapping if modern platform_ids lookup failed
+    if (cardSearchSnap.empty && (source_platform === 'instagram' || source_platform === 'messenger')) {
+        cardSearchSnap = await db.collectionGroup('cards')
+            .where('metaSenderId', '==', external_id)
+            .get();
+    }
     const existingCard = cardSearchSnap.docs.find(d => d.ref.path.includes(vaultPath));
     if (existingCard) {
         cardRef = existingCard.ref;
         await cardRef.update({
+            [`platform_ids.${source_platform}`]: external_id, // Ensure mapping exists
             lastMessage: message_text || `[${message_type.toUpperCase()}]`,
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             unreadCount: admin.firestore.FieldValue.increment(1),

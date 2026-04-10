@@ -76,12 +76,28 @@ export const useMessageSender = ({
     const handleSendMessage = async () => {
         if (!newMessage.trim() || isSending) return;
 
-        const rawPhone = liveCardData?.contactNumber || card?.contactNumber;
-        const phoneNumber = normalizePhoneNumber(rawPhone || '');
+        // Platform-aware recipient ID resolution
+        const platform = activePlatform.toLowerCase();
+        const isMetaPlatform = platform === 'messenger' || platform === 'facebook' || platform === 'instagram';
+        let recipientId: string;
 
-        if (!phoneNumber) {
-            toast.error('No se puede enviar: falta el número de teléfono del contacto.');
-            return;
+        if (isMetaPlatform) {
+            // For Messenger/Instagram use PSID/IGSID — NOT phone number
+            const platformKey = (platform === 'messenger' || platform === 'facebook') ? 'messenger' : 'instagram';
+            const cardData = liveCardData || card;
+            recipientId = cardData?.platform_ids?.[platformKey] || cardData?.metaSenderId || '';
+            if (!recipientId) {
+                toast.error('No se puede enviar: no se encontró el ID del contacto de Messenger/Instagram.');
+                return;
+            }
+        } else {
+            // WhatsApp and other phone-based platforms — existing logic unchanged
+            const rawPhone = liveCardData?.contactNumber || card?.contactNumber;
+            recipientId = normalizePhoneNumber(rawPhone || '');
+            if (!recipientId) {
+                toast.error('No se puede enviar: falta el número de teléfono del contacto.');
+                return;
+            }
         }
 
         setIsSending(true);
@@ -118,7 +134,7 @@ export const useMessageSender = ({
 
             let payload: any = {
                 message: messageToSend,
-                toNumber: phoneNumber,
+                toNumber: recipientId,
                 cardId: apiCardId,
                 groupId: currentGroupId,
                 platform: activePlatform,
@@ -216,11 +232,22 @@ export const useMessageSender = ({
     };
 
     const sendTemplateMessage = async (templateName: string = 'hello_world') => {
-        const rawPhone = liveCardData?.contactNumber || card?.contactNumber;
-        const phoneNumber = normalizePhoneNumber(rawPhone || '');
+        // Platform-aware recipient ID (templates only for WhatsApp, but safeguard here)
+        const platform = activePlatform.toLowerCase();
+        const isMetaPlatform = platform === 'messenger' || platform === 'facebook' || platform === 'instagram';
+        let phoneNumber: string;
+
+        if (isMetaPlatform) {
+            const platformKey = (platform === 'messenger' || platform === 'facebook') ? 'messenger' : 'instagram';
+            const cardData = liveCardData || card;
+            phoneNumber = cardData?.platform_ids?.[platformKey] || cardData?.metaSenderId || '';
+        } else {
+            const rawPhone = liveCardData?.contactNumber || card?.contactNumber;
+            phoneNumber = normalizePhoneNumber(rawPhone || '');
+        }
 
         if (!phoneNumber) {
-            toast.error('No se puede enviar: falta el número de teléfono.');
+            toast.error('No se puede enviar: falta el número del contacto.');
             return;
         }
 

@@ -47,36 +47,63 @@ async function releaseBotLock(cardRef) {
 // --- Search by platform_ids (Simple Approach) ---
 async function resolveCardRef(userId, entityId, contactNumber, platform = 'whatsapp') {
     const db = admin.firestore();
-    // Strategy A: By platform_ids.{platform}
+    const vaultPath = `users/${userId}/entities/${entityId}/kanban-groups`;
+    // Strategy A: By platform_ids.{platform} — FILTERED by tenant vaultPath
+    // Requires a Firestore index on platform_ids.{platform} — might fail if index not ready
     try {
         const snap = await db.collectionGroup('cards')
             .where(`platform_ids.${platform}`, '==', contactNumber)
-            .limit(1)
             .get();
-        if (!snap.empty)
-            return snap.docs[0].ref;
+        const tenantDoc = snap.docs.find(d => d.ref.path.includes(vaultPath));
+        if (tenantDoc) {
+            functions.logger.info(`[resolveCardRef] ✅ Found via collectionGroup index: ${tenantDoc.ref.path}`);
+            return tenantDoc.ref;
+        }
     }
     catch (e) {
-        functions.logger.warn(`[resolveCardRef] index for platform_ids.${platform} not ready.`);
+        functions.logger.warn(`[resolveCardRef] ⚠️ index for platform_ids.${platform} not ready: ${e.message}`);
     }
-    // Strategy B: Legacy contactNumber match
+    // Strategy B: Legacy contactNumber match (WhatsApp only)
     if (platform === 'whatsapp') {
         try {
             const snap = await db.collectionGroup('cards')
                 .where('contactNumber', '==', contactNumber)
-                .limit(1)
                 .get();
-            if (!snap.empty)
-                return snap.docs[0].ref;
+            const tenantDoc = snap.docs.find(d => d.ref.path.includes(vaultPath));
+            if (tenantDoc) {
+                functions.logger.info(`[resolveCardRef] ✅ Found via contactNumber index: ${tenantDoc.ref.path}`);
+                return tenantDoc.ref;
+            }
         }
         catch (e) { }
     }
+    // Strategy C: ⚡ DIRECT SCAN — no index required
+    // Iterates tenant groups and searches cards by platform_ids field.
+    // This is the fallback for messenger/instagram where no index may exist.
+    try {
+        functions.logger.info(`[resolveCardRef] 🔍 Falling back to direct scan for ${platform}:${contactNumber}`);
+        const groupsSnap = await db.collection(vaultPath).get();
+        for (const groupDoc of groupsSnap.docs) {
+            const cardsSnap = await groupDoc.ref.collection('cards')
+                .where(`platform_ids.${platform}`, '==', contactNumber)
+                .limit(1)
+                .get();
+            if (!cardsSnap.empty) {
+                functions.logger.info(`[resolveCardRef] ✅ Found via direct scan in group ${groupDoc.id}: ${cardsSnap.docs[0].ref.path}`);
+                return cardsSnap.docs[0].ref;
+            }
+        }
+    }
+    catch (e) {
+        functions.logger.error(`[resolveCardRef] ❌ Direct scan failed: ${e.message}`);
+    }
+    functions.logger.warn(`[resolveCardRef] ❌ Could not find card for ${platform}:${contactNumber} in tenant ${userId}/${entityId}`);
     return null;
 }
 async function getActiveBot(userId, entityId) {
     const db = admin.firestore();
     const botsSnapshot = await db.collection(`users/${userId}/entities/${entityId}/chatbots`)
-        .where('isActive', '==', true)
+        .where('isActive', 'in', [true, 'true'])
         .get();
     if (botsSnapshot.empty)
         return null;
@@ -186,7 +213,7 @@ function sanitizeButtonsData(buttons) {
  * Handles checking for active bots, session lifecycle, and command overrides.
  */
 async function tryTriggerBot(userId, entityId, platform, externalId, messageText, messageId, metadata) {
-    var _a, _b;
+    var _a, _b, _c, _d;
     const activeBot = await getActiveBot(userId, entityId);
     if (!activeBot) {
         functions.logger.debug(`[Bot Engine] No active bot for entity ${entityId}. Skipping.`);
@@ -201,38 +228,56 @@ async function tryTriggerBot(userId, entityId, platform, externalId, messageText
     const cardData = Object.assign({ id: cardRef.id }, cardSnap.data());
     const now = new Date();
     const FORTY_EIGHT_HOURS_IN_MS = 48 * 60 * 60 * 1000;
+    const ONE_HOUR_IN_MS = 60 * 60 * 1000;
     const input = messageText.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     const isCommand = input === 'reinicia todo ahora' || input === 'reiniciar' || input === 'reset';
-    const botStatus = ((_a = cardData.botState) === null || _a === void 0 ? void 0 : _a.status) || 'none';
+    // BILINGUAL STATUS RESOLUTION: Read both new and legacy state
+    const botStatus = ((_a = cardData.botState) === null || _a === void 0 ? void 0 : _a.status) || ((_b = cardData.chatbotState) === null || _b === void 0 ? void 0 : _b.status) || 'none';
+    const lastInteraction = ((_c = cardData.botState) === null || _c === void 0 ? void 0 : _c.lastInteraction) || ((_d = cardData.chatbotState) === null || _d === void 0 ? void 0 : _d.lastInteraction);
     let shouldTrigger = false;
     if (isCommand) {
+        // Command always triggers
         shouldTrigger = true;
     }
     else if (botStatus === 'completed') {
-        shouldTrigger = false;
+        // If 'completed', allow a restart after 1 hour of inactivity (no permanent block)
+        if (lastInteraction) {
+            const lastInt = lastInteraction.toDate ? lastInteraction.toDate() : new Date(0);
+            if ((now.getTime() - lastInt.getTime()) > ONE_HOUR_IN_MS) {
+                functions.logger.info(`[Bot Engine] Completed bot restarting after inactivity for ${externalId}`);
+                shouldTrigger = true;
+            }
+        }
     }
     else if (botStatus === 'none' || botStatus === 'active') {
         shouldTrigger = true;
     }
-    else if ((_b = cardData.botState) === null || _b === void 0 ? void 0 : _b.lastInteraction) {
-        const lastInt = cardData.botState.lastInteraction.toDate ? cardData.botState.lastInteraction.toDate() : new Date(0);
+    else if (lastInteraction) {
+        const lastInt = lastInteraction.toDate ? lastInteraction.toDate() : new Date(0);
         if ((now.getTime() - lastInt.getTime()) > FORTY_EIGHT_HOURS_IN_MS) {
             shouldTrigger = true;
         }
     }
     if (shouldTrigger) {
         // Reset state if it's starting a fresh session
-        if (botStatus === 'none' && cardData.botState) {
-            await cardRef.update({ botState: admin.firestore.FieldValue.delete() });
+        if (botStatus === 'none' && (cardData.botState || cardData.chatbotState)) {
+            await cardRef.update({
+                botState: admin.firestore.FieldValue.delete(),
+                chatbotState: admin.firestore.FieldValue.delete()
+            });
             delete cardData.botState;
+            delete cardData.chatbotState;
         }
         await executeBotFlow(activeBot, userId, entityId, externalId, cardData, messageText, messageId, metadata);
+    }
+    else {
+        functions.logger.info(`[Bot Engine] Bot NOT triggered. Status: ${botStatus}, isCommand: ${isCommand}, externalId: ${externalId}`);
     }
 }
 // --- MAIN ENGINE ---
 // --- MAIN ENGINE ---
 async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessage, messageId, metadata) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9;
     functions.logger.info(`>>> EXECUTING FLOW: ${bot.name} for ${to} (Tenant: ${userId}/${entityId}) <<<`);
     let currentMsg = rawUserMessage || '';
     const platform = cardData.source || 'whatsapp'; // Default to whatsapp if not set
@@ -259,17 +304,35 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
             functions.logger.info(`[Bot Engine] Absolute Restart requested for ${to}`);
             await cardRef.update({
                 botState: admin.firestore.FieldValue.delete(),
+                chatbotState: admin.firestore.FieldValue.delete(), // Bilingual support
                 customFields: admin.firestore.FieldValue.delete(),
-                contactName: "Amigo",
                 lastBotInteraction: admin.firestore.FieldValue.delete(),
+                botOutcome: admin.firestore.FieldValue.delete(), // Clear outcomes
+                lastError: admin.firestore.FieldValue.delete(), // Clear trace of errors
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
             });
             await adapter.sendMessage(to, "🔄 Reinicio completado, empezamos de nuevo.");
-            await logBotMessage(to, "🔄 Reinicio completado, empezamos de nuevo.", cardData.id, cardData.groupId, cardRef, 'text');
-            currentMsg = ""; // Clear to avoid being used by the fresh flow
-            return; // STOP execution here to wait for next user message
+            await logBotMessage(to, "🔄 Reinicio completado, empezamos de nuevo.", cardData.id, cardData.groupId, cardRef, 'text', undefined, userId, entityId, platform);
+            // RE-EJECUTAR EL FLOW DESDE EL INICIO (Master Fix)
+            const freshBot = await getActiveBot(userId, entityId);
+            if (freshBot) {
+                await executeBotFlow(freshBot, userId, entityId, to, Object.assign(Object.assign({}, cardData), { botState: undefined, chatbotState: undefined }), "");
+            }
+            return;
         }
-        let currentNodeId = (_a = cardData.botState) === null || _a === void 0 ? void 0 : _a.currentNodeId;
+        // --- BILINGUAL STATE RESOLUTION ---
+        // If botState doesn't exist but legacy chatbotState does, we migrate it or use it as fallback
+        let botState = cardData.botState;
+        if (!botState && cardData.chatbotState) {
+            functions.logger.info(`[Bot Engine] 🔄 Migrating legacy chatbotState to botState for ${to}`);
+            botState = {
+                status: cardData.chatbotState.status || 'active',
+                currentNodeId: cardData.chatbotState.currentNodeId,
+                lastInteraction: cardData.chatbotState.lastInteraction || admin.firestore.Timestamp.now(),
+                retryCount: 0
+            };
+        }
+        let currentNodeId = botState === null || botState === void 0 ? void 0 : botState.currentNodeId;
         let nextNodeId = null;
         let shouldContinue = true;
         let executionCount = 0;
@@ -286,7 +349,7 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
             // If the bot was waiting (lastInteraction exists) and the user's message doesn't look like
             // a valid response (e.g., very short/generic), OR if significant time has passed (> 30 min),
             // resend the current node's prompt to guide the user back.
-            const lastInteractionAt = ((_c = (_b = cardData.botState) === null || _b === void 0 ? void 0 : _b.lastInteraction) === null || _c === void 0 ? void 0 : _c.toDate)
+            const lastInteractionAt = ((_b = (_a = cardData.botState) === null || _a === void 0 ? void 0 : _a.lastInteraction) === null || _b === void 0 ? void 0 : _b.toDate)
                 ? cardData.botState.lastInteraction.toDate()
                 : null;
             const thirtyMinutesMs = 30 * 60 * 1000;
@@ -295,12 +358,12 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                 functions.logger.info(`[executeBotFlow] Conversation was stuck for >30 min. Resending current node prompt to ${to}.`);
                 try {
                     if (currentNode.type === 'quickReplyNode') {
-                        const qrText = replaceVariables(((_d = currentNode.data) === null || _d === void 0 ? void 0 : _d.bodyText) || ((_e = currentNode.data) === null || _e === void 0 ? void 0 : _e.text) || 'Por favor, elige una opción:', cardData);
-                        const buttons = sanitizeButtonsData(((_f = currentNode.data) === null || _f === void 0 ? void 0 : _f.buttons) || []);
+                        const qrText = replaceVariables(((_c = currentNode.data) === null || _c === void 0 ? void 0 : _c.bodyText) || ((_d = currentNode.data) === null || _d === void 0 ? void 0 : _d.text) || 'Por favor, elige una opción:', cardData);
+                        const buttons = sanitizeButtonsData(((_e = currentNode.data) === null || _e === void 0 ? void 0 : _e.buttons) || []);
                         const header = {
-                            type: ((_g = currentNode.data) === null || _g === void 0 ? void 0 : _g.headerType) || 'none',
-                            text: replaceVariables(((_h = currentNode.data) === null || _h === void 0 ? void 0 : _h.headerText) || '', cardData),
-                            url: (_j = currentNode.data) === null || _j === void 0 ? void 0 : _j.headerMediaUrl
+                            type: ((_f = currentNode.data) === null || _f === void 0 ? void 0 : _f.headerType) || 'none',
+                            text: replaceVariables(((_g = currentNode.data) === null || _g === void 0 ? void 0 : _g.headerText) || '', cardData),
+                            url: (_h = currentNode.data) === null || _h === void 0 ? void 0 : _h.headerMediaUrl
                         };
                         if (buttons.length > 0) {
                             await adapter.sendButtonMessage(to, qrText, buttons, header);
@@ -312,10 +375,10 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                         }
                     }
                     else if (currentNode.type === 'listMessageNode') {
-                        const listBody = replaceVariables(((_k = currentNode.data) === null || _k === void 0 ? void 0 : _k.body) || ((_l = currentNode.data) === null || _l === void 0 ? void 0 : _l.text) || 'Elige una opción:', cardData);
+                        const listBody = replaceVariables(((_j = currentNode.data) === null || _j === void 0 ? void 0 : _j.body) || ((_k = currentNode.data) === null || _k === void 0 ? void 0 : _k.text) || 'Elige una opción:', cardData);
                         const sections = sanitizeListData(currentNode.data);
                         if (sections.length > 0) {
-                            const btnText = ((_m = currentNode.data) === null || _m === void 0 ? void 0 : _m.buttonText) || 'Ver opciones';
+                            const btnText = ((_l = currentNode.data) === null || _l === void 0 ? void 0 : _l.buttonText) || 'Ver opciones';
                             await adapter.sendListMessage(to, listBody, btnText, sections);
                             await logBotMessage(to, listBody, cardData.id, cardData.groupId, cardRef, 'list', { buttonText: btnText, sections });
                         }
@@ -325,7 +388,7 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                         }
                     }
                     else if (currentNode.type === 'captureInputNode') {
-                        const prompt = replaceVariables(((_o = currentNode.data) === null || _o === void 0 ? void 0 : _o.content) || ((_p = currentNode.data) === null || _p === void 0 ? void 0 : _p.text) || '', cardData);
+                        const prompt = replaceVariables(((_m = currentNode.data) === null || _m === void 0 ? void 0 : _m.content) || ((_o = currentNode.data) === null || _o === void 0 ? void 0 : _o.text) || '', cardData);
                         if (prompt) {
                             await adapter.sendMessage(to, prompt);
                             await logBotMessage(to, prompt, cardData.id, cardData.groupId, cardRef, 'text');
@@ -353,14 +416,14 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
             await delay(500);
             if (currentNode.type === 'captureInputNode') {
                 const validation = validateInput(currentMsg, currentNode.data || {}, metadata);
-                const maxRetries = ((_q = currentNode.data) === null || _q === void 0 ? void 0 : _q.maxRetries) || 3;
-                const currentRetries = ((_r = cardData.botState) === null || _r === void 0 ? void 0 : _r.retryCount) || 0;
+                const maxRetries = ((_p = currentNode.data) === null || _p === void 0 ? void 0 : _p.maxRetries) || 3;
+                const currentRetries = ((_q = cardData.botState) === null || _q === void 0 ? void 0 : _q.retryCount) || 0;
                 if (!validation.isValid) {
                     functions.logger.info(`[executeBotFlow] Input validation failed for ${to}. Retry ${currentRetries + 1}/${maxRetries}`);
                     if (currentRetries + 1 >= maxRetries) {
                         functions.logger.info(`[executeBotFlow] Max retries reached for ${to}. Continuing flow.`);
                         // Fallback value for name variables if requested by user
-                        const varName = ((_s = currentNode.data) === null || _s === void 0 ? void 0 : _s.variableName) || '';
+                        const varName = ((_r = currentNode.data) === null || _r === void 0 ? void 0 : _r.variableName) || '';
                         const isNameVar = ['nombre', 'name', 'firstname'].includes(varName.toLowerCase());
                         const fallbackValue = isNameVar ? "Skyler" : "No provisto";
                         await saveVariable(to, varName, fallbackValue, cardData.id, cardData.groupId, cardRef);
@@ -377,7 +440,7 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                 }
                 else {
                     let valueToSave = currentMsg.trim();
-                    const varName = ((_t = currentNode.data) === null || _t === void 0 ? void 0 : _t.variableName) || `captured_${currentNode.id}`;
+                    const varName = ((_s = currentNode.data) === null || _s === void 0 ? void 0 : _s.variableName) || `captured_${currentNode.id}`;
                     const vName = varName.toLowerCase();
                     const isNameVar = vName.includes('name') || vName.includes('nombre') || vName.includes('user') || vName.includes('persona');
                     if (isNameVar) {
@@ -515,9 +578,9 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
             // Simulación Humana (Typing Delay) - CONTROLADO POR UI
             if (['textMessageNode', 'mediaMessageNode', 'quickReplyNode', 'listMessageNode'].includes(nextNode.type)) {
                 // Por defecto es TRUE (Humano) a menos que se desactive explícitamente en el editor
-                const simulateTyping = ((_u = nextNode.data) === null || _u === void 0 ? void 0 : _u.typingSimulation) !== false;
+                const simulateTyping = ((_t = nextNode.data) === null || _t === void 0 ? void 0 : _t.typingSimulation) !== false;
                 if (simulateTyping) {
-                    const content = ((_v = nextNode.data) === null || _v === void 0 ? void 0 : _v.content) || ((_w = nextNode.data) === null || _w === void 0 ? void 0 : _w.text) || ((_x = nextNode.data) === null || _x === void 0 ? void 0 : _x.caption) || '';
+                    const content = ((_u = nextNode.data) === null || _u === void 0 ? void 0 : _u.content) || ((_v = nextNode.data) === null || _v === void 0 ? void 0 : _v.text) || ((_w = nextNode.data) === null || _w === void 0 ? void 0 : _w.caption) || '';
                     const humanDelay = calculateTypingDelay(content);
                     await delay(humanDelay);
                 }
@@ -542,7 +605,7 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                         if (validation.isValid) {
                             functions.logger.info(`[Bot Engine] Immediate valid capture for ${to} at ${nextNodeId}: "${currentMsg}"`);
                             let valueToSave = currentMsg.trim();
-                            const varName = ((_y = nextNode.data) === null || _y === void 0 ? void 0 : _y.variableName) || `captured_${nextNodeId}`;
+                            const varName = ((_x = nextNode.data) === null || _x === void 0 ? void 0 : _x.variableName) || `captured_${nextNodeId}`;
                             if (['nombre', 'name', 'firstname', 'user'].includes(varName.toLowerCase())) {
                                 valueToSave = extractName(valueToSave);
                             }
@@ -562,7 +625,7 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                         }
                     }
                     // Si no fue válido o no había mensaje, enviar el prompt y esperar
-                    const prompt = replaceVariables(((_z = nextNode.data) === null || _z === void 0 ? void 0 : _z.content) || ((_0 = nextNode.data) === null || _0 === void 0 ? void 0 : _0.text) || '', cardData);
+                    const prompt = replaceVariables(((_y = nextNode.data) === null || _y === void 0 ? void 0 : _y.content) || ((_z = nextNode.data) === null || _z === void 0 ? void 0 : _z.text) || '', cardData);
                     if (prompt) {
                         await delay(calculateTypingDelay(prompt));
                         await adapter.sendMessage(to, prompt);
@@ -589,9 +652,9 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                     const qrText = replaceVariables(nextNode.data.text || nextNode.data.bodyText || 'Selecciona:', cardData);
                     const buttons = sanitizeButtonsData(nextNode.data.buttons || []);
                     const header = {
-                        type: ((_1 = nextNode.data) === null || _1 === void 0 ? void 0 : _1.headerType) || 'none',
-                        text: replaceVariables(((_2 = nextNode.data) === null || _2 === void 0 ? void 0 : _2.headerText) || '', cardData),
-                        url: (_3 = nextNode.data) === null || _3 === void 0 ? void 0 : _3.headerMediaUrl
+                        type: ((_0 = nextNode.data) === null || _0 === void 0 ? void 0 : _0.headerType) || 'none',
+                        text: replaceVariables(((_1 = nextNode.data) === null || _1 === void 0 ? void 0 : _1.headerText) || '', cardData),
+                        url: (_2 = nextNode.data) === null || _2 === void 0 ? void 0 : _2.headerMediaUrl
                     };
                     if (buttons.length > 0) {
                         await adapter.sendButtonMessage(to, qrText, buttons, header);
@@ -666,7 +729,7 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                         for (const cond of routeConditions) {
                             // Resolve variable value from cardData
                             const varName = (cond.variable || '').replace(/[\{\}]/g, '').trim();
-                            const varValue = ((_4 = cardData.customFields) === null || _4 === void 0 ? void 0 : _4[varName]) || cardData[varName];
+                            const varValue = ((_3 = cardData.customFields) === null || _3 === void 0 ? void 0 : _3[varName]) || cardData[varName];
                             const isMatch = evaluateCondition(varValue, cond.operator, cond.value, conditionData.fuzzyMatch !== false);
                             if (matchType === 'AND') {
                                 routeMatches = routeMatches && isMatch;
@@ -707,7 +770,7 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                     const op = setVarData.operation || 'set';
                     let valueToUse = replaceVariables(setVarData.value || '', cardData);
                     if (varToSet) {
-                        let currentVal = (_7 = (_6 = (_5 = cardData.customFields) === null || _5 === void 0 ? void 0 : _5[varToSet]) !== null && _6 !== void 0 ? _6 : cardData[varToSet]) !== null && _7 !== void 0 ? _7 : '';
+                        let currentVal = (_6 = (_5 = (_4 = cardData.customFields) === null || _4 === void 0 ? void 0 : _4[varToSet]) !== null && _5 !== void 0 ? _5 : cardData[varToSet]) !== null && _6 !== void 0 ? _6 : '';
                         let newVal = valueToUse;
                         if (opCat === 'math') {
                             const numCurrent = parseFloat(currentVal) || 0;
@@ -786,9 +849,9 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                     const systemPrompt = replaceVariables(aiData.systemPrompt || 'Eres un asistente útil.', cardData);
                     const userMsg = cardData.lastMessage || '';
                     const model = aiData.model || 'gpt-4o';
-                    const temperature = (_8 = aiData.temperature) !== null && _8 !== void 0 ? _8 : 0.7;
+                    const temperature = (_7 = aiData.temperature) !== null && _7 !== void 0 ? _7 : 0.7;
                     const outputVar = (aiData.outputVariable || '').replace(/[\{\}]/g, '').trim();
-                    const apiKey = (_9 = functions.config().openai) === null || _9 === void 0 ? void 0 : _9.key;
+                    const apiKey = (_8 = functions.config().openai) === null || _8 === void 0 ? void 0 : _8.key;
                     if (apiKey) {
                         try {
                             functions.logger.info(`[Bot] Calling AI Model: ${model}`);
@@ -819,7 +882,7 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                             }
                         }
                         catch (error) {
-                            functions.logger.error(`[Bot] AI Error:`, ((_10 = error.response) === null || _10 === void 0 ? void 0 : _10.data) || error.message);
+                            functions.logger.error(`[Bot] AI Error:`, ((_9 = error.response) === null || _9 === void 0 ? void 0 : _9.data) || error.message);
                             await adapter.sendMessage(to, "Lo siento, tuve un problema procesando tu solicitud con IA.");
                             await logBotMessage(to, "Lo siento, tuve un problema procesando tu solicitud con IA.", cardData.id, cardData.groupId, cardRef, 'text');
                         }
@@ -1018,23 +1081,34 @@ async function logBotMessage(contactNumber, message, cardId, groupId, existingRe
     // Use pre-resolved ref if available, otherwise fall back to lookup
     const docRef = existingRef || (userId && entityId ? await resolveCardRef(userId, entityId, contactNumber, platform || 'whatsapp') : null);
     if (docRef) {
-        // ⚠️ NOTE: FieldValue.serverTimestamp() is NOT allowed inside arrayUnion.
-        // Use Timestamp.now() instead so the write succeeds.
-        await docRef.update({
-            lastMessage: message.substring(0, 100),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            messages: admin.firestore.FieldValue.arrayUnion({
+        try {
+            // Build the message object — only include metadata if it has real value
+            const msgObj = {
                 sender: 'agent',
                 text: message,
                 type: type,
-                metadata: metadata || null,
+                messageId: `bot_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                 timestamp: admin.firestore.Timestamp.now()
-            }),
-            unreadCount: 0
-        });
+            };
+            if (metadata && Object.keys(metadata).length > 0) {
+                msgObj.metadata = metadata;
+            }
+            // ⚠️ NOTE: FieldValue.serverTimestamp() is NOT allowed inside arrayUnion.
+            // Use Timestamp.now() instead so the write succeeds.
+            await docRef.update({
+                lastMessage: message.substring(0, 100),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                messages: admin.firestore.FieldValue.arrayUnion(msgObj),
+                unreadCount: 0
+            });
+            functions.logger.info(`[logBotMessage] ✅ Bot message logged to ${docRef.path}: "${message.substring(0, 60)}"`);
+        }
+        catch (err) {
+            functions.logger.error(`[logBotMessage] ❌ FAILED to write bot message to Firestore. Path: ${docRef.path}. Error: ${err.message}`, { message, type, metadata });
+        }
     }
     else {
-        functions.logger.warn(`[logBotMessage] Could not resolve cardRef for ${contactNumber}. Bot message NOT logged.`);
+        functions.logger.warn(`[logBotMessage] Could not resolve cardRef for ${contactNumber} (platform: ${platform}). Bot message NOT logged.`);
     }
 }
 //# sourceMappingURL=botEngine.js.map

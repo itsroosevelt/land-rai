@@ -4,6 +4,7 @@ exports.metaWebhook = void 0;
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const messageNormalizer_1 = require("../helpers/messageNormalizer");
+const metaAPI_1 = require("../helpers/metaAPI");
 const kanbanOperations_1 = require("../helpers/kanbanOperations");
 const botEngine_1 = require("../helpers/botEngine");
 const tenantResolver_1 = require("../helpers/tenantResolver");
@@ -11,7 +12,7 @@ const tenantResolver_1 = require("../helpers/tenantResolver");
  * META WEBHOOK HANDLER (Arquitectura Molde Maestro)
  */
 exports.metaWebhook = functions.https.onRequest(async (req, res) => {
-    var _a, _b, _c, _d, _e, _f, _g;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
     // 1. VERIFICACIÓN (GET)
     if (req.method === 'GET') {
         const mode = req.query['hub.mode'];
@@ -105,20 +106,46 @@ exports.metaWebhook = functions.https.onRequest(async (req, res) => {
                 else if (entry.messaging) {
                     const event = entry.messaging[0];
                     const recipientId = (_f = event.recipient) === null || _f === void 0 ? void 0 : _f.id;
+                    const senderId = (_g = event.sender) === null || _g === void 0 ? void 0 : _g.id;
+                    // [DIAGNOSTIC] Skip echo messages (bot's own messages being reflected back)
+                    if ((_h = event.message) === null || _h === void 0 ? void 0 : _h.is_echo) {
+                        functions.logger.info(`[Meta Webhook] Skipping echo message for ${platform}`);
+                        continue;
+                    }
+                    // Skip events with no actual message text or attachments
+                    if (!((_j = event.message) === null || _j === void 0 ? void 0 : _j.text) && !((_k = event.message) === null || _k === void 0 ? void 0 : _k.attachments)) {
+                        functions.logger.info(`[Meta Webhook] Skipping non-message event for ${platform}`);
+                        continue;
+                    }
                     let u = req.query['u'];
                     let e = req.query['e'];
+                    functions.logger.info(`[Meta Webhook] Processing ${platform} event. sender=${senderId}, recipient=${recipientId}, entryId=${entry.id}`);
                     if (!u || !e) {
-                        const tenant = await (0, tenantResolver_1.resolveTenant)(platform, recipientId);
+                        // Try resolving by recipientId (page/instagram account that received the message)
+                        let tenant = await (0, tenantResolver_1.resolveTenant)(platform, recipientId);
+                        // Fallback: try with entry.id (also the page ID in Messenger webhook payloads)
+                        if (!tenant && entry.id && entry.id !== recipientId) {
+                            functions.logger.info(`[Meta Webhook] Retrying tenant resolution with entry.id: ${entry.id}`);
+                            tenant = await (0, tenantResolver_1.resolveTenant)(platform, entry.id);
+                        }
                         if (tenant) {
                             u = tenant.userId;
                             e = tenant.entityId;
                         }
+                        else {
+                            functions.logger.warn(`[Meta Webhook] ❌ Could not resolve tenant for ${platform}. recipientId=${recipientId}, entryId=${entry.id}. Dropping event.`);
+                        }
                     }
                     if (u && e) {
-                        const unified = (0, messageNormalizer_1.normalizeMetaMessage)(event, platform);
+                        // Fetch real profile name
+                        let profile = null;
+                        if (senderId) {
+                            profile = await (0, metaAPI_1.getMetaProfile)(senderId, undefined, { userId: u, entityId: e, provider: platform });
+                        }
+                        const unified = (0, messageNormalizer_1.normalizeMetaMessage)(event, platform, profile);
                         const result = await (0, kanbanOperations_1.handleKanbanUpdateOmni)(unified, u, e);
                         if (result === null || result === void 0 ? void 0 : result.success) {
-                            await (0, botEngine_1.tryTriggerBot)(u, e, platform, unified.external_id, unified.message_text, (_g = event.message) === null || _g === void 0 ? void 0 : _g.mid, { type: unified.message_type });
+                            await (0, botEngine_1.tryTriggerBot)(u, e, platform, unified.external_id, unified.message_text, (_l = event.message) === null || _l === void 0 ? void 0 : _l.mid, { type: unified.message_type });
                         }
                     }
                 }

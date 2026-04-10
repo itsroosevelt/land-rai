@@ -113,14 +113,37 @@ export const metaWebhook = functions.https.onRequest(async (req, res) => {
                     const recipientId = event.recipient?.id;
                     const senderId = event.sender?.id;
 
+                    // [DIAGNOSTIC] Skip echo messages (bot's own messages being reflected back)
+                    if (event.message?.is_echo) {
+                        functions.logger.info(`[Meta Webhook] Skipping echo message for ${platform}`);
+                        continue;
+                    }
+                    // Skip events with no actual message text or attachments
+                    if (!event.message?.text && !event.message?.attachments) {
+                        functions.logger.info(`[Meta Webhook] Skipping non-message event for ${platform}`);
+                        continue;
+                    }
+
                     let u = req.query['u'] as string;
                     let e = req.query['e'] as string;
 
+                    functions.logger.info(`[Meta Webhook] Processing ${platform} event. sender=${senderId}, recipient=${recipientId}, entryId=${entry.id}`);
+
                     if (!u || !e) {
-                        const tenant = await resolveTenant(platform as any, recipientId);
+                        // Try resolving by recipientId (page/instagram account that received the message)
+                        let tenant = await resolveTenant(platform as any, recipientId);
+
+                        // Fallback: try with entry.id (also the page ID in Messenger webhook payloads)
+                        if (!tenant && entry.id && entry.id !== recipientId) {
+                            functions.logger.info(`[Meta Webhook] Retrying tenant resolution with entry.id: ${entry.id}`);
+                            tenant = await resolveTenant(platform as any, entry.id);
+                        }
+
                         if (tenant) {
                             u = tenant.userId;
                             e = tenant.entityId;
+                        } else {
+                            functions.logger.warn(`[Meta Webhook] ❌ Could not resolve tenant for ${platform}. recipientId=${recipientId}, entryId=${entry.id}. Dropping event.`);
                         }
                     }
 

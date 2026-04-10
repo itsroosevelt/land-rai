@@ -205,7 +205,10 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             await cardRef.update({
                 'botState': admin.firestore.FieldValue.delete(),
                 'chatbotState': admin.firestore.FieldValue.delete(),
-                'customFields': admin.firestore.FieldValue.delete()
+                'customFields': admin.firestore.FieldValue.delete(),
+                'lastBotInteraction': admin.firestore.FieldValue.delete(),
+                'botOutcome': admin.firestore.FieldValue.delete(),
+                'lastError': admin.firestore.FieldValue.delete()
             });
             await dispatchMessage("🔄 Reinicio completado, empezamos de nuevo.");
             await cardRef.update({

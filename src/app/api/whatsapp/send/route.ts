@@ -36,10 +36,10 @@ export async function POST(req: Request) {
             if (targetPlatform === 'instagram' || targetPlatform === 'messenger') {
                 console.log(`[Omnichannel API] Sending to ${targetPlatform} (ID: ${toNumber}) for tenant ${entityId}`);
                 const { sendMetaMessage } = await import('@/lib/sendProviders');
-                responseData = await sendMetaMessage(toNumber, message, { 
-                    userId, 
-                    entityId, 
-                    provider: targetPlatform as 'messenger' | 'instagram' 
+                responseData = await sendMetaMessage(toNumber, message, {
+                    userId,
+                    entityId,
+                    provider: targetPlatform as 'messenger' | 'instagram'
                 });
                 messageId = responseData?.message_id;
             } else {
@@ -63,30 +63,41 @@ export async function POST(req: Request) {
         let resolvedGroupId = finalGroupId;
 
         if (!resolvedCardId || !resolvedGroupId || resolvedCardId.startsWith('temp')) {
-            console.log(`[Omnichannel API] 🔍 Resolving entity-card for content: ${cleanTo}`);
+            console.log(`[Omnichannel API] 🔍 Resolving entity-card for platform: ${targetPlatform}, ID: ${cleanTo}`);
             try {
                 const groupsSnap = await db.collection('users').doc(userId).collection('entities').doc(entityId).collection('kanban-groups').get();
                 for (const groupDoc of groupsSnap.docs) {
                     const cardsRef = groupDoc.ref.collection('cards');
                     let cardSnap: any = null;
 
-                    const searchNo = cleanTo.replace(/\+/g, '').replace(/\D/g, '');
-
-                    const query1 = await cardsRef.where('contactNumberClean', '==', searchNo).get();
-                    const query2 = query1.empty ? await cardsRef.where('contactNumber', '==', cleanTo).get() : query1;
-                    const query3 = query2.empty ? await cardsRef.where('external_id', '==', cleanTo).get() : query2;
-
-                    if (!query3.empty) {
-                        // Pick the one with the latest update to match Sidebar deduplication
-                        const sorted = query3.docs.sort((a, b) => {
-                            const tA = (a.data().updatedAt?.toDate?.() || new Date(0)).getTime();
-                            const tB = (b.data().updatedAt?.toDate?.() || new Date(0)).getTime();
-                            return tB - tA;
-                        });
-                        resolvedCardId = sorted[0].id;
+                    // Strategy A: Search by platform_ids (Modern Schema — Messenger/Instagram PSID)
+                    const platformKey = targetPlatform === 'facebook' ? 'messenger' : targetPlatform;
+                    const queryByPlatformId = await cardsRef.where(`platform_ids.${platformKey}`, '==', cleanTo).limit(1).get();
+                    if (!queryByPlatformId.empty) {
+                        resolvedCardId = queryByPlatformId.docs[0].id;
                         resolvedGroupId = groupDoc.id;
-                        console.log(`[Omnichannel API] ✅ FOUND BEST MATCH: Card ${resolvedCardId} in Group ${resolvedGroupId}`);
+                        console.log(`[Omnichannel API] ✅ Found via platform_ids.${platformKey}: ${resolvedCardId}`);
                         break;
+                    }
+
+                    // Strategy B: Legacy phone-based search (WhatsApp)
+                    if (targetPlatform === 'whatsapp' || targetPlatform === 'kamban') {
+                        const searchNo = cleanTo.replace(/\+/g, '').replace(/\D/g, '');
+                        const query1 = await cardsRef.where('contactNumberClean', '==', searchNo).get();
+                        const query2 = query1.empty ? await cardsRef.where('contactNumber', '==', cleanTo).get() : query1;
+                        const query3 = query2.empty ? await cardsRef.where('external_id', '==', cleanTo).get() : query2;
+
+                        if (!query3.empty) {
+                            const sorted = query3.docs.sort((a, b) => {
+                                const tA = (a.data().updatedAt?.toDate?.() || new Date(0)).getTime();
+                                const tB = (b.data().updatedAt?.toDate?.() || new Date(0)).getTime();
+                                return tB - tA;
+                            });
+                            resolvedCardId = sorted[0].id;
+                            resolvedGroupId = groupDoc.id;
+                            console.log(`[Omnichannel API] ✅ Found via phone: ${resolvedCardId}`);
+                            break;
+                        }
                     }
                 }
             } catch (err: any) {

@@ -4,7 +4,7 @@ exports.MetaAdapter = void 0;
 const metaAPI = require("../metaAPI");
 class MetaAdapter {
     constructor(platform = 'messenger', userId, entityId) {
-        this.ctx = { userId, entityId };
+        this.ctx = { userId, entityId, provider: platform };
     }
     async sendMessage(to, text) {
         return metaAPI.sendMetaMessage(to, text, undefined, this.ctx);

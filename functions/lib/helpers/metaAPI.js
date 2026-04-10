@@ -5,6 +5,7 @@ exports.sendMetaMessage = sendMetaMessage;
 exports.sendMetaMediaMessage = sendMetaMediaMessage;
 exports.markMetaMessageAsRead = markMetaMessageAsRead;
 exports.sendMetaQuickReplies = sendMetaQuickReplies;
+exports.getMetaProfile = getMetaProfile;
 const functions = require("firebase-functions");
 const axios_1 = require("axios");
 const admin = require("firebase-admin");
@@ -13,18 +14,47 @@ const PAGE_ACCESS_TOKEN = process.env.META_PAGE_ACCESS_TOKEN;
 exports.INSTAGRAM_ACCESS_TOKEN = process.env.INSTAGRAM_ACCESS_TOKEN || process.env.META_PAGE_ACCESS_TOKEN;
 // Generic function to make requests to Graph API
 async function callSendApi(messageData, token, ctx) {
-    var _a;
+    var _a, _b;
     let accessToken = token || PAGE_ACCESS_TOKEN;
+    let targetNodeId;
     // Resolve tenant-specific token if context provided
     if ((ctx === null || ctx === void 0 ? void 0 : ctx.userId) && (ctx === null || ctx === void 0 ? void 0 : ctx.entityId) && !token) {
         try {
             const db = admin.firestore();
-            // Try WhatsApp config first as it often contains the Meta system token
-            const configSnap = await db.doc(`users/${ctx.userId}/entities/${ctx.entityId}/integrations/whatsapp`).get();
-            if (configSnap.exists) {
+            const platform = ctx.provider || 'messenger';
+            // 1. Try direct doc lookup (fastest)
+            let configSnap = await db.doc(`users/${ctx.userId}/entities/${ctx.entityId}/integrations/${platform}`).get();
+            // 2. Try 'facebook' doc if 'messenger' fails
+            if (!configSnap.exists && platform === 'messenger') {
+                configSnap = await db.doc(`users/${ctx.userId}/entities/${ctx.entityId}/integrations/facebook`).get();
+            }
+            // 3. Robust fallback: search by field (matching resolveTenant logic)
+            if (!configSnap.exists) {
+                const fieldName = platform === 'instagram' ? 'instagramId' : 'pageId';
+                const integrationsSnap = await db.collection(`users/${ctx.userId}/entities/${ctx.entityId}/integrations`)
+                    .where(fieldName, '!=', '')
+                    .limit(1)
+                    .get();
+                if (!integrationsSnap.empty) {
+                    configSnap = integrationsSnap.docs[0];
+                }
+            }
+            if (configSnap && configSnap.exists) {
                 const data = configSnap.data();
                 if (data === null || data === void 0 ? void 0 : data.accessToken) {
                     accessToken = data.accessToken;
+                    targetNodeId = platform === 'messenger' ? data.pageId : data.instagramId;
+                }
+            }
+            else if (platform === 'messenger') {
+                // Last ditch fallback to whatsapp config
+                const waSnap = await db.doc(`users/${ctx.userId}/entities/${ctx.entityId}/integrations/whatsapp`).get();
+                if (waSnap.exists) {
+                    const waData = waSnap.data();
+                    if (waData === null || waData === void 0 ? void 0 : waData.accessToken) {
+                        accessToken = waData.accessToken;
+                        targetNodeId = waData.pageId;
+                    }
                 }
             }
         }
@@ -33,17 +63,22 @@ async function callSendApi(messageData, token, ctx) {
         }
     }
     if (!accessToken) {
-        functions.logger.error('Missing Access Token (Meta/Instagram).');
+        functions.logger.error('[Meta API] ❌ Missing Access Token.');
         throw new Error('Access Token is not configured.');
     }
-    const url = `https://graph.facebook.com/v19.0/me/messages?access_token=${accessToken}`;
+    const node = targetNodeId || 'me';
+    const url = `https://graph.facebook.com/v21.0/${node}/messages?access_token=${accessToken}`;
+    // Mask token for logs
+    const maskedToken = accessToken.substring(0, 6) + '...' + accessToken.substring(accessToken.length - 4);
+    functions.logger.info(`[Meta API] 🚀 Sending to ${node}. Recipient: ${(_a = messageData.recipient) === null || _a === void 0 ? void 0 : _a.id}. Token: ${maskedToken} (Provider: ${ctx === null || ctx === void 0 ? void 0 : ctx.provider})`);
     try {
         const response = await axios_1.default.post(url, messageData);
+        functions.logger.info(`[Meta API] ✅ Success: ${response.data.message_id || 'OK'}`);
         return response.data;
     }
     catch (error) {
-        const errorData = ((_a = error.response) === null || _a === void 0 ? void 0 : _a.data) || error.message;
-        functions.logger.error('Meta API Error:', errorData);
+        const errorData = ((_b = error.response) === null || _b === void 0 ? void 0 : _b.data) || error.message;
+        functions.logger.error(`[Meta API] ❌ FAILED for ${node}:`, errorData);
         throw new Error(`Meta API Error: ${JSON.stringify(errorData)}`);
     }
 }
@@ -120,5 +155,32 @@ async function sendMetaQuickReplies(recipientId, text, quickReplies, token, ctx)
         }
     };
     return await callSendApi(messageData, token, ctx);
+}
+/**
+ * Fetches user profile from Meta
+ */
+async function getMetaProfile(recipientId, token, ctx) {
+    var _a;
+    let accessToken = token || PAGE_ACCESS_TOKEN;
+    if ((ctx === null || ctx === void 0 ? void 0 : ctx.userId) && (ctx === null || ctx === void 0 ? void 0 : ctx.entityId) && !token) {
+        try {
+            const db = admin.firestore();
+            const configSnap = await db.doc(`users/${ctx.userId}/entities/${ctx.entityId}/integrations/${ctx.provider || 'messenger'}`).get();
+            if (configSnap.exists)
+                accessToken = ((_a = configSnap.data()) === null || _a === void 0 ? void 0 : _a.accessToken) || accessToken;
+        }
+        catch (e) { }
+    }
+    if (!accessToken)
+        return null;
+    const url = `https://graph.facebook.com/v21.0/${recipientId}?fields=name,first_name,last_name,profile_pic&access_token=${accessToken}`;
+    try {
+        const res = await axios_1.default.get(url);
+        return res.data;
+    }
+    catch (e) {
+        functions.logger.warn(`[Meta API] Failed to fetch profile for ${recipientId}`);
+        return null;
+    }
 }
 //# sourceMappingURL=metaAPI.js.map

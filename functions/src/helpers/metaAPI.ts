@@ -15,7 +15,7 @@ interface Context {
 }
 
 // Generic function to make requests to Graph API
-async function callSendApi(messageData: object, token?: string, ctx?: Context): Promise<any> {
+async function callSendApi(messageData: any, token?: string, ctx?: Context): Promise<any> {
     let accessToken = token || PAGE_ACCESS_TOKEN;
     let targetNodeId: string | undefined;
 
@@ -25,18 +25,34 @@ async function callSendApi(messageData: object, token?: string, ctx?: Context): 
             const db = admin.firestore();
             const platform = ctx.provider || 'messenger';
 
-            // Reintentamos con el documento de integración específico
-            const configSnap = await db.doc(`users/${ctx.userId}/entities/${ctx.entityId}/integrations/${platform}`).get();
+            // 1. Try direct doc lookup (fastest)
+            let configSnap = await db.doc(`users/${ctx.userId}/entities/${ctx.entityId}/integrations/${platform}`).get();
 
-            if (configSnap.exists) {
+            // 2. Try 'facebook' doc if 'messenger' fails
+            if (!configSnap.exists && platform === 'messenger') {
+                configSnap = await db.doc(`users/${ctx.userId}/entities/${ctx.entityId}/integrations/facebook`).get();
+            }
+
+            // 3. Robust fallback: search by field (matching resolveTenant logic)
+            if (!configSnap.exists) {
+                const fieldName = platform === 'instagram' ? 'instagramId' : 'pageId';
+                const integrationsSnap = await db.collection(`users/${ctx.userId}/entities/${ctx.entityId}/integrations`)
+                    .where(fieldName, '!=', '')
+                    .limit(1)
+                    .get();
+                if (!integrationsSnap.empty) {
+                    configSnap = integrationsSnap.docs[0] as any;
+                }
+            }
+
+            if (configSnap && configSnap.exists) {
                 const data = configSnap.data();
                 if (data?.accessToken) {
                     accessToken = data.accessToken;
-                    // Resolvemos el ID del nodo para System User Tokens
                     targetNodeId = platform === 'messenger' ? data.pageId : data.instagramId;
                 }
             } else if (platform === 'messenger') {
-                // Fallback a whatsapp config si es messenger y no tiene config propia
+                // Last ditch fallback to whatsapp config
                 const waSnap = await db.doc(`users/${ctx.userId}/entities/${ctx.entityId}/integrations/whatsapp`).get();
                 if (waSnap.exists) {
                     const waData = waSnap.data();
@@ -52,34 +68,24 @@ async function callSendApi(messageData: object, token?: string, ctx?: Context): 
     }
 
     if (!accessToken) {
-        functions.logger.error('Missing Access Token (Meta/Instagram).');
+        functions.logger.error('[Meta API] ❌ Missing Access Token.');
         throw new Error('Access Token is not configured.');
     }
 
-    // Si no tenemos el ID del nodo, intentamos con 'me' como fallback (solo funciona con User Tokens)
     const node = targetNodeId || 'me';
     const url = `https://graph.facebook.com/v21.0/${node}/messages?access_token=${accessToken}`;
 
+    // Mask token for logs
+    const maskedToken = accessToken.substring(0, 6) + '...' + accessToken.substring(accessToken.length - 4);
+    functions.logger.info(`[Meta API] 🚀 Sending to ${node}. Recipient: ${messageData.recipient?.id}. Token: ${maskedToken} (Provider: ${ctx?.provider})`);
+
     try {
         const response = await axios.post(url, messageData);
+        functions.logger.info(`[Meta API] ✅ Success: ${response.data.message_id || 'OK'}`);
         return response.data;
     } catch (error: any) {
         const errorData = error.response?.data || error.message;
-        functions.logger.error('Meta API Error:', errorData);
-
-        // Log error to card if possible
-        if (ctx?.userId && ctx?.entityId && ctx?.provider) {
-            const db = admin.firestore();
-            // Intentamos actualizar la última card activa
-            try {
-                //Nota: El query por platform_ids aquí es pesado, pero útil para depuración
-                const cards = await db.collectionGroup('cards')
-                    .where(`platform_ids.${ctx.provider}`, '!=', null)
-                    .limit(5).get(); // Limitado para evitar timeout
-                // Aquí lo ideal sería pasar el recipientId a callSendApi para buscar la card exacta
-            } catch (e) { }
-        }
-
+        functions.logger.error(`[Meta API] ❌ FAILED for ${node}:`, errorData);
         throw new Error(`Meta API Error: ${JSON.stringify(errorData)}`);
     }
 }
@@ -178,13 +184,13 @@ export async function getMetaProfile(recipientId: string, token?: string, ctx?: 
             const db = admin.firestore();
             const configSnap = await db.doc(`users/${ctx.userId}/entities/${ctx.entityId}/integrations/${ctx.provider || 'messenger'}`).get();
             if (configSnap.exists) accessToken = configSnap.data()?.accessToken || accessToken;
-        } catch (e) {}
+        } catch (e) { }
     }
 
     if (!accessToken) return null;
 
     const url = `https://graph.facebook.com/v21.0/${recipientId}?fields=name,first_name,last_name,profile_pic&access_token=${accessToken}`;
-    
+
     try {
         const res = await axios.get(url);
         return res.data;
