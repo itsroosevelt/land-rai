@@ -75,16 +75,17 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
         const currentState = cardData.botState || {};
 
         // 2. HELPERS (Must be declared before reset block)
-        const replaceVars = (val: string) => {
+        const replaceVars = (val: string, overlay: any = {}) => {
             if (!val) return '';
             let p = val;
             const context = {
                 nombre: cardData.contactName || 'Usuario',
                 name: cardData.contactName || 'Usuario',
-                namecli: cardData.contactName || 'Usuario', // Support common bot variable names
+                namecli: cardData.contactName || 'Usuario',
                 first_name: cardData.contactName?.split(' ')[0] || 'Usuario',
                 ...(cardData.customFields || {}),
-                ...(cardData.variables || {})
+                ...(cardData.variables || {}),
+                ...overlay
             };
             for (const [k, v] of Object.entries(context)) {
                 p = p.replace(new RegExp(`\\{${k}\\}`, 'gi'), String(v));
@@ -118,10 +119,11 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             }
         };
 
-        const executeFlow = async (startNodeId: string) => {
-            let currentNodeId: string | null = startNodeId;
+        const executeFlow = async (startId: string, runtimeContext: any = {}) => {
+            let currentNodeId: string | null = startId;
             let executionCount = 0;
             const MAX_STEPS = 15;
+            const currentOverlay = { ...runtimeContext };
 
             while (currentNodeId && executionCount < MAX_STEPS) {
                 executionCount++;
@@ -135,7 +137,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                 }
 
                 if (node.type === 'textMessageNode') {
-                    const msg = replaceVars(node.data?.content || node.data?.text || 'Hola');
+                    const msg = replaceVars(node.data?.content || node.data?.text || 'Hola', currentOverlay);
                     let messageId = `bot_${Date.now()}`;
                     let sendError = null;
 
@@ -168,7 +170,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                 }
 
                 if (node.type === 'quickReplyNode') {
-                    const msg = replaceVars(node.data?.bodyText || node.data?.text || 'Selecciona:');
+                    const msg = replaceVars(node.data?.bodyText || node.data?.text || 'Selecciona:', currentOverlay);
                     const buttons = (node.data?.buttons || []).map((btn: any) => ({
                         type: 'reply',
                         reply: {
@@ -221,7 +223,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                 }
 
                 if (node.type === 'captureInputNode') {
-                    const prompt = replaceVars(node.data?.content || node.data?.text || '');
+                    const prompt = replaceVars(node.data?.content || node.data?.text || '', currentOverlay);
                     
                     // --- LOOK-BACK: Check if user already sent text during bot sequence ---
                     const snap = await cardRef.get();
@@ -380,19 +382,35 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             const node = flow.nodes.find((n: any) => n.id === stateSnapshot.currentNodeId);
             if (node?.type === 'captureInputNode') {
                 const varName = stateSnapshot.variableName || 'input';
+                const nodeData = node.data || {};
 
                 let extractedValue = text;
-                if (varName.toLowerCase().includes('name') || varName.toLowerCase().includes('nombre')) {
+                const isNameVar = varName.toLowerCase().includes('name') || varName.toLowerCase().includes('nombre');
+                const isEmailVar = varName.toLowerCase().includes('mail') || varName.toLowerCase().includes('correo');
+
+                if (isNameVar) {
                     const match = text.match(/(?:me llamo|mi nombre es|soy|nombre:)\s+([a-z\s]+)/i);
                     if (match && match[1]) extractedValue = match[1].trim();
-                } else if (varName.toLowerCase().includes('mail') || varName.toLowerCase().includes('correo')) {
+                } else if (isEmailVar) {
                     const match = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
                     if (match) extractedValue = match[0];
                 }
 
-                await cardRef.update({ [`customFields.${varName}`]: extractedValue, 'botState.waitingForInput': false });
+                console.log(`[ChatbotEngine] 📥 Captured ${varName}: ${extractedValue}`);
+
+                const updatePayload: any = {
+                    [`customFields.${varName}`]: extractedValue,
+                    'botState.waitingForInput': false
+                };
+                
+                if (isNameVar) {
+                    updatePayload.contactName = extractedValue;
+                    updatePayload['customFields.namecli'] = extractedValue;
+                }
+
+                await cardRef.update(updatePayload);
                 const next = flow.edges.find((e: any) => e.source === node.id);
-                if (next) await executeFlow(next.target);
+                if (next) await executeFlow(next.target, { [varName]: extractedValue, namecli: extractedValue });
                 else await cardRef.update({ 'botState.status': 'completed' });
             } else {
                 const normalizedText = text.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
