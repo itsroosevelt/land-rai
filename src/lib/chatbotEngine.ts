@@ -87,9 +87,13 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                 ...(cardData.variables || {}),
                 ...overlay
             };
+            // CRITICAL: Replace {{var}} BEFORE {var} to prevent partial corruption
+            // e.g. {var} regex inside {{var}} would turn {{value}} into {replacedValue}
+            for (const [k, v] of Object.entries(context)) {
+                p = p.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'gi'), String(v));
+            }
             for (const [k, v] of Object.entries(context)) {
                 p = p.replace(new RegExp(`\\{${k}\\}`, 'gi'), String(v));
-                p = p.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'gi'), String(v));
             }
             return p;
         };
@@ -229,7 +233,10 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                     const snap = await cardRef.get();
                     const cardData = snap.data() || {};
                     const lastMsg = (cardData.messages || []).slice(-1)[0];
-                    if (lastMsg && lastMsg.sender === 'user' && lastMsg.messageId !== messageId) {
+                    const lastMsgNormalized = String(lastMsg?.text || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    const isLastMsgAReset = lastMsgNormalized === 'reiniciar' || lastMsgNormalized === 'reset' || lastMsgNormalized === 'menu' ||
+                        lastMsgNormalized.includes('reinicia todo ahora') || lastMsgNormalized.startsWith('reinici');
+                    if (lastMsg && lastMsg.sender === 'user' && lastMsg.messageId !== messageId && !isLastMsgAReset) {
                         console.log(`[ChatbotEngine] ⚡ Look-back: Capturing user message "${lastMsg.text}" for variable ${node.data?.variableName}`);
                         await cardRef.update({ 
                             [`customFields.${node.data?.variableName || 'last_input'}`]: lastMsg.text,
