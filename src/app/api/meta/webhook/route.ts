@@ -45,16 +45,27 @@ export async function POST(req: Request) {
         const targetId = entry.id; // Page ID or Instagram Account ID
         const messaging = entry.messaging?.[0];
 
-        if (!messaging || !messaging.sender || !messaging.message) {
-            return NextResponse.json({ success: true, ignored: 'not_a_message' });
+        if (!messaging || !messaging.sender || (!messaging.message && !messaging.postback)) {
+            return NextResponse.json({ success: true, ignored: 'not_a_valid_event' });
         }
 
         const senderId = messaging.sender.id;
-        const text = messaging.message.text || '[Multimedia/Otro]';
+        let text = '';
 
-        if (messaging.message.is_echo) {
-            return NextResponse.json({ success: true, ignored: 'echo' });
+        if (messaging.message) {
+            if (messaging.message.is_echo) {
+                return NextResponse.json({ success: true, ignored: 'echo' });
+            }
+            text = messaging.message.text || '';
+        } else if (messaging.postback) {
+            text = messaging.postback.title || messaging.postback.payload || '';
         }
+
+        if (!text && !messaging.message?.attachments) {
+            return NextResponse.json({ success: true, ignored: 'empty_text' });
+        }
+
+        if (!text) text = '[Multimedia/Otro]';
 
         debugLog(`[POST] Searching tenant for Target ID: ${targetId}`);
 

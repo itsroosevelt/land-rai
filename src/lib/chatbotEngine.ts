@@ -185,11 +185,15 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                 }
 
                 if (node.type === 'conditionNode') {
-                    const freshData = (await cardRef.get()).data() || {};
-                    const val = freshData.customFields?.[node.data?.variableName] || freshData.variables?.[node.data?.variableName];
+                    const snap = await cardRef.get();
+                    const freshData = snap.data() || {};
+                    const rawVal = freshData.customFields?.[node.data?.variableName] || freshData.variables?.[node.data?.variableName];
+                    const val = String(rawVal || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
                     let target = null;
                     for (const r of node.data?.routes || []) {
-                        if (r.condition === 'equals' && String(val) === String(r.value)) {
+                        const targetVal = String(r.value || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                        if (r.condition === 'equals' && val === targetVal) {
                             target = flow.edges.find((e: any) => e.source === node.id && e.sourceHandle === r.id)?.target;
                             if (target) break;
                         }
@@ -294,13 +298,33 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
         if (stateSnapshot.waitingForInput && stateSnapshot.currentNodeId) {
             const node = flow.nodes.find((n: any) => n.id === stateSnapshot.currentNodeId);
             console.log(`[ChatbotEngine] 📝 RESUMING INPUT @ ${node?.id}`);
+
             if (node?.type === 'captureInputNode') {
                 const varName = stateSnapshot.variableName || 'input';
-                await cardRef.update({ [`customFields.${varName}`]: text, 'botState.waitingForInput': false });
+
+                // SMARTER CAPTURE logic: Extract name if the variable name is 'nombre' or 'name'
+                let extractedValue = text;
+                const lowText = text.toLowerCase();
+                if (varName.toLowerCase().includes('name') || varName.toLowerCase().includes('nombre')) {
+                    const match = text.match(/(?:me llamo|mi nombre es|soy|nombre:)\s+([a-z\s]+)/i);
+                    if (match && match[1]) extractedValue = match[1].trim();
+                } else if (varName.toLowerCase().includes('mail') || varName.toLowerCase().includes('correo')) {
+                    const match = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+                    if (match) extractedValue = match[0];
+                }
+
+                await cardRef.update({ [`customFields.${varName}`]: extractedValue, 'botState.waitingForInput': false });
                 const next = flow.edges.find((e: any) => e.source === node.id);
                 if (next) await executeFlow(next.target);
             } else {
-                const edge = flow.edges.find((e: any) => e.source === node?.id && (String(e.sourceHandle) === text || String(e.sourceHandle?.toLowerCase()) === text.toLowerCase()));
+                // QUICK REPLIES / BUTTONS logic: Normalize for all channels
+                const normalizedText = text.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                const edge = flow.edges.find((e: any) => {
+                    if (e.source !== node?.id) return false;
+                    const handle = String(e.sourceHandle || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                    return handle === normalizedText;
+                });
+
                 if (edge) {
                     await cardRef.update({ 'botState.waitingForInput': false });
                     await executeFlow(edge.target);
