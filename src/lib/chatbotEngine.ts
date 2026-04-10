@@ -18,6 +18,17 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
 
     console.log(`[ChatbotEngine] 🚀 START | Platform: ${platform} | From: ${from} | Text: "${text}"`);
 
+    // HIT AUDIT (Visible in CRM System Logs)
+    try {
+        await db.collection(`users/${userId}/entities/${entityId}/system_logs`).add({
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            type: 'chatbot_engine_hit',
+            platform,
+            from,
+            textSnippet: text?.substring(0, 50)
+        });
+    } catch (e) { }
+
     // 0. QUICK RESET DETECTION
     const inputRaw = text || '';
     const input = inputRaw.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -83,6 +94,13 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                 return res;
             } catch (err: any) {
                 console.error(`[ChatbotEngine] ❌ Dispatch FAILED for ${from}:`, err.message);
+                // PERSIST ERROR FOR CRM VISIBILITY
+                try {
+                    await cardRef.update({
+                        'botState.lastError': err.message,
+                        'botState.lastErrorAt': admin.firestore.FieldValue.serverTimestamp()
+                    });
+                } catch (inner) { }
                 throw err;
             }
         };

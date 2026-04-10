@@ -130,7 +130,7 @@ export async function POST(req: Request) {
         try {
             await db.collection(`${entityPath}/system_logs`).add({
                 timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                type: `${provider}_webhook`,
+                type: `${provider}_webhook_nextjs`,
                 senderId: senderId,
                 payload_type: messaging.message ? 'message' : 'postback',
                 raw: JSON.stringify(body).substring(0, 1500)
