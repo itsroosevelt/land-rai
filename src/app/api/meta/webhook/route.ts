@@ -143,7 +143,7 @@ export async function POST(req: Request) {
         let existingContactId: string | null = null;
         let existingContactName: string | null = null;
 
-        // Try to find if user exists by meta sender ID in Contacts
+        // 3. PRIMARY SEARCH: Try to find if user exists by meta sender ID in Contacts
         const contactSnap = await db.collection(`${entityPath}/contacts`)
             .where('metaSenderId', '==', senderId)
             .limit(1)
@@ -166,7 +166,57 @@ export async function POST(req: Request) {
             }
         }
 
-        // FALLBACK SEARCH: Scane all groups like WhatsApp does to avoid duplicates
+        // 4. CAPTURE REAL PROFILE NAME FROM META (Critical for identity & fusion)
+        let resolvedName = existingContactName;
+        if (!resolvedName || (typeof resolvedName === 'string' && resolvedName.toLowerCase().includes('usuario'))) {
+            try {
+                if (tenantData?.accessToken) {
+                    const fields = provider === 'instagram' ? 'name,username' : 'first_name,last_name,name';
+                    const profileRes = await fetch(`https://graph.facebook.com/v21.0/${senderId}?fields=${fields}&access_token=${tenantData.accessToken}`);
+                    const profileData = await profileRes.json();
+
+                    if (profileData && !profileData.error) {
+                        if (provider === 'instagram') {
+                            resolvedName = profileData.username ? `@${profileData.username}` : (profileData.name || resolvedName);
+                        } else {
+                            resolvedName = profileData.name || `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim() || resolvedName;
+                        }
+                    }
+                }
+            } catch (err) {
+                debugLog(`[Profile Fetch] Failed to get name: ${err}`);
+            }
+        }
+
+        // 5. SAFE FUSION: If no contact found by metaSenderId, try searching by name
+        if (!existingContactId && resolvedName) {
+            const nameMatchSnap = await db.collection(`${entityPath}/contacts`)
+                .where('name', '==', resolvedName)
+                .get();
+            
+            // ARCHITECT RULE: Only merge if exactly ONE found and it doesn't have a conflicting platform ID
+            if (nameMatchSnap.size === 1) {
+                const potentialContact = nameMatchSnap.docs[0];
+                const pData = potentialContact.data();
+                if (!pData.metaSenderId || pData.metaSenderId === senderId) {
+                    existingContactId = potentialContact.id;
+                    existingContactName = resolvedName;
+                    targetGroupId = pData.kanbanGroupId;
+                    const contactCardId = pData.kanbanCardId;
+
+                    if (targetGroupId && contactCardId) {
+                        const cardRef = db.doc(`${entityPath}/kanban-groups/${targetGroupId}/cards/${contactCardId}`);
+                        const cardGet = await cardRef.get();
+                        if (cardGet.exists) {
+                            targetCardDoc = cardGet;
+                            debugLog(`[Safe Fusion] Link successful with contact ${existingContactId} (${resolvedName})`);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 6. FALLBACK SEARCH: If still no card, scan groups (like WhatsApp does)
         if (!targetCardDoc) {
             debugLog(`[POST] No card found via contact. Searching all groups for platform_ids.${provider} == ${senderId}...`);
             const allMatches: any[] = [];
@@ -204,7 +254,7 @@ export async function POST(req: Request) {
             sender: 'user',
             text: text,
             timestamp: new Date(),
-            messageId: messaging.message.mid || `mid_${Date.now()}`,
+            messageId: messaging.message?.mid || `mid_${Date.now()}`,
             platform: provider
         };
 
@@ -212,30 +262,9 @@ export async function POST(req: Request) {
         let groupId = targetGroupId;
 
         if (targetCardDoc && targetGroupId) {
-            // REFRESH NAME LOGIC: If contact exists but has a generic name, try to fetch real name again
-            let updatedName = existingContactName;
-            if (!existingContactName || existingContactName.toLowerCase().includes('usuario')) {
-                try {
-                    if (tenantData?.accessToken) {
-                        const fields = provider === 'instagram' ? 'name,username' : 'first_name,last_name,name';
-                        const profileRes = await fetch(`https://graph.facebook.com/v21.0/${senderId}?fields=${fields}&access_token=${tenantData.accessToken}`);
-                        const profileData = await profileRes.json();
-
-                        if (profileData && !profileData.error) {
-                            if (provider === 'instagram') {
-                                updatedName = profileData.username ? `@${profileData.username}` : (profileData.name || updatedName);
-                            } else {
-                                updatedName = profileData.name || `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim() || updatedName;
-                            }
-                        }
-                    }
-                } catch (err) {
-                    debugLog(`[Name Refresh] Failed to refresh name: ${err}`);
-                }
-            }
-
+            // UPDATING EXISTING CARD
             await targetCardDoc.ref.update({
-                contactName: updatedName,
+                contactName: resolvedName || existingContactName,
                 lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
                 updatedAt: new Date(),
                 unreadCount: admin.firestore.FieldValue.increment(1),
@@ -248,7 +277,7 @@ export async function POST(req: Request) {
             // Sincronizar campo source y nombre con el contacto existente
             if (existingContactId) {
                 await db.collection(`${entityPath}/contacts`).doc(existingContactId).update({
-                    name: updatedName,
+                    name: resolvedName || existingContactName,
                     source: provider.toUpperCase(),
                     updatedAt: new Date().toISOString()
                 });
@@ -270,29 +299,9 @@ export async function POST(req: Request) {
             const newCardRef = db.collection(`${entityPath}/kanban-groups/${destinationGroupId}/cards`).doc();
             const contactIdToUse = existingContactId || String(Date.now()).slice(-10);
 
-            // CAPTURE REAL PROFILE NAME FROM META (Resilient)
-            let contactName = `Usuario ${provider === 'instagram' ? 'IG' : 'FB'}`;
-            try {
-                if (tenantData?.accessToken) {
-                    const fields = provider === 'instagram' ? 'name,username' : 'first_name,last_name,name';
-                    const profileRes = await fetch(`https://graph.facebook.com/v21.0/${senderId}?fields=${fields}&access_token=${tenantData.accessToken}`);
-                    const profileData = await profileRes.json();
-
-                    if (profileData && !profileData.error) {
-                        if (provider === 'instagram') {
-                            contactName = profileData.username ? `@${profileData.username}` : (profileData.name || contactName);
-                        } else {
-                            contactName = profileData.name || `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim() || contactName;
-                        }
-                    }
-                }
-            } catch (err) {
-                debugLog(`[Profile Fetch] Failed to get name: ${err}`);
-            }
-
             await newCardRef.set({
                 crmId: contactIdToUse,
-                contactName: contactName,
+                contactName: resolvedName || 'Usuario Meta',
                 contactNumber: senderId,
                 metaSenderId: senderId,
                 lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
@@ -306,16 +315,21 @@ export async function POST(req: Request) {
                 platform_ids: { [provider]: senderId }
             });
 
-            await db.collection(`${entityPath}/contacts`).doc(contactIdToUse).set({
+            const contactPayload: any = {
                 crmId: contactIdToUse,
-                name: contactName,
+                name: resolvedName || 'Usuario Meta',
                 metaSenderId: senderId,
                 kanbanGroupId: destinationGroupId,
                 kanbanCardId: newCardRef.id,
                 source: provider.toUpperCase(),
                 updatedAt: new Date().toISOString(),
-                createdAt: new Date().toISOString()
-            }, { merge: true });
+            };
+
+            if (!existingContactId) {
+                contactPayload.createdAt = new Date().toISOString();
+            }
+
+            await db.collection(`${entityPath}/contacts`).doc(contactIdToUse).set(contactPayload, { merge: true });
 
             cardId = newCardRef.id;
             groupId = destinationGroupId;

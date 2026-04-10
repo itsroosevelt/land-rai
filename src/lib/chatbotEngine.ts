@@ -352,14 +352,13 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             const next = flow.edges.find((e: any) => e.source === stateSnapshot.currentNodeId);
             if (next) await executeFlow(next.target);
             else await executeFlow(stateSnapshot.currentNodeId);
-        } else if (stateSnapshot.status !== 'completed') {
+        } else {
+            // FRESH START OR RESTART (If completed/none)
             const startNode = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
             if (startNode) {
-                console.log(`[ChatbotEngine] 🚀 FRESH START for ${cardId}`);
+                console.log(`[ChatbotEngine] 🚀 ${stateSnapshot.status === 'completed' ? 'RESTARTING' : 'FRESH START'} for ${cardId}`);
                 await executeFlow(startNode.id);
             }
-        } else {
-            console.log(`[ChatbotEngine] ℹ️ Flow already COMPLETED. User must use reset command to restart.`);
         }
 
     } catch (err: any) {

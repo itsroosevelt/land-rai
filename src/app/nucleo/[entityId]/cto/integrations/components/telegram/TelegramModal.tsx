@@ -43,8 +43,13 @@ export default function TelegramModal({ isOpen, onClose, activeEntity, currentUs
     }, [isOpen, currentUser, activeEntity]);
 
     const handleConnect = async () => {
-        if (!botToken.includes(':')) {
-            toast.error("El Bot Token no tiene un formato válido.");
+        if (!botToken.trim()) {
+            toast.error("Por favor, ingresa el Bot Token.");
+            return;
+        }
+
+        if (!botToken.includes(':') || botToken.length < 20) {
+            toast.error("El formato del Bot Token es inválido. Debe ser algo como '123456:ABC-DEF...'");
             return;
         }
 
@@ -161,9 +166,9 @@ export default function TelegramModal({ isOpen, onClose, activeEntity, currentUs
                                     <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-12">
                                         <div className="space-y-8">
                                             {[
-                                                { id: 1, text: <>Obtén tu <span className="text-white font-medium">Bot Token</span> oficial desde el @BotFather de Telegram.</> },
-                                                { id: 2, text: <>Pega el token para <span className="text-white font-medium">vincular la IA de Roosevelt</span> con tu canal.</> },
-                                                { id: 3, text: <>Activa el <span className="text-[#3b82f6] underline underline-offset-4">protocolo de escucha</span> para recibir mensajes en tiempo real.</> }
+                                                { id: 1, text: <>Abre <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="text-[#26A5E4] hover:underline">@BotFather</a> en Telegram y crea tu bot con <span className="text-white">/newbot</span>.</> },
+                                                { id: 2, text: <>Copia el <span className="text-white font-medium">HTTP API Token</span> que te entregue al finalizar.</> },
+                                                { id: 3, text: <>Pégalo aquí para <span className="text-[#3b82f6] underline underline-offset-4">activar el protocolo</span> de IA en tiempo real.</> }
                                             ].map((step) => (
                                                 <div key={step.id} className="flex items-start gap-5 group">
                                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-black shrink-0 transition-all duration-500 ${

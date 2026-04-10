@@ -239,11 +239,22 @@ export async function sendTelegramMessage(
     }
 
     const url = `https://api.telegram.org/bot${token}/sendMessage`;
-    const payload = {
+    const payload: any = {
         chat_id: chatId,
         text: text,
         parse_mode: 'HTML'
     };
+
+    // Support for buttons (Quick Replies / Inline Keyboard)
+    const optAny = options as any;
+    if (optAny.type === 'quick_reply' && Array.isArray(optAny.buttons)) {
+        payload.reply_markup = {
+            inline_keyboard: optAny.buttons.map((btn: any) => {
+                const b = btn.reply || btn;
+                return [{ text: b.title, callback_data: b.id || b.title }];
+            })
+        };
+    }
 
     try {
         const response = await axios.post(url, payload);

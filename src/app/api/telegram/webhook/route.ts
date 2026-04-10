@@ -18,67 +18,117 @@ export async function POST(req: Request) {
     try {
         const body = await req.json();
         
-        // Telegram update object
+        // 1. Extract message or callback
         const message = body.message;
-        if (!message || !message.text) {
-            return NextResponse.json({ success: true, ignored: 'not_a_text_message' });
+        const callbackQuery = body.callback_query;
+        
+        if (!message && !callbackQuery) {
+            return NextResponse.json({ success: true, ignored: 'no_processable_content' });
         }
 
-        const telegramChatId = String(message.chat.id);
-        const text = message.text;
-        const firstName = message.from?.first_name || 'Usuario';
-        const lastName = message.from?.last_name || '';
+        const telegramChatId = String(message?.chat?.id || callbackQuery?.message?.chat?.id);
+        const text = callbackQuery?.data || message?.text || '';
+        const firstName = (message?.from || callbackQuery?.from)?.first_name || 'Usuario';
+        const lastName = (message?.from || callbackQuery?.from)?.last_name || '';
         const fullName = `${firstName} ${lastName}`.trim() || 'Usuario Telegram';
+
+        if (!text && !message?.attachments) {
+             return NextResponse.json({ success: true, ignored: 'empty_content' });
+        }
 
         const entityPath = `users/${userId}/entities/${entityId}`;
 
-        // 1. Find or Create Contact
+        // OMNICHANNEL INGESTION
+        let targetCardDoc: any = null;
+        let targetGroupId: string | null = null;
+        let existingContactId: string | null = null;
+
+        // Try to find if user exists by telegramChatId in Contacts
         const contactSnap = await db.collection(`${entityPath}/contacts`)
             .where('telegramChatId', '==', telegramChatId)
             .limit(1)
             .get();
 
-        let cardId: string | null = null;
-        let groupId: string | null = null;
-        let contactId: string | null = null;
+        if (!contactSnap.empty) {
+            const contactDoc = contactSnap.docs[0];
+            const contactData = contactDoc.data();
+            existingContactId = contactDoc.id;
+            targetGroupId = contactData.kanbanGroupId;
+            const contactCardId = contactData.kanbanCardId;
+
+            if (targetGroupId && contactCardId) {
+                const cardRef = db.doc(`${entityPath}/kanban-groups/${targetGroupId}/cards/${contactCardId}`);
+                const cardGet = await cardRef.get();
+                if (cardGet.exists) {
+                    targetCardDoc = cardGet;
+                }
+            }
+        }
+
+        // FALLBACK SEARCH: Scan all groups like WhatsApp/Meta do
+        if (!targetCardDoc) {
+             console.log(`[Telegram] No card found via contact. Deep searching all groups...`);
+             const allMatches: any[] = [];
+             const groupsRef = db.collection(`${entityPath}/kanban-groups`);
+             const groupsSnapshot = await groupsRef.get();
+
+             for (const groupDoc of groupsSnapshot.docs) {
+                 const cardsSnapshot = await groupDoc.ref.collection('cards')
+                     .where('telegramChatId', '==', telegramChatId)
+                     .orderBy('updatedAt', 'desc')
+                     .limit(1)
+                     .get();
+
+                 cardsSnapshot.forEach(doc => {
+                     allMatches.push({ doc, groupId: groupDoc.id });
+                 });
+             }
+
+             if (allMatches.length > 0) {
+                 allMatches.sort((a, b) => {
+                     const tA = (a.doc.data().updatedAt?.toDate?.() || new Date(0)).getTime();
+                     const tB = (b.doc.data().updatedAt?.toDate?.() || new Date(0)).getTime();
+                     return tB - tA;
+                 });
+                 targetCardDoc = allMatches[0].doc;
+                 targetGroupId = allMatches[0].groupId;
+                 console.log(`[Telegram] Found existing card via Deep Search: ${targetCardDoc.id}`);
+             }
+        }
+
+        let cardId: string | null = targetCardDoc?.id || null;
+        let groupId: string | null = targetGroupId || null;
+        let contactId: string | null = existingContactId || null;
 
         const newMessage = {
             sender: 'user',
             text: text,
             timestamp: new Date(),
-            messageId: `tg_${message.message_id}`,
+            messageId: message?.message_id ? `tg_${message.message_id}` : `tg_cb_${Date.now()}`,
             platform: 'telegram'
         };
 
-        if (!contactSnap.empty) {
-            const contactDoc = contactSnap.docs[0];
-            const contactData = contactDoc.data();
-            contactId = contactDoc.id;
-            cardId = contactData.kanbanCardId;
-            groupId = contactData.kanbanGroupId;
+        if (targetCardDoc && groupId) {
+            const cardRef = targetCardDoc.ref;
+            await cardRef.update({
+                lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
+                updatedAt: new Date(),
+                unreadCount: admin.firestore.FieldValue.increment(1),
+                messages: admin.firestore.FieldValue.arrayUnion(newMessage),
+                status: 'open',
+                source: 'TELEGRAM'
+            });
 
-            if (cardId && groupId) {
-                const cardRef = db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`);
-                await cardRef.update({
-                    lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
-                    updatedAt: new Date(),
-                    unreadCount: admin.firestore.FieldValue.increment(1),
-                    messages: admin.firestore.FieldValue.arrayUnion(newMessage),
-                    status: 'open',
-                    source: 'TELEGRAM'
+            // Sync contact source
+            if (contactId) {
+                await db.collection(`${entityPath}/contacts`).doc(contactId).update({
+                    source: 'TELEGRAM',
+                    updatedAt: new Date().toISOString()
                 });
-
-                // Sincronizar campo source con el contacto existente
-                if (contactId) {
-                    await db.collection(`${entityPath}/contacts`).doc(contactId).update({
-                        source: 'TELEGRAM',
-                        updatedAt: new Date().toISOString()
-                    });
-                }
             }
         } else {
             // Create New Contact & Card
-            const contactId = String(Date.now()).slice(-10);
+            const finalContactId = contactId || String(Date.now()).slice(-10);
             const groupsRef = db.collection(`${entityPath}/kanban-groups`);
             const groupsSnapshot = await groupsRef.get();
             
@@ -94,7 +144,7 @@ export async function POST(req: Request) {
             const newCardRef = db.collection(`${entityPath}/kanban-groups/${destinationGroupId}/cards`).doc();
             
             await newCardRef.set({
-                crmId: contactId,
+                crmId: finalContactId,
                 contactName: fullName,
                 contactNumber: telegramChatId,
                 telegramChatId: telegramChatId,
@@ -105,11 +155,12 @@ export async function POST(req: Request) {
                 unreadCount: 1,
                 status: 'open',
                 source: 'TELEGRAM',
-                primary_channel: 'telegram'
+                primary_channel: 'telegram',
+                platform_ids: { telegram: telegramChatId }
             });
 
-            await db.collection(`${entityPath}/contacts`).doc(contactId).set({
-                crmId: contactId,
+            await db.collection(`${entityPath}/contacts`).doc(finalContactId).set({
+                crmId: finalContactId,
                 name: fullName,
                 telegramChatId: telegramChatId,
                 kanbanGroupId: destinationGroupId,

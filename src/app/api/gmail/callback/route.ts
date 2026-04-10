@@ -58,8 +58,11 @@ export async function GET(req: Request) {
             }, { merge: true })
         ]);
 
-        // 4. Redirect back to Roosevelt
-        const redirectUrl = `https://royalty-udreamms-platform-1.us-central1.hosted.app/nucleo/${entityId}/cto/integrations?gmail=success`;
+        // 4. Redirect back to Roosevelt (Agnostic Rule 1)
+        const host = req.headers.get('host');
+        const protocol = host?.includes('localhost') ? 'http' : 'https';
+        const redirectUrl = `${protocol}://${host}/nucleo/${entityId}/cto/integrations?gmail=success`;
+        
         return NextResponse.redirect(redirectUrl);
 
     } catch (err: any) {
