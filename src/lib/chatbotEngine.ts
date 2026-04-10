@@ -34,11 +34,15 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
     // 0. QUICK RESET DETECTION
     const inputRaw = text || '';
     const input = inputRaw.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    
     // Fuzzy reset detection: catch typos like 'reincia', 'reiniciar', 'reset', 'menu'
     const isReset = input === 'reiniciar' || input === 'menu' || input === 'reset' ||
-        input === 'reinicia todo ahora' ||
-        input === 'reincia todo ahora' ||  // common typo
-        /^rein[ic]{1,3}[ao]/.test(input) || // catches reinicia, reincia, reiniciar, etc.
+        input.includes('reinicia todo ahora') ||
+        input.includes('reincia todo ahora') ||
+        input.includes('reinicia el bot') ||
+        input.includes('reinicio') ||
+        input.includes('reiniciar chat') ||
+        /^rein[ic]{1,4}[ao]/.test(input) || 
         input.startsWith('reinici') || input.startsWith('reincia');
 
     try {
@@ -77,6 +81,8 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             const context = {
                 nombre: cardData.contactName || 'Usuario',
                 name: cardData.contactName || 'Usuario',
+                namecli: cardData.contactName || 'Usuario', // Support common bot variable names
+                first_name: cardData.contactName?.split(' ')[0] || 'Usuario',
                 ...(cardData.customFields || {}),
                 ...(cardData.variables || {})
             };
