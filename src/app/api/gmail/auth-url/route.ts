@@ -12,12 +12,17 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: 'Missing context' }, { status: 400 });
     }
 
-    if (!CLIENT_ID || !REDIRECT_URI) {
-        console.error('[Gmail Auth Error] Missing configuration in environment variables (GMAIL_CLIENT_ID or GMAIL_REDIRECT_URI)');
+    const host = req.headers.get('host');
+    const protocol = req.headers.get('x-forwarded-proto') || (host?.includes('localhost') ? 'http' : 'https');
+    
+    // Agnostic Rule: Use the dynamic host if available, otherwise fall back to env var
+    const dynamicRedirect = host ? `${protocol}://${host}/api/gmail/callback` : REDIRECT_URI;
+
+    if (!CLIENT_ID || !dynamicRedirect) {
+        console.error('[Gmail Auth Error] Missing configuration (CLIENT_ID or REDIRECT_URI)');
         return NextResponse.json({ 
             error: 'Missing Gmail configuration', 
-            details: 'Required environment variables are not set on the server.',
-            missing: { CLIENT_ID: !CLIENT_ID, REDIRECT_URI: !REDIRECT_URI }
+            details: 'Ensure GMAIL_CLIENT_ID is set and redirected properly.',
         }, { status: 500 });
     }
 
@@ -31,14 +36,14 @@ export async function GET(req: Request) {
     const state = Buffer.from(JSON.stringify({ userId, entityId })).toString('base64');
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
         `client_id=${CLIENT_ID}&` +
-        `redirect_uri=${encodeURIComponent(REDIRECT_URI!)}&` +
+        `redirect_uri=${encodeURIComponent(dynamicRedirect!)}&` +
         `response_type=code&` +
         `scope=${encodeURIComponent(scopes.join(' '))}&` +
         `access_type=offline&` +
         `prompt=consent&` +
         `state=${state}`;
 
-    console.log(`[Gmail Auth] Generated URL for ${entityId}. Redirecting to: ${REDIRECT_URI}`);
+    console.log(`[Gmail Auth] Agnostic URL Generated for ${entityId}. Host: ${host} | Using: ${dynamicRedirect}`);
     
     return NextResponse.json({ url: authUrl });
 }

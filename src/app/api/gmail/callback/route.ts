@@ -20,12 +20,16 @@ export async function GET(req: Request) {
     try {
         const { userId, entityId } = JSON.parse(Buffer.from(state, 'base64').toString('utf-8'));
         
+        const host = req.headers.get('host');
+        const protocol = req.headers.get('x-forwarded-proto') || (host?.includes('localhost') ? 'http' : 'https');
+        const dynamicRedirect = host ? `${protocol}://${host}/api/gmail/callback` : REDIRECT_URI;
+
         // 1. Exchange Code for Tokens
         const response = await axios.post('https://oauth2.googleapis.com/token', {
             code,
             client_id: CLIENT_ID,
             client_secret: CLIENT_SECRET,
-            redirect_uri: REDIRECT_URI,
+            redirect_uri: dynamicRedirect,
             grant_type: 'authorization_code'
         });
 
