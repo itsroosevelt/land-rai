@@ -69,7 +69,15 @@ export async function POST(req: Request) {
 
         if (!text) text = '[Multimedia/Otro]';
 
+        // Try to extract name directly from payload (fastest, no API needed)
+        const senderNameFromPayload =
+            messaging.sender?.name ||
+            messaging.message?.from?.name ||
+            messaging.postback?.from?.name ||
+            null;
+
         debugLog(`[POST] Searching tenant for Target ID: ${targetId}`);
+
 
         // Search for the Tenant globally
         let tenantRef: admin.firestore.DocumentReference | null = null;
@@ -167,26 +175,51 @@ export async function POST(req: Request) {
         }
 
         // 4. CAPTURE REAL PROFILE NAME FROM META (Critical for identity & fusion)
-        let resolvedName = existingContactName;
-        if (!resolvedName || (typeof resolvedName === 'string' && resolvedName.toLowerCase().includes('usuario'))) {
+        // Priority: payload name > existing stored name > Graph API call > fallback
+        let resolvedName = senderNameFromPayload || existingContactName;
+        const isGenericName = !resolvedName ||
+            resolvedName.toLowerCase().includes('usuario') ||
+            resolvedName.toLowerCase().includes('meta') ||
+            resolvedName === senderId;
+
+        if (isGenericName) {
             try {
-                if (tenantData?.accessToken) {
-                    const fields = provider === 'instagram' ? 'name,username' : 'first_name,last_name,name';
-                    const profileRes = await fetch(`https://graph.facebook.com/v21.0/${senderId}?fields=${fields}&access_token=${tenantData.accessToken}`);
+                // Try multiple token fields — integrations may save under different keys
+                const token = tenantData?.accessToken || tenantData?.pageAccessToken || tenantData?.token;
+                if (token) {
+                    // Request broad fields and fall back gracefully
+                    const fields = provider === 'instagram'
+                        ? 'name,username,biography'
+                        : 'name,first_name,last_name';
+
+                    const profileUrl = `https://graph.facebook.com/v21.0/${senderId}?fields=${fields}&access_token=${token}`;
+                    const profileRes = await fetch(profileUrl);
                     const profileData = await profileRes.json();
 
-                    if (profileData && !profileData.error) {
+                    if (profileData?.error) {
+                        // Log the full error so we can diagnose permission issues
+                        debugLog(`[Profile Fetch] Meta API Error: ${JSON.stringify(profileData.error)}`);
+                    } else if (profileData) {
                         if (provider === 'instagram') {
-                            resolvedName = profileData.username ? `@${profileData.username}` : (profileData.name || resolvedName);
+                            resolvedName = profileData.username
+                                ? `@${profileData.username}`
+                                : (profileData.name || resolvedName);
                         } else {
-                            resolvedName = profileData.name || `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim() || resolvedName;
+                            // Prefer full 'name' field; fallback to first+last
+                            const fullName = profileData.name ||
+                                `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim();
+                            if (fullName) resolvedName = fullName;
                         }
+                        debugLog(`[Profile Fetch] Resolved name: "${resolvedName}" for senderId: ${senderId}`);
                     }
+                } else {
+                    debugLog(`[Profile Fetch] No access token available in tenantData. Keys: ${Object.keys(tenantData || {}).join(', ')}`);
                 }
             } catch (err) {
-                debugLog(`[Profile Fetch] Failed to get name: ${err}`);
+                debugLog(`[Profile Fetch] Exception: ${err}`);
             }
         }
+
 
         // 5. SAFE FUSION: If no contact found by metaSenderId, try searching by name
         if (!existingContactId && resolvedName) {
