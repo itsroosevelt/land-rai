@@ -268,8 +268,7 @@ export async function POST(req: Request) {
             }
 
             const newCardRef = db.collection(`${entityPath}/kanban-groups/${destinationGroupId}/cards`).doc();
-
-            let numericId = String(Date.now()).slice(-10); // Simple ID for MVP
+            const contactIdToUse = existingContactId || String(Date.now()).slice(-10);
 
             // CAPTURE REAL PROFILE NAME FROM META (Resilient)
             let contactName = `Usuario ${provider === 'instagram' ? 'IG' : 'FB'}`;
@@ -285,8 +284,6 @@ export async function POST(req: Request) {
                         } else {
                             contactName = profileData.name || `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim() || contactName;
                         }
-                    } else if (profileData.error) {
-                        debugLog(`[Profile Fetch] Meta Error: ${profileData.error.message}`);
                     }
                 }
             } catch (err) {
@@ -294,7 +291,7 @@ export async function POST(req: Request) {
             }
 
             await newCardRef.set({
-                crmId: numericId,
+                crmId: contactIdToUse,
                 contactName: contactName,
                 contactNumber: senderId,
                 metaSenderId: senderId,
@@ -309,8 +306,8 @@ export async function POST(req: Request) {
                 platform_ids: { [provider]: senderId }
             });
 
-            await db.collection(`${entityPath}/contacts`).doc(numericId).set({
-                crmId: numericId,
+            await db.collection(`${entityPath}/contacts`).doc(contactIdToUse).set({
+                crmId: contactIdToUse,
                 name: contactName,
                 metaSenderId: senderId,
                 kanbanGroupId: destinationGroupId,
