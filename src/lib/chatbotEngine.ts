@@ -233,6 +233,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             const now = new Date();
 
             if (isReset) {
+                console.log(`[ChatbotEngine] ♻️ Reset requested for ${cardId}`);
                 transaction.update(cardRef, {
                     'botLock': now,
                     'botState': admin.firestore.FieldValue.delete(),
@@ -245,11 +246,11 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             // Deduplication
             if (messageId && bState.lastProcessedMessageId === messageId) return null;
 
-            // Lock Check
+            // Lock Check (4s for better responsiveness)
             if (data.botLock) {
                 const lockTime = data.botLock.toDate?.() || new Date(data.botLock);
                 const diff = (now.getTime() - lockTime.getTime()) / 1000;
-                if (diff < 15) return null;
+                if (diff < 4) return null;
             }
 
             // Acquire Lock & Mark Message
@@ -327,11 +328,20 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                     }
                 }
             }
-        } else if (stateSnapshot.status !== 'completed' && stateSnapshot.status !== 'active') {
+        } else if (stateSnapshot.status === 'active' && stateSnapshot.currentNodeId) {
+            // THE BOT TURN WAS INTERRUPTED: Move to the NEXT node to avoid repeating the last message
+            console.log(`[ChatbotEngine] ⚡ RESUMING interrupted turn after ${stateSnapshot.currentNodeId}`);
+            const next = flow.edges.find((e: any) => e.source === stateSnapshot.currentNodeId);
+            if (next) await executeFlow(next.target);
+            else await executeFlow(stateSnapshot.currentNodeId);
+        } else if (stateSnapshot.status !== 'completed') {
             const startNode = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
-            if (startNode) await executeFlow(startNode.id);
+            if (startNode) {
+                console.log(`[ChatbotEngine] 🚀 FRESH START for ${cardId}`);
+                await executeFlow(startNode.id);
+            }
         } else {
-            console.log(`[ChatbotEngine] ℹ️ Flow is already ${stateSnapshot.status || 'not started'}. Use reset to restart.`);
+            console.log(`[ChatbotEngine] ℹ️ Flow already COMPLETED. User must use reset command to restart.`);
         }
 
     } catch (err: any) {
