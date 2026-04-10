@@ -56,9 +56,11 @@ export async function POST(req: Request) {
             if (messaging.message.is_echo) {
                 return NextResponse.json({ success: true, ignored: 'echo' });
             }
-            text = messaging.message.text || '';
+            // Prioritize Quick Reply payload, then text
+            text = messaging.message.quick_reply?.payload || messaging.message.text || '';
         } else if (messaging.postback) {
-            text = messaging.postback.title || messaging.postback.payload || '';
+            // Prioritize Postback payload, then title
+            text = messaging.postback.payload || messaging.postback.title || '';
         }
 
         if (!text && !messaging.message?.attachments) {
@@ -124,13 +126,24 @@ export async function POST(req: Request) {
 
         debugLog(`[POST] Tenant Discovery Success: User=${userId}, Entity=${entityId}, Provider=${provider}`);
 
+        // ENTERPRISE LOGGING (Status visibility in CRM)
+        try {
+            await db.collection(`${entityPath}/system_logs`).add({
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                type: `${provider}_webhook`,
+                senderId: senderId,
+                payload_type: messaging.message ? 'message' : 'postback',
+                raw: JSON.stringify(body).substring(0, 1500)
+            });
+        } catch (e) { }
+
         // OMNICHANNEL INGESTION TO KANBAN
         let targetCardDoc: any = null;
         let targetGroupId: string | null = null;
         let existingContactId: string | null = null;
         let existingContactName: string | null = null;
 
-        // Try to find if user exists by meta sender ID
+        // Try to find if user exists by meta sender ID in Contacts
         const contactSnap = await db.collection(`${entityPath}/contacts`)
             .where('metaSenderId', '==', senderId)
             .limit(1)
@@ -150,6 +163,37 @@ export async function POST(req: Request) {
                 if (cardGet.exists) {
                     targetCardDoc = cardGet;
                 }
+            }
+        }
+
+        // FALLBACK SEARCH: Scane all groups like WhatsApp does to avoid duplicates
+        if (!targetCardDoc) {
+            debugLog(`[POST] No card found via contact. Searching all groups for platform_ids.${provider} == ${senderId}...`);
+            const allMatches: any[] = [];
+            const groupsRef = db.collection(`${entityPath}/kanban-groups`);
+            const groupsSnapshot = await groupsRef.get();
+
+            for (const groupDoc of groupsSnapshot.docs) {
+                const cardsSnapshot = await groupDoc.ref.collection('cards')
+                    .where(`platform_ids.${provider}`, '==', senderId)
+                    .orderBy('updatedAt', 'desc')
+                    .limit(1)
+                    .get();
+
+                cardsSnapshot.forEach(doc => {
+                    allMatches.push({ doc, groupId: groupDoc.id });
+                });
+            }
+
+            if (allMatches.length > 0) {
+                allMatches.sort((a, b) => {
+                    const tA = (a.doc.data().updatedAt?.toDate?.() || new Date(0)).getTime();
+                    const tB = (b.doc.data().updatedAt?.toDate?.() || new Date(0)).getTime();
+                    return tB - tA;
+                });
+                targetCardDoc = allMatches[0].doc;
+                targetGroupId = allMatches[0].groupId;
+                debugLog(`[POST] Found existing card via Deep Search: ${targetCardDoc.id} in group ${targetGroupId}`);
             }
         }
 
