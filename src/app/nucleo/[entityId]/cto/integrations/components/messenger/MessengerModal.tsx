@@ -18,12 +18,13 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
     const { currentUser } = useAuth();
     const params = useParams();
     const activeEntity = params?.entityId as string;
-    
+
     const [step, setStep] = useState<number>(1);
     const [initialLoading, setInitialLoading] = useState(true);
     const [updatedAt, setUpdatedAt] = useState<any>(null);
     const [availablePages, setAvailablePages] = useState<any[]>([]);
     const [isSelectingPage, setIsSelectingPage] = useState(false);
+    const [userAccessToken, setUserAccessToken] = useState<string>(''); // For permanent token exchange
     const [config, setConfig] = useState<any>({
         pageId: '',
         pageName: '',
@@ -38,7 +39,7 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
         setInitialLoading(true);
 
         const configRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/integrations/messenger`);
-        
+
         const unsub = onSnapshot(configRef, (snap) => {
             if (snap.exists()) {
                 const data = snap.data();
@@ -81,6 +82,7 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
 
             (window as any).FB.login((response: any) => {
                 if (response.authResponse) {
+                    setUserAccessToken(response.authResponse.accessToken);
                     toast.loading("Obteniendo tus Fanpages...", { id: "meta-auth" });
 
                     (window as any).FB.api('/me/accounts', async (pagesRes: any) => {
@@ -107,7 +109,6 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
     const connectPage = async (page: any) => {
         const pageId = page.id;
         const pageName = page.name;
-        const pageAccessToken = page.access_token;
 
         toast.loading(`Vinculando ${pageName}...`, { id: "meta-auth" });
 
@@ -115,21 +116,41 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
             const pagesQuery = query(collectionGroup(db, 'integrations'), where('pageId', '==', pageId));
             const pagesSnap = await getDocs(pagesQuery);
             const isUsedByAnotherTenant = !pagesSnap.empty && !pagesSnap.docs.every((d: any) => d.ref.path.includes(activeEntity));
-            
+
             if (isUsedByAnotherTenant) {
                 toast.error("Esta Fanpage ya está vinculada.", { id: "meta-auth" });
                 return;
             }
 
+            // Exhange token
+            let permanentPageToken = page.access_token;
+            if (userAccessToken) {
+                toast.loading('Generando token permanente...', { id: 'meta-auth' });
+                try {
+                    const exchangeRes = await fetch('/api/meta/exchange-token', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userAccessToken, pageId })
+                    });
+                    const exchangeData = await exchangeRes.json();
+                    if (exchangeData.pageToken) {
+                        permanentPageToken = exchangeData.pageToken;
+                    }
+                } catch (e) {
+                    console.error('Failed to get permanent token', e);
+                }
+            }
+
             (window as any).FB.api(`/${pageId}/subscribed_apps`, 'post', {
                 subscribed_fields: ['messages', 'messaging_postbacks', 'message_deliveries', 'message_reads'],
-                access_token: pageAccessToken
+                access_token: permanentPageToken
             });
 
             const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/messenger`);
             await setDoc(configRef, {
-                pageId, pageName, accessToken: pageAccessToken,
+                pageId, pageName, accessToken: permanentPageToken,
                 status: 'Connected', provider: 'messenger', updatedAt: new Date(),
+                tokenType: 'permanent'
             }, { merge: true });
 
             toast.success(`¡Messenger vinculado!`, { id: "meta-auth" });
@@ -159,9 +180,9 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
             {isOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-                    
+
                     <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="relative w-full max-w-4xl h-[600px] bg-[#050505] border border-white/10 rounded-[40px] overflow-hidden flex shadow-2xl font-sans">
-                        
+
                         {/* Sidebar */}
                         <div className="w-1/3 border-r border-white/5 bg-[#080808] p-10 flex flex-col justify-between relative overflow-hidden">
                             <div className="absolute top-0 left-0 w-full h-full bg-blue-600/5 blur-[100px] pointer-events-none" />
@@ -201,14 +222,14 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
                                                 <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-8">Varias páginas detectadas</p>
                                                 <div className="space-y-3 max-h-[300px] overflow-y-auto no-scrollbar pr-2 mb-8">
                                                     {availablePages.map((p) => (
-                                                        <button 
-                                                            key={p.id} 
+                                                        <button
+                                                            key={p.id}
                                                             onClick={() => connectPage(p)}
                                                             className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-between hover:bg-white/10 transition-all group"
                                                         >
                                                             <div className="flex items-center gap-4 text-left">
                                                                 <div className="w-10 h-10 bg-[#0084FF]/10 rounded-full flex items-center justify-center border border-[#0084FF]/20 font-bold text-[#0084FF]">
-                                                                   FB
+                                                                    FB
                                                                 </div>
                                                                 <div>
                                                                     <p className="text-white text-sm font-medium">{p.name}</p>
@@ -227,7 +248,7 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
                                             <>
                                                 <h3 className="text-3xl font-extralight text-white tracking-tighter mb-2 italic uppercase">Vincular Fanpage</h3>
                                                 <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-12">Portal de Acceso Meta</p>
-                                                
+
                                                 <div className="space-y-6 mb-12">
                                                     <div className="flex items-start gap-4">
                                                         <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center text-[10px] font-bold text-white/40 shrink-0">1</div>
@@ -238,7 +259,7 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
                                                         <p className="text-xs text-white/60 font-light mt-1">Elegirás la Fanpage específica para automatizar.</p>
                                                     </div>
                                                 </div>
-        
+
                                                 <button onClick={handleConnectMessenger} className="w-full h-16 bg-[#0084FF] hover:bg-[#0073e6] text-white text-[11px] font-bold uppercase tracking-[0.3em] rounded-full transition-all shadow-[0_0_20px_rgba(0,132,255,0.2)]">
                                                     CONECTAR CON META
                                                 </button>
@@ -253,7 +274,7 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
                                         </div>
                                         <h3 className="text-3xl font-extralight text-white tracking-tighter mb-2 italic uppercase">Canal Sincronizado</h3>
                                         <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-10">{config.pageName}</p>
-                                        
+
                                         <div className="w-full space-y-4 px-2">
                                             <div className="h-28 bg-white/5 border border-white/10 rounded-[32px] flex items-center px-8 justify-between backdrop-blur-sm relative overflow-hidden group/card">
                                                 <div className="absolute inset-0 bg-[#0084FF]/5 opacity-0 group-hover/card:opacity-100 transition-opacity" />

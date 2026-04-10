@@ -18,13 +18,14 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
     const { currentUser } = useAuth();
     const params = useParams();
     const activeEntity = params?.entityId as string;
-    
+
     const [step, setStep] = useState<number>(1);
     const [initialLoading, setInitialLoading] = useState(true);
     const [updatedAt, setUpdatedAt] = useState<any>(null);
     const [availablePages, setAvailablePages] = useState<any[]>([]);
     const [isSelectingPage, setIsSelectingPage] = useState(false);
     const [showNoIgError, setShowNoIgError] = useState(false);
+    const [userAccessToken, setUserAccessToken] = useState<string>(''); // For permanent token exchange
     const [config, setConfig] = useState<any>({
         instagramId: '',
         pageName: '',
@@ -39,7 +40,7 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
         setInitialLoading(true);
 
         const configRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/integrations/instagram`);
-        
+
         const unsub = onSnapshot(configRef, (snap) => {
             if (snap.exists()) {
                 const data = snap.data();
@@ -77,6 +78,7 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
 
             (window as any).FB.login((response: any) => {
                 if (response.authResponse) {
+                    setUserAccessToken(response.authResponse.accessToken);
                     (window as any).FB.api('/me/accounts?fields=instagram_business_account{id,username,name},name,access_token', async (pagesRes: any) => {
                         console.log('[META_DEBUG] Raw API Response:', JSON.stringify(pagesRes, null, 2));
                         if (pagesRes && pagesRes.data) {
@@ -108,22 +110,40 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
 
     const connectPage = async (pageWithIg: any) => {
         const instagramId = pageWithIg.instagram_business_account.id;
-        const pageAccessToken = pageWithIg.access_token;
         toast.loading(`Vinculando @${pageWithIg.instagram_business_account.username}...`, { id: "meta-auth" });
 
         try {
             const igQuery = query(collectionGroup(db, 'integrations'), where('instagramId', '==', instagramId));
             const igSnap = await getDocs(igQuery);
             const isUsedByAnotherTenant = !igSnap.empty && !igSnap.docs.every((d: any) => d.ref.path.includes(activeEntity));
-            
+
             if (isUsedByAnotherTenant) {
                 toast.error("Cuenta ya vinculada a otro negocio.", { id: "meta-auth" });
                 return;
             }
 
+            // Exhange token
+            let permanentPageToken = pageWithIg.access_token;
+            if (userAccessToken) {
+                toast.loading('Generando token permanente...', { id: 'meta-auth' });
+                try {
+                    const exchangeRes = await fetch('/api/meta/exchange-token', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userAccessToken, pageId: pageWithIg.id })
+                    });
+                    const exchangeData = await exchangeRes.json();
+                    if (exchangeData.pageToken) {
+                        permanentPageToken = exchangeData.pageToken;
+                    }
+                } catch (e) {
+                    console.error('Failed to get permanent token', e);
+                }
+            }
+
             (window as any).FB.api(`/${pageWithIg.id}/subscribed_apps`, 'post', {
                 subscribed_fields: ['messages', 'messaging_postbacks', 'message_deliveries', 'message_reads'],
-                access_token: pageAccessToken
+                access_token: permanentPageToken
             });
 
             const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/instagram`);
@@ -131,11 +151,12 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                 instagramId,
                 instagramName: pageWithIg.instagram_business_account.name,
                 instagramUsername: pageWithIg.instagram_business_account.username,
-                pageName: pageWithIg.instagram_business_account.name || pageWithIg.name, 
-                accessToken: pageAccessToken,
-                status: 'Connected', 
-                provider: 'instagram', 
+                pageName: pageWithIg.instagram_business_account.name || pageWithIg.name,
+                accessToken: permanentPageToken,
+                status: 'Connected',
+                provider: 'instagram',
                 updatedAt: new Date(),
+                tokenType: 'permanent'
             }, { merge: true });
 
             toast.success(`¡Instagram vinculado!`, { id: "meta-auth" });
@@ -165,9 +186,9 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
             {isOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-                    
+
                     <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="relative w-full max-w-4xl h-[600px] bg-[#050505] border border-white/10 rounded-[40px] overflow-hidden flex shadow-2xl font-sans text-left">
-                        
+
                         {/* Sidebar */}
                         <div className="w-1/3 border-r border-white/5 bg-[#080808] p-10 flex flex-col justify-between relative overflow-hidden">
                             <div className="absolute top-0 left-0 w-full h-full bg-[#E4405F]/5 blur-[100px] pointer-events-none" />
@@ -207,14 +228,14 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                                                 <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-8">Varias cuentas detectadas</p>
                                                 <div className="space-y-3 max-h-[300px] overflow-y-auto no-scrollbar pr-2 mb-8">
                                                     {availablePages.map((p) => (
-                                                        <button 
-                                                            key={p.id} 
+                                                        <button
+                                                            key={p.id}
                                                             onClick={() => connectPage(p)}
                                                             className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-between hover:bg-white/10 transition-all group"
                                                         >
                                                             <div className="flex items-center gap-4 text-left">
                                                                 <div className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center border border-white/10 font-bold text-[#E4405F]">
-                                                                   IG
+                                                                    IG
                                                                 </div>
                                                                 <div>
                                                                     <p className="text-white text-sm font-medium">{p.instagram_business_account.name || p.instagram_business_account.username}</p>
@@ -240,10 +261,10 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                                                 </div>
                                                 <h3 className="text-3xl font-extralight text-white tracking-tighter mb-2 italic uppercase">Perfil No Detectado</h3>
                                                 <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-8 italic">Configuración Requerida en Meta</p>
-                                                
+
                                                 <div className="bg-white/5 border border-white/10 rounded-[32px] p-8 mb-10 backdrop-blur-sm text-left w-full">
                                                     <p className="text-xs text-white/60 font-light leading-relaxed mb-6">
-                                                        Tu cuenta de Facebook no tiene un <span className="text-white font-medium">Perfil de Instagram Professional</span> vinculado. 
+                                                        Tu cuenta de Facebook no tiene un <span className="text-white font-medium">Perfil de Instagram Professional</span> vinculado.
                                                         Para usar la automatización de Roosevelt, debes realizar esta conexión primero en el Business Suite.
                                                     </p>
                                                     <div className="flex items-center gap-3 p-4 bg-red-500/5 border border-red-500/10 rounded-2xl">
@@ -253,7 +274,7 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                                                 </div>
 
                                                 <div className="flex flex-col gap-4 w-full">
-                                                    <a 
+                                                    <a
                                                         href="https://business.facebook.com/latest/inbox/instagram_direct?asset_id=520950477768651&business_id=1785184582003764&ir_qe_exposed=1"
                                                         target="_blank"
                                                         rel="noopener noreferrer"
@@ -261,7 +282,7 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                                                     >
                                                         Crea tu perfil aquí
                                                     </a>
-                                                    <button 
+                                                    <button
                                                         onClick={() => setShowNoIgError(false)}
                                                         className="text-[9px] text-white/30 hover:text-white uppercase tracking-widest font-bold underline underline-offset-8 transition-colors"
                                                     >
@@ -273,7 +294,7 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                                             <>
                                                 <h3 className="text-3xl font-extralight text-white tracking-tighter mb-2 italic uppercase">Vincular Professional Account</h3>
                                                 <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-12">Portal de Acceso Meta</p>
-                                                
+
                                                 <div className="space-y-6 mb-12 text-left">
                                                     <div className="flex items-start gap-4">
                                                         <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center text-[10px] font-bold text-white/40 shrink-0">1</div>
@@ -299,7 +320,7 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                                         </div>
                                         <h3 className="text-3xl font-extralight text-white tracking-tighter mb-2 italic uppercase">Canal Sincronizado</h3>
                                         <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-10">Instagram Node Online</p>
-                                        
+
                                         <div className="w-full space-y-4 px-2">
                                             <div className="h-28 bg-white/5 border border-white/10 rounded-[32px] flex items-center px-8 justify-between backdrop-blur-sm relative overflow-hidden group/card">
                                                 <div className="absolute inset-0 bg-[#E4405F]/5 opacity-0 group-hover/card:opacity-100 transition-opacity" />
