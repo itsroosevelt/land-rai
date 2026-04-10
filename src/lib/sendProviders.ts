@@ -51,6 +51,7 @@ export async function sendMetaMessage(
     }
 
     const messageData = {
+        messaging_type: 'RESPONSE', // Required for many Messenger/Instagram integrations
         recipient: { id: recipientId },
         message: { text: text }
     };

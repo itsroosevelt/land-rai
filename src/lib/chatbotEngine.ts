@@ -306,34 +306,38 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             }
         }
 
-        // 4. ATOMIC OPERATION (Transaction-based — NO async side-effects inside)
-        const proceedData = await db.runTransaction(async (transaction) => {
-            const snap = await transaction.get(cardRef);
-            if (!snap.exists) return null;
-            const data = snap.data() || {};
-            const bState = data.botState || {};
-            const now = new Date();
+            // 4. ATOMIC OPERATION (Transaction-based — NO async side-effects inside)
+            const proceedData = await db.runTransaction(async (transaction) => {
+                const snap = await transaction.get(cardRef);
+                if (!snap.exists) return null;
+                const data = snap.data() || {};
+                const bState = data.botState || {};
+                const now = new Date();
 
-            if (isReset) {
-                console.log(`[ChatbotEngine] ♻️ Reset requested for ${cardId}`);
-                transaction.update(cardRef, {
-                    'botLock': now,
-                    'botState': admin.firestore.FieldValue.delete(),
-                    'customFields': admin.firestore.FieldValue.delete(),
-                    'updatedAt': now
-                });
-                return { data, bState: {}, reset: true };
-            }
+                // MASTER RESET BYPASS: Always allow reset regardless of lock
+                if (isReset) {
+                    console.log(`[ChatbotEngine] ♻️ Reset requested for ${cardId} (Master Bypass)`);
+                    transaction.update(cardRef, {
+                        'botLock': now,
+                        'botState': admin.firestore.FieldValue.delete(),
+                        'customFields': admin.firestore.FieldValue.delete(),
+                        'updatedAt': now
+                    });
+                    return { data, bState: {}, reset: true };
+                }
 
-            // Deduplication
-            if (messageId && bState.lastProcessedMessageId === messageId) return null;
+                // Deduplication
+                if (messageId && bState.lastProcessedMessageId === messageId) return null;
 
-            // Lock Check (simple, no async polling here)
-            if (data.botLock) {
-                const lockTime = data.botLock.toDate?.() || new Date(data.botLock);
-                const diff = (now.getTime() - lockTime.getTime()) / 1000;
-                if (diff < 4) return null;
-            }
+                // Lock Check (simple, no async polling here)
+                if (data.botLock) {
+                    const lockTime = data.botLock.toDate?.() || new Date(data.botLock);
+                    const diff = (now.getTime() - lockTime.getTime()) / 1000;
+                    if (diff < 4) {
+                        console.warn(`[ChatbotEngine] 🔒 Card ${cardId} still LOCKED in transaction. Skipping.`);
+                        return null;
+                    }
+                }
 
             // Acquire Lock & Mark Message
             transaction.update(cardRef, {
