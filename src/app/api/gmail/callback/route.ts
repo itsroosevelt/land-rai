@@ -63,8 +63,6 @@ export async function GET(req: Request) {
         ]);
 
         // 4. Redirect back to Roosevelt (Agnostic Rule 1)
-        const host = req.headers.get('host');
-        const protocol = host?.includes('localhost') ? 'http' : 'https';
         const redirectUrl = `${protocol}://${host}/nucleo/${entityId}/cto/integrations?gmail=success`;
         
         return NextResponse.redirect(redirectUrl);
