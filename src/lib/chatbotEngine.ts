@@ -230,6 +230,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             if (!snap.exists) return null;
             const data = snap.data() || {};
             const bState = data.botState || {};
+            const now = new Date();
 
             if (isReset) {
                 transaction.update(cardRef, {
