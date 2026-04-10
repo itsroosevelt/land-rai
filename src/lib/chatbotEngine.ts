@@ -256,32 +256,46 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             return;
         }
 
-        // 4. DEDUPLICATION & LOCK
-        if (messageId && currentState.lastProcessedMessageId === messageId) {
-            console.warn(`[ChatbotEngine] ⏩ Message ${messageId} already processed. Skipping.`);
+        // 4. ATOMIC LOCK & DEDUPLICATION (Transaction-based)
+        const proceedData = await db.runTransaction(async (transaction) => {
+            const snap = await transaction.get(cardRef);
+            if (!snap.exists) return null;
+            const data = snap.data() || {};
+            const bState = data.botState || {};
+
+            // Deduplication
+            if (messageId && bState.lastProcessedMessageId === messageId) return null;
+
+            // Lock Check
+            const now = new Date();
+            if (data.botLock) {
+                const lockTime = data.botLock.toDate?.() || new Date(data.botLock);
+                const diff = (now.getTime() - lockTime.getTime()) / 1000;
+                if (diff < 15) return null;
+            }
+
+            // Acquire Lock & Mark Message
+            transaction.update(cardRef, {
+                botLock: now,
+                'botState.lastProcessedMessageId': messageId
+            });
+
+            return { data, bState };
+        });
+
+        if (!proceedData) {
+            console.warn(`[ChatbotEngine] ⏩ Skipping: Card ${cardId} is either locked or message ${messageId} already processed.`);
             return;
         }
 
-        const now = new Date();
-        if (cardData.botLock) {
-            const lockTime = cardData.botLock.toDate?.() || new Date(cardData.botLock);
-            const diff = (now.getTime() - lockTime.getTime()) / 1000;
-            if (diff < 15) {
-                console.warn(`[ChatbotEngine] 🔒 Card ${cardId} is LOCKED (${diff.toFixed(1)}s).`);
-                return;
-            }
-        }
-        await cardRef.update({
-            botLock: now,
-            'botState.lastProcessedMessageId': messageId
-        });
+        const stateSnapshot = proceedData.bState;
 
         // 5. FLOW LOGIC (RESUME OR START)
-        if (currentState.waitingForInput && currentState.currentNodeId) {
-            const node = flow.nodes.find((n: any) => n.id === currentState.currentNodeId);
+        if (stateSnapshot.waitingForInput && stateSnapshot.currentNodeId) {
+            const node = flow.nodes.find((n: any) => n.id === stateSnapshot.currentNodeId);
             console.log(`[ChatbotEngine] 📝 RESUMING INPUT @ ${node?.id}`);
             if (node?.type === 'captureInputNode') {
-                const varName = currentState.variableName || 'input';
+                const varName = stateSnapshot.variableName || 'input';
                 await cardRef.update({ [`customFields.${varName}`]: text, 'botState.waitingForInput': false });
                 const next = flow.edges.find((e: any) => e.source === node.id);
                 if (next) await executeFlow(next.target);
@@ -298,14 +312,14 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                     }
                 }
             }
-        } else if (currentState.status === 'active' && currentState.currentNodeId) {
-            // THE BOT TURN WAS INTERRUPTED: Resume from NEXT node
-            const node = flow.nodes.find((n: any) => n.id === currentState.currentNodeId);
+        } else if (stateSnapshot.status === 'active' && stateSnapshot.currentNodeId) {
+            // THE BOT TURN WAS INTERRUPTED
+            const node = flow.nodes.find((n: any) => n.id === stateSnapshot.currentNodeId);
             console.log(`[ChatbotEngine] ⚡ RESUMING BOT TURN after ${node?.id}`);
             const next = flow.edges.find((e: any) => e.source === node?.id);
             if (next) await executeFlow(next.target);
-            else await executeFlow(currentState.currentNodeId); // Retry current if no edge? Unlikely.
-        } else if (currentState.status !== 'completed') {
+            else await executeFlow(stateSnapshot.currentNodeId);
+        } else if (stateSnapshot.status !== 'completed') {
             const startNode = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
             if (startNode) {
                 console.log(`[ChatbotEngine] 🚀 FRESH START for ${cardId}`);
