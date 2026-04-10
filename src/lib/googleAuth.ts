@@ -1,15 +1,16 @@
 import axios from 'axios';
 import { db } from './firebase-admin';
 
-const CLIENT_ID = process.env.GMAIL_CLIENT_ID;
-const CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
-const REDIRECT_URI = process.env.GMAIL_REDIRECT_URI;
+const CLIENT_ID = process.env.GMAIL_CLIENT_ID?.trim();
+const CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET?.trim();
+const REDIRECT_URI = process.env.GMAIL_REDIRECT_URI?.trim();
 
 export async function getGoogleAuthUrl(userId: string, entityId: string) {
     const scopes = [
         'https://www.googleapis.com/auth/gmail.readonly',
         'https://www.googleapis.com/auth/gmail.send',
-        'https://www.googleapis.com/auth/userinfo.email'
+        'https://www.googleapis.com/auth/userinfo.email',
+        'https://www.googleapis.com/auth/userinfo.profile'
     ];
     
     const state = Buffer.from(JSON.stringify({ userId, entityId })).toString('base64');
@@ -22,6 +23,7 @@ export async function getGoogleAuthUrl(userId: string, entityId: string) {
         `prompt=consent&` +
         `state=${state}`;
     
+    console.log(`[GoogleAuth Lib] Generating URL. ClientID: ${CLIENT_ID?.substring(0, 5)}... RedirectURI: ${REDIRECT_URI}`);
     return url;
 }
 

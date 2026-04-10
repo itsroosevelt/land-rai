@@ -12,6 +12,15 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: 'Missing context' }, { status: 400 });
     }
 
+    if (!CLIENT_ID || !REDIRECT_URI) {
+        console.error('[Gmail Auth Error] Missing configuration in environment variables (GMAIL_CLIENT_ID or GMAIL_REDIRECT_URI)');
+        return NextResponse.json({ 
+            error: 'Missing Gmail configuration', 
+            details: 'Required environment variables are not set on the server.',
+            missing: { CLIENT_ID: !CLIENT_ID, REDIRECT_URI: !REDIRECT_URI }
+        }, { status: 500 });
+    }
+
     const scopes = [
         'https://www.googleapis.com/auth/gmail.readonly',
         'https://www.googleapis.com/auth/gmail.send',
@@ -28,6 +37,8 @@ export async function GET(req: Request) {
         `access_type=offline&` +
         `prompt=consent&` +
         `state=${state}`;
+
+    console.log(`[Gmail Auth] Generated URL for ${entityId}. Redirecting to: ${REDIRECT_URI}`);
     
     return NextResponse.json({ url: authUrl });
 }
