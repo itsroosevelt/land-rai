@@ -247,6 +247,10 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                 })
             });
 
+            // Clear local stale data for this execution
+            if (cardData.customFields) Object.keys(cardData.customFields).forEach(k => delete cardData.customFields[k]);
+            if (cardData.variables) Object.keys(cardData.variables).forEach(k => delete cardData.variables[k]);
+
             const startNode = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
             if (startNode) await executeFlow(startNode.id);
             return;
@@ -275,6 +279,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
         // 5. FLOW LOGIC (RESUME OR START)
         if (currentState.waitingForInput && currentState.currentNodeId) {
             const node = flow.nodes.find((n: any) => n.id === currentState.currentNodeId);
+            console.log(`[ChatbotEngine] 📝 RESUMING INPUT @ ${node?.id}`);
             if (node?.type === 'captureInputNode') {
                 const varName = currentState.variableName || 'input';
                 await cardRef.update({ [`customFields.${varName}`]: text, 'botState.waitingForInput': false });
@@ -293,13 +298,21 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                     }
                 }
             }
-        } else if (currentState.status !== 'completed' && currentState.status !== 'active') {
+        } else if (currentState.status === 'active' && currentState.currentNodeId) {
+            // THE BOT TURN WAS INTERRUPTED: Resume from NEXT node
+            const node = flow.nodes.find((n: any) => n.id === currentState.currentNodeId);
+            console.log(`[ChatbotEngine] ⚡ RESUMING BOT TURN after ${node?.id}`);
+            const next = flow.edges.find((e: any) => e.source === node?.id);
+            if (next) await executeFlow(next.target);
+            else await executeFlow(currentState.currentNodeId); // Retry current if no edge? Unlikely.
+        } else if (currentState.status !== 'completed') {
             const startNode = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
-            if (startNode) await executeFlow(startNode.id);
-        } else if (currentState.status === 'completed') {
-            console.log(`[ChatbotEngine] ℹ️ Conversation COMPLETED.`);
+            if (startNode) {
+                console.log(`[ChatbotEngine] 🚀 FRESH START for ${cardId}`);
+                await executeFlow(startNode.id);
+            }
         } else {
-            console.log(`[ChatbotEngine] ⏩ Skipping start: Flow is active @ ${currentState.currentNodeId}.`);
+            console.log(`[ChatbotEngine] ℹ️ Conversation is COMPLETED or in unknown state.`);
         }
 
     } catch (err: any) {
