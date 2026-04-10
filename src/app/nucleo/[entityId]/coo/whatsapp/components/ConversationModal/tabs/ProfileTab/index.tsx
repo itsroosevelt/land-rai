@@ -108,6 +108,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                 }
             }
         }));
+        setTimeout(() => handleInfoSave(), 100);
     };
 
     const duplicateCustomProperty = (oldName: string) => {
@@ -198,15 +199,17 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
         setNamingField(key);
         setIsPropMenuOpen(false);
         setPropSearch('');
+        handleInfoSave(); // Persist new property slot
     };
 
-    const deleteCustomField = (key: string) => {
+    const deleteCustomField = async (key: string) => {
         setContactInfo(prev => {
             const newData = { ...(prev.extraData || {}) };
             delete newData[key];
             const propertyOrder = prev.propertyOrder ? prev.propertyOrder.filter((k: string) => k !== key) : null;
             return { ...prev, extraData: newData, ...(propertyOrder ? { propertyOrder } : {}) };
         });
+        setTimeout(() => handleInfoSave(), 100); // Small delay to ensure state update
     };
 
     const renameCustomProperty = (oldName: string, newName: string) => {
@@ -221,6 +224,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                 : null;
             return { ...prev, extraData: newData, ...(propertyOrder ? { propertyOrder } : {}) };
         });
+        setTimeout(() => handleInfoSave(), 100);
     };
 
     const changeCustomPropertyType = (name: string, newType: string) => {
@@ -231,6 +235,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                 [name]: { ...(prev.extraData?.[name] || { value: '' }), __type: newType as CustomPropertyMeta['__type'] }
             }
         }));
+        setTimeout(() => handleInfoSave(), 100);
     };
 
     const changeCustomPropertyVisibility = (name: string, visibility: 'always' | 'hide-empty' | 'hidden') => {
@@ -244,6 +249,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                 }
             }
         }));
+        setTimeout(() => handleInfoSave(), 100);
     };
 
     const toggleSection = (title: string) => {
@@ -281,6 +287,16 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                             name="contactName"
                             value={contactInfo.contactName || ''}
                             onChange={handleInfoChange}
+                            onBlur={() => {
+                                setIsEditing(false);
+                                handleInfoSave();
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    setIsEditing(false);
+                                    handleInfoSave();
+                                }
+                            }}
                             className="h-12 text-4xl font-bold bg-transparent border-none p-0 focus-visible:ring-0 placeholder:opacity-20"
                             placeholder="Sin nombre"
                             autoFocus
@@ -456,7 +472,10 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                                                             setContactInfo(prev => ({ ...prev, [field.key as keyof CardData]: newVal }));
                                                         }
                                                     }}
-                                                    finishEdit={() => setEditingField(null)}
+                                                    finishEdit={async () => {
+                                                        setEditingField(null);
+                                                        await handleInfoSave();
+                                                    }}
                                                     hasData={hasData}
                                                     getBadgeStyle={getBadgeStyle}
                                                     getColorForValue={getColorForValue}

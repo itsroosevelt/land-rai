@@ -1293,14 +1293,15 @@ export default function ContactsPage() {
             </div>
 
             <ConversationModal
-                key={selectedContact?.phone || 'no-contact'}
+                key={selectedContact?.id || 'no-contact'}
                 isOpen={isChatOpen}
                 onClose={() => setIsChatOpen(false)}
                 card={selectedContact ? {
                     id: `temp-${selectedContact.id}`, // Temporary ID until real Kanban card is found
-                    contactName: selectedContact.name,
-                    contactNumber: selectedContact.phone,
-                    // Don't pass the CRM contact ID as card.id - let the hook find the real Kanban card
+                    contactName: selectedContact.name || `${selectedContact.firstName || ''} ${selectedContact.lastName || ''}`.trim() || 'Sin nombre',
+                    contactNumber: selectedContact.phone || selectedContact.metaSenderId || '',
+                    metaSenderId: selectedContact.metaSenderId || null,
+                    crmId: selectedContact.id,
                 } : null}
                 groups={[]}
                 allConversations={contacts.map(c => ({ id: c.id, contactName: c.name, contactNumber: c.phone }))}

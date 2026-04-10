@@ -12,6 +12,8 @@ export interface ChatbotContext {
     messageId?: string;
 }
 
+const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+
 export async function processChatbotFlow(ctx: ChatbotContext) {
     const { userId, entityId, groupId, cardId, platform, from, text, messageId } = ctx;
     const entityPath = `users/${userId}/entities/${entityId}`;
@@ -32,7 +34,12 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
     // 0. QUICK RESET DETECTION
     const inputRaw = text || '';
     const input = inputRaw.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    const isReset = input === 'reiniciar' || input === 'menu' || input === 'reset' || input === 'reinicia todo ahora';
+    // Fuzzy reset detection: catch typos like 'reincia', 'reiniciar', 'reset', 'menu'
+    const isReset = input === 'reiniciar' || input === 'menu' || input === 'reset' ||
+        input === 'reinicia todo ahora' ||
+        input === 'reincia todo ahora' ||  // common typo
+        /^rein[ic]{1,3}[ao]/.test(input) || // catches reinicia, reincia, reiniciar, etc.
+        input.startsWith('reinici') || input.startsWith('reincia');
 
     try {
         // 1. Core Data Retrieval
@@ -164,6 +171,24 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                         }
                     })).slice(0, 3);
 
+                    // --- LOOK-BACK: Check if user already answered during bot sequence ---
+                    const snap = await cardRef.get();
+                    const cardData = snap.data() || {};
+                    const lastMsg = (cardData.messages || []).slice(-1)[0];
+                    if (lastMsg && lastMsg.sender === 'user' && lastMsg.messageId !== messageId) {
+                        const normalizedInput = String(lastMsg.text || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                        const edge = flow.edges.find((e: any) => {
+                            const handle = String(e.sourceHandle || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                            return e.source === node.id && handle === normalizedInput;
+                        });
+                        if (edge) {
+                            console.log(`[ChatbotEngine] ⚡ Look-back: Using existing user message "${lastMsg.text}" for QuickReply`);
+                            await cardRef.update({ 'botState.currentNodeId': node.id });
+                            currentNodeId = edge.target;
+                            continue;
+                        }
+                    }
+
                     let sendError = null;
                     try {
                         await dispatchMessage(msg, { type: 'quick_reply', buttons });
@@ -191,6 +216,24 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
 
                 if (node.type === 'captureInputNode') {
                     const prompt = replaceVars(node.data?.content || node.data?.text || '');
+                    
+                    // --- LOOK-BACK: Check if user already sent text during bot sequence ---
+                    const snap = await cardRef.get();
+                    const cardData = snap.data() || {};
+                    const lastMsg = (cardData.messages || []).slice(-1)[0];
+                    if (lastMsg && lastMsg.sender === 'user' && lastMsg.messageId !== messageId) {
+                        console.log(`[ChatbotEngine] ⚡ Look-back: Capturing user message "${lastMsg.text}" for variable ${node.data?.variableName}`);
+                        await cardRef.update({ 
+                            [`customFields.${node.data?.variableName || 'last_input'}`]: lastMsg.text,
+                            'botState.currentNodeId': node.id 
+                        });
+                        const next = flow.edges.find((e: any) => e.source === node.id);
+                        if (next) {
+                            currentNodeId = next.target;
+                            continue;
+                        }
+                    }
+
                     if (prompt) await dispatchMessage(prompt);
                     await cardRef.update({
                         'botState.currentNodeId': node.id,
@@ -241,8 +284,23 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             }
         };
 
-        // 3. PRIORITY RESET
-        // 4. ATOMIC OPERATION (Transaction-based)
+        // 3. PRE-TRANSACTION LOCK CHECK WITH POLLING (safe to do async OUTSIDE transaction)
+        if (!isReset) {
+            let lockAttempts = 0;
+            while (lockAttempts < 6) { // max 3 seconds
+                const lockSnap = await cardRef.get();
+                const lockData = lockSnap.data()?.botLock;
+                if (!lockData) break; // No lock, proceed
+                const lockTime = lockData.toDate?.() || new Date(lockData);
+                const diff = (new Date().getTime() - lockTime.getTime()) / 1000;
+                if (diff >= 4) break; // Lock expired, proceed
+                console.log(`[ChatbotEngine] ⏳ Card ${cardId} LOCKED, waiting (${lockAttempts + 1}/6)...`);
+                await sleep(500);
+                lockAttempts++;
+            }
+        }
+
+        // 4. ATOMIC OPERATION (Transaction-based — NO async side-effects inside)
         const proceedData = await db.runTransaction(async (transaction) => {
             const snap = await transaction.get(cardRef);
             if (!snap.exists) return null;
@@ -264,7 +322,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             // Deduplication
             if (messageId && bState.lastProcessedMessageId === messageId) return null;
 
-            // Lock Check (4s for better responsiveness)
+            // Lock Check (simple, no async polling here)
             if (data.botLock) {
                 const lockTime = data.botLock.toDate?.() || new Date(data.botLock);
                 const diff = (now.getTime() - lockTime.getTime()) / 1000;

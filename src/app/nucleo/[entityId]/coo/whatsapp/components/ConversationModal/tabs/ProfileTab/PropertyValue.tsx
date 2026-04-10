@@ -60,8 +60,11 @@ export const PropertyValue: React.FC<PropertyValueProps> = ({
             const current = Array.isArray(value) ? value : (value ? [value] : []);
             const updated = current.includes(val) ? current.filter(v => v !== val) : [...current, val];
             onValueChange(updated);
+            // Multi-select might not want to close/save immediately, but let's save on each change
+            if (onSave) onSave();
         } else {
             onValueChange(val);
+            if (onSave) onSave();
             finishEdit();
         }
     };
@@ -374,6 +377,7 @@ export const PropertyValue: React.FC<PropertyValueProps> = ({
                                 if (!isPhoneOpen) {
                                     const finalPhone = `${editPhoneData.code}${editPhoneData.number}`;
                                     onValueChange(finalPhone);
+                                    if (onSave) onSave();
                                     finishEdit();
                                 }
                             }}
@@ -387,7 +391,10 @@ export const PropertyValue: React.FC<PropertyValueProps> = ({
                             onChange={(e) => onValueChange(e.target.value)}
                             className="bg-neutral-800 border-none rounded px-2 py-1 text-xs text-neutral-200 outline-none w-full"
                         />
-                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={finishEdit}>
+                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => {
+                            if (onSave) onSave();
+                            finishEdit();
+                        }}>
                             <Check size={12} />
                         </Button>
                     </div>

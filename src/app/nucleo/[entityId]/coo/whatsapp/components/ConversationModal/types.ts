@@ -193,6 +193,8 @@ export interface CardData {
     assignedTo?: string;
     labels?: string[];
     unreadCount?: number;
+    metaSenderId?: string;
+    psid?: string;
 }
 
 export interface ConversationModalProps {

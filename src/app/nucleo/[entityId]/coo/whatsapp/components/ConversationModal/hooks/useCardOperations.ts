@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { db } from '@/lib/firebase';
-import { doc, updateDoc, arrayUnion, arrayRemove, Timestamp, addDoc, collection, serverTimestamp, getDocs, query, where } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, arrayRemove, Timestamp, addDoc, collection, serverTimestamp, getDocs, query, where, getDoc } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { CardData, CheckIn, Note, PaymentMethod } from '../types';
 import { normalizePhoneNumber } from '@/lib/phoneUtils';
@@ -66,8 +66,8 @@ export const useCardOperations = ({
 
         const rawPhone = liveCardData?.contactNumber || card?.contactNumber;
         const originalPhone = normalizePhoneNumber(rawPhone || '');
-        if (!originalPhone) return null;
-
+        const metaSenderId = liveCardData?.metaSenderId || (card as any)?.metaSenderId || (card as any)?.contactNumber;
+        
         try {
             const dataToSave = latestContactInfo.current;
             // 1. Update Kanban Card
@@ -76,24 +76,37 @@ export const useCardOperations = ({
             }
 
             // 2. Update CRM Contacts
-            const cleanDigits = originalPhone.replace(/\D/g, '');
-            const contactsQuery = query(collection(db, `${tenantPath}/contacts`), where('phone', 'in', [`+${cleanDigits}`, cleanDigits]));
-            const contactsSnapshot = await getDocs(contactsQuery);
             let contactId = dataToSave.id;
+            let contactsSnapshot: any = { empty: true };
+
+            if (originalPhone && originalPhone.length > 5) {
+                const cleanDigits = originalPhone.replace(/\D/g, '');
+                const contactsQuery = query(collection(db, `${tenantPath}/contacts`), where('phone', 'in', [`+${cleanDigits}`, cleanDigits]));
+                contactsSnapshot = await getDocs(contactsQuery);
+            } else if (metaSenderId) {
+                const metaQuery = query(collection(db, `${tenantPath}/contacts`), where('metaSenderId', '==', metaSenderId));
+                contactsSnapshot = await getDocs(metaQuery);
+            } else if (contactId) {
+                // If we have an ID directly
+                const docRef = doc(db, `${tenantPath}/contacts`, contactId);
+                const snap = await getDoc(docRef);
+                if (snap.exists()) contactsSnapshot = { empty: false, docs: [snap] };
+            }
 
             if (!contactsSnapshot.empty) {
                 contactId = contactsSnapshot.docs[0].id;
                 for (const cDoc of contactsSnapshot.docs) {
                     await updateDoc(cDoc.ref, {
                         ...dataToSave,
-                        phone: dataToSave.contactNumber ? normalizePhoneNumber(dataToSave.contactNumber) : cDoc.data().phone,
+                        phone: dataToSave.contactNumber ? normalizePhoneNumber(dataToSave.contactNumber) : (cDoc.data() as any).phone,
                         lastUpdated: serverTimestamp()
-                    });
+                    } as any);
                 }
-            } else {
+            } else if (originalPhone || metaSenderId) {
                 const newContact = {
                     ...dataToSave,
-                    phone: normalizePhoneNumber(originalPhone),
+                    phone: originalPhone ? normalizePhoneNumber(originalPhone) : null,
+                    metaSenderId: metaSenderId || null,
                     createdAt: serverTimestamp(),
                     lastUpdated: serverTimestamp(),
                     source: 'chat_restored'
