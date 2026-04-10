@@ -224,54 +224,27 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
         };
 
         // 3. PRIORITY RESET
-        if (isReset) {
-            console.log(`[ChatbotEngine] ♻️ EXECUTING RESET for card ${cardId}`);
-            const resetConfirmText = "🔄 Reinicio completado, empezamos de nuevo.";
-            try {
-                await dispatchMessage(resetConfirmText);
-            } catch (err) {
-                console.error(`[ChatbotEngine] ❌ Failed to send reset confirmation:`, err);
-            }
-
-            await cardRef.update({
-                'botState': admin.firestore.FieldValue.delete(),
-                'chatbotState': admin.firestore.FieldValue.delete(),
-                'customFields': admin.firestore.FieldValue.delete(),
-                'lastBotInteraction': admin.firestore.FieldValue.delete(),
-                'botOutcome': admin.firestore.FieldValue.delete(),
-                'lastError': admin.firestore.FieldValue.delete(),
-                'botLock': admin.firestore.FieldValue.delete(),
-                'updatedAt': new Date(),
-                messages: admin.firestore.FieldValue.arrayUnion({
-                    sender: 'agent',
-                    text: resetConfirmText,
-                    platform,
-                    timestamp: new Date(),
-                    messageId: `bot_sys_${Date.now()}`
-                })
-            });
-
-            // Clear local stale data for this execution
-            if (cardData.customFields) Object.keys(cardData.customFields).forEach(k => delete cardData.customFields[k]);
-            if (cardData.variables) Object.keys(cardData.variables).forEach(k => delete cardData.variables[k]);
-
-            const startNode = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
-            if (startNode) await executeFlow(startNode.id);
-            return;
-        }
-
-        // 4. ATOMIC LOCK & DEDUPLICATION (Transaction-based)
+        // 4. ATOMIC OPERATION (Transaction-based)
         const proceedData = await db.runTransaction(async (transaction) => {
             const snap = await transaction.get(cardRef);
             if (!snap.exists) return null;
             const data = snap.data() || {};
             const bState = data.botState || {};
 
+            if (isReset) {
+                transaction.update(cardRef, {
+                    'botLock': now,
+                    'botState': admin.firestore.FieldValue.delete(),
+                    'customFields': admin.firestore.FieldValue.delete(),
+                    'updatedAt': now
+                });
+                return { data, bState: {}, reset: true };
+            }
+
             // Deduplication
             if (messageId && bState.lastProcessedMessageId === messageId) return null;
 
             // Lock Check
-            const now = new Date();
             if (data.botLock) {
                 const lockTime = data.botLock.toDate?.() || new Date(data.botLock);
                 const diff = (now.getTime() - lockTime.getTime()) / 1000;
@@ -294,17 +267,33 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
 
         const stateSnapshot = proceedData.bState;
 
+        if (proceedData.reset) {
+            console.log(`[ChatbotEngine] ♻️ EXECUTING RESET for card ${cardId}`);
+            const resetConfirmText = "🔄 Reinicio completado, empezamos de nuevo.";
+            try { await dispatchMessage(resetConfirmText); } catch (e) { }
+
+            await cardRef.update({
+                messages: admin.firestore.FieldValue.arrayUnion({
+                    sender: 'agent', text: resetConfirmText, platform, timestamp: new Date(), messageId: `bot_sys_${Date.now()}`
+                })
+            });
+
+            // Clear local stale data
+            if (cardData.customFields) Object.keys(cardData.customFields).forEach(k => delete cardData.customFields[k]);
+            if (cardData.variables) Object.keys(cardData.variables).forEach(k => delete cardData.variables[k]);
+
+            const startNode = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
+            if (startNode) await executeFlow(startNode.id);
+            return;
+        }
+
         // 5. FLOW LOGIC (RESUME OR START)
         if (stateSnapshot.waitingForInput && stateSnapshot.currentNodeId) {
             const node = flow.nodes.find((n: any) => n.id === stateSnapshot.currentNodeId);
-            console.log(`[ChatbotEngine] 📝 RESUMING INPUT @ ${node?.id}`);
-
             if (node?.type === 'captureInputNode') {
                 const varName = stateSnapshot.variableName || 'input';
 
-                // SMARTER CAPTURE logic: Extract name if the variable name is 'nombre' or 'name'
                 let extractedValue = text;
-                const lowText = text.toLowerCase();
                 if (varName.toLowerCase().includes('name') || varName.toLowerCase().includes('nombre')) {
                     const match = text.match(/(?:me llamo|mi nombre es|soy|nombre:)\s+([a-z\s]+)/i);
                     if (match && match[1]) extractedValue = match[1].trim();
@@ -316,13 +305,12 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                 await cardRef.update({ [`customFields.${varName}`]: extractedValue, 'botState.waitingForInput': false });
                 const next = flow.edges.find((e: any) => e.source === node.id);
                 if (next) await executeFlow(next.target);
+                else await cardRef.update({ 'botState.status': 'completed' });
             } else {
-                // QUICK REPLIES / BUTTONS logic: Normalize for all channels
                 const normalizedText = text.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
                 const edge = flow.edges.find((e: any) => {
-                    if (e.source !== node?.id) return false;
                     const handle = String(e.sourceHandle || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                    return handle === normalizedText;
+                    return e.source === node?.id && handle === normalizedText;
                 });
 
                 if (edge) {
@@ -333,24 +321,16 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                     if (fallback) {
                         await cardRef.update({ 'botState.waitingForInput': false });
                         await executeFlow(fallback.target);
+                    } else {
+                        await cardRef.update({ 'botState.status': 'completed' });
                     }
                 }
             }
-        } else if (stateSnapshot.status === 'active' && stateSnapshot.currentNodeId) {
-            // THE BOT TURN WAS INTERRUPTED
-            const node = flow.nodes.find((n: any) => n.id === stateSnapshot.currentNodeId);
-            console.log(`[ChatbotEngine] ⚡ RESUMING BOT TURN after ${node?.id}`);
-            const next = flow.edges.find((e: any) => e.source === node?.id);
-            if (next) await executeFlow(next.target);
-            else await executeFlow(stateSnapshot.currentNodeId);
-        } else if (stateSnapshot.status !== 'completed') {
+        } else if (stateSnapshot.status !== 'completed' && stateSnapshot.status !== 'active') {
             const startNode = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
-            if (startNode) {
-                console.log(`[ChatbotEngine] 🚀 FRESH START for ${cardId}`);
-                await executeFlow(startNode.id);
-            }
+            if (startNode) await executeFlow(startNode.id);
         } else {
-            console.log(`[ChatbotEngine] ℹ️ Conversation is COMPLETED or in unknown state.`);
+            console.log(`[ChatbotEngine] ℹ️ Flow is already ${stateSnapshot.status || 'not started'}. Use reset to restart.`);
         }
 
     } catch (err: any) {
