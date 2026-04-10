@@ -274,7 +274,8 @@ export async function POST(req: Request) {
             console.log(`[Meta Webhook] 🤖 Triggering chatbot for ${provider} | User: ${userId} | Entity: ${entityId}`);
             try {
                 await processChatbotFlow({
-                    userId, entityId, groupId, cardId, platform: provider, from: senderId, text: text
+                    userId, entityId, groupId, cardId, platform: provider, from: senderId, text: text,
+                    messageId: messaging.message.mid || `mid_${Date.now()}`
                 });
                 console.log(`[Meta Webhook] ✅ Chatbot process completed for ${senderId}`);
             } catch (botError: any) {

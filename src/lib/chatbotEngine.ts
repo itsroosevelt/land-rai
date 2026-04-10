@@ -9,10 +9,11 @@ export interface ChatbotContext {
     platform: 'whatsapp' | 'messenger' | 'instagram' | 'telegram' | 'gmail';
     from: string;
     text: string;
+    messageId?: string;
 }
 
 export async function processChatbotFlow(ctx: ChatbotContext) {
-    const { userId, entityId, groupId, cardId, platform, from, text } = ctx;
+    const { userId, entityId, groupId, cardId, platform, from, text, messageId } = ctx;
     const entityPath = `users/${userId}/entities/${entityId}`;
 
     console.log(`[ChatbotEngine] 🚀 START | Platform: ${platform} | From: ${from} | Text: "${text}"`);
@@ -45,6 +46,25 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
         }
         const cardData = cardSnap.data() || {};
         const currentState = cardData.botState || {};
+
+        // 0. DEDUPLICATION (Skip if message already processed)
+        if (messageId && cardData.messages?.some((m: any) => m.messageId === messageId && m.sender === 'user')) {
+            console.warn(`[ChatbotEngine] ⏩ Message ${messageId} already processed for card ${cardId}. Skipping.`);
+            return;
+        }
+
+        // 1. CONCURRENCY LOCK (15 seconds)
+        const now = new Date();
+        if (cardData.botLock) {
+            const lockTime = cardData.botLock.toDate?.() || new Date(cardData.botLock);
+            const diff = (now.getTime() - lockTime.getTime()) / 1000;
+            if (diff < 15) {
+                console.warn(`[ChatbotEngine] 🔒 Card ${cardId} is LOCKED (diff: ${diff.toFixed(1)}s). Aborting.`);
+                return;
+            }
+        }
+        await cardRef.update({ botLock: now });
+
         console.log(`[ChatbotEngine] 🗂️ Card Data loaded. Bot Status: ${currentState.status || 'none'}`);
 
         // Helper: Variable Injection (Agnostic)
@@ -214,7 +234,11 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                 }
 
                 if (node.type === 'endNode') {
-                    await cardRef.update({ 'botState.status': 'completed', 'botState.currentNodeId': node.id });
+                    await cardRef.update({
+                        'botState.status': 'completed',
+                        'botState.currentNodeId': node.id,
+                        'botState.waitingForInput': false
+                    });
                     console.log(`[ChatbotEngine] 🏁 FLOW COMPLETED @ ${node.id}`);
                     return;
                 }
@@ -222,6 +246,9 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                 break;
             }
             if (executionCount >= MAX_STEPS) console.warn('[ChatbotEngine] ⚠️ FLOW ABORTED: MAX_STEPS reached.');
+
+            // Clear lock after successful flow execution
+            await cardRef.update({ botLock: admin.firestore.FieldValue.delete() });
         };
 
         // 1. NORMALIZE INPUT
@@ -286,18 +313,26 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                     }
                 }
             }
-        } else if (currentState.status !== 'completed') {
+        } else if (currentState.status !== 'completed' && currentState.status !== 'active') {
             const startNode = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
             if (startNode) {
                 console.log(`[ChatbotEngine] 🚀 FRESH START for ${cardId}`);
                 await executeFlow(startNode.id);
             }
-        } else {
+        } else if (currentState.status === 'completed') {
             console.log(`[ChatbotEngine] ℹ️ Conversation is COMPLETED. Use RESET to restart.`);
+        } else {
+            console.log(`[ChatbotEngine] ⏩ Skipping start: Flow is already active at node ${currentState.currentNodeId}.`);
         }
 
     } catch (err: any) {
         console.error(`[ChatbotEngine] 💥 CRITICAL FAILURE:`, err.message);
         console.error(err.stack);
+    } finally {
+        // ALWAYS release lock
+        try {
+            const cardRef = db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`);
+            await cardRef.update({ botLock: admin.firestore.FieldValue.delete() });
+        } catch (e) { }
     }
 }
