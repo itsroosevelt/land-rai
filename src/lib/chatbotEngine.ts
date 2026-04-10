@@ -109,12 +109,26 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
 
                 if (node.type === 'textMessageNode') {
                     const msg = replaceVars(node.data?.content || node.data?.text || 'Hola');
-                    const res = await dispatchMessage(msg);
-                    const messageId = res?.message_id || res?.messageId || `bot_${Date.now()}`;
+                    let messageId = `bot_${Date.now()}`;
+                    let sendError = null;
+
+                    try {
+                        const res = await dispatchMessage(msg);
+                        messageId = res?.message_id || res?.messageId || messageId;
+                    } catch (err: any) {
+                        console.error(`[ChatbotEngine] ❌ TextNode Dispatch Failure:`, err.message);
+                        sendError = err.message;
+                    }
 
                     await cardRef.update({
                         messages: admin.firestore.FieldValue.arrayUnion({
-                            sender: 'agent', text: msg, platform, timestamp: new Date(), messageId
+                            sender: 'agent',
+                            text: msg,
+                            platform,
+                            timestamp: new Date(),
+                            messageId,
+                            status: sendError ? 'error' : 'sent',
+                            error: sendError
                         }),
                         lastMessage: msg.substring(0, 50),
                         updatedAt: new Date(),
@@ -137,12 +151,27 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                         }
                     })).slice(0, 3);
 
-                    await dispatchMessage(msg, { type: 'quick_reply', buttons });
+                    let sendError = null;
+                    try {
+                        await dispatchMessage(msg, { type: 'quick_reply', buttons });
+                    } catch (err: any) {
+                        sendError = err.message;
+                    }
+
                     await cardRef.update({
+                        messages: admin.firestore.FieldValue.arrayUnion({
+                            sender: 'agent',
+                            text: msg,
+                            platform,
+                            timestamp: new Date(),
+                            messageId: `bot_qr_${Date.now()}`,
+                            status: sendError ? 'error' : 'sent'
+                        }),
                         'botState.currentNodeId': node.id,
                         'botState.status': 'active',
                         'botState.waitingForInput': true,
-                        'botState.lastInteraction': new Date()
+                        'botState.lastInteraction': new Date(),
+                        updatedAt: new Date()
                     });
                     console.log(`[ChatbotEngine] ⏸️ FLOW PAUSE (Input Needed) @ ${node.id}`);
                     return;
@@ -195,7 +224,9 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             if (executionCount >= MAX_STEPS) console.warn('[ChatbotEngine] ⚠️ FLOW ABORTED: MAX_STEPS reached.');
         };
 
-        const input = text.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        // 1. NORMALIZE INPUT
+        const inputRaw = text || '';
+        const input = inputRaw.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         const isReset = input === 'reiniciar' || input === 'menu' || input === 'reset' || input === 'reinicia todo ahora';
 
         console.log(`[ChatbotEngine] 🛤️ PATH: isReset=${isReset}, status=${currentState.status}, waitingInput=${currentState.waitingForInput}`);
@@ -208,12 +239,24 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                 'customFields': admin.firestore.FieldValue.delete(),
                 'lastBotInteraction': admin.firestore.FieldValue.delete(),
                 'botOutcome': admin.firestore.FieldValue.delete(),
-                'lastError': admin.firestore.FieldValue.delete()
+                'lastError': admin.firestore.FieldValue.delete(),
+                'updatedAt': new Date()
             });
-            await dispatchMessage("🔄 Reinicio completado, empezamos de nuevo.");
+
+            const resetConfirmText = "🔄 Reinicio completado, empezamos de nuevo.";
+            try {
+                await dispatchMessage(resetConfirmText);
+            } catch (err) {
+                console.error(`[ChatbotEngine] ❌ Failed to send reset confirmation:`, err);
+            }
+
             await cardRef.update({
                 messages: admin.firestore.FieldValue.arrayUnion({
-                    sender: 'agent', text: "🔄 Reinicio completado, empezamos de nuevo.", platform, timestamp: new Date(), messageId: `bot_sys_${Date.now()}`
+                    sender: 'agent',
+                    text: resetConfirmText,
+                    platform,
+                    timestamp: new Date(),
+                    messageId: `bot_sys_${Date.now()}`
                 })
             });
 

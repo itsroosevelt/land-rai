@@ -328,6 +328,12 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                                                     <span className="text-[9px] uppercase tracking-[0.2em] text-[#E4405F] block mb-2 font-black">CANAL ACTIVO</span>
                                                     <p className="text-2xl font-light text-white tracking-tight leading-none truncate max-w-[250px]">{config.instagramName || config.pageName || 'Perfil Conectado'}</p>
                                                     <span className="text-[9px] text-white/40 mt-3 block font-medium italic">Listo para recibir mensajes</span>
+                                                    {config.tokenType === 'permanent' && (
+                                                        <div className="mt-2 flex items-center gap-1.5">
+                                                            <div className="w-1 h-1 rounded-full bg-green-500 animate-pulse" />
+                                                            <span className="text-[8px] font-bold text-green-500/80 uppercase tracking-widest">Token Permanente</span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 <div className="p-4 bg-green-500/5 border border-green-500/10 rounded-2xl relative z-10"><ShieldCheck className="w-6 h-6 text-green-500/40" /></div>
                                             </div>
