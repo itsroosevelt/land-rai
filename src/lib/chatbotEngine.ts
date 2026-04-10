@@ -18,6 +18,11 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
 
     console.log(`[ChatbotEngine] 🚀 START | Platform: ${platform} | From: ${from} | Text: "${text}"`);
 
+    // 0. QUICK RESET PASS (Bypass locks)
+    const inputRaw = text || '';
+    const input = inputRaw.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const isReset = input === 'reiniciar' || input === 'menu' || input === 'reset' || input === 'reinicia todo ahora';
+
     try {
         console.log(`[ChatbotEngine] 🔍 Searching active bot for ${entityId}...`);
         const botsRef = db.collection(`${entityPath}/chatbots`);
@@ -39,6 +44,40 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
         const flow = activeBot.flow || { nodes: [], edges: [] };
 
         const cardRef = db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`);
+
+        if (isReset) {
+            console.log(`[ChatbotEngine] ♻️ EXECUTING RESET for card ${cardId}`);
+
+            const resetConfirmText = "🔄 Reinicio completado, empezamos de nuevo.";
+            try {
+                await dispatchMessage(resetConfirmText);
+            } catch (err) {
+                console.error(`[ChatbotEngine] ❌ Failed to send reset confirmation:`, err);
+            }
+
+            await cardRef.update({
+                'botState': admin.firestore.FieldValue.delete(),
+                'chatbotState': admin.firestore.FieldValue.delete(),
+                'customFields': admin.firestore.FieldValue.delete(),
+                'lastBotInteraction': admin.firestore.FieldValue.delete(),
+                'botOutcome': admin.firestore.FieldValue.delete(),
+                'lastError': admin.firestore.FieldValue.delete(),
+                'botLock': admin.firestore.FieldValue.delete(),
+                'updatedAt': new Date(),
+                messages: admin.firestore.FieldValue.arrayUnion({
+                    sender: 'agent',
+                    text: resetConfirmText,
+                    platform,
+                    timestamp: new Date(),
+                    messageId: `bot_sys_${Date.now()}`
+                })
+            });
+
+            const startNode = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
+            if (startNode) await executeFlow(startNode.id);
+            return;
+        }
+
         const cardSnap = await cardRef.get();
         if (!cardSnap.exists) {
             console.error(`[ChatbotEngine] ❌ Card ${cardId} NOT found in Firestore.`);
@@ -251,46 +290,6 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             await cardRef.update({ botLock: admin.firestore.FieldValue.delete() });
         };
 
-        // 1. NORMALIZE INPUT
-        const inputRaw = text || '';
-        const input = inputRaw.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        const isReset = input === 'reiniciar' || input === 'menu' || input === 'reset' || input === 'reinicia todo ahora';
-
-        console.log(`[ChatbotEngine] 🛤️ PATH: isReset=${isReset}, status=${currentState.status}, waitingInput=${currentState.waitingForInput}`);
-
-        if (isReset) {
-            console.log(`[ChatbotEngine] ♻️ EXECUTING RESET for card ${cardId}`);
-            await cardRef.update({
-                'botState': admin.firestore.FieldValue.delete(),
-                'chatbotState': admin.firestore.FieldValue.delete(),
-                'customFields': admin.firestore.FieldValue.delete(),
-                'lastBotInteraction': admin.firestore.FieldValue.delete(),
-                'botOutcome': admin.firestore.FieldValue.delete(),
-                'lastError': admin.firestore.FieldValue.delete(),
-                'updatedAt': new Date()
-            });
-
-            const resetConfirmText = "🔄 Reinicio completado, empezamos de nuevo.";
-            try {
-                await dispatchMessage(resetConfirmText);
-            } catch (err) {
-                console.error(`[ChatbotEngine] ❌ Failed to send reset confirmation:`, err);
-            }
-
-            await cardRef.update({
-                messages: admin.firestore.FieldValue.arrayUnion({
-                    sender: 'agent',
-                    text: resetConfirmText,
-                    platform,
-                    timestamp: new Date(),
-                    messageId: `bot_sys_${Date.now()}`
-                })
-            });
-
-            const startNode = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
-            if (startNode) await executeFlow(startNode.id);
-            return;
-        }
 
         if (currentState.waitingForInput && currentState.currentNodeId) {
             const node = flow.nodes.find((n: any) => n.id === currentState.currentNodeId);
