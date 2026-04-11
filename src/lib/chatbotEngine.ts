@@ -123,7 +123,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             }
         };
 
-        const executeFlow = async (startId: string, runtimeContext: any = {}) => {
+        const executeFlow = async (startId: string, runtimeContext: any = {}, allowLookBack: boolean = false) => {
             let currentNodeId: string | null = startId;
             let executionCount = 0;
             const MAX_STEPS = 15;
@@ -183,21 +183,23 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                         }
                     })).slice(0, 3);
 
-                    // --- LOOK-BACK: Check if user already answered during bot sequence ---
-                    const snap = await cardRef.get();
-                    const cardData = snap.data() || {};
-                    const lastMsg = (cardData.messages || []).slice(-1)[0];
-                    if (lastMsg && lastMsg.sender === 'user' && lastMsg.messageId !== messageId) {
-                        const normalizedInput = String(lastMsg.text || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                        const edge = flow.edges.find((e: any) => {
-                            const handle = String(e.sourceHandle || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                            return e.source === node.id && handle === normalizedInput;
-                        });
-                        if (edge) {
-                            console.log(`[ChatbotEngine] ⚡ Look-back: Using existing user message "${lastMsg.text}" for QuickReply`);
-                            await cardRef.update({ 'botState.currentNodeId': node.id });
-                            currentNodeId = edge.target;
-                            continue;
+                    // --- LOOK-BACK for QuickReply (only when genuinely resuming) ---
+                    if (allowLookBack) {
+                        const snap = await cardRef.get();
+                        const cardData = snap.data() || {};
+                        const lastMsg = (cardData.messages || []).slice(-1)[0];
+                        if (lastMsg && lastMsg.sender === 'user' && lastMsg.messageId !== messageId) {
+                            const normalizedInput = String(lastMsg.text || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                            const edge = flow.edges.find((e: any) => {
+                                const handle = String(e.sourceHandle || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                                return e.source === node.id && handle === normalizedInput;
+                            });
+                            if (edge) {
+                                console.log(`[ChatbotEngine] ⚡ Look-back: Using existing user message "${lastMsg.text}" for QuickReply`);
+                                await cardRef.update({ 'botState.currentNodeId': node.id });
+                                currentNodeId = edge.target;
+                                continue;
+                            }
                         }
                     }
 
@@ -229,23 +231,25 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                 if (node.type === 'captureInputNode') {
                     const prompt = replaceVars(node.data?.content || node.data?.text || '', currentOverlay);
                     
-                    // --- LOOK-BACK: Check if user already sent text during bot sequence ---
-                    const snap = await cardRef.get();
-                    const cardData = snap.data() || {};
-                    const lastMsg = (cardData.messages || []).slice(-1)[0];
-                    const lastMsgNormalized = String(lastMsg?.text || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                    const isLastMsgAReset = lastMsgNormalized === 'reiniciar' || lastMsgNormalized === 'reset' || lastMsgNormalized === 'menu' ||
-                        lastMsgNormalized.includes('reinicia todo ahora') || lastMsgNormalized.startsWith('reinici');
-                    if (lastMsg && lastMsg.sender === 'user' && lastMsg.messageId !== messageId && !isLastMsgAReset) {
-                        console.log(`[ChatbotEngine] ⚡ Look-back: Capturing user message "${lastMsg.text}" for variable ${node.data?.variableName}`);
-                        await cardRef.update({ 
-                            [`customFields.${node.data?.variableName || 'last_input'}`]: lastMsg.text,
-                            'botState.currentNodeId': node.id 
-                        });
-                        const next = flow.edges.find((e: any) => e.source === node.id);
-                        if (next) {
-                            currentNodeId = next.target;
-                            continue;
+                    // --- LOOK-BACK (only when genuinely resuming, not on fresh starts/resets) ---
+                    if (allowLookBack) {
+                        const snap = await cardRef.get();
+                        const cardData = snap.data() || {};
+                        const lastMsg = (cardData.messages || []).slice(-1)[0];
+                        const lastMsgNormalized = String(lastMsg?.text || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                        const isLastMsgAReset = lastMsgNormalized === 'reiniciar' || lastMsgNormalized === 'reset' || lastMsgNormalized === 'menu' ||
+                            lastMsgNormalized.includes('reinicia todo ahora') || lastMsgNormalized.startsWith('reinici');
+                        if (lastMsg && lastMsg.sender === 'user' && lastMsg.messageId !== messageId && !isLastMsgAReset) {
+                            console.log(`[ChatbotEngine] ⚡ Look-back: Capturing user message "${lastMsg.text}" for variable ${node.data?.variableName}`);
+                            await cardRef.update({ 
+                                [`customFields.${node.data?.variableName || 'last_input'}`]: lastMsg.text,
+                                'botState.currentNodeId': node.id 
+                            });
+                            const next = flow.edges.find((e: any) => e.source === node.id);
+                            if (next) {
+                                currentNodeId = next.target;
+                                continue;
+                            }
                         }
                     }
 
@@ -380,7 +384,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             if (cardData.variables) Object.keys(cardData.variables).forEach(k => delete cardData.variables[k]);
 
             const startNode = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
-            if (startNode) await executeFlow(startNode.id);
+            if (startNode) await executeFlow(startNode.id, {}, false); // NO look-back on reset
             return;
         }
 
@@ -417,7 +421,8 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
 
                 await cardRef.update(updatePayload);
                 const next = flow.edges.find((e: any) => e.source === node.id);
-                if (next) await executeFlow(next.target, { [varName]: extractedValue, namecli: extractedValue });
+                // allowLookBack=false: user just answered, don't re-capture old messages for NEW nodes
+                if (next) await executeFlow(next.target, { [varName]: extractedValue, namecli: extractedValue }, false);
                 else await cardRef.update({ 'botState.status': 'completed' });
             } else {
                 const normalizedText = text.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -443,14 +448,15 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             // THE BOT TURN WAS INTERRUPTED: Move to the NEXT node to avoid repeating the last message
             console.log(`[ChatbotEngine] ⚡ RESUMING interrupted turn after ${stateSnapshot.currentNodeId}`);
             const next = flow.edges.find((e: any) => e.source === stateSnapshot.currentNodeId);
-            if (next) await executeFlow(next.target);
-            else await executeFlow(stateSnapshot.currentNodeId);
+            // allowLookBack=false: we don't know if user answered, avoid capturing stale data
+            if (next) await executeFlow(next.target, {}, false);
+            else await executeFlow(stateSnapshot.currentNodeId, {}, false);
         } else {
             // FRESH START OR RESTART (If completed/none)
             const startNode = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
             if (startNode) {
                 console.log(`[ChatbotEngine] 🚀 ${stateSnapshot.status === 'completed' ? 'RESTARTING' : 'FRESH START'} for ${cardId}`);
-                await executeFlow(startNode.id);
+                await executeFlow(startNode.id, {}, false); // NO look-back on fresh start
             }
         }
 
