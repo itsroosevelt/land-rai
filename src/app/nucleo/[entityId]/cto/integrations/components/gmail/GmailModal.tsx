@@ -179,24 +179,70 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
                                         <p className="text-[10px] text-white/20 text-center uppercase tracking-widest italic">Handshake seguro vía Google OAuth Engine</p>
                                     </motion.div>
                                 ) : (
-                                    <motion.div key="step3" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center text-center space-y-8">
-                                        <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center border border-white/20">
-                                            <CheckCircle2 className="w-10 h-10 text-white" />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <h3 className="text-2xl font-light text-white tracking-tight">Enterprise Sync Activo</h3>
-                                            <p className="text-white/40 text-[13px] font-light max-w-xs mx-auto">La bandeja de entrada ha sido sincronizada bajo el control de Roosevelt.</p>
-                                        </div>
-                                        <div className="w-full max-w-sm mt-8 border border-white/5 rounded-2xl bg-black/50 p-6 relative overflow-hidden group">
-                                            <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-[#EA4335]/30 to-transparent"></div>
-                                            <div className="flex flex-col gap-1 items-start mb-6">
-                                                <span className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Workspace Activo</span>
-                                                <code className="text-white font-mono text-[13px] tracking-tight">{gmailAddress}</code>
+                                    <motion.div 
+                                        key="step3" 
+                                        initial={{ opacity: 0, scale: 0.95, y: 10 }} 
+                                        animate={{ opacity: 1, scale: 1, y: 0 }} 
+                                        className="flex flex-col items-center text-center space-y-10"
+                                    >
+                                        {/* 1. Visual Centerpiece: Status Icon */}
+                                        <div className="relative">
+                                            <div className="absolute inset-0 bg-emerald-500/20 rounded-full blur-2xl animate-pulse" />
+                                            <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center border border-white/10 relative z-10">
+                                                <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center border border-emerald-500/20">
+                                                    <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+                                                </div>
                                             </div>
-                                            <div className="flex items-center gap-3">
-                                                <button onClick={onClose} className="flex-1 h-12 bg-white/5 hover:bg-white/10 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">TERMINAR</button>
-                                                <button onClick={handleDelete} className="flex-1 h-12 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">DESCONECTAR</button>
+                                        </div>
+
+                                        {/* 2. Premium Headers */}
+                                        <div className="space-y-3">
+                                            <h3 className="text-[28px] font-light italic text-white tracking-[0.18em] uppercase">
+                                                Canal Sincronizado
+                                            </h3>
+                                            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-500">
+                                                Gmail Node <span className="text-emerald-500">Online</span>
+                                            </p>
+                                        </div>
+
+                                        {/* 3. Account / Workspace Card */}
+                                        <div className="w-full max-w-sm border border-white/10 rounded-[35px] bg-white/[0.02] backdrop-blur-2xl p-8 relative overflow-hidden group">
+                                            <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-emerald-500/30 to-transparent shadow-[0_0_15px_rgba(16,185,129,0.2)]"></div>
+                                            
+                                            <div className="flex items-center justify-between mb-8">
+                                                <div className="flex flex-col items-start gap-1">
+                                                    <span className="text-[9px] font-black uppercase tracking-widest text-[#EA4335]">Canal Activo</span>
+                                                    <h4 className="text-white font-medium text-[16px] tracking-tight truncate max-w-[200px]">
+                                                        {gmailAddress.split('@')[0]}
+                                                    </h4>
+                                                    <p className="text-neutral-500 text-[11px] font-light">Listo para recibir mensajes</p>
+                                                </div>
+
+                                                <div className="w-14 h-14 bg-white/[0.03] border border-white/10 rounded-2xl flex items-center justify-center shadow-inner">
+                                                    <ShieldCheck className="w-7 h-7 text-emerald-500/40" />
+                                                </div>
                                             </div>
+
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse" />
+                                                <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500/80">Token Permanente</span>
+                                            </div>
+                                        </div>
+
+                                        {/* 4. Action Buttons */}
+                                        <div className="flex items-center gap-4 w-full max-w-sm pt-4">
+                                            <button 
+                                                onClick={onClose} 
+                                                className="flex-1 h-14 bg-black border border-white/10 hover:bg-white/[0.05] text-white rounded-[20px] text-[11px] font-black uppercase tracking-[0.2em] transition-all hover:scale-[1.02] active:scale-[0.98]"
+                                            >
+                                                Terminar
+                                            </button>
+                                            <button 
+                                                onClick={handleDelete} 
+                                                className="flex-1 h-14 bg-red-950/10 border border-red-500/20 hover:bg-red-500/10 text-red-500 rounded-[20px] text-[11px] font-black uppercase tracking-[0.2em] transition-all hover:scale-[1.02] active:scale-[0.98]"
+                                            >
+                                                Desconectar
+                                            </button>
                                         </div>
                                     </motion.div>
                                 )}
