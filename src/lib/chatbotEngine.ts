@@ -188,7 +188,8 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                         const snap = await cardRef.get();
                         const cardData = snap.data() || {};
                         const lastMsg = (cardData.messages || []).slice(-1)[0];
-                        if (lastMsg && lastMsg.sender === 'user' && lastMsg.messageId !== messageId) {
+                        // Allow if it's a user message (including the current one that triggered this)
+                        if (lastMsg && lastMsg.sender === 'user') {
                             const normalizedInput = String(lastMsg.text || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
                             const edge = flow.edges.find((e: any) => {
                                 const handle = String(e.sourceHandle || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -239,7 +240,9 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                         const lastMsgNormalized = String(lastMsg?.text || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                         const isLastMsgAReset = lastMsgNormalized === 'reiniciar' || lastMsgNormalized === 'reset' || lastMsgNormalized === 'menu' ||
                             lastMsgNormalized.includes('reinicia todo ahora') || lastMsgNormalized.startsWith('reinici');
-                        if (lastMsg && lastMsg.sender === 'user' && lastMsg.messageId !== messageId && !isLastMsgAReset) {
+                        
+                        // Allow if it's a user message (including the current one) and NOT a reset
+                        if (lastMsg && lastMsg.sender === 'user' && !isLastMsgAReset) {
                             console.log(`[ChatbotEngine] ⚡ Look-back: Capturing user message "${lastMsg.text}" for variable ${node.data?.variableName}`);
                             await cardRef.update({ 
                                 [`customFields.${node.data?.variableName || 'last_input'}`]: lastMsg.text,
@@ -489,12 +492,10 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                 }
             }
         } else if (stateSnapshot.status === 'active' && stateSnapshot.currentNodeId) {
-            // THE BOT TURN WAS INTERRUPTED: Move to the NEXT node to avoid repeating the last message
-            console.log(`[ChatbotEngine] ⚡ RESUMING interrupted turn after ${stateSnapshot.currentNodeId}`);
-            const next = flow.edges.find((e: any) => e.source === stateSnapshot.currentNodeId);
-            // allowLookBack=false: we don't know if user answered, avoid capturing stale data
-            if (next) await executeFlow(next.target, {}, false);
-            else await executeFlow(stateSnapshot.currentNodeId, {}, false);
+            // THE BOT TURN WAS INTERRUPTED: Try to capture the incoming message at the current node
+            console.log(`[ChatbotEngine] ⚡ RESUMING active turn at ${stateSnapshot.currentNodeId}`);
+            // allowLookBack=true: the message that just arrived is the input we need!
+            await executeFlow(stateSnapshot.currentNodeId, {}, true);
         } else {
             // FRESH START OR RESTART (If completed/none)
             const startNode = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
