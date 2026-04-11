@@ -56,9 +56,9 @@ export async function sendMetaMessage(
         message: { text: text }
     };
 
-    // Si no tenemos el ID del nodo, intentamos con 'me' como fallback (solo funciona con User Tokens)
-    const node = targetNodeId || 'me';
-    const url = `https://graph.facebook.com/v21.0/${node}/messages?access_token=${token}`;
+    // The standard Messenger and Instagram Send API endpoints require 'me/messages'
+    // when using Page Access Tokens generated via the setup flow.
+    const url = `https://graph.facebook.com/v21.0/me/messages?access_token=${token}`;
 
     try {
         const response = await axios.post(url, messageData);

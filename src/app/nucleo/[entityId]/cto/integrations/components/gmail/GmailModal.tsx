@@ -112,10 +112,10 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
                     initial={{ scale: 0.95, opacity: 0, y: 20 }}
                     animate={{ scale: 1, opacity: 1, y: 0 }}
                     exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                    className="relative w-full max-w-4xl bg-[#0a0a0a] border border-white/5 rounded-[40px] shadow-2xl overflow-hidden flex flex-col md:flex-row min-h-[550px]"
+                    className="relative w-full max-w-4xl h-[600px] bg-[#0a0a0a] border border-white/5 rounded-[40px] shadow-2xl overflow-hidden flex flex-col md:flex-row"
                 >
-                    {/* Left Side: Branding (The Teal/Green Sidebar) */}
-                    <div className="hidden md:flex w-[38%] bg-[#0d1d1d] p-12 flex-col relative overflow-hidden shrink-0 text-left border-r border-white/5">
+                    {/* Left Side: Branding (Sidebar) */}
+                    <div className="hidden md:flex w-1/3 bg-[#0d1d1d] p-10 flex-col justify-between relative overflow-hidden shrink-0 text-left border-r border-white/5">
                         <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-[#EA4335]/10 to-transparent pointer-events-none" />
                         
                         <div className="relative z-10">
@@ -123,125 +123,107 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
                                 <Mail className="w-10 h-10 text-[#EA4335]" />
                             </div>
                             
-                            <h1 className="text-[32px] font-normal text-white tracking-tight leading-tight mb-4">
+                            <h1 className="text-4xl font-extralight text-white tracking-tighter mb-4 italic uppercase">
                                 Gmail
                             </h1>
                             
-                            <p className="text-[14px] text-white/40 font-light leading-relaxed max-w-[280px]">
-                                Integra tu ecosistema de Google Mail para flujos de soporte y ventas automatizados en Roosevelt.
+                            <p className="text-[10px] text-white/30 leading-relaxed uppercase tracking-[0.2em] font-medium">
+                                Professional Protocol
                             </p>
+                        </div>
+
+                        <div className="p-6 bg-white/5 border border-white/10 rounded-[24px] backdrop-blur-sm relative z-10">
+                            <div className="flex items-center gap-2 mb-3">
+                                <div className="w-1.5 h-1.5 rounded-full bg-[#EA4335] shadow-[0_0_8px_rgba(234,67,53,0.8)]" />
+                                <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/50">Estado del Nodo</span>
+                            </div>
+                            <p className="text-[10px] text-white/30 leading-relaxed italic">Sincronización autónoma de hilos y respuestas para Roosevelt.</p>
                         </div>
                     </div>
 
-                    {/* Right Side: Deployment Content */}
-                    <div className="flex-1 p-12 flex flex-col bg-[#0a0a0a] relative">
-                        <button onClick={onClose} className="absolute top-8 right-8 p-2 text-neutral-500 hover:text-white transition-colors">
+                    {/* Right Side: Content Area */}
+                    <div className="flex-1 flex flex-col bg-[#0a0a0a] relative">
+                        <button onClick={onClose} className="absolute top-8 right-8 p-2 text-neutral-600 hover:text-white transition-colors z-50">
                             <X className="w-5 h-5" />
                         </button>
 
-                        <div className="flex items-center gap-2 mb-12 text-neutral-500">
-                            <Lock className="w-3.5 h-3.5" />
-                            <span className="text-[9px] font-black uppercase tracking-[0.2em]">Google Enterprise Sync</span>
-                        </div>
+                        <div className="flex-1 p-12 flex flex-col justify-center relative">
+                            <div className="absolute top-12 left-12 flex items-center gap-2 text-neutral-500">
+                                <Lock className="w-3.5 h-3.5" />
+                                <span className="text-[9px] font-black uppercase tracking-[0.2em]">Google Enterprise Sync</span>
+                            </div>
 
-                        <div className="flex-1 flex flex-col justify-center">
                             <AnimatePresence mode="wait">
                                 {step === 1 ? (
                                     <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-12">
-                                        <div className="space-y-8">
-                                            {[
-                                                { id: 1, text: <>Inicia sesión con tu cuenta de <span className="text-white font-medium">Google Cloud Portal</span>.</> },
-                                                { id: 2, text: <>Vindula tu bandeja de entrada con la <span className="text-white font-medium">IA de Roosevelt</span>.</> },
-                                                { id: 3, text: <>Sincroniza hilos de forma <span className="text-[#3b82f6] underline underline-offset-4">totalmente autónoma</span>.</> }
-                                            ].map((step) => (
-                                                <div key={step.id} className="flex items-start gap-5 group">
-                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-black shrink-0 transition-all duration-500 ${
-                                                        step.id === 3 
-                                                        ? 'bg-[#1e293b] border border-[#3b82f6]/50 text-[#3b82f6] shadow-[0_0_15px_rgba(59,130,246,0.3)]' 
-                                                        : 'bg-black border border-white/10 text-white/40'
-                                                    }`}>
-                                                        {step.id}
-                                                    </div>
-                                                    <p className={`text-[13px] leading-relaxed transition-colors duration-500 ${step.id === 3 ? 'text-white' : 'text-neutral-400'}`}>
-                                                        {step.text}
-                                                    </p>
+                                        <div>
+                                            <h3 className="text-3xl font-extralight text-white tracking-tighter mb-2 italic uppercase">Vincular Workspace</h3>
+                                            <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-12">Portal de Acceso Seguro</p>
+
+                                            <div className="space-y-6 text-left">
+                                                <div className="flex items-start gap-4">
+                                                    <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center text-[10px] font-bold text-white/40 shrink-0">1</div>
+                                                    <p className="text-xs text-white/60 font-light mt-1 text-left leading-relaxed">Inicia sesión con tu cuenta de <span className="text-white">Google Cloud Portal</span>.</p>
                                                 </div>
-                                            ))}
+                                                <div className="flex items-start gap-4">
+                                                    <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center text-[10px] font-bold text-white/40 shrink-0">2</div>
+                                                    <p className="text-xs text-white/60 font-light mt-1 text-left leading-relaxed">Vincula tu bandeja de entrada con la <span className="text-white">IA de Roosevelt</span>.</p>
+                                                </div>
+                                            </div>
                                         </div>
                                         
                                         <button 
                                             onClick={handleConnect}
                                             disabled={isLoading}
-                                            className="w-full h-16 bg-[#EA4335] text-white text-[11px] font-black uppercase tracking-[0.4em] rounded-2xl transition-all shadow-xl flex items-center justify-center gap-4 hover:brightness-110 active:scale-[0.98]"
+                                            className="w-full h-16 bg-[#EA4335] text-white text-[11px] font-bold uppercase tracking-[0.3em] rounded-full transition-all shadow-[0_0_20px_rgba(234,67,53,0.2)] hover:brightness-110 active:scale-[0.98]"
                                         >
-                                            {isLoading ? 'SINCRONIZANDO...' : 'CONECTAR GOOGLE MAIL'}
+                                            {isLoading ? 'SINCRONIZANDO...' : 'CONECTAR GMAIL'}
                                         </button>
-                                        <p className="text-[10px] text-white/20 text-center uppercase tracking-widest italic">Handshake seguro vía Google OAuth Engine</p>
                                     </motion.div>
                                 ) : (
                                     <motion.div 
                                         key="step3" 
-                                        initial={{ opacity: 0, scale: 0.95, y: 10 }} 
-                                        animate={{ opacity: 1, scale: 1, y: 0 }} 
+                                        initial={{ opacity: 0, scale: 0.95 }} 
+                                        animate={{ opacity: 1, scale: 1 }} 
                                         className="flex flex-col items-center text-center space-y-10"
                                     >
-                                        {/* 1. Visual Centerpiece: Status Icon */}
-                                        <div className="relative">
-                                            <div className="absolute inset-0 bg-emerald-500/20 rounded-full blur-2xl animate-pulse" />
-                                            <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center border border-white/10 relative z-10">
-                                                <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center border border-emerald-500/20">
-                                                    <CheckCircle2 className="w-8 h-8 text-emerald-500" />
-                                                </div>
+                                        <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center relative">
+                                            <div className="absolute inset-0 rounded-full border border-emerald-500/20 animate-pulse" />
+                                            <CheckCircle2 className="w-10 h-10 text-emerald-500" />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <h3 className="text-3xl font-extralight text-white tracking-tighter mb-2 italic uppercase">Canal Sincronizado</h3>
+                                            <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold">Gmail Node <span className="text-emerald-500">Online</span></p>
+                                        </div>
+
+                                        <div className="w-full max-w-sm h-32 bg-white/[0.03] border border-white/10 rounded-[32px] p-8 flex items-center justify-between backdrop-blur-sm relative overflow-hidden group">
+                                            <div className="absolute inset-0 bg-emerald-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity" />
+                                            <div className="text-left relative z-10">
+                                                <span className="text-[9px] font-black uppercase tracking-widest text-[#EA4335] block mb-2">Canal Activo</span>
+                                                <h4 className="text-white font-light text-2xl tracking-tight leading-none truncate max-w-[200px]">
+                                                    {gmailAddress.split('@')[0]}
+                                                </h4>
+                                                <span className="text-[9px] text-white/40 mt-3 block font-medium italic">Listo para recibir hilos</span>
+                                            </div>
+
+                                            <div className="w-14 h-14 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl flex items-center justify-center relative z-10">
+                                                <ShieldCheck className="w-7 h-7 text-emerald-500/40" />
                                             </div>
                                         </div>
 
-                                        {/* 2. Premium Headers */}
-                                        <div className="space-y-4">
-                                            <h3 className="text-[36px] font-light italic text-white tracking-[0.2em] uppercase leading-none">
-                                                Canal Sincronizado
-                                            </h3>
-                                            <p className="text-[12px] font-black uppercase tracking-[0.4em] text-neutral-500">
-                                                Gmail Node <span className="text-emerald-500">Online</span>
-                                            </p>
-                                        </div>
-
-                                        {/* 3. Account / Workspace Card */}
-                                        <div className="w-full max-w-md border border-white/10 rounded-[40px] bg-white/[0.02] backdrop-blur-2xl p-10 relative overflow-hidden group">
-                                            <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-emerald-500/30 to-transparent shadow-[0_0_20px_rgba(16,185,129,0.3)]"></div>
-                                            
-                                            <div className="flex items-center justify-between mb-10">
-                                                <div className="flex flex-col items-start gap-1.5">
-                                                    <span className="text-[10px] font-black uppercase tracking-widest text-[#EA4335]">Canal Activo</span>
-                                                    <h4 className="text-white font-medium text-[20px] tracking-tight truncate max-w-[240px]">
-                                                        {gmailAddress.split('@')[0]}
-                                                    </h4>
-                                                    <p className="text-neutral-500 text-[13px] font-light">Listo para recibir mensajes</p>
-                                                </div>
-
-                                                <div className="w-16 h-16 bg-white/[0.03] border border-white/10 rounded-2xl flex items-center justify-center shadow-inner shrink-0">
-                                                    <ShieldCheck className="w-8 h-8 text-emerald-500/40" />
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.8)] animate-pulse" />
-                                                <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-500/80">Token Permanente</span>
-                                            </div>
-                                        </div>
-
-                                        {/* 4. Action Buttons */}
-                                        <div className="flex items-center gap-4 w-full max-w-md pt-6">
+                                        <div className="flex items-center gap-4 w-full max-w-sm pt-6">
                                             <button 
                                                 onClick={onClose} 
-                                                className="flex-1 h-16 bg-black border border-white/10 hover:bg-white/[0.05] text-white rounded-[24px] text-[12px] font-black uppercase tracking-[0.25em] transition-all hover:scale-[1.02] active:scale-[0.98]"
+                                                className="flex-1 h-14 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all"
                                             >
-                                                Terminar
+                                                TERMINAR
                                             </button>
                                             <button 
                                                 onClick={handleDelete} 
-                                                className="flex-1 h-16 bg-red-950/10 border border-red-500/20 hover:bg-red-500/10 text-red-500 rounded-[24px] text-[12px] font-black uppercase tracking-[0.25em] transition-all hover:scale-[1.02] active:scale-[0.98]"
+                                                className="flex-1 h-14 bg-red-500/5 hover:bg-red-500/10 text-red-500/50 border border-red-500/10 text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all"
                                             >
-                                                Desconectar
+                                                DESCONECTAR
                                             </button>
                                         </div>
                                     </motion.div>
