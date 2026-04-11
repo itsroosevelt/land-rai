@@ -196,50 +196,50 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
                                         </div>
 
                                         {/* 2. Premium Headers */}
-                                        <div className="space-y-3">
-                                            <h3 className="text-[28px] font-light italic text-white tracking-[0.18em] uppercase">
+                                        <div className="space-y-4">
+                                            <h3 className="text-[36px] font-light italic text-white tracking-[0.2em] uppercase leading-none">
                                                 Canal Sincronizado
                                             </h3>
-                                            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-500">
+                                            <p className="text-[12px] font-black uppercase tracking-[0.4em] text-neutral-500">
                                                 Gmail Node <span className="text-emerald-500">Online</span>
                                             </p>
                                         </div>
 
                                         {/* 3. Account / Workspace Card */}
-                                        <div className="w-full max-w-sm border border-white/10 rounded-[35px] bg-white/[0.02] backdrop-blur-2xl p-8 relative overflow-hidden group">
-                                            <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-emerald-500/30 to-transparent shadow-[0_0_15px_rgba(16,185,129,0.2)]"></div>
+                                        <div className="w-full max-w-md border border-white/10 rounded-[40px] bg-white/[0.02] backdrop-blur-2xl p-10 relative overflow-hidden group">
+                                            <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-emerald-500/30 to-transparent shadow-[0_0_20px_rgba(16,185,129,0.3)]"></div>
                                             
-                                            <div className="flex items-center justify-between mb-8">
-                                                <div className="flex flex-col items-start gap-1">
-                                                    <span className="text-[9px] font-black uppercase tracking-widest text-[#EA4335]">Canal Activo</span>
-                                                    <h4 className="text-white font-medium text-[16px] tracking-tight truncate max-w-[200px]">
+                                            <div className="flex items-center justify-between mb-10">
+                                                <div className="flex flex-col items-start gap-1.5">
+                                                    <span className="text-[10px] font-black uppercase tracking-widest text-[#EA4335]">Canal Activo</span>
+                                                    <h4 className="text-white font-medium text-[20px] tracking-tight truncate max-w-[240px]">
                                                         {gmailAddress.split('@')[0]}
                                                     </h4>
-                                                    <p className="text-neutral-500 text-[11px] font-light">Listo para recibir mensajes</p>
+                                                    <p className="text-neutral-500 text-[13px] font-light">Listo para recibir mensajes</p>
                                                 </div>
 
-                                                <div className="w-14 h-14 bg-white/[0.03] border border-white/10 rounded-2xl flex items-center justify-center shadow-inner">
-                                                    <ShieldCheck className="w-7 h-7 text-emerald-500/40" />
+                                                <div className="w-16 h-16 bg-white/[0.03] border border-white/10 rounded-2xl flex items-center justify-center shadow-inner shrink-0">
+                                                    <ShieldCheck className="w-8 h-8 text-emerald-500/40" />
                                                 </div>
                                             </div>
 
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse" />
-                                                <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500/80">Token Permanente</span>
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.8)] animate-pulse" />
+                                                <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-500/80">Token Permanente</span>
                                             </div>
                                         </div>
 
                                         {/* 4. Action Buttons */}
-                                        <div className="flex items-center gap-4 w-full max-w-sm pt-4">
+                                        <div className="flex items-center gap-4 w-full max-w-md pt-6">
                                             <button 
                                                 onClick={onClose} 
-                                                className="flex-1 h-14 bg-black border border-white/10 hover:bg-white/[0.05] text-white rounded-[20px] text-[11px] font-black uppercase tracking-[0.2em] transition-all hover:scale-[1.02] active:scale-[0.98]"
+                                                className="flex-1 h-16 bg-black border border-white/10 hover:bg-white/[0.05] text-white rounded-[24px] text-[12px] font-black uppercase tracking-[0.25em] transition-all hover:scale-[1.02] active:scale-[0.98]"
                                             >
                                                 Terminar
                                             </button>
                                             <button 
                                                 onClick={handleDelete} 
-                                                className="flex-1 h-14 bg-red-950/10 border border-red-500/20 hover:bg-red-500/10 text-red-500 rounded-[20px] text-[11px] font-black uppercase tracking-[0.2em] transition-all hover:scale-[1.02] active:scale-[0.98]"
+                                                className="flex-1 h-16 bg-red-950/10 border border-red-500/20 hover:bg-red-500/10 text-red-500 rounded-[24px] text-[12px] font-black uppercase tracking-[0.25em] transition-all hover:scale-[1.02] active:scale-[0.98]"
                                             >
                                                 Desconectar
                                             </button>
