@@ -56,17 +56,35 @@ export async function sendMetaMessage(
         message: { text: text }
     };
 
-    // The standard Messenger and Instagram Send API endpoints require 'me/messages'
-    // when using Page Access Tokens generated via the setup flow.
-    const url = `https://graph.facebook.com/v21.0/me/messages?access_token=${token}`;
+    // Dual-Fallback architecture for Meta API URLs:
+    // Page Access Tokens strictly require /me/messages
+    // System User / Business Tokens strictly require /{page_id}/messages
+    const urlMe = `https://graph.facebook.com/v21.0/me/messages?access_token=${token}`;
+    const urlNode = `https://graph.facebook.com/v21.0/${targetNodeId || 'me'}/messages?access_token=${token}`;
 
     try {
-        const response = await axios.post(url, messageData);
-        return {
-            ...response.data,
-            message_id: response.data.message_id || response.data.id,
-            sentTo: recipientId
-        };
+        // Attempt 1: The standard Page Access Token route
+        try {
+            const response = await axios.post(urlMe, messageData);
+            return {
+                ...response.data,
+                message_id: response.data.message_id || response.data.id,
+                sentTo: recipientId
+            };
+        } catch (initialErr: any) {
+            // Attempt 2: Fallback to Explicit Node ID
+            if (targetNodeId && targetNodeId !== 'me') {
+                console.log(`[Meta API] /me/messages failed. Retrying with node /${targetNodeId}/messages...`);
+                const fallbackResponse = await axios.post(urlNode, messageData);
+                return {
+                    ...fallbackResponse.data,
+                    message_id: fallbackResponse.data.message_id || fallbackResponse.data.id,
+                    sentTo: recipientId
+                };
+            } else {
+                throw initialErr; // No valid node ID to fall back to, rethrow original error
+            }
+        }
     } catch (error: any) {
         const errorData = error.response?.data || error.message;
         console.error('Meta API Error:', JSON.stringify(errorData, null, 2));
