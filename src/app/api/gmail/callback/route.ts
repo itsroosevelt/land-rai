@@ -62,7 +62,29 @@ export async function GET(req: Request) {
             }, { merge: true })
         ]);
 
-        // 4. Redirect back to Roosevelt (Agnostic Rule 1)
+        // 4. INITIATE REAL-TIME SYNC (Watch API)
+        const topicName = process.env.GMAIL_PUBSUB_TOPIC;
+        if (topicName) {
+            try {
+                console.log(`[Gmail Callback] Initiating Watch for ${gmailAddress} on topic ${topicName}`);
+                await axios.post('https://gmail.googleapis.com/gmail/v1/users/me/watch', {
+                    topicName,
+                    labelIds: ['INBOX'],
+                    labelFilterAction: 'include'
+                }, {
+                    headers: { Authorization: `Bearer ${access_token}` }
+                });
+                console.log(`[Gmail Callback] ✅ Watch successfully registered for ${gmailAddress}`);
+            } catch (watchErr: any) {
+                console.error('[Gmail Callback] ⚠️ Watch Registration Failed:', watchErr.response?.data || watchErr.message);
+                // We DON'T fail the whole flow, as the user is already authenticated. 
+                // We'll just have missing real-time notifications until fixed.
+            }
+        } else {
+            console.warn('[Gmail Callback] ⚠️ GMAIL_PUBSUB_TOPIC not configured. Real-time sync will not work.');
+        }
+
+        // 5. Redirect back to Roosevelt (Agnostic Rule 1)
         const redirectUrl = `${protocol}://${host}/nucleo/${entityId}/cto/integrations?gmail=success`;
         
         return NextResponse.redirect(redirectUrl);

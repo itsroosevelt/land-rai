@@ -112,7 +112,7 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
                     initial={{ scale: 0.95, opacity: 0, y: 20 }}
                     animate={{ scale: 1, opacity: 1, y: 0 }}
                     exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                    className="relative w-full max-w-4xl h-[600px] bg-[#0a0a0a] border border-white/5 rounded-[40px] shadow-2xl overflow-hidden flex flex-col md:flex-row"
+                    className="relative w-full max-w-4xl h-[500px] bg-[#0a0a0a] border border-white/5 rounded-[40px] shadow-2xl overflow-hidden flex flex-col md:flex-row"
                 >
                     {/* Left Side: Branding (Sidebar) */}
                     <div className="hidden md:flex w-1/3 bg-[#0d1d1d] p-10 flex-col justify-between relative overflow-hidden shrink-0 text-left border-r border-white/5">
@@ -155,7 +155,7 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
 
                             <AnimatePresence mode="wait">
                                 {step === 1 ? (
-                                    <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-12">
+                                    <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-8">
                                         <div>
                                             <h3 className="text-3xl font-extralight text-white tracking-tighter mb-2 italic uppercase">Vincular Workspace</h3>
                                             <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-12">Portal de Acceso Seguro</p>
@@ -185,7 +185,7 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
                                         key="step3" 
                                         initial={{ opacity: 0, scale: 0.95 }} 
                                         animate={{ opacity: 1, scale: 1 }} 
-                                        className="flex flex-col items-center text-center space-y-10"
+                                        className="flex flex-col items-center text-center space-y-6"
                                     >
                                         <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center relative">
                                             <div className="absolute inset-0 rounded-full border border-emerald-500/20 animate-pulse" />
@@ -197,12 +197,12 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
                                             <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold">Gmail Node <span className="text-emerald-500">Online</span></p>
                                         </div>
 
-                                        <div className="w-full max-w-sm h-32 bg-white/[0.03] border border-white/10 rounded-[32px] p-8 flex items-center justify-between backdrop-blur-sm relative overflow-hidden group">
+                                        <div className="w-full max-w-md h-32 bg-white/[0.03] border border-white/10 rounded-[32px] p-8 flex items-center justify-between backdrop-blur-sm relative overflow-hidden group">
                                             <div className="absolute inset-0 bg-emerald-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity" />
-                                            <div className="text-left relative z-10">
+                                            <div className="text-left relative z-10 flex-1">
                                                 <span className="text-[9px] font-black uppercase tracking-widest text-[#EA4335] block mb-2">Canal Activo</span>
-                                                <h4 className="text-white font-light text-2xl tracking-tight leading-none truncate max-w-[200px]">
-                                                    {gmailAddress.split('@')[0]}
+                                                <h4 className="text-white font-light text-xl tracking-tight leading-none break-all">
+                                                    {gmailAddress}
                                                 </h4>
                                                 <span className="text-[9px] text-white/40 mt-3 block font-medium italic">Listo para recibir hilos</span>
                                             </div>
@@ -212,7 +212,7 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center gap-4 w-full max-w-sm pt-6">
+                                        <div className="flex items-center gap-4 w-full max-w-sm pt-2">
                                             <button 
                                                 onClick={onClose} 
                                                 className="flex-1 h-14 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all"
