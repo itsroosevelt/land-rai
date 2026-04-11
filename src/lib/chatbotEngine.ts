@@ -74,28 +74,45 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
         const cardData = cardSnap.data() || {};
         const currentState = cardData.botState || {};
 
+        // 1.5 PRIORITY RESET INTERVENTION
+        if (isReset) {
+            console.log(`[ChatbotEngine] 🔄 RESET triggered for ${from} | Platform: ${platform}`);
+            await cardRef.update({
+                'botState.status': 'inactive',
+                'botState.currentNodeId': null,
+                'botState.waitingForInput': false,
+                'botState.pendingMessages': [],
+                'botState.lastStep': 'FORCE_RESET',
+                'botState.lastInteraction': new Date(),
+                updatedAt: new Date()
+            });
+            // Try to confirm the reset to the user
+            try {
+                await sendMetaMessage(from, "🔄 Reinicio completado. Escribe 'hola' para iniciar de nuevo.", { userId, entityId, provider: platform });
+            } catch (e) {
+                console.warn("[ChatbotEngine] Failed to send reset confirmation:", e.message);
+            }
+            return;
+        }
+
         // 2. HELPERS (Must be declared before reset block)
+        // 2. HELPERS
         const replaceVars = (val: string, overlay: any = {}) => {
             if (!val) return '';
-            let p = val;
-            const context = {
+            const context: any = {
                 nombre: cardData.contactName || 'Usuario',
                 name: cardData.contactName || 'Usuario',
-                namecli: cardData.contactName || 'Usuario',
                 first_name: cardData.contactName?.split(' ')[0] || 'Usuario',
                 ...(cardData.customFields || {}),
                 ...(cardData.variables || {}),
                 ...overlay
             };
-            // CRITICAL: Replace {{var}} BEFORE {var} to prevent partial corruption
-            // e.g. {var} regex inside {{var}} would turn {{value}} into {replacedValue}
-            for (const [k, v] of Object.entries(context)) {
-                p = p.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'gi'), String(v));
-            }
-            for (const [k, v] of Object.entries(context)) {
-                p = p.replace(new RegExp(`\\{${k}\\}`, 'gi'), String(v));
-            }
-            return p;
+            
+            // Single-pass regex replacement for both {{var}} and {var}
+            return val.replace(/\{\{?(\w+)\}?}/g, (match, key) => {
+                const val = context[key];
+                return val !== undefined ? String(val) : match;
+            });
         };
 
         const dispatchMessage = async (content: string, options: any = {}) => {
@@ -246,11 +263,11 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                         const cardData = snap.data() || {};
                         const lastMsg = (cardData.messages || []).slice(-1)[0];
                         const lastMsgNormalized = String(lastMsg?.text || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                        const isLastMsgAReset = lastMsgNormalized === 'reiniciar' || lastMsgNormalized === 'reset' || lastMsgNormalized === 'menu' ||
+                        const isCmd = lastMsgNormalized === 'reiniciar' || lastMsgNormalized === 'reset' || lastMsgNormalized === 'menu' ||
                             lastMsgNormalized.includes('reinicia todo ahora') || lastMsgNormalized.startsWith('reinici');
                         
-                        // Allow if it's a user message (including the current one) and NOT a reset
-                        if (lastMsg && lastMsg.sender === 'user' && !isLastMsgAReset) {
+                        // Allow if it's a user message (including the current one) and NOT a command
+                        if (lastMsg && lastMsg.sender === 'user' && !isCmd) {
                             console.log(`[ChatbotEngine] ⚡ Look-back: Capturing user message "${lastMsg.text}" for variable ${node.data?.variableName}`);
                             lookBackConsumed = true;
                             await cardRef.update({ 
