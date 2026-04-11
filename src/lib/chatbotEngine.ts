@@ -80,7 +80,14 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             console.log(`[ChatbotEngine] 🧵 Processing Queue Item [${msgId}]: "${msgText.substring(0, 30)}"`);
 
             // --- 3. INNER ENGINE CORE ---
-            await runEngineCycle(cardRef, cardData, currentMsg, entityPath, entityId, userId);
+            try {
+                await runEngineCycle(cardRef, cardData, currentMsg, entityPath, entityId, userId);
+            } catch (cycleError: any) {
+                console.error(`[ChatbotEngine] 💥 Engine Cycle Crashed on Msg ${msgId}:`, cycleError.message);
+                await db.runTransaction(async (t) => {
+                     t.update(cardRef, { 'botState.lastError': cycleError.message, 'botState.lastErrorAt': new Date() });
+                });
+            }
 
             // --- 4. ATOMIC QUEUE DRAIN ---
             await db.runTransaction(async (transaction) => {
@@ -142,11 +149,17 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     };
 
     const dispatchMessage = async (content: string, options: any = {}) => {
-        const opts = { userId, entityId, ...options };
-        if (platform === 'whatsapp') return await sendWhatsAppMessage(from, content, opts);
-        if (platform === 'messenger' || platform === 'instagram') return await sendMetaMessage(from, content, { ...opts, provider: platform });
-        if (platform === 'telegram') return await sendTelegramMessage(from, content, opts);
-        if (platform === 'gmail') return await sendGmailMessage(from, content, opts);
+        try {
+            const opts = { userId, entityId, ...options };
+            if (platform === 'whatsapp') return await sendWhatsAppMessage(from, content, opts);
+            if (platform === 'messenger' || platform === 'instagram') return await sendMetaMessage(from, content, { ...opts, provider: platform });
+            if (platform === 'telegram') return await sendTelegramMessage(from, content, opts);
+            if (platform === 'gmail') return await sendGmailMessage(from, content, opts);
+        } catch (dispatchError: any) {
+            console.error(`[ChatbotEngine] ⚠️ Dispatch failed for ${platform} (${from}):`, dispatchError.message);
+            // Safely absorb the error so the engine continues to save the message to Firestore UI
+            // and successfully drains the queue. The sendProviders function already writes the lastError.
+        }
     };
 
     // D. RESET EXECUTION
