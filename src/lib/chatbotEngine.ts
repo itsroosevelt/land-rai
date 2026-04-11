@@ -303,19 +303,43 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             }
         };
 
-        // 3. PRE-TRANSACTION LOCK CHECK WITH POLLING (safe to do async OUTSIDE transaction)
+        // 3. FIFO QUEUE: If card is actively locked, enqueue this message instead of dropping it
         if (!isReset) {
-            let lockAttempts = 0;
-            while (lockAttempts < 6) { // max 3 seconds
-                const lockSnap = await cardRef.get();
-                const lockData = lockSnap.data()?.botLock;
-                if (!lockData) break; // No lock, proceed
-                const lockTime = lockData.toDate?.() || new Date(lockData);
+            const wasQueued = await db.runTransaction(async (transaction) => {
+                const snap = await transaction.get(cardRef);
+                if (!snap.exists) return false;
+                const data = snap.data() || {};
+
+                if (!data.botLock) return false; // Not locked — proceed normally
+
+                const lockTime = data.botLock.toDate?.() || new Date(data.botLock);
                 const diff = (new Date().getTime() - lockTime.getTime()) / 1000;
-                if (diff >= 4) break; // Lock expired, proceed
-                console.log(`[ChatbotEngine] ⏳ Card ${cardId} LOCKED, waiting (${lockAttempts + 1}/6)...`);
-                await sleep(500);
-                lockAttempts++;
+                if (diff >= 4) return false; // Lock is stale — proceed normally
+
+                // Card is actively locked: add this message to the pending queue
+                const pendingMsg = {
+                    text: text || '',
+                    messageId: messageId || `mid_${Date.now()}`,
+                    platform,
+                    from,
+                    queuedAt: new Date().toISOString()
+                };
+
+                // Dedup: don't queue the same messageId twice
+                const alreadyQueued = (data.pendingMessages || []).some(
+                    (m: any) => m.messageId && m.messageId === pendingMsg.messageId
+                );
+                if (alreadyQueued) return true; // Already in queue, silently skip
+
+                transaction.update(cardRef, {
+                    pendingMessages: admin.firestore.FieldValue.arrayUnion(pendingMsg)
+                });
+                return true;
+            });
+
+            if (wasQueued) {
+                console.log(`[ChatbotEngine] 📥 Message queued (card busy): "${text?.substring(0, 30)}"`);
+                return;
             }
         }
 
@@ -327,13 +351,14 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                 const bState = data.botState || {};
                 const now = new Date();
 
-                // MASTER RESET BYPASS: Always allow reset regardless of lock
+                // MASTER RESET BYPASS: Always allow reset, clear queue and state
                 if (isReset) {
                     console.log(`[ChatbotEngine] ♻️ Reset requested for ${cardId} (Master Bypass)`);
                     transaction.update(cardRef, {
                         'botLock': now,
                         'botState': admin.firestore.FieldValue.delete(),
                         'customFields': admin.firestore.FieldValue.delete(),
+                        'pendingMessages': admin.firestore.FieldValue.delete(), // Clear queue on reset
                         'updatedAt': now
                     });
                     return { data, bState: {}, reset: true };
@@ -342,12 +367,12 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                 // Deduplication
                 if (messageId && bState.lastProcessedMessageId === messageId) return null;
 
-                // Lock Check (simple, no async polling here)
+                // Lock Check inside transaction (definitive)
                 if (data.botLock) {
                     const lockTime = data.botLock.toDate?.() || new Date(data.botLock);
                     const diff = (now.getTime() - lockTime.getTime()) / 1000;
                     if (diff < 4) {
-                        console.warn(`[ChatbotEngine] 🔒 Card ${cardId} still LOCKED in transaction. Skipping.`);
+                        console.warn(`[ChatbotEngine] 🔒 Card ${cardId} still LOCKED in transaction. Will queue.`);
                         return null;
                     }
                 }
@@ -464,8 +489,39 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
         console.error(`[ChatbotEngine] 💥 CRITICAL FAILURE:`, err.message);
     } finally {
         try {
-            const cardRef = db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`);
-            await cardRef.update({ botLock: admin.firestore.FieldValue.delete() });
-        } catch (e) { }
+            // 1. Release the processing lock
+            const cardRefFinal = db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`);
+            await cardRefFinal.update({ botLock: admin.firestore.FieldValue.delete() });
+
+            // 2. Drain queue: pick the oldest pending message and process it next
+            const afterSnap = await cardRefFinal.get();
+            const pending: any[] = (afterSnap.data()?.pendingMessages || [])
+                .sort((a: any, b: any) => new Date(a.queuedAt).getTime() - new Date(b.queuedAt).getTime());
+
+            if (pending.length > 0) {
+                const nextMsg = pending[0];
+
+                // Atomically remove from queue before processing
+                await cardRefFinal.update({
+                    pendingMessages: admin.firestore.FieldValue.arrayRemove(nextMsg)
+                });
+
+                console.log(`[ChatbotEngine] 📤 Draining queue (${pending.length} pending). Processing: "${nextMsg.text?.substring(0, 30)}"`);
+
+                // Process next message — it will acquire its own lock
+                await processChatbotFlow({
+                    userId,
+                    entityId,
+                    groupId,
+                    cardId,
+                    platform: nextMsg.platform || platform,
+                    from: nextMsg.from || from,
+                    text: nextMsg.text,
+                    messageId: nextMsg.messageId
+                });
+            }
+        } catch (e) {
+            console.error('[ChatbotEngine] ⚠️ Queue drain error:', e);
+        }
     }
 }
