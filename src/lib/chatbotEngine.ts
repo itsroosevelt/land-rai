@@ -396,11 +396,30 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
         if (proceedData.reset) {
             console.log(`[ChatbotEngine] ♻️ EXECUTING RESET for card ${cardId}`);
             const resetConfirmText = "🔄 Reinicio completado, empezamos de nuevo.";
-            try { await dispatchMessage(resetConfirmText); } catch (e) { }
+            
+            // Try to send confirmation with detailed error logging
+            let resetSent = false;
+            for (let attempt = 1; attempt <= 2; attempt++) {
+                try {
+                    await dispatchMessage(resetConfirmText);
+                    resetSent = true;
+                    console.log(`[ChatbotEngine] ✅ Reset confirmation sent (attempt ${attempt})`);
+                    break;
+                } catch (e: any) {
+                    console.error(`[ChatbotEngine] ❌ Reset confirmation FAILED (attempt ${attempt}):`, e?.message || e);
+                    if (attempt < 2) await sleep(1000); // Wait 1s before retry
+                }
+            }
 
+            // Always record in Firestore regardless of send success
             await cardRef.update({
                 messages: admin.firestore.FieldValue.arrayUnion({
-                    sender: 'agent', text: resetConfirmText, platform, timestamp: new Date(), messageId: `bot_sys_${Date.now()}`
+                    sender: 'agent',
+                    text: resetConfirmText,
+                    platform,
+                    timestamp: new Date(),
+                    messageId: `bot_sys_${Date.now()}`,
+                    delivered: resetSent
                 })
             });
 
