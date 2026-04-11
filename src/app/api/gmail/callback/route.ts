@@ -67,12 +67,19 @@ export async function GET(req: Request) {
         if (topicName) {
             try {
                 console.log(`[Gmail Callback] Initiating Watch for ${gmailAddress} on topic ${topicName}`);
-                await axios.post('https://gmail.googleapis.com/gmail/v1/users/me/watch', {
+                const watchRes = await axios.post('https://gmail.googleapis.com/gmail/v1/users/me/watch', {
                     topicName,
                     labelIds: ['INBOX'],
                     labelFilterAction: 'include'
                 }, {
                     headers: { Authorization: `Bearer ${access_token}` }
+                });
+                
+                // Save meta-data so we can confirm it's alive in our audits
+                await db.doc(`users/${userId}/entities/${entityId}/integrations/gmail`).update({
+                    watchExpiry: watchRes.data.expiration,
+                    historyId: watchRes.data.historyId,
+                    lastWatchRefresh: admin.firestore.FieldValue.serverTimestamp()
                 });
                 console.log(`[Gmail Callback] ✅ Watch successfully registered for ${gmailAddress}`);
             } catch (watchErr: any) {
