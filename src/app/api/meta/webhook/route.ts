@@ -40,10 +40,24 @@ export async function POST(req: Request) {
         }
 
         const entry = body.entry?.[0];
-        if (!entry) return NextResponse.json({ success: true });
+        if (!entry) return NextResponse.json({ success: true, warning: 'no_entry' });
 
-        const targetId = entry.id; // Page ID or Instagram Account ID
+        const targetId = String(entry.id || ''); // Explicitly stringify Page ID
         const messaging = entry.messaging?.[0];
+        const senderId = String(messaging?.sender?.id || '');
+
+        // --- GLOBAL TRACE (Diagnostic Barrier) ---
+        // Log every hit to help identify project/page ID mismatches
+        try {
+            await db.collection('global_incoming_hits').add({
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                targetId,
+                senderId,
+                platform: body.object || 'unknown',
+                provider: targetId.length > 13 ? 'instagram' : 'messenger', // Heuristic
+                bodySnippet: JSON.stringify(body).substring(0, 500)
+            });
+        } catch (e) { console.error('[Fatal Debug Log Error]', e); }
 
         if (!messaging || !messaging.sender || (!messaging.message && !messaging.postback)) {
             return NextResponse.json({ success: true, ignored: 'not_a_valid_event' });
@@ -112,13 +126,22 @@ export async function POST(req: Request) {
         }
 
         if (!tenantRef) {
-            debugLog(`[POST] ❌ ALERTA: No se pudo resolver el tenant. Target ID recibido: ${targetId}.`);
-            debugLog(`[POST] Sugerencia: Verifica que el Instagram ID '${targetId}' esté registrado en Firestore.`);
+            console.error(`[Meta Webhook] ❌ ORPHAN SIGNAL: No tenant found for ID ${targetId}. Check integrations collection.`);
+            // Enterprise reporting for the orphan hit
+            try {
+                await db.collection('orphan_meta_hits').add({
+                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                    receivedId: targetId,
+                    senderId: senderId,
+                    raw: JSON.stringify(body).substring(0, 1000)
+                });
+            } catch (e) {}
+            
             return NextResponse.json({
                 success: false,
                 error: 'Tenant not mapped',
                 incomingId: targetId,
-                note: 'Ensure this ID is correctly stored in your integrations collection'
+                recommendation: 'Register this ID in your Roosevelt entity integrations'
             });
         }
 
