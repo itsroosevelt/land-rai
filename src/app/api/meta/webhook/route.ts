@@ -295,6 +295,14 @@ export async function POST(req: Request) {
         let groupId = targetGroupId;
 
         if (targetCardDoc && targetGroupId) {
+            const queueItem = {
+                text: text || '',
+                messageId: messaging.message?.mid || `mid_${Date.now()}`,
+                platform: provider,
+                from: senderId,
+                timestamp: Date.now()
+            };
+
             // UPDATING EXISTING CARD
             await targetCardDoc.ref.update({
                 contactName: resolvedName || existingContactName,
@@ -302,9 +310,9 @@ export async function POST(req: Request) {
                 updatedAt: admin.firestore.Timestamp.now(),
                 unreadCount: admin.firestore.FieldValue.increment(1),
                 messages: admin.firestore.FieldValue.arrayUnion(newMessage),
+                'botState.messageQueue': admin.firestore.FieldValue.arrayUnion(queueItem),
                 status: 'open',
                 source: provider.toUpperCase(),
-                // FIX: Dot-notation to PRESERVE existing platform IDs (e.g. whatsapp ID stays intact)
                 [`platform_ids.${provider}`]: senderId
             });
 
@@ -334,6 +342,14 @@ export async function POST(req: Request) {
             const newCardRef = db.collection(`${entityPath}/kanban-groups/${destinationGroupId}/cards`).doc();
             const contactIdToUse = existingContactId || String(Date.now()).slice(-10);
 
+            const queueItem = {
+                text: text || '',
+                messageId: messaging.message?.mid || `mid_${Date.now()}`,
+                platform: provider,
+                from: senderId,
+                timestamp: Date.now()
+            };
+
             await newCardRef.set({
                 crmId: contactIdToUse,
                 contactName: resolvedName || 'Usuario Meta',
@@ -343,6 +359,7 @@ export async function POST(req: Request) {
                 updatedAt: admin.firestore.Timestamp.now(),
                 createdAt: admin.firestore.Timestamp.now(),
                 messages: [newMessage],
+                'botState.messageQueue': [queueItem],
                 unreadCount: 1,
                 status: 'open',
                 source: provider.toUpperCase(),

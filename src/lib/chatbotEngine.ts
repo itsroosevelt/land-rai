@@ -14,560 +14,279 @@ export interface ChatbotContext {
 
 const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
 
+/**
+ * Sequential Chatbot Engine Runner
+ * Implements a FIFO queue consumer pattern to prevent race conditions and duplicate responses.
+ */
 export async function processChatbotFlow(ctx: ChatbotContext) {
     const { userId, entityId, groupId, cardId, platform, from, text, messageId } = ctx;
     const entityPath = `users/${userId}/entities/${entityId}`;
+    const cardRef = db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`);
 
-    console.log(`[ChatbotEngine] 🚀 START | Platform: ${platform} | From: ${from} | Text: "${text}"`);
-
-    // HIT AUDIT (Visible in CRM System Logs)
-    try {
-        await db.collection(`users/${userId}/entities/${entityId}/system_logs`).add({
-            timestamp: admin.firestore.FieldValue.serverTimestamp(),
-            type: 'chatbot_engine_hit',
-            platform,
-            from,
-            textSnippet: text?.substring(0, 50)
-        });
-    } catch (e) { }
-
-    // 0. QUICK RESET DETECTION
-    const inputRaw = text || '';
-    const input = inputRaw.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    
-    // Fuzzy reset detection: catch typos like 'reincia', 'reiniciar', 'reset', 'menu'
-    const isReset = input === 'reiniciar' || input === 'menu' || input === 'reset' ||
-        input.includes('reinicia todo ahora') ||
-        input.includes('reincia todo ahora') ||
-        input.includes('reinicia el bot') ||
-        input.includes('reinicio') ||
-        input.includes('reiniciar chat') ||
-        /^rein[ic]{1,4}[ao]/.test(input) || 
-        input.startsWith('reinici') || input.startsWith('reincia');
+    console.log(`[ChatbotEngine] 🚀 RUNNER START | Platform: ${platform} | From: ${from}`);
 
     try {
-        // 1. Core Data Retrieval
-        console.log(`[ChatbotEngine] 🔍 Searching active bot for ${entityId}...`);
-        const botsRef = db.collection(`${entityPath}/chatbots`);
-        const botsSnapshot = await botsRef.where('isActive', 'in', [true, 'true']).get();
+        // --- 1. ATOMIC LOCK ACQUISITION ---
+        const canExecute = await db.runTransaction(async (transaction) => {
+            const snap = await transaction.get(cardRef);
+            if (!snap.exists) return false;
+            const data = snap.data() || {};
+            const bState = data.botState || {};
 
-        if (botsSnapshot.empty) {
-            console.warn(`[ChatbotEngine] ⚠️ No active bot for entity ${entityId}.`);
-            return;
-        }
+            // DEDUP: If this exact message ID was just processed, skip queueing (but runner might already have it)
+            if (messageId && bState.lastProcessedMessageId === messageId) return false;
 
-        const bots = botsSnapshot.docs.map(d => ({ id: d.id, ...d.data() as any }));
-        bots.sort((a, b) => {
-            const timeA = a.updatedAt?.toDate?.()?.getTime() || a.createdAt?.toDate?.()?.getTime() || 0;
-            const timeB = b.updatedAt?.toDate?.()?.getTime() || b.createdAt?.toDate?.()?.getTime() || 0;
-            return timeB - timeA;
+            // LOCK CHECK: If locked and lock is less than 30 seconds old, we let the existing runner handle it.
+            // Our webhook already pushed the message to 'messageQueue', so the active runner WILL see it.
+            if (data.botLock) {
+                const lockTime = data.botLock.toDate?.() || new Date(data.botLock);
+                const diff = (Date.now() - lockTime.getTime()) / 1000;
+                if (diff < 30) {
+                    console.log(`[ChatbotEngine] 🔒 Card ${cardId} is actively locked (${diff}s). Skipping parallel execution.`);
+                    return false;
+                }
+            }
+
+            // Acquire lock and mark start
+            transaction.update(cardRef, { 
+                botLock: admin.firestore.FieldValue.serverTimestamp(),
+                'botState.lastProcessedMessageId': messageId || null
+            });
+            return true;
         });
-        const activeBot = bots[0];
-        const flow = activeBot.flow || { nodes: [], edges: [] };
 
-        const cardRef = db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`);
-        const cardSnap = await cardRef.get();
-        if (!cardSnap.exists) {
-            console.error(`[ChatbotEngine] ❌ Card ${cardId} NOT found in Firestore.`);
-            return;
-        }
-        const cardData = cardSnap.data() || {};
-        const currentState = cardData.botState || {};
+        if (!canExecute) return;
 
-        // 1.5 PRIORITY RESET INTERVENTION
-        if (isReset) {
-            console.log(`[ChatbotEngine] 🔄 RESET triggered for ${from} | Platform: ${platform}`);
-            await cardRef.update({
-                'botState.status': 'inactive',
-                'botState.currentNodeId': null,
-                'botState.waitingForInput': false,
-                'botState.pendingMessages': [],
-                'botState.lastStep': 'FORCE_RESET',
-                'botState.lastInteraction': new Date(),
-                updatedAt: new Date()
-            });
-            // Try to confirm the reset to the user
-            try {
-                await sendMetaMessage(from, "🔄 Reinicio completado. Escribe 'hola' para iniciar de nuevo.", { userId, entityId, provider: platform });
-            } catch (e) {
-                console.warn("[ChatbotEngine] Failed to send reset confirmation:", e.message);
-            }
-            return;
-        }
+        // --- 2. THE CONSUMER LOOP ---
+        let queueHasItems = true;
+        while (queueHasItems) {
+            const snap = await cardRef.get();
+            const cardData = snap.data() || {};
+            const bState = cardData.botState || {};
+            const queue = bState.messageQueue || [];
 
-        // 2. HELPERS (Must be declared before reset block)
-        // 2. HELPERS
-        const replaceVars = (val: string, overlay: any = {}) => {
-            if (!val) return '';
-            const context: any = {
-                nombre: cardData.contactName || 'Usuario',
-                name: cardData.contactName || 'Usuario',
-                first_name: cardData.contactName?.split(' ')[0] || 'Usuario',
-                ...(cardData.customFields || {}),
-                ...(cardData.variables || {}),
-                ...overlay
-            };
-            
-            // Single-pass regex replacement for both {{var}} and {var}
-            return val.replace(/\{\{?(\w+)\}?}/g, (match, key) => {
-                const val = context[key];
-                return val !== undefined ? String(val) : match;
-            });
-        };
-
-        const dispatchMessage = async (content: string, options: any = {}) => {
-            console.log(`[ChatbotEngine] 📤 Sending "${content.substring(0, 30)}..." to ${from}`);
-            try {
-                const opts = { userId, entityId, ...options };
-                let res;
-                if (platform === 'whatsapp') res = await sendWhatsAppMessage(from, content, opts);
-                else if (platform === 'messenger' || platform === 'instagram') res = await sendMetaMessage(from, content, { ...opts, provider: platform });
-                else if (platform === 'telegram') res = await sendTelegramMessage(from, content, opts);
-                else if (platform === 'gmail') res = await sendGmailMessage(from, content, opts);
-
-                console.log(`[ChatbotEngine] ✅ Dispatch SUCCESS for ${from}`);
-                return res;
-            } catch (err: any) {
-                console.error(`[ChatbotEngine] ❌ Dispatch FAILED for ${from}:`, err.message);
-                // PERSIST ERROR FOR CRM VISIBILITY
-                try {
-                    await cardRef.update({
-                        'botState.lastError': err.message,
-                        'botState.lastErrorAt': admin.firestore.FieldValue.serverTimestamp()
-                    });
-                } catch (inner) { }
-                throw err;
-            }
-        };
-
-        const executeFlow = async (startId: string, runtimeContext: any = {}, allowLookBack: boolean = false) => {
-            let currentNodeId: string | null = startId;
-            let executionCount = 0;
-            const MAX_STEPS = 20;
-            let lookBackConsumed = false; // Important: prevent greedy look-back across multiple nodes
-            const currentOverlay = { ...runtimeContext };
-
-            while (currentNodeId && executionCount < MAX_STEPS) {
-                executionCount++;
-                const node = flow.nodes.find((n: any) => n.id === currentNodeId);
-                if (!node) break;
-
-                // VISIBILITY: Update where the bot is at in the CRM
-                await cardRef.update({ 
-                    'botState.currentNodeId': node.id,
-                    'botState.lastStep': `${node.type} (${node.id.substring(0, 4)})`
-                });
-
-                if (node.type === 'startNode' || node.type === 'start') {
-                    const edge = flow.edges.find((e: any) => e.source === node.id);
-                    currentNodeId = edge ? edge.target : null;
-                    continue;
-                }
-
-                if (node.type === 'textMessageNode') {
-                    const msg = replaceVars(node.data?.content || node.data?.text || 'Hola', currentOverlay);
-                    let messageId = `bot_${Date.now()}`;
-                    let sendError = null;
-
-                    try {
-                        const res = await dispatchMessage(msg);
-                        messageId = res?.message_id || res?.messageId || messageId;
-                    } catch (err: any) {
-                        sendError = err.message;
-                    }
-
-                    await cardRef.update({
-                        messages: admin.firestore.FieldValue.arrayUnion({
-                            sender: 'agent',
-                            text: msg,
-                            platform,
-                            timestamp: new Date(),
-                            messageId,
-                            status: sendError ? 'error' : 'sent',
-                            error: sendError
-                        }),
-                        lastMessage: msg.substring(0, 50),
-                        updatedAt: new Date(),
-                        'botState.currentNodeId': node.id,
-                        'botState.status': 'active'
-                    });
-
-                    const edge = flow.edges.find((e: any) => e.source === node.id);
-                    currentNodeId = edge ? edge.target : null;
-                    continue;
-                }
-
-                if (node.type === 'quickReplyNode') {
-                    const msg = replaceVars(node.data?.bodyText || node.data?.text || 'Selecciona:', currentOverlay);
-                    const buttons = (node.data?.buttons || []).map((btn: any) => ({
-                        type: 'reply',
-                        reply: {
-                            id: (typeof btn === 'object' ? (btn.id || btn.title) : btn).substring(0, 20),
-                            title: (typeof btn === 'object' ? btn.title : btn).substring(0, 20)
-                        }
-                    })).slice(0, 3);
-
-                    // --- LOOK-BACK for QuickReply (only when genuinely resuming) ---
-                    if (allowLookBack && !lookBackConsumed) {
-                        const snap = await cardRef.get();
-                        const cardData = snap.data() || {};
-                        const lastMsg = (cardData.messages || []).slice(-1)[0];
-                        // Allow if it's a user message (including the current one that triggered this)
-                        if (lastMsg && lastMsg.sender === 'user') {
-                            const normalizedInput = String(lastMsg.text || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                            const edge = flow.edges.find((e: any) => {
-                                const handle = String(e.sourceHandle || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                                return e.source === node.id && handle === normalizedInput;
-                            });
-                            if (edge) {
-                                console.log(`[ChatbotEngine] ⚡ Look-back: Using existing user message "${lastMsg.text}" for QuickReply`);
-                                lookBackConsumed = true;
-                                await cardRef.update({ 'botState.currentNodeId': node.id });
-                                currentNodeId = edge.target;
-                                continue;
-                            }
-                        }
-                    }
-
-                    let sendError = null;
-                    try {
-                        await dispatchMessage(msg, { type: 'quick_reply', buttons });
-                    } catch (err: any) {
-                        sendError = err.message;
-                    }
-
-                    await cardRef.update({
-                        messages: admin.firestore.FieldValue.arrayUnion({
-                            sender: 'agent',
-                            text: msg,
-                            platform,
-                            timestamp: new Date(),
-                            messageId: `bot_qr_${Date.now()}`,
-                            status: sendError ? 'error' : 'sent'
-                        }),
-                        'botState.currentNodeId': node.id,
-                        'botState.status': 'active',
-                        'botState.waitingForInput': true,
-                        'botState.lastInteraction': new Date(),
-                        updatedAt: new Date()
-                    });
-                    return;
-                }
-
-                if (node.type === 'captureInputNode') {
-                    const prompt = replaceVars(node.data?.content || node.data?.text || '', currentOverlay);
-                    
-                    // --- LOOK-BACK (only when genuinely resuming, not on fresh starts/resets) ---
-                    if (allowLookBack && !lookBackConsumed) {
-                        const snap = await cardRef.get();
-                        const cardData = snap.data() || {};
-                        const lastMsg = (cardData.messages || []).slice(-1)[0];
-                        const lastMsgNormalized = String(lastMsg?.text || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                        const isCmd = lastMsgNormalized === 'reiniciar' || lastMsgNormalized === 'reset' || lastMsgNormalized === 'menu' ||
-                            lastMsgNormalized.includes('reinicia todo ahora') || lastMsgNormalized.startsWith('reinici');
-                        
-                        // Allow if it's a user message (including the current one) and NOT a command
-                        if (lastMsg && lastMsg.sender === 'user' && !isCmd) {
-                            console.log(`[ChatbotEngine] ⚡ Look-back: Capturing user message "${lastMsg.text}" for variable ${node.data?.variableName}`);
-                            lookBackConsumed = true;
-                            await cardRef.update({ 
-                                [`customFields.${node.data?.variableName || 'last_input'}`]: lastMsg.text,
-                                'botState.currentNodeId': node.id 
-                            });
-                            const next = flow.edges.find((e: any) => e.source === node.id);
-                            if (next) {
-                                currentNodeId = next.target;
-                                continue;
-                            }
-                        }
-                    }
-
-                    if (prompt) await dispatchMessage(prompt);
-                    await cardRef.update({
-                        'botState.currentNodeId': node.id,
-                        'botState.status': 'active',
-                        'botState.waitingForInput': true,
-                        'botState.variableName': node.data?.variableName || 'last_input',
-                        'botState.lastInteraction': new Date()
-                    });
-                    return;
-                }
-
-                if (node.type === 'conditionNode') {
-                    const snap = await cardRef.get();
-                    const freshData = snap.data() || {};
-                    const rawVal = freshData.customFields?.[node.data?.variableName] || freshData.variables?.[node.data?.variableName];
-                    const val = String(rawVal || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-                    let target = null;
-                    for (const r of node.data?.routes || []) {
-                        const targetVal = String(r.value || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                        if (r.condition === 'equals' && val === targetVal) {
-                            target = flow.edges.find((e: any) => e.source === node.id && e.sourceHandle === r.id)?.target;
-                            if (target) break;
-                        }
-                    }
-                    if (!target) target = flow.edges.find((e: any) => e.source === node.id && e.sourceHandle === 'else')?.target;
-                    currentNodeId = target;
-                    continue;
-                }
-
-                if (node.type === 'setVariableNode') {
-                    await cardRef.update({ [`customFields.${node.data?.variableName}`]: node.data?.value });
-                    const edge = flow.edges.find((e: any) => e.source === node.id);
-                    currentNodeId = edge ? edge.target : null;
-                    continue;
-                }
-
-                if (node.type === 'endNode') {
-                    await cardRef.update({
-                        'botState.status': 'completed',
-                        'botState.currentNodeId': node.id,
-                        'botState.waitingForInput': false
-                    });
-                    return;
-                }
-
+            if (queue.length === 0) {
+                queueHasItems = false;
                 break;
             }
-        };
 
-        // 3. FIFO QUEUE: If card is actively locked, enqueue this message instead of dropping it
-        if (!isReset) {
-            const wasQueued = await db.runTransaction(async (transaction) => {
-                const snap = await transaction.get(cardRef);
-                if (!snap.exists) return false;
-                const data = snap.data() || {};
+            // Consume first item (FIFO)
+            const currentMsg = queue[0];
+            const msgId = currentMsg.messageId;
+            const msgText = String(currentMsg.text || '').trim();
+            const msgPlatform = currentMsg.platform || platform;
+            const msgFrom = currentMsg.from || from;
 
-                if (!data.botLock) return false; // Not locked — proceed normally
+            console.log(`[ChatbotEngine] 🧵 Processing Queue Item [${msgId}]: "${msgText.substring(0, 30)}"`);
 
-                const lockTime = data.botLock.toDate?.() || new Date(data.botLock);
-                const diff = (new Date().getTime() - lockTime.getTime()) / 1000;
-                if (diff >= 4) return false; // Lock is stale — proceed normally
+            // --- 3. INNER ENGINE CORE ---
+            await runEngineCycle(cardRef, cardData, currentMsg, entityPath, entityId, userId);
 
-                // Card is actively locked: add this message to the pending queue
-                const pendingMsg = {
-                    text: text || '',
-                    messageId: messageId || `mid_${Date.now()}`,
-                    platform,
-                    from,
-                    queuedAt: new Date().toISOString()
-                };
-
-                // Dedup: don't queue the same messageId twice
-                const alreadyQueued = (data.pendingMessages || []).some(
-                    (m: any) => m.messageId && m.messageId === pendingMsg.messageId
-                );
-                if (alreadyQueued) return true; // Already in queue, silently skip
-
+            // --- 4. ATOMIC QUEUE DRAIN ---
+            await db.runTransaction(async (transaction) => {
                 transaction.update(cardRef, {
-                    pendingMessages: admin.firestore.FieldValue.arrayUnion(pendingMsg)
+                    'botState.messageQueue': admin.firestore.FieldValue.arrayRemove(currentMsg),
+                    botLock: admin.firestore.FieldValue.serverTimestamp() // Refresh lock
                 });
-                return true;
             });
-
-            if (wasQueued) {
-                console.log(`[ChatbotEngine] 📥 Message queued (card busy): "${text?.substring(0, 30)}"`);
-                return;
-            }
         }
+    } catch (err: any) {
+        console.error(`[ChatbotEngine] 💥 Runner Crash:`, err.message);
+    } finally {
+        // --- 5. FINAL RELEASE ---
+        try {
+            await cardRef.update({ botLock: admin.firestore.FieldValue.delete() });
+            console.log(`[ChatbotEngine] 🏁 RUNNER FINISHED for ${cardId}`);
+        } catch (e) {}
+    }
+}
 
-            // 4. ATOMIC OPERATION (Transaction-based — NO async side-effects inside)
-            const proceedData = await db.runTransaction(async (transaction) => {
-                const snap = await transaction.get(cardRef);
-                if (!snap.exists) return null;
-                const data = snap.data() || {};
-                const bState = data.botState || {};
-                const now = new Date();
+/**
+ * Single Engine Cycle: Processes ONE message through the flow.
+ */
+async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath: string, entityId: string, userId: string) {
+    const text = msg.text || '';
+    const platform = msg.platform;
+    const from = msg.from;
+    const messageId = msg.messageId;
 
-                // MASTER RESET BYPASS: Always allow reset, clear queue and state
-                if (isReset) {
-                    console.log(`[ChatbotEngine] ♻️ Reset requested for ${cardId} (Master Bypass)`);
-                    transaction.update(cardRef, {
-                        'botLock': now,
-                        'botState': admin.firestore.FieldValue.delete(),
-                        'customFields': admin.firestore.FieldValue.delete(),
-                        'pendingMessages': admin.firestore.FieldValue.delete(), // Clear queue on reset
-                        'updatedAt': now
-                    });
-                    return { data, bState: {}, reset: true };
-                }
+    // A. RESET CHECK (Master Bypass)
+    const normalizedInput = text.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const isReset = normalizedInput === 'reiniciar' || normalizedInput === 'menu' || normalizedInput === 'reset' ||
+        normalizedInput.includes('reinicia todo ahora') || normalizedInput.startsWith('reinici');
 
-                // Deduplication
-                if (messageId && bState.lastProcessedMessageId === messageId) return null;
+    // B. FETCH BOT & FLOW
+    const botsRef = db.collection(`${entityPath}/chatbots`);
+    const botsSnapshot = await botsRef.where('isActive', 'in', [true, 'true']).get();
+    if (botsSnapshot.empty) return;
 
-                // Lock Check inside transaction (definitive)
-                if (data.botLock) {
-                    const lockTime = data.botLock.toDate?.() || new Date(data.botLock);
-                    const diff = (now.getTime() - lockTime.getTime()) / 1000;
-                    if (diff < 4) {
-                        console.warn(`[ChatbotEngine] 🔒 Card ${cardId} still LOCKED in transaction. Will queue.`);
-                        return null;
-                    }
-                }
+    const bots = botsSnapshot.docs.map(d => ({ id: d.id, ...d.data() as any }));
+    bots.sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
+    const flow = bots[0].flow || { nodes: [], edges: [] };
 
-            // Acquire Lock & Mark Message
-            transaction.update(cardRef, {
-                botLock: now,
-                'botState.lastProcessedMessageId': messageId
-            });
-
-            return { data, bState };
+    // C. HELPERS
+    const replaceVars = (val: string, overlay: any = {}) => {
+        if (!val) return '';
+        const context: any = {
+            nombre: cardData.contactName || 'Usuario',
+            name: cardData.contactName || 'Usuario',
+            first_name: cardData.contactName?.split(' ')[0] || 'Usuario',
+            ...(cardData.customFields || {}),
+            ...(cardData.variables || {}),
+            ...overlay
+        };
+        // Bulletproof regex for {{var}} and {var}
+        return val.replace(/\{\{?(\w+)\}?}/g, (match, key) => {
+            return context[key] !== undefined ? String(context[key]) : match;
         });
+    };
 
-        if (!proceedData) {
-            console.warn(`[ChatbotEngine] ⏩ Skipping: Card ${cardId} is either locked or message ${messageId} already processed.`);
-            return;
-        }
+    const dispatchMessage = async (content: string, options: any = {}) => {
+        const opts = { userId, entityId, ...options };
+        if (platform === 'whatsapp') return await sendWhatsAppMessage(from, content, opts);
+        if (platform === 'messenger' || platform === 'instagram') return await sendMetaMessage(from, content, { ...opts, provider: platform });
+        if (platform === 'telegram') return await sendTelegramMessage(from, content, opts);
+        if (platform === 'gmail') return await sendGmailMessage(from, content, opts);
+    };
 
-        const stateSnapshot = proceedData.bState;
+    // D. RESET EXECUTION
+    if (isReset) {
+        console.log(`[ChatbotEngine] ♻️ EXECUTING RESET for ${from}`);
+        await cardRef.update({
+            'botState.status': 'inactive',
+            'botState.currentNodeId': null,
+            'botState.waitingForInput': false,
+            'botState.messageQueue': [], // WIPE QUEUE ON RESET
+            'customFields': admin.firestore.FieldValue.delete(),
+            'botState.lastStep': 'FORCE_RESET'
+        });
+        const resetText = "🔄 Reinicio completado. Escribe 'hola' para empezar de nuevo.";
+        await dispatchMessage(resetText);
+        await cardRef.update({
+            messages: admin.firestore.FieldValue.arrayUnion({
+                sender: 'agent', text: resetText, platform, timestamp: new Date(), messageId: `bot_sys_${Date.now()}`
+            })
+        });
+        return;
+    }
 
-        if (proceedData.reset) {
-            console.log(`[ChatbotEngine] ♻️ EXECUTING RESET for card ${cardId}`);
-            const resetConfirmText = "🔄 Reinicio completado, empezamos de nuevo.";
-            
-            // Try to send confirmation with detailed error logging
-            let resetSent = false;
-            for (let attempt = 1; attempt <= 2; attempt++) {
-                try {
-                    await dispatchMessage(resetConfirmText);
-                    resetSent = true;
-                    console.log(`[ChatbotEngine] ✅ Reset confirmation sent (attempt ${attempt})`);
-                    break;
-                } catch (e: any) {
-                    console.error(`[ChatbotEngine] ❌ Reset confirmation FAILED (attempt ${attempt}):`, e?.message || e);
-                    if (attempt < 2) await sleep(1000); // Wait 1s before retry
-                }
+    // E. RESUME OR START
+    const bState = cardData.botState || {};
+    
+    // --- INNER EXECUTION LOOP (Node by Node until Wait) ---
+    let currentNodeId: string | null = bState.currentNodeId || null;
+    let waitingForInput = bState.waitingForInput || false;
+
+    // Handle incoming input for current node
+    if (waitingForInput && currentNodeId) {
+        const node = flow.nodes.find((n: any) => n.id === currentNodeId);
+        if (node?.type === 'captureInputNode') {
+            const varName = node.data?.variableName || 'input';
+            const isEmail = varName.toLowerCase().includes('mail') || varName.toLowerCase().includes('correo');
+            let extracted = text;
+            if (isEmail) {
+                const match = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+                if (match) extracted = match[0];
             }
 
-            // Always record in Firestore regardless of send success
+            console.log(`[ChatbotEngine] 📥 Captured ${varName}: ${extracted}`);
+            const updatePayload: any = { [`customFields.${varName}`]: extracted, 'botState.waitingForInput': false };
+            if (varName === 'nombre' || varName === 'name') updatePayload.contactName = extracted;
+            await cardRef.update(updatePayload);
+
+            const next = flow.edges.find((e: any) => e.source === node.id);
+            currentNodeId = next ? next.target : null;
+        } else {
+            // QuickReply or generic wait
+            const edge = flow.edges.find((e: any) => {
+                const handle = String(e.sourceHandle || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                return e.source === node?.id && handle === normalizedInput;
+            }) || flow.edges.find((e: any) => e.source === node?.id);
+            
+            currentNodeId = edge ? edge.target : null;
+            await cardRef.update({ 'botState.waitingForInput': false });
+        }
+    } else {
+        // Start from beginning if not active
+        if (bState.status !== 'active') {
+             const start = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
+             currentNodeId = start ? start.id : null;
+        }
+    }
+
+    // Node-by-Node Forward Execution
+    let executionCount = 0;
+    while (currentNodeId && executionCount < 15) {
+        executionCount++;
+        const node = flow.nodes.find((n: any) => n.id === currentNodeId);
+        if (!node) break;
+
+        await cardRef.update({ 'botState.currentNodeId': node.id, 'botState.lastStep': `${node.type}` });
+
+        if (node.type === 'start' || node.type === 'startNode') {
+            const edge = flow.edges.find((e: any) => e.source === node.id);
+            currentNodeId = edge ? edge.target : null;
+            continue;
+        }
+
+        if (node.type === 'textMessageNode') {
+            const content = replaceVars(node.data?.content || node.data?.text || 'Hola');
+            await dispatchMessage(content);
             await cardRef.update({
                 messages: admin.firestore.FieldValue.arrayUnion({
-                    sender: 'agent',
-                    text: resetConfirmText,
-                    platform,
-                    timestamp: new Date(),
-                    messageId: `bot_sys_${Date.now()}`,
-                    delivered: resetSent
+                    sender: 'agent', text: content, platform, timestamp: new Date(), messageId: `bot_${Date.now()}`
                 })
             });
+            const edge = flow.edges.find((e: any) => e.source === node.id);
+            currentNodeId = edge ? edge.target : null;
+            continue;
+        }
 
-            // Clear local stale data
-            if (cardData.customFields) Object.keys(cardData.customFields).forEach(k => delete cardData.customFields[k]);
-            if (cardData.variables) Object.keys(cardData.variables).forEach(k => delete cardData.variables[k]);
+        if (node.type === 'captureInputNode' || node.type === 'quickReplyNode') {
+            const content = replaceVars(node.data?.content || node.data?.text || node.data?.bodyText || '...');
+            const buttons = (node.data?.buttons || []).map((b: any) => ({
+                type: 'reply', reply: { id: (b.id || b.title || b).substring(0, 20), title: (b.title || b).substring(0, 20) }
+            })).slice(0, 3);
 
-            const startNode = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
-            if (startNode) await executeFlow(startNode.id, {}, false); // NO look-back on reset
+            await dispatchMessage(content, node.type === 'quickReplyNode' ? { type: 'quick_reply', buttons } : {});
+            await cardRef.update({
+                messages: admin.firestore.FieldValue.arrayUnion({
+                    sender: 'agent', text: content, platform, timestamp: new Date(), messageId: `bot_wait_${Date.now()}`
+                }),
+                'botState.status': 'active',
+                'botState.waitingForInput': true,
+                'botState.currentNodeId': node.id,
+                'botState.variableName': node.data?.variableName || 'input'
+            });
+            return; // EXIT loop, wait for user
+        }
+
+        if (node.type === 'conditionNode') {
+            const snap = await cardRef.get();
+            const fresh = snap.data() || {};
+            const val = String(fresh.customFields?.[node.data?.variableName] || '').trim().toLowerCase();
+            let target = null;
+            for (const r of node.data?.routes || []) {
+                if (val === String(r.value || '').trim().toLowerCase()) {
+                    target = flow.edges.find((e: any) => e.source === node.id && e.sourceHandle === r.id)?.target;
+                    break;
+                }
+            }
+            currentNodeId = target || flow.edges.find((e: any) => e.source === node.id && e.sourceHandle === 'else')?.target;
+            continue;
+        }
+
+        if (node.type === 'setVariableNode') {
+            await cardRef.update({ [`customFields.${node.data?.variableName}`]: node.data?.value });
+            const edge = flow.edges.find((e: any) => e.source === node.id);
+            currentNodeId = edge ? edge.target : null;
+            continue;
+        }
+
+        if (node.type === 'endNode') {
+            await cardRef.update({ 'botState.status': 'completed', 'botState.waitingForInput': false });
             return;
         }
-
-        // 5. FLOW LOGIC (RESUME OR START)
-        if (stateSnapshot.waitingForInput && stateSnapshot.currentNodeId) {
-            const node = flow.nodes.find((n: any) => n.id === stateSnapshot.currentNodeId);
-            if (node?.type === 'captureInputNode') {
-                const varName = stateSnapshot.variableName || 'input';
-                const nodeData = node.data || {};
-
-                let extractedValue = text;
-                const isNameVar = varName.toLowerCase().includes('name') || varName.toLowerCase().includes('nombre');
-                const isEmailVar = varName.toLowerCase().includes('mail') || varName.toLowerCase().includes('correo');
-
-                if (isNameVar) {
-                    const match = text.match(/(?:me llamo|mi nombre es|soy|nombre:)\s+([a-z\s]+)/i);
-                    if (match && match[1]) extractedValue = match[1].trim();
-                } else if (isEmailVar) {
-                    const match = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-                    if (match) extractedValue = match[0];
-                }
-
-                console.log(`[ChatbotEngine] 📥 Captured ${varName}: ${extractedValue}`);
-
-                const updatePayload: any = {
-                    [`customFields.${varName}`]: extractedValue,
-                    'botState.waitingForInput': false
-                };
-                
-                if (isNameVar) {
-                    updatePayload.contactName = extractedValue;
-                    updatePayload['customFields.namecli'] = extractedValue;
-                }
-
-                await cardRef.update(updatePayload);
-                const next = flow.edges.find((e: any) => e.source === node.id);
-                // allowLookBack=false: user just answered, don't re-capture old messages for NEW nodes
-                if (next) await executeFlow(next.target, { [varName]: extractedValue, namecli: extractedValue }, false);
-                else await cardRef.update({ 'botState.status': 'completed' });
-            } else {
-                const normalizedText = text.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                const edge = flow.edges.find((e: any) => {
-                    const handle = String(e.sourceHandle || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                    return e.source === node?.id && handle === normalizedText;
-                });
-
-                if (edge) {
-                    await cardRef.update({ 'botState.waitingForInput': false });
-                    await executeFlow(edge.target);
-                } else {
-                    const fallback = flow.edges.find((e: any) => e.source === node?.id);
-                    if (fallback) {
-                        await cardRef.update({ 'botState.waitingForInput': false });
-                        await executeFlow(fallback.target);
-                    } else {
-                        await cardRef.update({ 'botState.status': 'completed' });
-                    }
-                }
-            }
-        } else if (stateSnapshot.status === 'active' && stateSnapshot.currentNodeId) {
-            // THE BOT TURN WAS INTERRUPTED: Try to capture the incoming message at the current node
-            console.log(`[ChatbotEngine] ⚡ RESUMING active turn at ${stateSnapshot.currentNodeId}`);
-            // allowLookBack=true: the message that just arrived is the input we need!
-            await executeFlow(stateSnapshot.currentNodeId, {}, true);
-        } else {
-            // FRESH START OR RESTART (If completed/none)
-            const startNode = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
-            if (startNode) {
-                console.log(`[ChatbotEngine] 🚀 ${stateSnapshot.status === 'completed' ? 'RESTARTING' : 'FRESH START'} for ${cardId}`);
-                await executeFlow(startNode.id, {}, false); // NO look-back on fresh start
-            }
-        }
-
-    } catch (err: any) {
-        console.error(`[ChatbotEngine] 💥 CRITICAL FAILURE:`, err.message);
-    } finally {
-        try {
-            // 1. Release the processing lock
-            const cardRefFinal = db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`);
-            await cardRefFinal.update({ botLock: admin.firestore.FieldValue.delete() });
-
-            // 2. Drain queue: pick the oldest pending message and process it next
-            const afterSnap = await cardRefFinal.get();
-            const pending: any[] = (afterSnap.data()?.pendingMessages || [])
-                .sort((a: any, b: any) => new Date(a.queuedAt).getTime() - new Date(b.queuedAt).getTime());
-
-            if (pending.length > 0) {
-                const nextMsg = pending[0];
-
-                // Atomically remove from queue before processing
-                await cardRefFinal.update({
-                    pendingMessages: admin.firestore.FieldValue.arrayRemove(nextMsg)
-                });
-
-                console.log(`[ChatbotEngine] 📤 Draining queue (${pending.length} pending). Processing: "${nextMsg.text?.substring(0, 30)}"`);
-
-                // Process next message — it will acquire its own lock
-                await processChatbotFlow({
-                    userId,
-                    entityId,
-                    groupId,
-                    cardId,
-                    platform: nextMsg.platform || platform,
-                    from: nextMsg.from || from,
-                    text: nextMsg.text,
-                    messageId: nextMsg.messageId
-                });
-            }
-        } catch (e) {
-            console.error('[ChatbotEngine] ⚠️ Queue drain error:', e);
-        }
+        break;
     }
 }
