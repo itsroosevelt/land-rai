@@ -63,7 +63,6 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: true, ignored: 'not_a_valid_event' });
         }
 
-        const senderId = messaging.sender.id;
         let text = '';
 
         if (messaging.message) {

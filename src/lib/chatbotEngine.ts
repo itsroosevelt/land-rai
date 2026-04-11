@@ -238,6 +238,8 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         if (bState.status !== 'active') {
              const start = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
              currentNodeId = start ? start.id : null;
+             // Mark as active so future messages follow the flow logic
+             await cardRef.update({ 'botState.status': 'active' });
         }
     }
 
