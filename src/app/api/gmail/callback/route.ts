@@ -83,9 +83,14 @@ export async function GET(req: Request) {
                 });
                 console.log(`[Gmail Callback] ✅ Watch successfully registered for ${gmailAddress}`);
             } catch (watchErr: any) {
-                console.error('[Gmail Callback] ⚠️ Watch Registration Failed:', watchErr.response?.data || watchErr.message);
+                const errMsg = watchErr.response?.data ? JSON.stringify(watchErr.response.data) : watchErr.message;
+                console.error('[Gmail Callback] ⚠️ Watch Registration Failed:', errMsg);
+                
+                await db.doc(`users/${userId}/entities/${entityId}/integrations/gmail`).update({
+                    watchError: errMsg,
+                    lastWatchAttempt: admin.firestore.FieldValue.serverTimestamp()
+                });
                 // We DON'T fail the whole flow, as the user is already authenticated. 
-                // We'll just have missing real-time notifications until fixed.
             }
         } else {
             console.warn('[Gmail Callback] ⚠️ GMAIL_PUBSUB_TOPIC not configured. Real-time sync will not work.');
