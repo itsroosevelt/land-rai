@@ -131,6 +131,14 @@ export async function POST(req: Request) {
         let cardId: string | null = targetCardDoc?.id || null;
         let groupId: string | null = targetGroupId || null;
 
+        const queueItem = {
+            text: bodySnippet || '',
+            messageId: `gm_${msgId}`,
+            platform: 'gmail',
+            from: fromEmail,
+            timestamp: Date.now()
+        };
+
         if (targetCardDoc && groupId) {
             const cardRef = targetCardDoc.ref;
             await cardRef.update({
@@ -138,6 +146,7 @@ export async function POST(req: Request) {
                 updatedAt: new Date(),
                 unreadCount: admin.firestore.FieldValue.increment(1),
                 messages: admin.firestore.FieldValue.arrayUnion(newMessage),
+                'botState.messageQueue': admin.firestore.FieldValue.arrayUnion(queueItem),
                 status: 'open',
                 source: 'GMAIL'
             });
@@ -158,6 +167,14 @@ export async function POST(req: Request) {
 
             const newCardRef = db.collection(`${entityPath}/kanban-groups/${destinationGroupId}/cards`).doc();
             
+            const queueItem = {
+                text: bodySnippet || '',
+                messageId: `gm_${msgId}`,
+                platform: 'gmail',
+                from: fromEmail,
+                timestamp: Date.now()
+            };
+
             await newCardRef.set({
                 crmId: finalContactId,
                 contactName: fromName,
@@ -167,6 +184,7 @@ export async function POST(req: Request) {
                 updatedAt: new Date(),
                 createdAt: new Date(),
                 messages: [newMessage],
+                'botState.messageQueue': [queueItem],
                 unreadCount: 1,
                 status: 'open',
                 source: 'GMAIL',

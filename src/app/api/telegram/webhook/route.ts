@@ -108,6 +108,14 @@ export async function POST(req: Request) {
             platform: 'telegram'
         };
 
+        const queueItem = {
+            text: text || '',
+            messageId: message?.message_id ? `tg_${message.message_id}` : `tg_cb_${Date.now()}`,
+            platform: 'telegram',
+            from: telegramChatId,
+            timestamp: Date.now()
+        };
+
         if (targetCardDoc && groupId) {
             const cardRef = targetCardDoc.ref;
             await cardRef.update({
@@ -115,6 +123,7 @@ export async function POST(req: Request) {
                 updatedAt: admin.firestore.Timestamp.now(),
                 unreadCount: admin.firestore.FieldValue.increment(1),
                 messages: admin.firestore.FieldValue.arrayUnion(newMessage),
+                'botState.messageQueue': admin.firestore.FieldValue.arrayUnion(queueItem),
                 status: 'open',
                 source: 'TELEGRAM',
                 [`platform_ids.telegram`]: telegramChatId
@@ -145,6 +154,22 @@ export async function POST(req: Request) {
 
             const newCardRef = db.collection(`${entityPath}/kanban-groups/${destinationGroupId}/cards`).doc();
             
+            const newMessage = {
+                sender: 'user',
+                text: text,
+                timestamp: admin.firestore.Timestamp.now(),
+                messageId: message?.message_id ? `tg_${message.message_id}` : `tg_cb_${Date.now()}`,
+                platform: 'telegram'
+            };
+
+            const queueItem = {
+                text: text || '',
+                messageId: message?.message_id ? `tg_${message.message_id}` : `tg_cb_${Date.now()}`,
+                platform: 'telegram',
+                from: telegramChatId,
+                timestamp: Date.now()
+            };
+
             await newCardRef.set({
                 crmId: finalContactId,
                 contactName: fullName,
@@ -154,6 +179,7 @@ export async function POST(req: Request) {
                 updatedAt: admin.firestore.Timestamp.now(),
                 createdAt: admin.firestore.Timestamp.now(),
                 messages: [newMessage],
+                'botState.messageQueue': [queueItem],
                 unreadCount: 1,
                 status: 'open',
                 source: 'TELEGRAM',
