@@ -47,11 +47,25 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                 }
             }
 
-            // Acquire lock and mark start
-            transaction.update(cardRef, { 
+            // REPAIR/INITIALIZE: If botState is missing or incomplete, heal it now
+            const updateData: any = { 
                 botLock: admin.firestore.FieldValue.serverTimestamp(),
                 'botState.lastProcessedMessageId': messageId || null
-            });
+            };
+
+            if (!data.botState) {
+                console.log(`[ChatbotEngine] 🩹 Healing missing botState for card ${cardId}`);
+                updateData.botState = {
+                    status: 'inactive',
+                    currentNodeId: null,
+                    waitingForInput: false,
+                    messageQueue: data.botState?.messageQueue || [],
+                    lastStep: 'AUTO_HEAL'
+                };
+            }
+
+            // Acquire lock and mark start
+            transaction.update(cardRef, updateData);
             return true;
         });
 

@@ -303,8 +303,8 @@ export async function POST(req: Request) {
                 timestamp: Date.now()
             };
 
-            // UPDATING EXISTING CARD
-            await targetCardDoc.ref.update({
+            // UPDATING EXISTING CARD + HEALING DATA
+            const updatePayload: any = {
                 contactName: resolvedName || existingContactName,
                 lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
                 updatedAt: admin.firestore.Timestamp.now(),
@@ -314,7 +314,20 @@ export async function POST(req: Request) {
                 status: 'open',
                 source: provider.toUpperCase(),
                 [`platform_ids.${provider}`]: senderId
-            });
+            };
+
+            // Ensure botState exists if we're dealing with a 'broken' manual card
+            const cData = targetCardDoc.data();
+            if (!cData?.botState) {
+                updatePayload.botState = {
+                    status: 'inactive',
+                    currentNodeId: null,
+                    waitingForInput: false,
+                    messageQueue: [queueItem]
+                };
+            }
+
+            await targetCardDoc.ref.update(updatePayload);
 
             // Sincronizar metaSenderId, source y nombre con el contacto existente
             if (existingContactId) {
