@@ -126,13 +126,20 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
         const executeFlow = async (startId: string, runtimeContext: any = {}, allowLookBack: boolean = false) => {
             let currentNodeId: string | null = startId;
             let executionCount = 0;
-            const MAX_STEPS = 15;
+            const MAX_STEPS = 20;
+            let lookBackConsumed = false; // Important: prevent greedy look-back across multiple nodes
             const currentOverlay = { ...runtimeContext };
 
             while (currentNodeId && executionCount < MAX_STEPS) {
                 executionCount++;
                 const node = flow.nodes.find((n: any) => n.id === currentNodeId);
                 if (!node) break;
+
+                // VISIBILITY: Update where the bot is at in the CRM
+                await cardRef.update({ 
+                    'botState.currentNodeId': node.id,
+                    'botState.lastStep': `${node.type} (${node.id.substring(0, 4)})`
+                });
 
                 if (node.type === 'startNode' || node.type === 'start') {
                     const edge = flow.edges.find((e: any) => e.source === node.id);
@@ -184,7 +191,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                     })).slice(0, 3);
 
                     // --- LOOK-BACK for QuickReply (only when genuinely resuming) ---
-                    if (allowLookBack) {
+                    if (allowLookBack && !lookBackConsumed) {
                         const snap = await cardRef.get();
                         const cardData = snap.data() || {};
                         const lastMsg = (cardData.messages || []).slice(-1)[0];
@@ -197,6 +204,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                             });
                             if (edge) {
                                 console.log(`[ChatbotEngine] ⚡ Look-back: Using existing user message "${lastMsg.text}" for QuickReply`);
+                                lookBackConsumed = true;
                                 await cardRef.update({ 'botState.currentNodeId': node.id });
                                 currentNodeId = edge.target;
                                 continue;
@@ -233,7 +241,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                     const prompt = replaceVars(node.data?.content || node.data?.text || '', currentOverlay);
                     
                     // --- LOOK-BACK (only when genuinely resuming, not on fresh starts/resets) ---
-                    if (allowLookBack) {
+                    if (allowLookBack && !lookBackConsumed) {
                         const snap = await cardRef.get();
                         const cardData = snap.data() || {};
                         const lastMsg = (cardData.messages || []).slice(-1)[0];
@@ -244,6 +252,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                         // Allow if it's a user message (including the current one) and NOT a reset
                         if (lastMsg && lastMsg.sender === 'user' && !isLastMsgAReset) {
                             console.log(`[ChatbotEngine] ⚡ Look-back: Capturing user message "${lastMsg.text}" for variable ${node.data?.variableName}`);
+                            lookBackConsumed = true;
                             await cardRef.update({ 
                                 [`customFields.${node.data?.variableName || 'last_input'}`]: lastMsg.text,
                                 'botState.currentNodeId': node.id 
