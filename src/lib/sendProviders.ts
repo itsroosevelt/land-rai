@@ -6,10 +6,11 @@ import { getGmailAccessToken } from './googleAuth';
 // --- Meta (Instagram & Messenger) ---
 
 export interface MetaSendOptions {
-    type?: 'text' | 'image';
+    type?: 'text' | 'image' | 'quick_reply';
     userId?: string;
     entityId?: string;
     provider?: 'messenger' | 'instagram';
+    buttons?: any[];
 }
 
 export async function sendMetaMessage(
@@ -33,11 +34,12 @@ export async function sendMetaMessage(
             const configDoc = await db.doc(configPath).get();
             if (configDoc.exists) {
                 const data = configDoc.data();
-                if (data?.accessToken) {
-                    token = data.accessToken;
-                    // Extraemos el ID del nodo para soportar Tokens de Sistema
+                // SUPPORT MULTIPLE TOKEN KEYS (Agnosticism Rule)
+                const resolvedToken = data?.accessToken || data?.pageAccessToken || data?.token;
+                if (resolvedToken) {
+                    token = resolvedToken;
                     targetNodeId = options.provider === 'messenger' ? data.pageId : data.instagramId;
-                    console.log(`[sendMetaMessage] Loaded token for ${options.provider} in tenant ${options.entityId}`);
+                    console.log(`[sendMetaMessage] Loaded resolved token for ${options.provider} in tenant ${options.entityId}`);
                 }
             }
         } catch (err) {
@@ -50,15 +52,27 @@ export async function sendMetaMessage(
         throw new Error('Access Token is not configured.');
     }
 
-    const messageData = {
-        messaging_type: 'RESPONSE', // Required for many Messenger/Instagram integrations
+    const messageData: any = {
+        messaging_type: 'RESPONSE',
         recipient: { id: recipientId },
         message: { text: text }
     };
 
-    // The standard Messenger and Instagram Send API endpoints require 'me/messages'
-    // when using Page Access Tokens generated via the setup flow.
-    const url = `https://graph.facebook.com/v21.0/me/messages?access_token=${token}`;
+    // --- QUICK REPLY SUPPORT (FIXES MESSENGER MISSING BUTTONS) ---
+    if (options.type === 'quick_reply' && options.buttons && options.buttons.length > 0) {
+        messageData.message.quick_replies = options.buttons.map((btn: any) => {
+            const b = btn.reply || btn;
+            return {
+                content_type: 'text',
+                title: (b.title || b).substring(0, 20),
+                payload: (b.id || b.title || b).substring(0, 50)
+            };
+        });
+    }
+
+    // Support for targetNodeId in URL for System User Tokens
+    const endpoint = targetNodeId && targetNodeId !== 'me' ? targetNodeId : 'me';
+    const url = `https://graph.facebook.com/v21.0/${endpoint}/messages?access_token=${token}`;
 
     try {
         const response = await axios.post(url, messageData);

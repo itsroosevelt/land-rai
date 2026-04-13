@@ -79,16 +79,25 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
 
             console.log(`[ChatbotEngine] 🧵 Processing Queue Item [${msgId}]: "${msgText.substring(0, 30)}"`);
 
-            // --- 3. INNER ENGINE CORE ---
-            await runEngineCycle(cardRef, cardData, currentMsg, entityPath, entityId, userId);
-
-            // --- 4. ATOMIC QUEUE DRAIN ---
-            await db.runTransaction(async (transaction) => {
-                transaction.update(cardRef, {
-                    'botState.messageQueue': admin.firestore.FieldValue.arrayRemove(currentMsg),
-                    botLock: admin.firestore.FieldValue.serverTimestamp() // Refresh lock
+            try {
+                // --- 3. INNER ENGINE CORE ---
+                await runEngineCycle(cardRef, cardData, currentMsg, entityPath, entityId, userId);
+            } catch (cycleErr: any) {
+                console.error(`[ChatbotEngine] ❌ Cycle Error [${msgId}]:`, cycleErr.message);
+                // Log error to card but DON'T stop the whole runner
+                await cardRef.update({
+                    'botState.lastError': cycleErr.message || 'Unknown Cycle Error',
+                    'botState.lastErrorAt': admin.firestore.FieldValue.serverTimestamp()
                 });
-            });
+            } finally {
+                // --- 4. ATOMIC QUEUE DRAIN (MUST happen even on failure to avoid blocking) ---
+                await db.runTransaction(async (transaction) => {
+                    transaction.update(cardRef, {
+                        'botState.messageQueue': admin.firestore.FieldValue.arrayRemove(currentMsg),
+                        botLock: admin.firestore.FieldValue.serverTimestamp() // Refresh lock
+                    });
+                });
+            }
         }
     } catch (err: any) {
         console.error(`[ChatbotEngine] 💥 Runner Crash:`, err.message);
@@ -177,6 +186,9 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     let currentNodeId: string | null = bState.currentNodeId || null;
     let waitingForInput = bState.waitingForInput || false;
 
+    // FIX: If status is 'active' but we have no node (stuck) or it's 'completed', we should try to restart
+    const shouldRestart = !currentNodeId || bState.status === 'completed' || bState.status === 'inactive';
+
     // Handle incoming input for current node
     if (waitingForInput && currentNodeId) {
         const node = flow.nodes.find((n: any) => n.id === currentNodeId);
@@ -207,10 +219,11 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             await cardRef.update({ 'botState.waitingForInput': false });
         }
     } else {
-        // Start from beginning if not active
-        if (bState.status !== 'active') {
+        // Start from beginning if not active or if stuck
+        if (shouldRestart) {
              const start = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
              currentNodeId = start ? start.id : null;
+             console.log(`[ChatbotEngine] 🆕 Starting/Restarting flow at node ${currentNodeId}`);
         }
     }
 
