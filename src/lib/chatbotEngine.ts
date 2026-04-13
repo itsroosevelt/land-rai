@@ -144,6 +144,35 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         if (platform === 'gmail') return await sendGmailMessage(from, content, opts);
     };
 
+    // SMART CLEANING HELPER
+    const cleanInput = (raw: string, varName: string): string => {
+        const val = raw.trim();
+        const v = varName.toLowerCase();
+        
+        // A. EMAIL EXTRACTION
+        if (v.includes('mail') || v.includes('correo')) {
+            const match = val.match(/[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*/);
+            return match ? match[0] : val;
+        }
+        
+        // B. NAME CLEANSING
+        if (v === 'nombre' || v === 'name' || v === 'first_name') {
+            let cleaned = val;
+            const prefixes = [
+                /^(hola,?\s+)?me\s+llamo\s+/i,
+                /^(hola,?\s+)?mi\s+nombre\s+es\s+/i,
+                /^(hola,?\s+)?soy\s+/i,
+                /^(mucho\s+gusto,?\s+)/i,
+                /^(buen(as|os)\s+(dias|noches|tardes),?\s+)/i
+            ];
+            prefixes.forEach(p => { cleaned = cleaned.replace(p, ''); });
+            // Capitalize names
+            return cleaned.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ').trim();
+        }
+        
+        return val;
+    };
+
     if (isReset) {
         console.log(`[ChatbotEngine] ♻️ EXECUTING RESET for ${from}`);
         await cardRef.update({
@@ -206,17 +235,9 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             const node = flow.nodes.find((n: any) => n.id === currentNodeId);
             if (node?.type === 'captureInputNode') {
                 const varName = node.data?.variableName || 'input';
-                const isEmail = varName.toLowerCase().includes('mail') || varName.toLowerCase().includes('correo');
-                let extracted = text;
-                
-                if (isEmail) {
-                    // More robust email regex
-                    const match = text.match(/[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*/);
-                    if (match) extracted = match[0];
-                    console.log(`[ChatbotEngine] 📧 Email detected: ${extracted}`);
-                }
+                const extracted = cleanInput(text, varName);
 
-                console.log(`[ChatbotEngine] 📥 Captured ${varName}: ${extracted}`);
+                console.log(`[ChatbotEngine] 📥 Captured & Cleaned ${varName}: ${extracted}`);
                 const updatePayload: any = { [`customFields.${varName}`]: extracted, 'botState.waitingForInput': false };
                 if (varName === 'nombre' || varName === 'name') {
                     updatePayload.contactName = extracted;
