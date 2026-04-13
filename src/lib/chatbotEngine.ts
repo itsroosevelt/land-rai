@@ -426,14 +426,6 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
 
         // 4. CAPTURE / QUICK REPLY (Wait nodes)
         if (node.type === 'captureInputNode' || node.type === 'quickReplyNode') {
-            // BLOCK TRIGGER
-            if (isStartTrigger) {
-                console.log(`[ChatbotEngine] 🛡️ Skipping capture for trigger "${text}".`);
-                const edge = flow.edges.find((e: any) => e.source === node.id);
-                currentNodeId = edge ? edge.target : null;
-                continue;
-            }
-
             const content = replaceVars(node.data?.content || node.data?.text || node.data?.bodyText || '');
             const buttons = (node.data?.buttons || []).map((b: any) => ({
                 type: 'reply', reply: { id: (b.id || b.title || b).substring(0, 20), title: (b.title || b).substring(0, 20) }
