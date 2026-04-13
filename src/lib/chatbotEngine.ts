@@ -81,7 +81,9 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
 
             try {
                 // --- 3. INNER ENGINE CORE ---
-                await runEngineCycle(cardRef, cardData, currentMsg, entityPath, entityId, userId);
+                // We pass a 'isNewSession' flag if the bot was not active before this message
+                const wasActive = bState.status === 'active';
+                await runEngineCycle(cardRef, cardData, currentMsg, entityPath, entityId, userId, !wasActive);
             } catch (cycleErr: any) {
                 console.error(`[ChatbotEngine] ❌ Cycle Error [${msgId}]:`, cycleErr.message);
                 // Log error to card but DON'T stop the whole runner
@@ -113,7 +115,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
 /**
  * Single Engine Cycle: Processes ONE message through the flow.
  */
-async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath: string, entityId: string, userId: string) {
+async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath: string, entityId: string, userId: string, isTriggerMessage: boolean = false) {
     const text = msg.text || '';
     const platform = msg.platform;
     const from = msg.from;
@@ -190,32 +192,38 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
 
     // Handle incoming input for current node
     if (waitingForInput && currentNodeId) {
-        const node = flow.nodes.find((n: any) => n.id === currentNodeId);
-        if (node?.type === 'captureInputNode') {
-            const varName = node.data?.variableName || 'input';
-            const isEmail = varName.toLowerCase().includes('mail') || varName.toLowerCase().includes('correo');
-            let extracted = text;
-            if (isEmail) {
-                const match = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-                if (match) extracted = match[0];
-            }
-
-            console.log(`[ChatbotEngine] 📥 Captured ${varName}: ${extracted}`);
-            const updatePayload: any = { [`customFields.${varName}`]: extracted, 'botState.waitingForInput': false };
-            if (varName === 'nombre' || varName === 'name') updatePayload.contactName = extracted;
-            await cardRef.update(updatePayload);
-
-            const next = flow.edges.find((e: any) => e.source === node.id);
-            currentNodeId = next ? next.target : null;
+        // AGNOSTIC RULE: Do not allow the same message that triggered the start to be captured as an input
+        // This prevents "mucho gusto hola" if 'hola' was the trigger.
+        if (isTriggerMessage && shouldRestart) {
+            console.log(`[ChatbotEngine] 🛡️ Trigger message blocked from capture captureInputNode to prevent auto-fill.`);
         } else {
-            // QuickReply or generic wait
-            const edge = flow.edges.find((e: any) => {
-                const handle = String(e.sourceHandle || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                return e.source === node?.id && handle === normalizedInput;
-            }) || flow.edges.find((e: any) => e.source === node?.id);
-            
-            currentNodeId = edge ? edge.target : null;
-            await cardRef.update({ 'botState.waitingForInput': false });
+            const node = flow.nodes.find((n: any) => n.id === currentNodeId);
+            if (node?.type === 'captureInputNode') {
+                const varName = node.data?.variableName || 'input';
+                const isEmail = varName.toLowerCase().includes('mail') || varName.toLowerCase().includes('correo');
+                let extracted = text;
+                if (isEmail) {
+                    const match = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+                    if (match) extracted = match[0];
+                }
+
+                console.log(`[ChatbotEngine] 📥 Captured ${varName}: ${extracted}`);
+                const updatePayload: any = { [`customFields.${varName}`]: extracted, 'botState.waitingForInput': false };
+                if (varName === 'nombre' || varName === 'name') updatePayload.contactName = extracted;
+                await cardRef.update(updatePayload);
+
+                const next = flow.edges.find((e: any) => e.source === node.id);
+                currentNodeId = next ? next.target : null;
+            } else {
+                // QuickReply or generic wait
+                const edge = flow.edges.find((e: any) => {
+                    const handle = String(e.sourceHandle || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                    return e.source === node?.id && handle === normalizedInput;
+                }) || flow.edges.find((e: any) => e.source === node?.id);
+                
+                currentNodeId = edge ? edge.target : null;
+                await cardRef.update({ 'botState.waitingForInput': false });
+            }
         }
     } else {
         // Start from beginning if not active or if stuck
@@ -255,7 +263,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         }
 
         if (node.type === 'captureInputNode' || node.type === 'quickReplyNode') {
-            const content = replaceVars(node.data?.content || node.data?.text || node.data?.bodyText || '...');
+            const content = replaceVars(node.data?.content || node.data?.text || node.data?.bodyText || '');
             const buttons = (node.data?.buttons || []).map((b: any) => ({
                 type: 'reply', reply: { id: (b.id || b.title || b).substring(0, 20), title: (b.title || b).substring(0, 20) }
             })).slice(0, 3);
