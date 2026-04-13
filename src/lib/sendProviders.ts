@@ -6,7 +6,7 @@ import { getGmailAccessToken } from './googleAuth';
 // --- Meta (Instagram & Messenger) ---
 
 export interface MetaSendOptions {
-    type?: 'text' | 'image' | 'quick_reply';
+    type?: 'text' | 'image' | 'quick_reply' | 'media';
     userId?: string;
     entityId?: string;
     provider?: 'messenger' | 'instagram';
@@ -55,8 +55,22 @@ export async function sendMetaMessage(
     const messageData: any = {
         messaging_type: 'RESPONSE',
         recipient: { id: recipientId },
-        message: { text: text }
+        message: {}
     };
+
+    const isImage = options.type === 'image' || (typeof options !== 'string' && options.type === 'media');
+
+    if (isImage) {
+        messageData.message.attachment = {
+            type: 'image',
+            payload: {
+                url: text, // In media mode, 'text' is often the URL
+                is_selectable: true
+            }
+        };
+    } else {
+        messageData.message.text = text;
+    }
 
     // --- QUICK REPLY SUPPORT (FIXES MESSENGER MISSING BUTTONS) ---
     if (options.type === 'quick_reply' && options.buttons && options.buttons.length > 0) {

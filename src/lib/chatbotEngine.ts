@@ -129,9 +129,9 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     
     // TRACK SESSION VARIABLES (Avoids stale cardData)
     const sessionVars = {
-        nombre: cardData.contactName || 'Usuario',
-        name: cardData.contactName || 'Usuario',
-        first_name: (cardData.contactName || 'Usuario').split(' ')[0],
+        nombre: (isStartTrigger || isReset) ? 'Usuario' : (cardData.contactName || 'Usuario'),
+        name: (isStartTrigger || isReset) ? 'Usuario' : (cardData.contactName || 'Usuario'),
+        first_name: ((isStartTrigger || isReset) ? 'Usuario' : (cardData.contactName || 'Usuario')).split(' ')[0],
         ...(cardData.customFields || {}),
         ...(cardData.variables || {})
     };
@@ -378,9 +378,10 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             const url = node.data?.url;
             const caption = replaceVars(node.data?.caption || '');
             if (url) {
-                // We use dispatchMessage for caption and assume provider can handle media if we had a dedicated tool, 
-                // for now we send caption as text + url if possible.
-                await dispatchMessage(`${caption}\n${url}`.trim());
+                // SEND REAL IMAGE
+                if (caption.trim()) await dispatchMessage(caption);
+                await dispatchMessage(url, { type: 'image' });
+
                 await cardRef.update({
                     messages: admin.firestore.FieldValue.arrayUnion({
                         sender: 'agent', text: caption || 'Imagen', platform, timestamp: new Date(), messageId: `bot_media_${Date.now()}`
@@ -392,8 +393,41 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             continue;
         }
 
-        // 3. CAPTURE / QUICK REPLY (Wait nodes)
+        // 3. LIST MESSAGE
+        if (node.type === 'listMessageNode') {
+            const body = replaceVars(node.data?.body || node.data?.text || 'Selecciona una opción:');
+            const sections = (node.data?.sections || []).map((s: any) => ({
+                title: s.title || 'Opciones',
+                rows: (s.rows || []).map((r: any) => ({
+                    id: (r.id || r.title).substring(0, 50),
+                    title: r.title.substring(0, 24),
+                    description: r.description?.substring(0, 72)
+                }))
+            }));
+
+            await dispatchMessage(body, { type: 'list', button: node.data?.buttonText || 'Ver opciones', sections });
+            
+            await cardRef.update({
+                'botState.status': 'active',
+                'botState.waitingForInput': true,
+                'botState.currentNodeId': node.id,
+                messages: admin.firestore.FieldValue.arrayUnion({
+                    sender: 'agent', text: body, platform, timestamp: new Date(), messageId: `bot_list_${Date.now()}`
+                })
+            });
+            return;
+        }
+
+        // 4. CAPTURE / QUICK REPLY (Wait nodes)
         if (node.type === 'captureInputNode' || node.type === 'quickReplyNode') {
+            // BLOCK TRIGGER
+            if (isStartTrigger) {
+                console.log(`[ChatbotEngine] 🛡️ Skipping capture for trigger "${text}".`);
+                const edge = flow.edges.find((e: any) => e.source === node.id);
+                currentNodeId = edge ? edge.target : null;
+                continue;
+            }
+
             const content = replaceVars(node.data?.content || node.data?.text || node.data?.bodyText || '');
             const buttons = (node.data?.buttons || []).map((b: any) => ({
                 type: 'reply', reply: { id: (b.id || b.title || b).substring(0, 20), title: (b.title || b).substring(0, 20) }
