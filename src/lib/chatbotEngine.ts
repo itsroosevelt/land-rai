@@ -179,52 +179,59 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         return val;
     };
 
-    if (isReset) {
-        console.log(`[ChatbotEngine] ♻️ EXECUTING RESET for ${from}`);
+    let bState = cardData.botState || {};
+
+    // --- B. ATOMIC RESET (Deep Wipe) ---
+    if (isReset || isStartTrigger) {
+        console.log(`[ChatbotEngine] 🧹 Performing Deep Wipe for card ${cardRef.id}`);
         await cardRef.update({
-            'botState.status': 'inactive',
-            'botState.currentNodeId': null,
+            'botState.status': 'active',
             'botState.waitingForInput': false,
-            'botState.messageQueue': [], // WIPE QUEUE ON RESET
-            'customFields': admin.firestore.FieldValue.delete(),
-            'botState.lastStep': 'FORCE_RESET'
+            'botState.currentNodeId': null,
+            'botState.messageQueue': [],
+            'botState.lastProcessedMessageId': null,
+            customFields: {}, // WIPE PREVIOUS DATA
+            contactName: 'Usuario'
         });
-        const resetText = "🔄 Reinicio completado. Escribe 'hola' para empezar de nuevo.";
-        await dispatchMessage(resetText);
-        await cardRef.update({
-            messages: admin.firestore.FieldValue.arrayUnion({
-                sender: 'agent', text: resetText, platform, timestamp: new Date(), messageId: `bot_sys_${Date.now()}`
-            })
-        });
-        return;
+        
+        // Refresh local state after wipe
+        bState = { ...bState, status: 'active', waitingForInput: false, currentNodeId: null };
+        cardData.customFields = {};
+        cardData.contactName = 'Usuario';
+        
+        if (isReset) {
+            const resetText = "🔄 Reinicio completado. Escribe 'hola' para empezar de nuevo.";
+            await dispatchMessage(resetText);
+            await cardRef.update({
+                messages: admin.firestore.FieldValue.arrayUnion({
+                    sender: 'agent', text: resetText, platform, timestamp: new Date(), messageId: `bot_sys_${Date.now()}`
+                })
+            });
+            if (!isStartTrigger) return;
+        }
     }
 
-    // B. FETCH BOT & FLOW
+    // C. FETCH BOT & FLOW
     const botsRef = db.collection(`${entityPath}/chatbots`);
     const botsSnapshot = await botsRef.where('isActive', 'in', [true, 'true']).get();
-    if (botsSnapshot.empty) return;
+    if (botsSnapshot.empty) {
+        console.log(`[ChatbotEngine] 🛑 No active bots found for entity ${entityId}`);
+        return;
+    }
 
     const bots = botsSnapshot.docs.map(d => ({ id: d.id, ...d.data() as any }));
     bots.sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
     const flow = bots[0].flow || { nodes: [], edges: [] };
 
-    // C. HELPERS
     const replaceVars = (val: string, overlay: any = {}) => {
         if (!val) return '';
-        const context: any = {
-            ...sessionVars,
-            ...overlay
-        };
-        // Bulletproof regex for {{var}} and {var}
+        const context: any = { ...sessionVars, ...overlay };
         return val.replace(/\{\{?(\w+)\}?}/g, (match, key) => {
             return context[key] !== undefined ? String(context[key]) : match;
         });
     };
 
-    // E. RESUME OR START
-    const bState = cardData.botState || {};
-    
-    // --- INNER EXECUTION LOOP (Node by Node until Wait) ---
+    // --- INNER EXECUTION LOOP ---
     let currentNodeId: string | null = bState.currentNodeId || null;
     let waitingForInput = bState.waitingForInput || false;
 
