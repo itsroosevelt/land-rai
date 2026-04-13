@@ -294,14 +294,22 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 await cardRef.update(updatePayload);
 
                 // Find next node (Success edge)
-                // Priority: 'success' handle > handle with no name > first available edge
+                // UNIVERSAL CONNECTOR LOGIC: 
+                // 1. Look for 'success' handle
+                // 2. Look for ANY edge that isn't for a specific 'fail' handle
+                // 3. Take first available edge
                 const edges = flow.edges.filter((e: any) => e.source === node.id);
                 const next = edges.find((e: any) => e.sourceHandle === 'success') 
-                          || edges.find((e: any) => !e.sourceHandle)
+                          || edges.find((e: any) => !e.sourceHandle || !e.sourceHandle.toLowerCase().includes('fail'))
                           || edges[0];
                 
-                console.log(`[ChatbotEngine] ➡️ Transitioning from ${node.id} to ${next?.target || 'NULL'}`);
-                currentNodeId = next ? next.target : null;
+                if (next) {
+                    console.log(`[ChatbotEngine] ➡️ Validated! Moving from ${node.id} to ${next.target}`);
+                    currentNodeId = next.target;
+                } else {
+                    console.log(`[ChatbotEngine] ⚠️ No outgoing edge found for node ${node.id}. Flow ends here.`);
+                    currentNodeId = null;
+                }
             } else {
                 // QuickReply or generic wait
                 const edge = flow.edges.find((e: any) => {
