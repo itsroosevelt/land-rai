@@ -127,6 +127,15 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     // Trigger check for "hola" and variants
     const isStartTrigger = normalizedInput === 'hola' || normalizedInput === 'hi' || normalizedInput === 'buenas' || normalizedInput === 'inicio';
     
+    // TRACK SESSION VARIABLES (Avoids stale cardData)
+    const sessionVars = {
+        nombre: cardData.contactName || 'Usuario',
+        name: cardData.contactName || 'Usuario',
+        first_name: (cardData.contactName || 'Usuario').split(' ')[0],
+        ...(cardData.customFields || {}),
+        ...(cardData.variables || {})
+    };
+
     const dispatchMessage = async (content: string, options: any = {}) => {
         const opts = { userId, entityId, ...options };
         if (platform === 'whatsapp') return await sendWhatsAppMessage(from, content, opts);
@@ -168,11 +177,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     const replaceVars = (val: string, overlay: any = {}) => {
         if (!val) return '';
         const context: any = {
-            nombre: cardData.contactName || 'Usuario',
-            name: cardData.contactName || 'Usuario',
-            first_name: cardData.contactName?.split(' ')[0] || 'Usuario',
-            ...(cardData.customFields || {}),
-            ...(cardData.variables || {}),
+            ...sessionVars,
             ...overlay
         };
         // Bulletproof regex for {{var}} and {var}
@@ -213,7 +218,13 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
 
                 console.log(`[ChatbotEngine] 📥 Captured ${varName}: ${extracted}`);
                 const updatePayload: any = { [`customFields.${varName}`]: extracted, 'botState.waitingForInput': false };
-                if (varName === 'nombre' || varName === 'name') updatePayload.contactName = extracted;
+                if (varName === 'nombre' || varName === 'name') {
+                    updatePayload.contactName = extracted;
+                    sessionVars.nombre = extracted;
+                    sessionVars.name = extracted;
+                }
+                sessionVars[varName] = extracted;
+                
                 await cardRef.update(updatePayload);
 
                 const next = flow.edges.find((e: any) => e.source === node.id);
@@ -256,11 +267,13 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         if (node.type === 'textMessageNode') {
             const content = replaceVars(node.data?.content || node.data?.text || 'Hola');
             await dispatchMessage(content);
-            await cardRef.update({
-                messages: admin.firestore.FieldValue.arrayUnion({
-                    sender: 'agent', text: content, platform, timestamp: new Date(), messageId: `bot_${Date.now()}`
-                })
-            });
+            if (content.trim()) {
+                await cardRef.update({
+                    messages: admin.firestore.FieldValue.arrayUnion({
+                        sender: 'agent', text: content, platform, timestamp: new Date(), messageId: `bot_${Date.now()}`
+                    })
+                });
+            }
             const edge = flow.edges.find((e: any) => e.source === node.id);
             currentNodeId = edge ? edge.target : null;
             continue;
@@ -273,15 +286,20 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             })).slice(0, 3);
 
             await dispatchMessage(content, node.type === 'quickReplyNode' ? { type: 'quick_reply', buttons } : {});
-            await cardRef.update({
-                messages: admin.firestore.FieldValue.arrayUnion({
-                    sender: 'agent', text: content, platform, timestamp: new Date(), messageId: `bot_wait_${Date.now()}`
-                }),
+            const updatePayload: any = {
                 'botState.status': 'active',
                 'botState.waitingForInput': true,
                 'botState.currentNodeId': node.id,
                 'botState.variableName': node.data?.variableName || 'input'
-            });
+            };
+            
+            if (content.trim()) {
+                updatePayload.messages = admin.firestore.FieldValue.arrayUnion({
+                    sender: 'agent', text: content, platform, timestamp: new Date(), messageId: `bot_wait_${Date.now()}`
+                });
+            }
+            
+            await cardRef.update(updatePayload);
             return; // EXIT loop, wait for user
         }
 
