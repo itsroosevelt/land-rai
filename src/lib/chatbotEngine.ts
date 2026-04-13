@@ -119,10 +119,38 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     const from = msg.from;
     const messageId = msg.messageId;
 
-    // A. RESET CHECK (Master Bypass)
+    // A. RESET CHECK (Master Bypass) - MOVED TO TOP
     const normalizedInput = text.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     const isReset = normalizedInput === 'reiniciar' || normalizedInput === 'menu' || normalizedInput === 'reset' ||
         normalizedInput.includes('reinicia todo ahora') || normalizedInput.startsWith('reinici');
+
+    const dispatchMessage = async (content: string, options: any = {}) => {
+        const opts = { userId, entityId, ...options };
+        if (platform === 'whatsapp') return await sendWhatsAppMessage(from, content, opts);
+        if (platform === 'messenger' || platform === 'instagram') return await sendMetaMessage(from, content, { ...opts, provider: platform });
+        if (platform === 'telegram') return await sendTelegramMessage(from, content, opts);
+        if (platform === 'gmail') return await sendGmailMessage(from, content, opts);
+    };
+
+    if (isReset) {
+        console.log(`[ChatbotEngine] ♻️ EXECUTING RESET for ${from}`);
+        await cardRef.update({
+            'botState.status': 'inactive',
+            'botState.currentNodeId': null,
+            'botState.waitingForInput': false,
+            'botState.messageQueue': [], // WIPE QUEUE ON RESET
+            'customFields': admin.firestore.FieldValue.delete(),
+            'botState.lastStep': 'FORCE_RESET'
+        });
+        const resetText = "🔄 Reinicio completado. Escribe 'hola' para empezar de nuevo.";
+        await dispatchMessage(resetText);
+        await cardRef.update({
+            messages: admin.firestore.FieldValue.arrayUnion({
+                sender: 'agent', text: resetText, platform, timestamp: new Date(), messageId: `bot_sys_${Date.now()}`
+            })
+        });
+        return;
+    }
 
     // B. FETCH BOT & FLOW
     const botsRef = db.collection(`${entityPath}/chatbots`);
@@ -149,35 +177,6 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             return context[key] !== undefined ? String(context[key]) : match;
         });
     };
-
-    const dispatchMessage = async (content: string, options: any = {}) => {
-        const opts = { userId, entityId, ...options };
-        if (platform === 'whatsapp') return await sendWhatsAppMessage(from, content, opts);
-        if (platform === 'messenger' || platform === 'instagram') return await sendMetaMessage(from, content, { ...opts, provider: platform });
-        if (platform === 'telegram') return await sendTelegramMessage(from, content, opts);
-        if (platform === 'gmail') return await sendGmailMessage(from, content, opts);
-    };
-
-    // D. RESET EXECUTION
-    if (isReset) {
-        console.log(`[ChatbotEngine] ♻️ EXECUTING RESET for ${from}`);
-        await cardRef.update({
-            'botState.status': 'inactive',
-            'botState.currentNodeId': null,
-            'botState.waitingForInput': false,
-            'botState.messageQueue': [], // WIPE QUEUE ON RESET
-            'customFields': admin.firestore.FieldValue.delete(),
-            'botState.lastStep': 'FORCE_RESET'
-        });
-        const resetText = "🔄 Reinicio completado. Escribe 'hola' para empezar de nuevo.";
-        await dispatchMessage(resetText);
-        await cardRef.update({
-            messages: admin.firestore.FieldValue.arrayUnion({
-                sender: 'agent', text: resetText, platform, timestamp: new Date(), messageId: `bot_sys_${Date.now()}`
-            })
-        });
-        return;
-    }
 
     // E. RESUME OR START
     const bState = cardData.botState || {};
