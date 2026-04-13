@@ -421,13 +421,6 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         }
 
         // 4. LOGIC NODES (Set Variable, Webhook, etc.) - DEFAULT SKIP & ADVANCE
-        // This is the "Agnostic" part: if it has an edge, just follow it.
-        console.log(`[ChatbotEngine] ⏩ Skipping logic/unknown node type: ${node.type}`);
-        const edge = flow.edges.find((e: any) => e.source === node.id);
-        currentNodeId = edge ? edge.target : null;
-        if (!edge) break; // End of flow if no way forward
-    }
-
         if (node.type === 'conditionNode') {
             const snap = await cardRef.get();
             const fresh = snap.data() || {};
@@ -454,6 +447,12 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             await cardRef.update({ 'botState.status': 'completed', 'botState.waitingForInput': false });
             return;
         }
-        break;
+
+        // DEFAULT: Just follow the edge if node is unhandled
+        console.log(`[ChatbotEngine] ⏩ Skipping logic/unknown node type: ${node.type}`);
+        const edge = flow.edges.find((e: any) => e.source === node.id);
+        currentNodeId = edge ? edge.target : null;
+        if (!edge) break; // End of flow if no way forward
     }
 }
+
