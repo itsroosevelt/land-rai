@@ -61,15 +61,17 @@ export async function sendMetaMessage(
     const isImage = options.type === 'image' || (typeof options !== 'string' && options.type === 'media');
 
     if (isImage) {
-        messageData.message.attachment = {
-            type: 'image',
-            payload: {
-                url: text, // In media mode, 'text' is often the URL
-                is_selectable: true
+        messageData.message = {
+            attachment: {
+                type: 'image',
+                payload: {
+                    url: text,
+                    is_selectable: true
+                }
             }
         };
     } else {
-        messageData.message.text = text;
+        messageData.message = { text: text };
     }
 
     // --- QUICK REPLY SUPPORT (FIXES MESSENGER MISSING BUTTONS) ---

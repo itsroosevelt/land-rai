@@ -119,13 +119,12 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     const from = msg.from;
     const messageId = msg.messageId;
 
-    // A. RESET CHECK (Master Bypass) - MOVED TO TOP
+    // --- A. RESET & TRIGGER DETECTION (Super Intelligent) ---
     const normalizedInput = text.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    const isReset = normalizedInput === 'reiniciar' || normalizedInput === 'menu' || normalizedInput === 'reset' ||
-        normalizedInput.includes('reinicia todo ahora') || normalizedInput.startsWith('reinici');
-
-    // Trigger check for "hola" and variants
-    const isStartTrigger = normalizedInput === 'hola' || normalizedInput === 'hi' || normalizedInput === 'buenas' || normalizedInput === 'inicio';
+    const isReset = /^(reiniciar|reset|menu|inicio|detener|stop|salir)/i.test(normalizedInput);
+    
+    // Inclusive regex for Spanish greetings (hola, buenos dias, que tal, etc)
+    const isStartTrigger = /^(hola|hi|buenas|inicio|buen(as)?\s*(dias|tardes|noches)|que\s*tal|saludos)/i.test(normalizedInput);
     
     // TRACK SESSION VARIABLES (Avoids stale cardData)
     const sessionVars = {
@@ -148,28 +147,35 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     const cleanInput = (raw: string, varName: string): string => {
         const val = raw.trim();
         const v = varName.toLowerCase();
-        
-        // A. EMAIL EXTRACTION
+
+        // EMAIL Extraction (Intelligent Regex)
         if (v.includes('mail') || v.includes('correo')) {
-            const match = val.match(/[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*/);
-            return match ? match[0] : val;
+            const emailRegex = /[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*/g;
+            const matches = val.match(emailRegex);
+            return matches ? matches[0] : val;
         }
-        
-        // B. NAME CLEANSING
-        if (v === 'nombre' || v === 'name' || v === 'first_name') {
+
+        // NAME Cleaning (Greedy Prefix Removal for 100% Intelligence)
+        if (v.includes('nombre') || v.includes('name') || v.includes('cliente')) {
             let cleaned = val;
             const prefixes = [
                 /^(hola,?\s+)?me\s+llamo\s+/i,
                 /^(hola,?\s+)?mi\s+nombre\s+es\s+/i,
                 /^(hola,?\s+)?soy\s+/i,
+                /^(hola,?\s+)?mucho\s+gusto,?\s+/i,
+                /^(hola,?\s+)?buen(as)?\s*(dias|tardes|noches),?\s*(soy|me llamo)?\s*/i,
+                /^(hola,?\s+)?que\s*tal,?\s*(soy|me llamo)?\s*/i,
                 /^(mucho\s+gusto,?\s+)/i,
-                /^(buen(as|os)\s+(dias|noches|tardes),?\s+)/i
+                /^(buen(as)?\s*(dias|tardes|noches),?\s+)/i,
+                /^(hola,?\s+)/i
             ];
-            prefixes.forEach(p => { cleaned = cleaned.replace(p, ''); });
+            prefixes.forEach(p => {
+                cleaned = cleaned.replace(p, '');
+            });
+
             // Capitalize names
             return cleaned.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ').trim();
         }
-        
         return val;
     };
 
