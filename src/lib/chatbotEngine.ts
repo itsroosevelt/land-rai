@@ -253,9 +253,17 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                     extracted = text.trim();
                 }
 
-                // 2. VALIDATION
+                // 2. VALIDATION (Smart)
                 let isValid = true;
-                if (validationRegex) {
+
+                // RULE 1: If result is empty after cleaning, it's invalid noise
+                if (!extracted) {
+                    console.log(`[ChatbotEngine] 🛡️ Smart rejection: Input for ${varName} was purely noise or empty.`);
+                    isValid = false;
+                }
+
+                // RULE 2: Regex Validation (if defined)
+                if (isValid && validationRegex) {
                     try {
                         const regex = new RegExp(validationRegex, 'i');
                         isValid = regex.test(extracted);
@@ -267,8 +275,9 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
 
                 if (!isValid) {
                     console.log(`[ChatbotEngine] ⚠️ Validation failed for ${varName}: "${extracted}"`);
-                    // Stay on same node, send error message
-                    await dispatchMessage(replaceVars(errorMessage));
+                    // Stay on same node, send error message (default or custom)
+                    const errorContent = replaceVars(errorMessage);
+                    await dispatchMessage(errorContent);
                     return;
                 }
 
