@@ -418,7 +418,13 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 'botState.waitingForInput': true,
                 'botState.currentNodeId': node.id,
                 messages: admin.firestore.FieldValue.arrayUnion({
-                    sender: 'agent', text: body, platform, timestamp: new Date(), messageId: `bot_list_${Date.now()}`
+                    sender: 'agent', 
+                    text: body, 
+                    platform, 
+                    timestamp: new Date(), 
+                    messageId: `bot_list_${Date.now()}`,
+                    type: 'list',
+                    sections: sections
                 })
             });
             return;
@@ -444,7 +450,13 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             
             if (content.trim()) {
                 updatePayload.messages = admin.firestore.FieldValue.arrayUnion({
-                    sender: 'agent', text: content, platform, timestamp: new Date(), messageId: `bot_wait_${Date.now()}`
+                    sender: 'agent', 
+                    text: content, 
+                    platform, 
+                    timestamp: new Date(), 
+                    messageId: `bot_wait_${Date.now()}`,
+                    type: node.type === 'quickReplyNode' ? 'quick_reply' : 'text',
+                    buttons: node.type === 'quickReplyNode' ? buttons : []
                 });
             }
             
