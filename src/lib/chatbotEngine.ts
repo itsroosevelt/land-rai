@@ -235,20 +235,61 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             const node = flow.nodes.find((n: any) => n.id === currentNodeId);
             if (node?.type === 'captureInputNode') {
                 const varName = node.data?.variableName || 'input';
-                const extracted = cleanInput(text, varName);
+                const inputType = node.data?.inputType || 'text';
+                const validationRegex = node.data?.validationRegex;
+                const errorMessage = node.data?.errorMessage || 'Formato inválido. Por favor intenta de nuevo.';
+                
+                // 1. SMART EXTRACTION & CLEANSING
+                // We use inputType to decide how to clean, or fallback to name heuristics
+                let extracted = text;
+                const isEmail = inputType === 'email' || varName.toLowerCase().includes('mail') || varName.toLowerCase().includes('correo');
+                const isName = inputType === 'text' && (varName.toLowerCase().includes('nombre') || varName.toLowerCase().includes('name'));
 
-                console.log(`[ChatbotEngine] 📥 Captured & Cleaned ${varName}: ${extracted}`);
+                if (isEmail) {
+                    extracted = cleanInput(text, 'email'); // Force email cleaning
+                } else if (isName) {
+                    extracted = cleanInput(text, 'nombre'); // Force name cleaning
+                } else {
+                    extracted = text.trim();
+                }
+
+                // 2. VALIDATION
+                let isValid = true;
+                if (validationRegex) {
+                    try {
+                        const regex = new RegExp(validationRegex, 'i');
+                        isValid = regex.test(extracted);
+                    } catch (e) {
+                        console.error(`[ChatbotEngine] ❌ Invalid Regex in node ${node.id}:`, validationRegex);
+                    }
+                }
+
+                if (!isValid) {
+                    console.log(`[ChatbotEngine] ⚠️ Validation failed for ${varName}: "${extracted}"`);
+                    // Stay on same node, send error message
+                    await dispatchMessage(replaceVars(errorMessage));
+                    // We don't advance currentNodeId, so it stays waiting for input at the same node
+                    return;
+                }
+
+                // 3. SUCCESS HANDLING
+                console.log(`[ChatbotEngine] ✅ Captured & Validated ${varName}: ${extracted}`);
                 const updatePayload: any = { [`customFields.${varName}`]: extracted, 'botState.waitingForInput': false };
-                if (varName === 'nombre' || varName === 'name') {
+                
+                // Mirror name to contactName if applicable
+                if (isName) {
                     updatePayload.contactName = extracted;
                     sessionVars.nombre = extracted;
                     sessionVars.name = extracted;
                 }
                 sessionVars[varName] = extracted;
-                
                 await cardRef.update(updatePayload);
 
-                const next = flow.edges.find((e: any) => e.source === node.id);
+                // Find next node (Success edge)
+                // Prefer edge with 'success' handle, otherwise first available
+                const next = flow.edges.find((e: any) => e.source === node.id && e.sourceHandle === 'success') 
+                          || flow.edges.find((e: any) => e.source === node.id);
+                
                 currentNodeId = next ? next.target : null;
             } else {
                 // QuickReply or generic wait
