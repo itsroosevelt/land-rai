@@ -357,6 +357,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             continue;
         }
 
+        // 1. TEXT MESSAGE
         if (node.type === 'textMessageNode') {
             const content = replaceVars(node.data?.content || node.data?.text || 'Hola');
             await dispatchMessage(content);
@@ -372,13 +373,36 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             continue;
         }
 
+        // 2. MEDIA MESSAGE
+        if (node.type === 'mediaMessageNode') {
+            const url = node.data?.url;
+            const caption = replaceVars(node.data?.caption || '');
+            if (url) {
+                // We use dispatchMessage for caption and assume provider can handle media if we had a dedicated tool, 
+                // for now we send caption as text + url if possible.
+                await dispatchMessage(`${caption}\n${url}`.trim());
+                await cardRef.update({
+                    messages: admin.firestore.FieldValue.arrayUnion({
+                        sender: 'agent', text: caption || 'Imagen', platform, timestamp: new Date(), messageId: `bot_media_${Date.now()}`
+                    })
+                });
+            }
+            const edge = flow.edges.find((e: any) => e.source === node.id);
+            currentNodeId = edge ? edge.target : null;
+            continue;
+        }
+
+        // 3. CAPTURE / QUICK REPLY (Wait nodes)
         if (node.type === 'captureInputNode' || node.type === 'quickReplyNode') {
             const content = replaceVars(node.data?.content || node.data?.text || node.data?.bodyText || '');
             const buttons = (node.data?.buttons || []).map((b: any) => ({
                 type: 'reply', reply: { id: (b.id || b.title || b).substring(0, 20), title: (b.title || b).substring(0, 20) }
             })).slice(0, 3);
 
-            await dispatchMessage(content, node.type === 'quickReplyNode' ? { type: 'quick_reply', buttons } : {});
+            if (content.trim()) {
+                await dispatchMessage(content, node.type === 'quickReplyNode' ? { type: 'quick_reply', buttons } : {});
+            }
+            
             const updatePayload: any = {
                 'botState.status': 'active',
                 'botState.waitingForInput': true,
@@ -395,6 +419,14 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             await cardRef.update(updatePayload);
             return; // EXIT loop, wait for user
         }
+
+        // 4. LOGIC NODES (Set Variable, Webhook, etc.) - DEFAULT SKIP & ADVANCE
+        // This is the "Agnostic" part: if it has an edge, just follow it.
+        console.log(`[ChatbotEngine] ⏩ Skipping logic/unknown node type: ${node.type}`);
+        const edge = flow.edges.find((e: any) => e.source === node.id);
+        currentNodeId = edge ? edge.target : null;
+        if (!edge) break; // End of flow if no way forward
+    }
 
         if (node.type === 'conditionNode') {
             const snap = await cardRef.get();
