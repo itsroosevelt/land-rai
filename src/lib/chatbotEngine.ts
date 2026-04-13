@@ -245,30 +245,21 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 const validationRegex = node.data?.validationRegex;
                 const errorMessage = node.data?.errorMessage || 'Formato inválido. Por favor intenta de nuevo.';
                 
-                // 1. SMART EXTRACTION & CLEANSING
-                // We use inputType to decide how to clean, or fallback to name heuristics
-                let extracted = text;
+                // 1. EXTRACTION
+                let extracted = text.trim();
                 const isEmail = inputType === 'email' || varName.toLowerCase().includes('mail') || varName.toLowerCase().includes('correo');
-                const isName = inputType === 'text' && (varName.toLowerCase().includes('nombre') || varName.toLowerCase().includes('name'));
+                const isName = inputType === 'text' && (varName.toLowerCase().includes('nombre') || varName.toLowerCase().includes('name') || varName.toLowerCase().includes('cli'));
 
                 if (isEmail) {
-                    extracted = cleanInput(text, 'email'); // Force email cleaning
+                    extracted = cleanInput(text, 'email');
                 } else if (isName) {
-                    extracted = cleanInput(text, 'nombre'); // Force name cleaning
-                } else {
-                    extracted = text.trim();
+                    extracted = cleanInput(text, 'nombre');
                 }
 
                 // 2. VALIDATION (Smart)
-                let isValid = true;
+                let isValid = !!extracted;
 
-                // RULE 1: If result is empty after cleaning, it's invalid noise
-                if (!extracted) {
-                    console.log(`[ChatbotEngine] 🛡️ Smart rejection: Input for ${varName} was purely noise or empty.`);
-                    isValid = false;
-                }
-
-                // RULE 2: Regex Validation (if defined)
+                // RULE: Regex Validation (if defined)
                 if (isValid && validationRegex) {
                     try {
                         const regex = new RegExp(validationRegex, 'i');
@@ -281,7 +272,6 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
 
                 if (!isValid) {
                     console.log(`[ChatbotEngine] ⚠️ Validation failed for ${varName}: "${extracted}"`);
-                    // Stay on same node, send error message (default or custom)
                     const errorContent = replaceVars(errorMessage);
                     await dispatchMessage(errorContent);
                     return;
@@ -299,29 +289,24 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 sessionVars[varName] = extracted;
                 await cardRef.update(updatePayload);
 
-                // Find next node (Success edge)
-                // UNIVERSAL CONNECTOR LOGIC: 
-                // 1. Look for 'success' handle
-                // 2. Look for ANY edge that isn't for a specific 'fail' handle
-                // 3. Take first available edge
+                // Find next node (Universal Connector)
                 const edges = flow.edges.filter((e: any) => e.source === node.id);
                 const next = edges.find((e: any) => e.sourceHandle === 'success') 
                           || edges.find((e: any) => !e.sourceHandle || !e.sourceHandle.toLowerCase().includes('fail'))
                           || edges[0];
                 
                 if (next) {
-                    console.log(`[ChatbotEngine] ➡️ Validated! Moving from ${node.id} to ${next.target}`);
                     currentNodeId = next.target;
                 } else {
-                    console.log(`[ChatbotEngine] ⚠️ No outgoing edge found for node ${node.id}. Flow ends here.`);
                     currentNodeId = null;
                 }
             } else {
-                // QuickReply or generic wait
+                // QuickReply or List Selection - HYBRID MATCHING
                 const edge = flow.edges.find((e: any) => {
-                    const handle = String(e.sourceHandle || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                    return e.source === node?.id && handle === normalizedInput;
-                }) || flow.edges.find((e: any) => e.source === node?.id);
+                    const handle = String(e.sourceHandle || '').trim().toLowerCase();
+                    // Match by technical ID (handle) OR formatted text
+                    return e.source === node?.id && (handle === normalizedInput || handle === text.trim().toLowerCase());
+                }) || flow.edges.find((e: any) => e.source === node?.id); // Fallback to first exit
                 
                 currentNodeId = edge ? edge.target : null;
                 await cardRef.update({ 'botState.waitingForInput': false });
