@@ -306,7 +306,7 @@ export async function POST(req: Request) {
             // UPDATING EXISTING CARD
             await targetCardDoc.ref.update({
                 contactName: resolvedName || existingContactName,
-                lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
+                lastMessage: text.length > 300 ? text.substring(0, 297) + '...' : text,
                 updatedAt: admin.firestore.Timestamp.now(),
                 unreadCount: admin.firestore.FieldValue.increment(1),
                 messages: admin.firestore.FieldValue.arrayUnion(newMessage),
@@ -355,7 +355,7 @@ export async function POST(req: Request) {
                 contactName: resolvedName || 'Usuario Meta',
                 contactNumber: senderId,
                 metaSenderId: senderId,
-                lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
+                lastMessage: text.length > 300 ? text.substring(0, 297) + '...' : text,
                 updatedAt: admin.firestore.Timestamp.now(),
                 createdAt: admin.firestore.Timestamp.now(),
                 messages: [newMessage],
