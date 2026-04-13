@@ -259,6 +259,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                     try {
                         const regex = new RegExp(validationRegex, 'i');
                         isValid = regex.test(extracted);
+                        console.log(`[ChatbotEngine] 🔍 Validation Check: "${extracted}" against /${validationRegex}/i => ${isValid}`);
                     } catch (e) {
                         console.error(`[ChatbotEngine] ❌ Invalid Regex in node ${node.id}:`, validationRegex);
                     }
@@ -268,7 +269,6 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                     console.log(`[ChatbotEngine] ⚠️ Validation failed for ${varName}: "${extracted}"`);
                     // Stay on same node, send error message
                     await dispatchMessage(replaceVars(errorMessage));
-                    // We don't advance currentNodeId, so it stays waiting for input at the same node
                     return;
                 }
 
@@ -276,7 +276,6 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 console.log(`[ChatbotEngine] ✅ Captured & Validated ${varName}: ${extracted}`);
                 const updatePayload: any = { [`customFields.${varName}`]: extracted, 'botState.waitingForInput': false };
                 
-                // Mirror name to contactName if applicable
                 if (isName) {
                     updatePayload.contactName = extracted;
                     sessionVars.nombre = extracted;
@@ -286,10 +285,13 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 await cardRef.update(updatePayload);
 
                 // Find next node (Success edge)
-                // Prefer edge with 'success' handle, otherwise first available
-                const next = flow.edges.find((e: any) => e.source === node.id && e.sourceHandle === 'success') 
-                          || flow.edges.find((e: any) => e.source === node.id);
+                // Priority: 'success' handle > handle with no name > first available edge
+                const edges = flow.edges.filter((e: any) => e.source === node.id);
+                const next = edges.find((e: any) => e.sourceHandle === 'success') 
+                          || edges.find((e: any) => !e.sourceHandle)
+                          || edges[0];
                 
+                console.log(`[ChatbotEngine] ➡️ Transitioning from ${node.id} to ${next?.target || 'NULL'}`);
                 currentNodeId = next ? next.target : null;
             } else {
                 // QuickReply or generic wait
@@ -316,7 +318,19 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     while (currentNodeId && executionCount < 15) {
         executionCount++;
         const node = flow.nodes.find((n: any) => n.id === currentNodeId);
-        if (!node) break;
+        if (!node) {
+            console.log(`[ChatbotEngine] 🛑 Node not found: ${currentNodeId}`);
+            break;
+        }
+
+        console.log(`[ChatbotEngine] ⚙️ Executing Node Type: ${node.type} (${node.id})`);
+        
+        // Skip start nodes in the middle of execution
+        if (node.type === 'start' || node.type === 'startNode') {
+            const edge = flow.edges.find((e: any) => e.source === node.id);
+            currentNodeId = edge ? edge.target : null;
+            continue;
+        }
 
         await cardRef.update({ 'botState.currentNodeId': node.id, 'botState.lastStep': `${node.type}` });
 
