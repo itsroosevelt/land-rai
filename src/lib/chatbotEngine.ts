@@ -81,9 +81,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
 
             try {
                 // --- 3. INNER ENGINE CORE ---
-                // We pass a 'isNewSession' flag if the bot was not active before this message
-                const wasActive = bState.status === 'active';
-                await runEngineCycle(cardRef, cardData, currentMsg, entityPath, entityId, userId, !wasActive);
+                await runEngineCycle(cardRef, cardData, currentMsg, entityPath, entityId, userId);
             } catch (cycleErr: any) {
                 console.error(`[ChatbotEngine] ❌ Cycle Error [${msgId}]:`, cycleErr.message);
                 // Log error to card but DON'T stop the whole runner
@@ -115,7 +113,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
 /**
  * Single Engine Cycle: Processes ONE message through the flow.
  */
-async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath: string, entityId: string, userId: string, isTriggerMessage: boolean = false) {
+async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath: string, entityId: string, userId: string) {
     const text = msg.text || '';
     const platform = msg.platform;
     const from = msg.from;
@@ -126,6 +124,9 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     const isReset = normalizedInput === 'reiniciar' || normalizedInput === 'menu' || normalizedInput === 'reset' ||
         normalizedInput.includes('reinicia todo ahora') || normalizedInput.startsWith('reinici');
 
+    // Trigger check for "hola" and variants
+    const isStartTrigger = normalizedInput === 'hola' || normalizedInput === 'hi' || normalizedInput === 'buenas' || normalizedInput === 'inicio';
+    
     const dispatchMessage = async (content: string, options: any = {}) => {
         const opts = { userId, entityId, ...options };
         if (platform === 'whatsapp') return await sendWhatsAppMessage(from, content, opts);
@@ -188,13 +189,13 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     let waitingForInput = bState.waitingForInput || false;
 
     // FIX: If status is 'active' but we have no node (stuck) or it's 'completed', we should try to restart
-    const shouldRestart = !currentNodeId || bState.status === 'completed' || bState.status === 'inactive';
+    const shouldRestart = isStartTrigger || !currentNodeId || bState.status === 'completed' || bState.status === 'inactive';
 
     // Handle incoming input for current node
     if (waitingForInput && currentNodeId) {
         // AGNOSTIC RULE: Do not allow the same message that triggered the start to be captured as an input
         // This prevents "mucho gusto hola" if 'hola' was the trigger.
-        if (isTriggerMessage && shouldRestart) {
+        if (isStartTrigger || (shouldRestart && !waitingForInput)) {
             console.log(`[ChatbotEngine] 🛡️ Trigger message blocked from capture captureInputNode to prevent auto-fill.`);
         } else {
             const node = flow.nodes.find((n: any) => n.id === currentNodeId);
@@ -202,9 +203,12 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 const varName = node.data?.variableName || 'input';
                 const isEmail = varName.toLowerCase().includes('mail') || varName.toLowerCase().includes('correo');
                 let extracted = text;
+                
                 if (isEmail) {
-                    const match = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+                    // More robust email regex
+                    const match = text.match(/[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*/);
                     if (match) extracted = match[0];
+                    console.log(`[ChatbotEngine] 📧 Email detected: ${extracted}`);
                 }
 
                 console.log(`[ChatbotEngine] 📥 Captured ${varName}: ${extracted}`);
