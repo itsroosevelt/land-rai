@@ -119,22 +119,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     const from = msg.from;
     const messageId = msg.messageId;
 
-    // --- A. RESET & TRIGGER DETECTION (Super Intelligent) ---
-    const normalizedInput = text.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    const isReset = /^(reiniciar|reset|menu|inicio|detener|stop|salir)/i.test(normalizedInput);
-    
-    // Inclusive regex for Spanish greetings (hola, buenos dias, que tal, etc)
-    const isStartTrigger = /^(hola|hi|buenas|inicio|buen(as)?\s*(dias|tardes|noches)|que\s*tal|saludos)/i.test(normalizedInput);
-    
-    // TRACK SESSION VARIABLES (Avoids stale cardData)
-    const sessionVars = {
-        nombre: (isStartTrigger || isReset) ? 'Usuario' : (cardData.contactName || 'Usuario'),
-        name: (isStartTrigger || isReset) ? 'Usuario' : (cardData.contactName || 'Usuario'),
-        first_name: ((isStartTrigger || isReset) ? 'Usuario' : (cardData.contactName || 'Usuario')).split(' ')[0],
-        ...(cardData.customFields || {}),
-        ...(cardData.variables || {})
-    };
-
+    // --- A. HELPERS (Essentials) ---
     const dispatchMessage = async (content: string, options: any = {}) => {
         const opts = { userId, entityId, ...options };
         if (platform === 'whatsapp') return await sendWhatsAppMessage(from, content, opts);
@@ -143,59 +128,46 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         if (platform === 'gmail') return await sendGmailMessage(from, content, opts);
     };
 
-    // SMART CLEANING HELPER
+    const normalizedInput = text.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const isReset = /^(reiniciar|reinicio|reset|menu|inicio|detener|stop|salir|clear)/i.test(normalizedInput);
+    const isStartTrigger = /^(hola|hi|buenas|inicio|buen(as)?\s*(dias|tardes|noches)|que\s*tal|saludos)/i.test(normalizedInput);
+
+    const sessionVars = {
+        nombre: (isStartTrigger || isReset) ? 'Usuario' : (cardData.contactName || 'Usuario'),
+        name: (isStartTrigger || isReset) ? 'Usuario' : (cardData.contactName || 'Usuario'),
+        first_name: ((isStartTrigger || isReset) ? 'Usuario' : (cardData.contactName || 'Usuario')).split(' ')[0],
+        ...(cardData.customFields || {}),
+        ...(cardData.variables || {})
+    };
+
     const cleanInput = (raw: string, varName: string): string => {
         const val = raw.trim();
-        const v = varName.toLowerCase();
-
-        // EMAIL Extraction (Intelligent Regex)
-        if (v.includes('mail') || v.includes('correo')) {
-            const emailRegex = /[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*/g;
-            const matches = val.match(emailRegex);
+        if (varName.toLowerCase().includes('mail') || varName.toLowerCase().includes('correo')) {
+            const matches = val.match(/[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*/g);
             return matches ? matches[0] : val;
         }
-
-        // NAME Cleaning (Greedy Prefix Removal for 100% Intelligence)
-        if (v.includes('nombre') || v.includes('name') || v.includes('cliente')) {
+        if (/nombre|name|cli/i.test(varName)) {
             let cleaned = val;
-            const prefixes = [
-                /^(hola,?\s+)?me\s+llamo\s+/i,
-                /^(hola,?\s+)?mi\s+nombre\s+es\s+/i,
-                /^(hola,?\s+)?soy\s+/i,
-                /^(hola,?\s+)?mucho\s+gusto,?\s+/i,
-                /^(hola,?\s+)?buen(as)?\s*(dias|tardes|noches),?\s*(soy|me llamo)?\s*/i,
-                /^(hola,?\s+)?que\s*tal,?\s*(soy|me llamo)?\s*/i,
-                /^(mucho\s+gusto,?\s+)/i,
-                /^(buen(as)?\s*(dias|tardes|noches),?\s+)/i,
-                /^(hola,?\s+)/i
-            ];
-            prefixes.forEach(p => {
-                cleaned = cleaned.replace(p, '');
-            });
-
-            // Capitalize names
+            [/me llamo /i, /mi nombre es /i, /soy /i, /mucho gusto/i, /hola/i].forEach(p => cleaned = cleaned.replace(p, ''));
             return cleaned.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ').trim();
         }
         return val;
     };
 
-    let bState = cardData.botState || {};
-
-    // --- B. ATOMIC RESET (Deep Wipe) ---
+    // --- B. MASTER BYPASS (Reset/Trigger) ---
     if (isReset || isStartTrigger) {
-        console.log(`[ChatbotEngine] 🧹 Performing Deep Wipe for card ${cardRef.id}`);
+        console.log(`[ChatbotEngine] 🧹 Master Bypass for card ${cardRef.id}`);
         await cardRef.update({
             'botState.status': 'active',
             'botState.waitingForInput': false,
             'botState.currentNodeId': null,
             'botState.messageQueue': [],
             'botState.lastProcessedMessageId': null,
-            customFields: {}, // WIPE PREVIOUS DATA
+            customFields: {}, 
             contactName: 'Usuario'
         });
         
-        // Refresh local state after wipe
-        bState = { ...bState, status: 'active', waitingForInput: false, currentNodeId: null };
+        cardData.botState = { status: 'active', waitingForInput: false, currentNodeId: null };
         cardData.customFields = {};
         cardData.contactName = 'Usuario';
         
@@ -210,6 +182,8 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             if (!isStartTrigger) return;
         }
     }
+
+    let bState = cardData.botState || {};
 
     // C. FETCH BOT & FLOW
     const botsRef = db.collection(`${entityPath}/chatbots`);
