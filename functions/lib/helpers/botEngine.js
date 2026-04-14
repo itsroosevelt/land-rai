@@ -748,10 +748,15 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                     shouldContinue = false;
                     break;
                 case 'mediaMessageNode':
+                    const mediaUrl = replaceVariables(nextNode.data.url || '', cardData);
                     const caption = replaceVariables(nextNode.data.caption || '', cardData);
-                    if (nextNode.data.url) {
-                        await adapter.sendMediaMessage(to, nextNode.data.url, caption, nextNode.data.filename);
-                        await logBotMessage(to, caption, cardData.id, cardData.groupId, cardRef, 'media', { url: nextNode.data.url, filename: nextNode.data.filename });
+                    const mediaType = nextNode.data.type || nextNode.data.mediaType || 'image';
+                    if (mediaUrl) {
+                        functions.logger.info(`[Bot Engine] Sending Media (${mediaType}) to ${to}: ${mediaUrl}`);
+                        await adapter.sendMediaMessage(to, mediaUrl, caption, mediaType);
+                        await logBotMessage(to, caption, cardData.id, cardData.groupId, cardRef, 'media', { url: mediaUrl, filename: nextNode.data.filename, type: mediaType });
+                        // Buffer delay to allow platform to process media before next message
+                        await delay(1500);
                     }
                     nextNodeId = getNextNodeId(bot, nextNodeId);
                     break;

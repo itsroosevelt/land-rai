@@ -200,7 +200,11 @@ async function sendLocationMessage(to, lat, long, name, address, ctx) {
 }
 function getMediaType(url, fileName) {
     var _a;
-    const ext = (_a = (fileName.includes('.') ? fileName.split('.').pop() : url.split('.').pop())) === null || _a === void 0 ? void 0 : _a.toLowerCase();
+    // Better extension extraction: split by '?' to remove query params, then take extension
+    const cleanUrl = url.split('?')[0];
+    const ext = (_a = (fileName && fileName.includes('.')
+        ? fileName.split('.').pop()
+        : cleanUrl.split('.').pop())) === null || _a === void 0 ? void 0 : _a.toLowerCase();
     if (['jpg', 'jpeg', 'png', 'webp'].includes(ext || ''))
         return 'image';
     if (['pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'csv'].includes(ext || ''))
@@ -209,6 +213,7 @@ function getMediaType(url, fileName) {
         return 'video';
     if (['mp3', 'aac', 'ogg', 'wav', 'm4a'].includes(ext || ''))
         return 'audio';
+    // Default fallback
     return 'image';
 }
 //# sourceMappingURL=whatsappAPI.js.map

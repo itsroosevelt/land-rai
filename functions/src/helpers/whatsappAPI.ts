@@ -215,10 +215,17 @@ export async function sendLocationMessage(to: string, lat: number, long: number,
 }
 
 function getMediaType(url: string, fileName: string): 'image' | 'document' | 'video' | 'audio' | 'unsupported' {
-    const ext = (fileName.includes('.') ? fileName.split('.').pop() : url.split('.').pop())?.toLowerCase();
+    // Better extension extraction: split by '?' to remove query params, then take extension
+    const cleanUrl = url.split('?')[0];
+    const ext = (fileName && fileName.includes('.') 
+        ? fileName.split('.').pop() 
+        : cleanUrl.split('.').pop())?.toLowerCase();
+    
     if (['jpg', 'jpeg', 'png', 'webp'].includes(ext || '')) return 'image';
     if (['pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'csv'].includes(ext || '')) return 'document';
     if (['mp4', '3gp', 'mov', 'avi', 'mkv'].includes(ext || '')) return 'video';
     if (['mp3', 'aac', 'ogg', 'wav', 'm4a'].includes(ext || '')) return 'audio';
+    
+    // Default fallback
     return 'image';
 }
