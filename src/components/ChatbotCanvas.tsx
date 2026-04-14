@@ -20,15 +20,14 @@ import {
 import 'reactflow/dist/style.css';
 import dagre from 'dagre';
 import { Button } from './ui/button';
-import * as nodeComponents from './CustomNodes';
-import CustomEdge from './CustomEdge';
+import { cn } from '@/lib/utils';
+import { nodeTypes, edgeTypes } from './ChatbotNodeTypes';
 import SettingsPanel from './SettingsPanel';
 import {
     Menu, MessageSquare, Image as ImageIcon, Zap, Rows, Edit2, AlertTriangle, Code, Variable, StopCircle, ChevronLeft,
     CheckSquare, Contact, MapPin, BrainCircuit, Bot, Database, Clock, ShoppingCart, CreditCard,
     Rocket, Mic, Smile, Users, ThumbsUp, Send
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import {
     Tooltip,
     TooltipContent,
@@ -36,40 +35,7 @@ import {
     TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-// --- STATIC CONFIGURATION (DEFINED OUTSIDE COMPONENT) ---
-// This prevents React Flow warning #002 about unnecessary re-renders.
-
-const nodeTypes = {
-    startNode: nodeComponents.StartNode,
-    endNode: nodeComponents.EndNode,
-    textMessageNode: nodeComponents.TextMessageNode,
-    mediaMessageNode: nodeComponents.MediaMessageNode,
-    quickReplyNode: nodeComponents.QuickReplyNode,
-    listMessageNode: nodeComponents.ListMessageNode,
-    pollNode: nodeComponents.PollNode,
-    contactNode: nodeComponents.ContactNode,
-    locationNode: nodeComponents.LocationNode,
-    captureInputNode: nodeComponents.CaptureInputNode,
-    conditionNode: nodeComponents.ConditionNode,
-    setVariableNode: nodeComponents.SetVariableNode,
-    webhookNode: nodeComponents.WebhookNode,
-    firestoreReadWriteNode: nodeComponents.FirestoreReadWriteNode,
-    delayNode: nodeComponents.DelayNode,
-    catalogNode: nodeComponents.CatalogNode,
-    productNode: nodeComponents.ProductNode,
-    kambanFlowsNode: nodeComponents.kambanFlowsNode,
-    checkoutNode: nodeComponents.CheckoutNode,
-    generativeAINode: nodeComponents.GenerativeAINode,
-    transcriptionNode: nodeComponents.TranscriptionNode,
-    sentimentAnalysisNode: nodeComponents.SentimentAnalysisNode,
-    templateNode: nodeComponents.TemplateNode,
-    humanHandoffNode: nodeComponents.HumanHandoffNode,
-};
-
-const edgeTypes = {
-    custom: CustomEdge,
-};
-
+// --- SIDEBAR CONFIGURATION ---
 const sidebarNodeGroups = [
     {
         title: 'Mensajería y UI',
@@ -215,9 +181,6 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => 
 
 const ChatbotCanvas = forwardRef<ChatbotCanvasRef, ChatbotCanvasProps>(
     ({ nodes, edges, onNodesChange, onEdgesChange, onConnect, setNodes, setEdges }, ref) => {
-
-        // nodeTypes and edgeTypes are now defined OUTSIDE the component
-        // No useMemo needed inside here anymore.
 
         const [selectedNode, setSelectedNode] = useState<Node | null>(null);
         const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);

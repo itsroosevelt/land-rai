@@ -413,19 +413,25 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         }
 
         // 2. MEDIA MESSAGE
-        if (node.type === 'mediaMessageNode') {
-            const url = node.data?.url;
+        console.log(`[ChatbotEngine] 🎯 Checking Node: ${node.id} | Type: ${node.type}`);
+        if (node.type === 'mediaMessageNode' || (node.type as string) === 'multimedia') {
+            const url = replaceVars(node.data?.url || '');
             const caption = replaceVars(node.data?.caption || '');
+            console.log(`[ChatbotEngine] 🖼️ Media Node Detected: URL=${url.substring(0, 30)}... Caption=${caption.substring(0, 20)}`);
+            
             if (url) {
-                // SEND REAL IMAGE
-                if (caption.trim()) await dispatchMessage(caption);
-                await dispatchMessage(url, { type: 'image' });
+                // Combined Send (Image + Caption) via options
+                const sendResult = await dispatchMessage(caption, { type: 'image', url: url, filename: node.data?.filename });
+                console.log(`[ChatbotEngine] 📦 Dispatch Result:`, JSON.stringify(sendResult));
 
                 await cardRef.update({
                     messages: admin.firestore.FieldValue.arrayUnion({
                         sender: 'agent', text: caption || 'Imagen', platform, timestamp: new Date(), messageId: `bot_media_${Date.now()}`
                     })
                 });
+
+                // Crucial delay to allow media to be ingested before next node
+                await sleep(2000);
             }
             const edge = flow.edges.find((e: any) => e.source === node.id);
             currentNodeId = edge ? edge.target : null;

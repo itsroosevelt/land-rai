@@ -1,4 +1,3 @@
-
 import axios from 'axios';
 import { db, admin } from './firebase-admin'; // Use admin to fetch tokens on server
 import { getGmailAccessToken } from './googleAuth';
@@ -192,6 +191,8 @@ export async function sendWhatsAppMessage(
         to: cleanTo,
     };
 
+    console.log(`[sendWhatsAppMessage] Preparing message type: ${options.type || 'text'} to ${cleanTo}`);
+
     // Construct Payload based on type
     if (options.type === 'template' && options.template) {
         payload.type = 'template';
@@ -218,14 +219,20 @@ export async function sendWhatsAppMessage(
                 sections: options.sections
             }
         };
-    } else if (options.type === 'media') {
-        payload.type = 'document'; // or image/video based on filename? defaulting to document
-        payload.document = {
-            link: options.url,
-            filename: options.filename,
-            caption: message
-        };
+    } else if (['media', 'multimedia', 'image', 'video', 'audio', 'document'].includes((options.type || '').toLowerCase())) {
+        const typeIn = (options.type || 'image').toLowerCase();
+        const mediaType = (typeIn === 'media' || typeIn === 'multimedia') ? 'document' : typeIn as 'image' | 'video' | 'audio' | 'document';
+        payload.type = mediaType;
+        
+        // Build media object strictly (Meta rejects 'filename' inside 'image' or 'video')
+        const mediaData: any = { link: options.url, caption: message };
+        if (mediaType === 'document' && options.filename) {
+            mediaData.filename = options.filename;
+        }
+
+        payload[mediaType] = mediaData;
     } else {
+        console.warn(`[sendWhatsAppMessage] ⚠️ Falling back to TEXT. Received Type: "${options.type || 'undefined'}"`);
         payload.type = 'text';
         payload.text = { body: message, preview_url: false };
     }
@@ -234,6 +241,8 @@ export async function sendWhatsAppMessage(
         const response = await axios.post(url, payload, {
             headers: { Authorization: `Bearer ${token}` }
         });
+
+        console.log(`[sendWhatsAppMessage] Meta API Response:`, JSON.stringify(response.data, null, 2));
 
         return { ...response.data, sentTo: cleanTo };
     } catch (error: any) {
