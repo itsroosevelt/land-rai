@@ -243,7 +243,9 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         } else if (targets.length === 0 || targets.includes('*')) {
             score = 5;  // Global Match (Medium Priority)
         } else {
-            score = 1;  // Fallback: Best available active bot (Low Priority)
+            // FALLBACK RULE: If we have multiple bots, but none match this platform, 
+            // the oldest/first active bot acts as a general fallback.
+            score = 1;
         }
         
         return { ...bot, _score: score };
