@@ -252,10 +252,10 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 const validationRegex = node.data?.validationRegex;
                 const errorMessage = node.data?.errorMessage || 'Formato inválido. Por favor intenta de nuevo.';
                 
-                // 1. EXTRACTION
+                // 1. ROBUST TYPE DETECTION
                 let extracted = text.trim();
-                const isEmail = inputType === 'email' || varName.toLowerCase().includes('mail') || varName.toLowerCase().includes('correo');
-                const isName = inputType === 'text' && (varName.toLowerCase().includes('nombre') || varName.toLowerCase().includes('name') || varName.toLowerCase().includes('cli'));
+                const isEmail = inputType === 'email' || /email|mail|correo|direcc/i.test(varName);
+                const isName = (inputType === 'text' || !inputType) && /nombre|name|cli/i.test(varName);
 
                 if (isEmail) {
                     extracted = cleanInput(text, 'email');
@@ -263,15 +263,23 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                     extracted = cleanInput(text, 'nombre');
                 }
 
-                // 2. VALIDATION (Smart)
+                // 2. VALIDATION (Omnichannel Robust)
                 let isValid = !!extracted;
 
-                // RULE: Regex Validation (if defined)
+                // SPECIAL RULE: If it's an email type, ensure it looks like an email at minimum
+                if (isEmail && isValid) {
+                    const basicEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    if (!basicEmailRegex.test(extracted)) {
+                        console.log(`[ChatbotEngine] ⚠️ Basic Email validation failed for: ${extracted}`);
+                        isValid = false;
+                    }
+                }
+
+                // RULE: Regex Validation (if defined in node)
                 if (isValid && validationRegex) {
                     try {
                         const regex = new RegExp(validationRegex, 'i');
                         isValid = regex.test(extracted);
-                        console.log(`[ChatbotEngine] 🔍 Validation Check: "${extracted}" against /${validationRegex}/i => ${isValid}`);
                     } catch (e) {
                         console.error(`[ChatbotEngine] ❌ Invalid Regex in node ${node.id}:`, validationRegex);
                     }
