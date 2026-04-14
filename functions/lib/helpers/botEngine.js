@@ -422,8 +422,13 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
             const confirmText = isReset ? "🔄 Reinicio completado, empezamos de nuevo." : "📋 Iniciando sistema...";
             await adapter.sendMessage(to, confirmText);
             await logBotMessage(to, confirmText, cardData.id, cardData.groupId, cardRef, 'text', undefined, userId, entityId, platform);
-            // Local state sync for immediate flow start below
+            // Local state sync 
             botState = { status: 'active', currentNodeId: null, waitingForInput: false };
+            // If it's a reset, we stop here and wait for the user to send a new message ('hola', etc.) to start the flow
+            if (isReset) {
+                functions.logger.info(`[Bot Engine] Reset complete for ${to}. Waiting for next message.`);
+                return;
+            }
         }
         // --- BILINGUAL STATE RESOLUTION / MIGRATION ---
         if (botState.status === undefined && cardData.chatbotState) {
