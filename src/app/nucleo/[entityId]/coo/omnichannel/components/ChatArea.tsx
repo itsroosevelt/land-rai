@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreVertical, Info, Send, Paperclip, Smile, Image as ImageIcon, FileText, Loader2, Zap, User, XCircle, Ban, Mic, X, Plus, MapPin, Contact2, AlertCircle, RefreshCw, List, MousePointer2, ExternalLink } from 'lucide-react';
+import { MoreVertical, Info, Send, Paperclip, Smile, Image as ImageIcon, FileText, Loader2, Zap, User, XCircle, Ban, Mic, X, Plus, MapPin, Contact2, AlertCircle, RefreshCw, List, MousePointer2, ExternalLink, Search, Filter, MessageCircle, Check, CheckCheck, Clock, Mail, Instagram, Facebook, Twitter } from 'lucide-react';
 import { useConversationLogic } from '../../whatsapp/components/ConversationModal/hooks/useConversationLogic';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -219,41 +219,69 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
     };
 
     return (
-        <div className="flex-1 flex flex-col h-full relative">
+        <div className="flex-1 flex flex-col h-full relative bg-[#0a0a0a]">
 
-            {/* Header */}
-            <div className="h-12 border-b border-neutral-800 bg-[#111] flex items-center justify-between px-4 flex-shrink-0">
-                <div className="flex items-center space-x-2">
-                    <div className="w-7 h-7 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center font-bold text-white text-[11px] shadow-sm">
-                        {contactName.charAt(0).toUpperCase()}
+            {/* Header - Glassmorphism */}
+            <div className="h-16 border-b border-white/5 bg-[#0d0d0d]/80 backdrop-blur-md flex items-center justify-between px-6 flex-shrink-0 z-10 sticky top-0 shadow-sm">
+                <div className="flex items-center space-x-3">
+                    <div className="relative">
+                        <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center font-bold text-white text-[14px] shadow-lg shadow-indigo-500/20">
+                            {contactName.charAt(0).toUpperCase()}
+                        </div>
+                        <div className={`absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full border-2 border-[#0d0d0d] flex items-center justify-center p-0.5 shadow-md
+                            ${(card?.channel || card?.source || '').toLowerCase().includes('whatsapp') ? 'bg-[#25D366]' :
+                              (card?.channel || card?.source || '').toLowerCase().includes('instagram') ? 'bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888]' :
+                              (card?.channel || card?.source || '').toLowerCase().includes('messenger') ? 'bg-[#0084FF]' :
+                              (card?.channel || card?.source || '').toLowerCase().includes('telegram') ? 'bg-[#0088cc]' :
+                              (card?.channel || card?.source || '').toLowerCase().includes('gmail') ? 'bg-[#EA4335]' : 
+                              (card?.channel || card?.source || '').toLowerCase().includes('twitter') || (card?.channel || card?.source || '').toLowerCase().includes('x_twitter') ? 'bg-black' : 'bg-neutral-600'}
+                        `}>
+                            {(card?.channel || card?.source || '').toLowerCase().includes('whatsapp') ? (
+                                <svg viewBox="0 0 24 24" className="w-2.5 h-2.5 text-white fill-current">
+                                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.414 0 0 5.414 0 12.05c0 2.123.551 4.197 1.597 6.03l-1.602 5.8 5.883-1.543a11.86 11.86 0 005.815 1.526h.005c6.634 0 12.048-5.414 12.048-12.05 0-3.213-1.252-6.234-3.525-8.508z" />
+                                </svg>
+                            ) : (card?.channel || card?.source || '').toLowerCase().includes('instagram') ? (
+                                <Instagram size={10} className="text-white" />
+                            ) : (card?.channel || card?.source || '').toLowerCase().includes('messenger') ? (
+                                <Facebook size={10} className="text-white" />
+                            ) : (card?.channel || card?.source || '').toLowerCase().includes('telegram') ? (
+                                <Send size={10} className="text-white" />
+                            ) : (card?.channel || card?.source || '').toLowerCase().includes('gmail') ? (
+                                <Mail size={10} className="text-white" />
+                            ) : (card?.channel || card?.source || '').toLowerCase().includes('twitter') || (card?.channel || card?.source || '').toLowerCase().includes('x_twitter') ? (
+                                <Twitter size={10} className="text-white" />
+                            ) : (
+                                <div className={`w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-neutral-500'}`} />
+                            )}
+                        </div>
                     </div>
                     <div>
-                        <h2 className="font-semibold text-white tracking-tight text-[13px]">{contactName}</h2>
-                        <div className="flex items-center text-[10px] text-neutral-500 min-h-[16px]">
+                        <h2 className="font-bold text-white tracking-tight text-sm flex items-center gap-2">
+                            {contactName}
+                            {logic.liveCardData?.isBlocked && <Ban size={12} className="text-red-500" />}
+                        </h2>
+                        <div className="flex items-center text-[10px] text-neutral-500 font-medium">
                             {card?.presence === 'typing' ? (
-                                <span className="text-blue-500 italic animate-pulse font-medium">Escribiendo...</span>
+                                <span className="text-blue-400 italic animate-pulse">Escribiendo...</span>
                             ) : card?.presence === 'recording' ? (
-                                <span className="text-blue-500 italic animate-pulse font-medium flex items-center gap-1">
+                                <span className="text-blue-400 italic animate-pulse flex items-center gap-1">
                                     <Mic size={10} /> Grabando audio...
                                 </span>
                             ) : (
-                                <>
-                                    <span className={`w-1 h-1 rounded-full mr-1.5 inline-block ${isOnline ? 'bg-green-500' : 'bg-neutral-500'}`}></span>
-                                    {isOnline ? 'Online' : 'Offline'}
-                                </>
+                                <span className="opacity-60">{isOnline ? 'En línea' : 'Desconectado'}</span>
                             )}
                         </div>
                     </div>
                 </div>
 
-                <div className="flex items-center space-x-1 text-neutral-500">
-                    <button className="p-1.5 hover:bg-neutral-800 rounded transition-colors" title="Mark as Unread">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                <div className="flex items-center space-x-2">
+                    <button className="p-2.5 hover:bg-white/5 rounded-xl transition-all text-neutral-400 hover:text-white" title="Mark as Unread">
+                        <Mail className="w-4 h-4" />
                     </button>
                     <div className="relative" ref={moreMenuRef}>
                         <button
                             onClick={() => setShowMoreMenu(!showMoreMenu)}
-                            className={`p-2 transition-colors rounded-md ${showMoreMenu ? 'text-white bg-neutral-800' : 'text-neutral-400 hover:text-white hover:bg-neutral-800'}`}
+                            className={`p-2.5 transition-all rounded-xl ${showMoreMenu ? 'text-white bg-white/10' : 'text-neutral-400 hover:text-white hover:bg-white/5'}`}
                             title="More Actions"
                         >
                             <MoreVertical size={20} />
@@ -261,21 +289,31 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
 
                         {/* More Menu Popover */}
                         {showMoreMenu && (
-                            <div className="absolute top-full right-0 mt-2 w-52 bg-neutral-900 border border-neutral-800 rounded-lg shadow-2xl z-[70] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                                <div className="p-1">
+                            <div className="absolute top-full right-0 mt-2 w-56 bg-neutral-900/95 backdrop-blur-xl border border-white/5 rounded-2xl shadow-2xl z-[70] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                                <div className="p-1.5 space-y-1">
                                     <button
-                                        className="w-full flex items-center px-3 py-2.5 text-xs text-neutral-300 hover:bg-neutral-800 transition-colors rounded-md group text-left"
+                                        className="w-full flex items-center px-3 py-2.5 text-xs text-neutral-300 hover:bg-white/5 transition-all rounded-xl group text-left"
                                         onClick={handleCloseConversation}
                                     >
-                                        <XCircle size={14} className="mr-3 text-neutral-500 group-hover:text-yellow-500" />
-                                        Finalizar Conversación
+                                        <div className="w-8 h-8 rounded-lg bg-yellow-500/10 flex items-center justify-center mr-3 group-hover:bg-yellow-500/20 transition-colors">
+                                            <XCircle size={14} className="text-yellow-500" />
+                                        </div>
+                                        <div>
+                                            <p className="font-bold">Finalizar Chat</p>
+                                            <p className="text-[9px] text-neutral-500">Mover a completados</p>
+                                        </div>
                                     </button>
                                     <button
-                                        className={`w-full flex items-center px-3 py-2.5 text-xs transition-colors rounded-md group text-left ${logic.liveCardData?.isBlocked ? 'text-green-400 hover:bg-green-500/10' : 'text-red-400 hover:bg-red-500/10'}`}
+                                        className={`w-full flex items-center px-3 py-2.5 text-xs transition-all rounded-xl group text-left ${logic.liveCardData?.isBlocked ? 'text-green-400 hover:bg-green-500/10' : 'text-red-400 hover:bg-red-500/10'}`}
                                         onClick={handleBlockContact}
                                     >
-                                        <Ban size={14} className={`mr-3 group-hover:text-current ${logic.liveCardData?.isBlocked ? 'text-green-500' : 'text-red-500'}`} />
-                                        {logic.liveCardData?.isBlocked ? 'Desbloquear Contacto' : 'Bloquear Contacto'}
+                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center mr-3 transition-colors ${logic.liveCardData?.isBlocked ? 'bg-green-500/10 group-hover:bg-green-500/20' : 'bg-red-500/10 group-hover:bg-red-500/20'}`}>
+                                            <Ban size={14} className={logic.liveCardData?.isBlocked ? 'text-green-500' : 'text-red-500'} />
+                                        </div>
+                                        <div>
+                                            <p className="font-bold">{logic.liveCardData?.isBlocked ? 'Desbloquear' : 'Bloquear'}</p>
+                                            <p className="text-[9px] text-neutral-500">{logic.liveCardData?.isBlocked ? 'Permitir mensajes' : 'Ignorar mensajes'}</p>
+                                        </div>
                                     </button>
                                 </div>
                             </div>
@@ -285,14 +323,19 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
             </div>
 
             {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto p-4 bg-[#0a0a0a] space-y-3 no-scrollbar">
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar pb-32">
                 {Object.entries(logic.groupedMessages).map(([date, msgs], dateIdx) => (
                     <React.Fragment key={date}>
-                        <div className="text-center text-[10px] text-neutral-600 my-4 uppercase tracking-widest font-bold opacity-60">{date}</div>
+                        <div className="flex justify-center my-8 sticky top-4 z-[5]">
+                            <div className="bg-neutral-900/40 backdrop-blur-sm border border-white/5 text-[10px] text-neutral-400 px-4 py-1 rounded-full uppercase tracking-widest font-black shadow-sm">
+                                {date}
+                            </div>
+                        </div>
 
                         {(msgs as any[]).map((msg: any, msgIdx: number) => {
+                            const isAgent = msg.sender === 'agent';
                             const prevMsg = (msgs as any[])[msgIdx - 1];
-                            const EXPIRE_THRESHOLD = 48 * 60 * 60 * 1000; // 48 hours
+                            const EXPIRE_THRESHOLD = 48 * 60 * 60 * 1000;
 
                             const showGapMarker = prevMsg && msg.timestamp?.toDate && prevMsg.timestamp?.toDate &&
                                 (msg.timestamp.toDate().getTime() - prevMsg.timestamp.toDate().getTime() > EXPIRE_THRESHOLD);
@@ -300,57 +343,62 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
                             return (
                                 <React.Fragment key={msgIdx}>
                                     {showGapMarker && (
-                                        <div className="flex justify-center my-6">
-                                            <div className="bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] px-4 py-1.5 rounded-full font-black uppercase tracking-widest shadow-lg backdrop-blur-sm">
-                                                No hubo respuesta y terminó la conversación
+                                        <div className="flex justify-center my-10">
+                                            <div className="bg-red-500/5 border border-red-500/20 text-red-500/80 text-[10px] px-6 py-2 rounded-2xl font-black uppercase tracking-[0.2em] shadow-sm backdrop-blur-sm max-w-sm text-center leading-relaxed">
+                                                VENTANA COMERCIAL CERRADA POR INACTIVIDAD
                                             </div>
                                         </div>
                                     )}
-                                    <div className={`flex ${msg.sender === 'agent' ? 'justify-end' : 'justify-start'}`}>
-                                        {msg.sender !== 'agent' && (
-                                            <div className="w-6 h-6 rounded-full bg-neutral-800 mr-2 flex-shrink-0 self-end mb-1 flex items-center justify-center text-[10px] font-bold text-neutral-500">
+                                    <div className={`flex items-end gap-2 ${isAgent ? 'justify-end' : 'justify-start'}`}>
+                                        {!isAgent && (
+                                            <div className="w-8 h-8 rounded-2xl bg-neutral-900 border border-white/5 flex-shrink-0 mb-1 flex items-center justify-center text-[10px] font-bold text-neutral-500 shadow-sm overflow-hidden">
                                                 {contactName.charAt(0).toUpperCase()}
                                             </div>
                                         )}
 
-                                        <div className={`max-w-[75%] group ${msg.sender === 'agent' ? 'flex flex-col items-end' : 'flex flex-col items-start'}`}>
-
-                                            <div className={`px-2.5 py-1.5 rounded-xl relative ${msg.sender === 'agent'
-                                                ? 'bg-blue-600 text-white rounded-br-none shadow-lg'
-                                                : 'bg-neutral-800 text-neutral-200 rounded-bl-none shadow-sm'
+                                        <div className={`max-w-[80%] group flex flex-col ${isAgent ? 'items-end' : 'items-start'}`}>
+                                            <div className={`p-4 rounded-3xl relative transition-all duration-300 ${isAgent
+                                                ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-br-none shadow-xl shadow-blue-500/10 border border-blue-400/20'
+                                                : 'bg-neutral-800/80 backdrop-blur-sm text-neutral-100 rounded-bl-none shadow-lg border border-white/5'
                                                 }`}>
 
                                                 {/* File Support */}
                                                 {msg.fileUrl && (
-                                                    <div className="mb-1.5">
+                                                    <div className="mb-3 overflow-hidden rounded-2xl border border-white/10 shadow-inner">
                                                         {msg.fileType?.startsWith('image/') ? (
-                                                            <img src={msg.fileUrl} alt={msg.fileName} className="max-w-full rounded max-h-40" />
+                                                            <img src={msg.fileUrl} alt={msg.fileName} className="max-w-full rounded-xl hover:scale-[1.02] transition-transform duration-500" />
                                                         ) : (
-                                                            <a href={msg.fileUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 underline text-[11px] opacity-80 hover:opacity-100">
-                                                                <FileText size={12} /> {msg.fileName || 'Archivo'}
+                                                            <a href={msg.fileUrl} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 bg-black/20 hover:bg-black/30 transition-colors">
+                                                                <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center">
+                                                                    <FileText size={18} className={isAgent ? 'text-white' : 'text-blue-400'} />
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-[11px] font-bold truncate">{msg.fileName || 'Documento'}</p>
+                                                                    <p className="text-[9px] opacity-60 uppercase tracking-widest">Descargar</p>
+                                                                </div>
                                                             </a>
                                                         )}
                                                     </div>
                                                 )}
 
-                                                {/* Specialized Rendering for Agent Interactive Messages */}
+                                                {/* Interactive Content Rendering */}
                                                 {msg.sender === 'agent' && msg.type === 'buttons' && (
-                                                    <div className="mb-2 space-y-2">
+                                                    <div className="space-y-3">
                                                         {msg.metadata?.header && msg.metadata.header.type !== 'none' && (
-                                                            <div className="mb-2 pb-2 border-b border-white/10">
+                                                            <div className="mb-3 rounded-xl overflow-hidden border border-white/10">
                                                                 {msg.metadata.header.type === 'text' && (
-                                                                    <div className="font-bold text-[11px] uppercase tracking-wide opacity-80">{msg.metadata.header.text}</div>
+                                                                    <div className="font-black text-[10px] uppercase tracking-[0.1em] bg-white/5 p-3">{msg.metadata.header.text}</div>
                                                                 )}
                                                                 {msg.metadata.header.type === 'image' && msg.metadata.header.url && (
-                                                                    <img src={msg.metadata.header.url} alt="header" className="rounded w-full max-h-32 object-cover" />
+                                                                    <img src={msg.metadata.header.url} alt="header" className="w-full max-h-48 object-cover" />
                                                                 )}
                                                             </div>
                                                         )}
-                                                        <p className="text-[13px] leading-snug whitespace-pre-wrap mb-2">{msg.text}</p>
-                                                        <div className="flex flex-wrap gap-1.5 pt-1">
+                                                        <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                                                        <div className="flex flex-wrap gap-2 pt-2">
                                                             {msg.metadata?.buttons?.map((btn: any, idx: number) => (
-                                                                <div key={idx} className="bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 flex items-center gap-2 text-[11px] font-bold shadow-sm">
-                                                                    <MousePointer2 size={10} className="text-blue-200" />
+                                                                <div key={idx} className="bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl px-4 py-2 flex items-center gap-2 text-[11px] font-bold shadow-sm transition-colors cursor-default">
+                                                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-300 animate-pulse"></div>
                                                                     {btn.text}
                                                                 </div>
                                                             ))}
@@ -359,76 +407,77 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
                                                 )}
 
                                                 {msg.sender === 'agent' && msg.type === 'list' && (
-                                                    <div className="mb-1">
-                                                        <p className="text-[13px] leading-snug whitespace-pre-wrap mb-3">{msg.text}</p>
-                                                        <div className="bg-black/20 border border-white/10 rounded-lg overflow-hidden">
-                                                            <div className="px-3 py-2 flex items-center justify-between border-b border-white/5">
-                                                                <div className="flex items-center gap-2">
-                                                                    <List size={12} className="text-blue-300" />
-                                                                    <span className="text-[11px] font-bold tracking-tight">{msg.metadata?.buttonText || 'Ver opciones'}</span>
+                                                    <div className="space-y-4">
+                                                        <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                                                        <div className="bg-black/20 border border-white/10 rounded-2xl overflow-hidden shadow-inner">
+                                                            <div className="px-4 py-3 flex items-center justify-between border-b border-white/5 bg-white/5">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                                                                        <List size={14} className="text-blue-300" />
+                                                                    </div>
+                                                                    <span className="text-[11px] font-black uppercase tracking-widest">{msg.metadata?.buttonText || 'Menú'}</span>
                                                                 </div>
-                                                                <ExternalLink size={10} className="text-neutral-500" />
                                                             </div>
-                                                            <div className="bg-white/5 px-3 py-1.5">
-                                                                <div className="text-[9px] text-neutral-400 uppercase font-black tracking-widest leading-none">Menú de Opciones</div>
+                                                            <div className="bg-gradient-to-b from-transparent to-black/20 px-4 py-2 border-t border-white/5">
+                                                                <p className="text-[9px] text-neutral-400 font-bold uppercase tracking-[0.2em] mb-1">Opciones disponibles</p>
+                                                                <p className="text-[10px] opacity-60">Selecciona en tu dispositivo</p>
                                                             </div>
                                                         </div>
                                                     </div>
                                                 )}
 
-                                                {/* Standard Text or Fallback */}
+                                                {/* Status markers & Time for agent */}
                                                 {(!msg.type || msg.type === 'text' || (msg.sender !== 'agent')) && (
-                                                    <p className="text-[13px] leading-snug whitespace-pre-wrap">{msg.text}</p>
+                                                    <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{msg.text}</p>
                                                 )}
 
                                                 {msg.sender === 'agent' && msg.type === 'media' && (
-                                                    <div className="mb-1">
+                                                    <div className="space-y-3">
                                                         {msg.metadata?.url && (
-                                                            <div className="mb-2 relative group">
-                                                                <img src={msg.metadata.url} alt="media" className="rounded-lg w-full max-h-60 object-cover border border-white/10" />
-                                                                <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/60 to-transparent rounded-b-lg">
-                                                                    <div className="text-[9px] font-bold truncate opacity-80">{msg.metadata.filename || 'Medios'}</div>
+                                                            <div className="relative group rounded-2xl overflow-hidden border border-white/10 shadow-lg bg-black/20">
+                                                                <img src={msg.metadata.url} alt="media" className="w-full max-h-80 object-cover transition-transform duration-700 group-hover:scale-110" />
+                                                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4">
+                                                                    <p className="text-[10px] font-bold uppercase tracking-widest truncate">{msg.metadata.filename || 'Archivo de Medios'}</p>
                                                                 </div>
                                                             </div>
                                                         )}
-                                                        <p className="text-[13px] leading-snug whitespace-pre-wrap">{msg.text}</p>
+                                                        <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{msg.text}</p>
                                                     </div>
                                                 )}
                                             </div>
 
-                                            <div className="flex items-center mt-0.5 text-[9px] text-neutral-600 px-1 font-bold">
+                                            <div className="flex items-center mt-1.5 px-2 text-[9px] font-black uppercase tracking-widest text-neutral-600 gap-2">
                                                 <span>{msg.timestamp?.toDate ? msg.timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
-                                                {msg.sender === 'agent' && (
+                                                {isAgent && (
                                                     msg.status === 'sending' ? (
-                                                        <Loader2 size={10} className="ml-1 animate-spin text-neutral-500" />
+                                                        <Loader2 size={10} className="animate-spin" />
                                                     ) : msg.status === 'failed' ? (
                                                         <div
-                                                            className="ml-2 flex items-center gap-1 bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded cursor-pointer hover:bg-red-500/20 transition-colors border border-red-500/20"
+                                                            className="flex items-center gap-1.5 bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full border border-red-500/20 cursor-pointer hover:bg-red-500/20 transition-all hover:scale-105"
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 logic.retryMessage?.(msg);
                                                             }}
-                                                            title={msg.error || 'Error desconocido'}
                                                         >
                                                             <AlertCircle size={10} />
-                                                            <span className="text-[8px] font-black uppercase tracking-tighter">Error</span>
-                                                            <RefreshCw size={10} className="ml-0.5" />
+                                                            <span>ERROR</span>
+                                                            <RefreshCw size={10} className="ml-1" />
                                                         </div>
                                                     ) : (
-                                                        <span className={`ml-1 flex items-center ${msg.status === 'read' ? 'text-blue-400' : 'text-neutral-600'}`}>
+                                                        <div className={`flex items-center gap-0.5 ${msg.status === 'read' ? 'text-blue-400' : 'text-neutral-600'}`}>
                                                             {msg.status === 'sent' && <span>✓</span>}
                                                             {msg.status === 'delivered' && <span>✓✓</span>}
-                                                            {msg.status === 'read' && <span>✓✓</span>}
+                                                            {msg.status === 'read' && <span className="drop-shadow-[0_0_5px_rgba(96,165,250,0.5)]">✓✓</span>}
                                                             {!msg.status && <span>✓</span>}
-                                                        </span>
+                                                        </div>
                                                     )
                                                 )}
                                             </div>
                                         </div>
 
-                                        {msg.sender === 'agent' && (
-                                            <div className="w-6 h-6 rounded-full bg-neutral-800 ml-2 flex-shrink-0 self-end mb-1 ring-1 ring-neutral-700/50 flex items-center justify-center text-neutral-500">
-                                                <User size={14} />
+                                        {isAgent && (
+                                            <div className="w-8 h-8 rounded-2xl bg-neutral-900 border border-white/5 flex-shrink-0 mb-1 flex items-center justify-center text-neutral-500 shadow-sm overflow-hidden ring-1 ring-white/5">
+                                                <User size={16} />
                                             </div>
                                         )}
                                     </div>
@@ -438,7 +487,7 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
                     </React.Fragment>
                 ))}
 
-                {/* Show marker at the end if currently expired (extra 48h since last message) */}
+                {/* Expiration warning at end */}
                 {(() => {
                     const lastMsgArray = logic.liveCardData?.messages || [];
                     if (lastMsgArray.length === 0) return null;
@@ -450,9 +499,10 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
 
                     if (lastTs > 0 && (now - lastTs > EXPIRE_THRESHOLD)) {
                         return (
-                            <div className="flex justify-center my-6">
-                                <div className="bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] px-4 py-1.5 rounded-full font-black uppercase tracking-widest shadow-lg backdrop-blur-sm">
-                                    No hubo respuesta y terminó la conversación
+                            <div className="flex justify-center my-10 animate-in fade-in zoom-in duration-500">
+                                <div className="bg-red-500/5 border border-red-500/20 text-red-500/80 text-[10px] px-8 py-3 rounded-3xl font-black uppercase tracking-[0.2em] shadow-lg backdrop-blur-md max-w-sm text-center leading-relaxed border-dashed">
+                                    ESTA CONVERSACIÓN HA EXPIRADO
+                                    <div className="text-[8px] opacity-40 mt-1 font-medium">Han pasado más de 48 horas desde el último mensaje</div>
                                 </div>
                             </div>
                         );
@@ -460,208 +510,228 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
                     return null;
                 })()}
 
-                <div ref={logic.messagesEndRef} />
+                <div ref={logic.messagesEndRef} className="h-4" />
             </div>
 
-            {/* Input Area */}
-            <div className="p-4 bg-[#111] border-t border-neutral-800 flex-shrink-0 relative">
-
-                {/* File Preview Overlay */}
-                {logic.filePreviewUrl && (
-                    <div className="absolute bottom-full left-4 mb-4 bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl p-3 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300 w-72">
-                        <div className="relative group">
-                            {logic.selectedFile?.type.startsWith('image/') ? (
-                                <img src={logic.filePreviewUrl} alt="Preview" className="w-full h-40 object-cover rounded-xl" />
-                            ) : (
-                                <div className="w-full h-20 bg-neutral-800 rounded-xl flex items-center justify-center gap-3 px-4">
-                                    <FileText className="text-blue-500" size={24} />
-                                    <div className="flex-1 min-w-0">
-                                        <div className="text-[10px] font-bold text-white truncate uppercase tracking-widest">{logic.selectedFile?.name}</div>
-                                        <div className="text-[10px] text-neutral-500">{(logic.selectedFile?.size || 0) / 1024 > 1024 ? `${((logic.selectedFile?.size || 0) / (1024 * 1024)).toFixed(1)} MB` : `${((logic.selectedFile?.size || 0) / 1024).toFixed(1)} KB`}</div>
-                                    </div>
+            {/* Input Area - Floating Experience */}
+            <div className="absolute bottom-0 left-0 right-0 p-4 pb-8 z-20">
+                <div className="max-w-4xl mx-auto bg-[#1a1a1a]/80 backdrop-blur-xl border border-white/10 rounded-[2.5rem] shadow-2xl p-2 relative">
+                    
+                    {/* File Preview Overlay - Refined */}
+                    {logic.filePreviewUrl && (
+                        <div className="absolute bottom-full left-0 right-0 mb-4 mx-4 bg-[#111] border border-white/10 rounded-3xl shadow-2xl p-4 z-50 animate-in fade-in slide-in-from-bottom-8 duration-500">
+                            <div className="flex items-start gap-4">
+                                <div className="relative group w-32 h-32 flex-shrink-0">
+                                    {logic.selectedFile?.type.startsWith('image/') ? (
+                                        <img src={logic.filePreviewUrl} alt="Preview" className="w-full h-full object-cover rounded-2xl ring-1 ring-white/10" />
+                                    ) : (
+                                        <div className="w-full h-full bg-neutral-800 rounded-2xl flex items-center justify-center">
+                                            <FileText className="text-blue-500" size={32} />
+                                        </div>
+                                    )}
+                                    <button
+                                        onClick={logic.handleCancelPreview}
+                                        className="absolute -top-3 -right-3 bg-red-600 text-white rounded-full p-2 border-4 border-[#111] hover:scale-110 transition-transform shadow-xl"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
                                 </div>
-                            )}
-                            <button
-                                onClick={logic.handleCancelPreview}
-                                className="absolute -top-2 -right-2 bg-neutral-950 text-white rounded-full p-1 border border-neutral-800 hover:bg-red-500 transition-colors shadow-lg"
-                            >
-                                <X className="w-3 h-3" />
-                            </button>
-                        </div>
-                        {logic.uploading && (
-                            <div className="mt-3 space-y-1.5">
-                                <div className="flex justify-between text-[8px] font-black text-neutral-500 uppercase tracking-widest px-1">
-                                    <span>Subiendo archivo...</span>
-                                    <span>{logic.progress}%</span>
-                                </div>
-                                <div className="w-full bg-neutral-800 h-1.5 rounded-full overflow-hidden">
-                                    <div className="bg-blue-600 h-full transition-all duration-300" style={{ width: `${logic.progress}%` }} />
+                                <div className="flex-1 pt-2">
+                                    <h4 className="text-white font-bold text-sm truncate uppercase tracking-widest">{logic.selectedFile?.name}</h4>
+                                    <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest mt-1">
+                                        {(logic.selectedFile?.size || 0) / 1024 > 1024 
+                                            ? `${((logic.selectedFile?.size || 0) / (1024 * 1024)).toFixed(1)} MB` 
+                                            : `${((logic.selectedFile?.size || 0) / 1024).toFixed(1)} KB`}
+                                    </p>
+                                    
+                                    {logic.uploading && (
+                                        <div className="mt-4 space-y-2">
+                                            <div className="flex justify-between text-[10px] font-black text-blue-400 uppercase tracking-widest">
+                                                <span className="animate-pulse">Subiendo...</span>
+                                                <span>{logic.progress}%</span>
+                                            </div>
+                                            <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden">
+                                                <div className="bg-blue-600 h-full transition-all duration-500 shadow-[0_0_10px_rgba(37,99,235,0.5)]" style={{ width: `${logic.progress}%` }} />
+                                            </div>
+                                        </div>
+                                    )}
+                                    
+                                    {!logic.uploading && (
+                                        <Button
+                                            className="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-black text-[10px] uppercase tracking-[0.2em] rounded-xl px-6 h-10 shadow-lg shadow-blue-500/20 w-full md:w-auto"
+                                            onClick={logic.handleDisplayFileSend}
+                                        >
+                                            Confirmar y Enviar
+                                        </Button>
+                                    )}
                                 </div>
                             </div>
-                        )}
-                        {!logic.uploading && (
-                            <div className="mt-3 flex gap-2">
-                                <Button
-                                    size="sm"
-                                    className="flex-1 h-8 bg-blue-600 hover:bg-blue-700 text-[10px] font-black uppercase tracking-widest rounded-lg"
-                                    onClick={logic.handleDisplayFileSend}
-                                >
-                                    Enviar Archivo
-                                </Button>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {/* Quick Replies Popover */}
-                {showQuickReplies && (
-                    <div className="absolute bottom-full left-4 mb-2 w-64 bg-neutral-900 border border-neutral-800 rounded-lg shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200">
-                        <div className="p-2 border-b border-neutral-800 bg-neutral-950 text-[10px] font-bold text-neutral-500 uppercase tracking-widest px-3 flex justify-between items-center">
-                            Quick Replies
-                            <button onClick={() => setShowQuickReplies(false)} className="hover:text-white">✕</button>
-                        </div>
-                        <div className="max-h-60 overflow-y-auto">
-                            {QUICK_REPLIES.map(reply => (
-                                <button
-                                    key={reply.id}
-                                    onClick={() => handleSelectQuickReply(reply.text)}
-                                    className="w-full text-left px-4 py-3 hover:bg-neutral-800 border-b border-neutral-800/50 last:border-0 transition-colors group"
-                                >
-                                    <div className="text-xs font-semibold text-blue-400 mb-0.5">{reply.label}</div>
-                                    <div className="text-xs text-neutral-400 truncate group-hover:text-neutral-200">{reply.text}</div>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                <div className="flex items-end bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 transition-shadow relative">
-
-                    {logic.liveCardData?.isBlocked && (
-                        <div className="absolute inset-0 bg-neutral-900/80 backdrop-blur-[2px] z-20 flex items-center justify-center gap-3 animate-in fade-in duration-300">
-                            <Ban size={16} className="text-red-500" />
-                            <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-widest">Contacto Bloqueado</span>
-                            <button
-                                onClick={logic.handleToggleBlock}
-                                className="ml-2 text-blue-500 hover:text-blue-400 text-[10px] font-black uppercase tracking-widest border-b border-blue-500/30 transition-all hover:border-blue-400"
-                            >
-                                Desbloquear
-                            </button>
                         </div>
                     )}
 
-                    <button
-                        disabled={logic.liveCardData?.isBlocked}
-                        onClick={() => setShowQuickReplies(!showQuickReplies)}
-                        className={`p-3 transition-colors ${showQuickReplies ? 'text-blue-500 bg-blue-500/10' : 'text-neutral-400 hover:text-white'}`}
-                        title="Quick Replies"
-                    >
-                        <Zap size={20} fill={showQuickReplies ? 'currentColor' : 'none'} />
-                    </button>
+                    {/* Quick Replies - New Grid Design */}
+                    {showQuickReplies && (
+                        <div className="absolute bottom-full left-0 right-0 mb-4 mx-4 bg-[#111]/95 backdrop-blur-xl border border-white/10 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300">
+                            <div className="bg-white/5 px-6 py-4 flex justify-between items-center border-b border-white/5">
+                                <div className="flex items-center gap-3">
+                                    <Zap size={14} className="text-yellow-500 fill-yellow-500" />
+                                    <span className="text-[11px] font-black uppercase tracking-[0.2em] text-white">Respuestas Rápidas</span>
+                                </div>
+                                <button onClick={() => setShowQuickReplies(false)} className="text-neutral-500 hover:text-white transition-colors">
+                                    <X size={16} />
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-1 p-2 max-h-72 overflow-y-auto no-scrollbar">
+                                {QUICK_REPLIES.map(reply => (
+                                    <button
+                                        key={reply.id}
+                                        onClick={() => handleSelectQuickReply(reply.text)}
+                                        className="flex flex-col text-left px-5 py-4 hover:bg-white/5 rounded-2xl transition-all border border-transparent hover:border-white/5 group"
+                                    >
+                                        <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1 group-hover:translate-x-1 transition-transform">{reply.label}</span>
+                                        <span className="text-xs text-neutral-400 truncate group-hover:text-neutral-200">{reply.text}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
-                    {/* Attachment Menu */}
-                    <div className="relative" ref={attachmentsRef}>
+                    <div className="flex items-end relative">
+                        {/* Status Lock Overlay */}
+                        {logic.liveCardData?.isBlocked && (
+                            <div className="absolute inset-0 bg-[#111]/90 backdrop-blur-md z-30 flex items-center justify-center gap-6 rounded-[2rem] animate-in fade-in duration-500 overflow-hidden">
+                                <div className="w-10 h-10 bg-red-500/10 rounded-full flex items-center justify-center">
+                                    <Ban size={20} className="text-red-500" />
+                                </div>
+                                <div>
+                                    <p className="text-[12px] font-black text-white uppercase tracking-[0.1em]">Contacto Bloqueado</p>
+                                    <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest">No puedes enviar mensajes</p>
+                                </div>
+                                <button
+                                    onClick={logic.handleToggleBlock}
+                                    className="px-6 py-2 bg-blue-600/10 hover:bg-blue-600 text-blue-400 hover:text-white rounded-full text-[10px] font-black uppercase tracking-widest transition-all border border-blue-500/20"
+                                >
+                                    Desbloquear
+                                </button>
+                            </div>
+                        )}
+
                         <button
-                            onClick={() => setShowAttachments(!showAttachments)}
-                            className={`p-3 transition-colors ${showAttachments ? 'text-blue-500 bg-blue-500/10' : 'text-neutral-400 hover:text-white'}`}
-                            title="Adjuntos"
+                            disabled={logic.liveCardData?.isBlocked}
+                            onClick={() => setShowQuickReplies(!showQuickReplies)}
+                            className={`p-4 transition-all duration-300 rounded-full ${showQuickReplies ? 'text-yellow-500 bg-yellow-500/10 scale-110' : 'text-neutral-500 hover:text-white hover:bg-white/5'}`}
                         >
-                            <Plus size={20} className={`transition-transform duration-300 ${showAttachments ? 'rotate-45' : ''}`} />
+                            <Zap size={22} fill={showQuickReplies ? 'currentColor' : 'none'} className={showQuickReplies ? 'animate-pulse' : ''} />
                         </button>
 
-                        {showAttachments && (
-                            <div className="absolute bottom-full left-0 mb-2 w-48 bg-neutral-900 border border-neutral-800 rounded-lg shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200 py-1">
-                                <button onClick={() => { logic.open(); setShowAttachments(false); }} className="w-full flex items-center gap-3 px-4 py-2 hover:bg-neutral-800 text-neutral-300 hover:text-white transition-colors text-[11px] font-medium">
-                                    <ImageIcon size={14} className="text-blue-400" />
-                                    <span>Fotos y Videos</span>
-                                </button>
-                                <button onClick={() => { logic.open(); setShowAttachments(false); }} className="w-full flex items-center gap-3 px-4 py-2 hover:bg-neutral-800 text-neutral-300 hover:text-white transition-colors text-[11px] font-medium">
-                                    <FileText size={14} className="text-purple-400" />
-                                    <span>Documento</span>
-                                </button>
-                                <button onClick={() => { alert('Funcionalidad de Envío de Ubicación en desarrollo.'); setShowAttachments(false); }} className="w-full flex items-center gap-3 px-4 py-2 hover:bg-neutral-800 text-neutral-300 hover:text-white transition-colors text-[11px] font-medium">
-                                    <MapPin size={14} className="text-green-400" />
-                                    <span>Ubicación</span>
-                                </button>
-                                <button onClick={() => { alert('Funcionalidad de Envío de Contacto (vCard) en desarrollo.'); setShowAttachments(false); }} className="w-full flex items-center gap-3 px-4 py-2 hover:bg-neutral-800 text-neutral-300 hover:text-white transition-colors text-[11px] font-medium">
-                                    <Contact2 size={14} className="text-orange-400" />
-                                    <span>Contacto</span>
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
-                    {isRecording ? (
-                        <div className="flex-1 flex items-center gap-3 px-4 h-[44px] animate-pulse">
-                            <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]"></div>
-                            <span className="text-red-500 font-mono text-[13px] tracking-wider">{formatRecordingTime(recordingTime)}</span>
-                            <span className="text-neutral-500 text-[11px] uppercase tracking-widest font-bold hidden sm:block">Grabando Audio...</span>
-                        </div>
-                    ) : (
-                        <textarea
-                            disabled={logic.liveCardData?.isBlocked}
-                            className="flex-1 bg-transparent border-none focus:outline-none focus:ring-0 text-white py-3 resize-none max-h-32 min-h-[44px] disabled:opacity-30 no-scrollbar"
-                            placeholder={logic.liveCardData?.isBlocked ? "Contacto bloqueado" : "Type your reply here... (Shift + Enter for new line)"}
-                            rows={1}
-                            value={logic.newMessage}
-                            onChange={(e) => logic.setNewMessage(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' && !e.shiftKey) {
-                                    e.preventDefault();
-                                    logic.handleSendMessage();
-                                }
-                            }}
-                        />
-                    )}
-
-                    <div className="flex items-center px-2 pb-2 h-[44px]">
-                        <input {...logic.getInputProps()} />
-
-                        {isRecording ? (
-                            <>
-                                <button
-                                    onClick={cancelRecording}
-                                    className="p-2 text-neutral-500 hover:text-red-400 transition-colors mx-1"
-                                    title="Cancelar grabación"
-                                >
-                                    <X size={18} />
-                                </button>
-                                <button
-                                    onClick={stopRecording}
-                                    className="ml-2 p-2 rounded-full bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-500/20 transition-transform hover:scale-105 flex items-center justify-center w-8 h-8"
-                                    title="Enviar Audio PTT"
-                                >
-                                    <Send size={14} className="translate-x-[1px] translate-y-[-1px]" />
-                                </button>
-                            </>
-                        ) : (
-                            logic.newMessage.trim().length > 0 || logic.selectedFile ? (
-                                <button
-                                    onClick={logic.handleSendMessage}
-                                    disabled={logic.isSending || (!logic.newMessage.trim() && !logic.selectedFile)}
-                                    className="ml-2 p-2 rounded-full bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-500/20 transition-transform hover:scale-105 flex items-center justify-center w-8 h-8"
-                                >
-                                    {logic.isSending || logic.uploading ? <Loader2 size={16} className="animate-spin" /> : <Send size={14} className="translate-x-[1px] translate-y-[-1px]" />}
-                                </button>
+                        <div className="relative flex-1 px-1">
+                            {isRecording ? (
+                                <div className="h-[54px] flex items-center gap-4 px-6 animate-in fade-in slide-in-from-left-4">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.8)] animate-pulse"></div>
+                                        <span className="text-red-500 font-black text-[14px] font-mono tracking-widest">{formatRecordingTime(recordingTime)}</span>
+                                    </div>
+                                    <div className="h-1 bg-white/5 flex-1 rounded-full overflow-hidden">
+                                        <div className="h-full bg-red-500/40 w-full animate-wave"></div>
+                                    </div>
+                                    <span className="text-neutral-500 text-[9px] font-black uppercase tracking-[0.2em] hidden sm:block">Grabando Audio PTT</span>
+                                </div>
                             ) : (
+                                <textarea
+                                    disabled={logic.liveCardData?.isBlocked}
+                                    className="w-full bg-transparent border-none focus:outline-none focus:ring-0 text-white py-4 px-2 resize-none max-h-48 min-h-[54px] text-sm leading-relaxed placeholder:text-neutral-600 no-scrollbar"
+                                    placeholder={logic.liveCardData?.isBlocked ? "Bloqueado" : "Escribe tu mensaje aquí..."}
+                                    rows={1}
+                                    value={logic.newMessage}
+                                    onChange={(e) => {
+                                        logic.setNewMessage(e.target.value);
+                                        e.target.style.height = 'auto';
+                                        e.target.style.height = e.target.scrollHeight + 'px';
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault();
+                                            logic.handleSendMessage();
+                                        }
+                                    }}
+                                />
+                            )}
+                        </div>
+
+                        <div className="flex items-center p-1.5 gap-1.5 self-center">
+                            {/* Attachments Menu - Circular design */}
+                            <div className="relative" ref={attachmentsRef}>
                                 <button
-                                    onClick={startRecording}
-                                    className="ml-2 p-2 rounded-full bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700 transition-colors flex items-center justify-center w-8 h-8"
-                                    title="Grabar nota de voz"
+                                    disabled={logic.liveCardData?.isBlocked}
+                                    onClick={() => setShowAttachments(!showAttachments)}
+                                    className={`w-11 h-11 flex items-center justify-center transition-all duration-300 rounded-full ${showAttachments ? 'bg-indigo-500 text-white rotate-45 shadow-lg shadow-indigo-500/30' : 'text-neutral-500 hover:text-white hover:bg-white/5'}`}
                                 >
-                                    <Mic size={16} />
+                                    <Plus size={24} />
                                 </button>
-                            )
-                        )}
-                    </div>
 
-                </div>
+                                {showAttachments && (
+                                    <div className="absolute bottom-full right-0 mb-4 w-52 bg-[#111]/95 backdrop-blur-xl border border-white/10 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-50 py-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                        <button onClick={() => { logic.open(); setShowAttachments(false); }} className="w-full flex items-center gap-4 px-5 py-3 hover:bg-white/5 text-neutral-300 hover:text-white transition-all group">
+                                            <div className="w-8 h-8 rounded-xl bg-blue-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                                <ImageIcon size={16} className="text-blue-400" />
+                                            </div>
+                                            <span className="text-[11px] font-bold uppercase tracking-widest">Multimedia</span>
+                                        </button>
+                                        <button onClick={() => { logic.open(); setShowAttachments(false); }} className="w-full flex items-center gap-4 px-5 py-3 hover:bg-white/5 text-neutral-300 hover:text-white transition-all group">
+                                            <div className="w-8 h-8 rounded-xl bg-purple-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                                <FileText size={16} className="text-purple-400" />
+                                            </div>
+                                            <span className="text-[11px] font-bold uppercase tracking-widest">Documento</span>
+                                        </button>
+                                        <button onClick={() => setShowAttachments(false)} className="w-full flex items-center gap-4 px-5 py-3 hover:bg-white/5 text-neutral-300 hover:text-white transition-all group border-t border-white/5 mt-1">
+                                            <div className="w-8 h-8 rounded-xl bg-green-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                                <MapPin size={16} className="text-green-400" />
+                                            </div>
+                                            <span className="text-[11px] font-bold uppercase tracking-widest">Ubicación</span>
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
 
-                <div className="flex justify-between items-center mt-2 px-2 text-[11px] font-medium text-neutral-500 uppercase tracking-widest">
-                    <span>Press Enter to send</span>
-                    <div className="flex gap-4">
-                        <span className="hover:text-neutral-300 cursor-pointer">Private Note</span>
-                        <span className="text-blue-500 hover:text-blue-400 cursor-pointer">Reply</span>
+                            {/* Main Action Button - Circular Gradient */}
+                            {isRecording ? (
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={cancelRecording}
+                                        className="w-11 h-11 rounded-full bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all duration-300 flex items-center justify-center shadow-lg"
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                    <button
+                                        onClick={stopRecording}
+                                        className="w-11 h-11 rounded-full bg-blue-600 text-white hover:bg-blue-700 shadow-xl shadow-blue-500/40 transition-all duration-300 flex items-center justify-center scale-110"
+                                    >
+                                        <Send size={18} className="translate-x-[1px] -translate-y-[1px]" />
+                                    </button>
+                                </div>
+                            ) : (
+                                logic.newMessage.trim().length > 0 || logic.selectedFile ? (
+                                    <button
+                                        onClick={logic.handleSendMessage}
+                                        disabled={logic.isSending || (!logic.newMessage.trim() && !logic.selectedFile)}
+                                        className="w-11 h-11 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 text-white hover:shadow-[0_0_20px_rgba(37,99,235,0.4)] shadow-xl shadow-blue-500/20 transition-all duration-300 flex items-center justify-center scale-110 group"
+                                    >
+                                        {logic.isSending || logic.uploading 
+                                            ? <Loader2 size={18} className="animate-spin" /> 
+                                            : <Send size={18} className="translate-x-[1px] -translate-y-[1px] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                                        }
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={startRecording}
+                                        disabled={logic.liveCardData?.isBlocked}
+                                        className="w-11 h-11 rounded-full bg-neutral-900 border border-white/10 text-neutral-400 hover:text-blue-400 hover:border-blue-500/50 hover:bg-blue-500/10 transition-all duration-300 flex items-center justify-center group"
+                                    >
+                                        <Mic size={18} className="group-hover:scale-110 transition-transform" />
+                                    </button>
+                                )
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>

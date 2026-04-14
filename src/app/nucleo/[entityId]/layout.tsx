@@ -12,7 +12,7 @@ export default function SuiteLayout({
 }) {
     const pathname = usePathname();
     const router = useRouter();
-    const isDashboard = pathname === '/nucleo/roosevelt';
+    const isDashboard = pathname === `/nucleo/${pathname.split('/')[2]}`;
 
     return (
         <div className="min-h-screen bg-[#0a0a0a] text-white font-sans selection:bg-white/20">

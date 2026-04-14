@@ -1,36 +1,38 @@
 'use client';
 
 import React from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { Plane, Users, FileText, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-const tools = [
-    {
-        name: 'Visa Consulting',
-        description: 'Process F-1 student visas, DS-160 forms, and manage embassy appointments.',
-        icon: Plane,
-        path: '/nucleo/roosevelt/coo/visas',
-        color: 'bg-sky-500/10 text-sky-400 border-sky-500/20'
-    },
-    {
-        name: 'Customer Experience',
-        description: 'Onboarding flows and post-sales support tickets.',
-        icon: Users,
-        path: '/nucleo/roosevelt/coo/cx',
-        color: 'bg-teal-500/10 text-teal-400 border-teal-500/20'
-    },
-    {
-        name: 'Compliance & SOPs',
-        description: 'Standard Operating Procedures and regulatory document storage.',
-        icon: FileText,
-        path: '#',
-        color: 'bg-slate-500/10 text-slate-400 border-slate-500/20'
-    }
-];
-
 export default function COODashboard() {
     const router = useRouter();
+    const params = useParams();
+    const entityId = params.entityId as string;
+
+    const dynamicTools = [
+        {
+            name: 'Visa Consulting',
+            description: 'Process F-1 student visas, DS-160 forms, and manage embassy appointments.',
+            icon: Plane,
+            path: `/nucleo/${entityId}/coo/visas`,
+            color: 'bg-sky-500/10 text-sky-400 border-sky-500/20'
+        },
+        {
+            name: 'Customer Experience',
+            description: 'Onboarding flows and post-sales support tickets.',
+            icon: Users,
+            path: `/nucleo/${entityId}/coo/cx`,
+            color: 'bg-teal-500/10 text-teal-400 border-teal-500/20'
+        },
+        {
+            name: 'Compliance & SOPs',
+            description: 'Standard Operating Procedures and regulatory document storage.',
+            icon: FileText,
+            path: '#',
+            color: 'bg-slate-500/10 text-slate-400 border-slate-500/20'
+        }
+    ];
 
     return (
         <div className="min-h-screen bg-[#050505] text-white p-8 pt-24">
@@ -50,7 +52,7 @@ export default function COODashboard() {
                 </header>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {tools.map((tool, idx) => (
+                    {dynamicTools.map((tool, idx) => (
                         <motion.div
                             key={tool.name}
                             initial={{ opacity: 0, y: 20 }}

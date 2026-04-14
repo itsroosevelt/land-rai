@@ -294,7 +294,7 @@ export default function ConversationModal({
   const handleCopyLink = () => {
     const crmId = liveData?.crmId;
     if (!crmId) return;
-    const link = `${window.location.origin}/nucleo/roosevelt/coo/kamban/application/${crmId}`;
+    const link = `${window.location.origin}/nucleo/${activeEntity}/coo/kamban/application/${crmId}`;
     navigator.clipboard.writeText(link);
     window.open(link, '_blank');
     toast.success('Link copiado');

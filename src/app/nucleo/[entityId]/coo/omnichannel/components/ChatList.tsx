@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Search, Filter, Clock, MessageCircle, ChevronDown, Check, Mic } from 'lucide-react';
+import { Search, Filter, Clock, MessageCircle, ChevronDown, Check, Mic, Loader2 } from 'lucide-react';
 
 interface ChatListProps {
     selectedFolder: string;
@@ -190,84 +190,92 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
             <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-neutral-800 hover:scrollbar-thumb-neutral-700">
                 <div className="divide-y divide-neutral-900/40">
                     {loading ? (
-                        <div className="p-4 text-center text-neutral-700 text-[10px] animate-pulse">Cargando...</div>
+                        <div className="flex flex-col items-center justify-center p-8 gap-3 opacity-40 animate-pulse">
+                            <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">Cargando...</span>
+                        </div>
                     ) : conversations.length === 0 ? (
-                        <div className="p-4 text-center text-neutral-700 text-[10px]">
-                            {filterBy === 'unread' ? 'Sin mensajes no leídos' : 'Sin conversaciones'}
+                        <div className="p-10 text-center">
+                            <div className="w-12 h-12 bg-neutral-900 rounded-full flex items-center justify-center mx-auto mb-3 opacity-30">
+                                <MessageCircle size={20} />
+                            </div>
+                            <p className="text-neutral-500 text-[11px] font-medium leading-relaxed">
+                                {filterBy === 'unread' ? 'Sin mensajes no leídos' : 'Tu bandeja está vacía.'}
+                            </p>
                         </div>
                     ) : (
-                        conversations.map((chat) => (
-                            <button
-                                key={chat.id}
-                                onClick={() => setActiveConversationId(chat.id)}
-                                className={`w-full flex items-start p-2 text-left transition-colors hover:bg-neutral-900/50 relative ${activeConversationId === chat.id ? 'bg-neutral-900/80 shadow-inner' : ''}`}
-                            >
-                                {activeConversationId === chat.id && (
-                                    <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-blue-500 rounded-r" />
-                                )}
+                        <div className="p-2 space-y-1">
+                            {conversations.map((chat) => (
+                                <button
+                                    key={chat.id}
+                                    onClick={() => setActiveConversationId(chat.id)}
+                                    className={`w-full group flex items-start gap-3 p-3 text-left transition-all duration-300 rounded-2xl relative border ${
+                                        activeConversationId === chat.id 
+                                            ? 'bg-blue-600/10 border-blue-500/20 shadow-lg shadow-blue-500/5' 
+                                            : 'bg-transparent border-transparent hover:bg-neutral-900/50 hover:border-neutral-800/50'
+                                    }`}
+                                >
+                                    {/* Unread dot indicator */}
+                                    {chat.unread > 0 && activeConversationId !== chat.id && (
+                                        <div className="absolute left-1.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-blue-500 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
+                                    )}
 
-                                <div className="relative mr-2 flex-shrink-0 pt-0.5">
-                                    <div className="w-7 h-7 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center font-bold text-[10px] text-white">
-                                        {chat.name.charAt(0).toUpperCase()}
-                                    </div>
-                                    <div className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border border-[#0d0d0d] flex items-center justify-center overflow-hidden
-                                        ${chat.channel.toLowerCase().includes('whatsapp') ? 'bg-[#25D366]' :
-                                            chat.channel.toLowerCase().includes('instagram') ? 'bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888]' :
-                                                chat.channel.toLowerCase().includes('messenger') ? 'bg-[#00B2FF]' :
-                                                    chat.channel.toLowerCase().includes('telegram') ? 'bg-[#229ED9]' :
-                                                        chat.channel.toLowerCase().includes('gmail') ? 'bg-[#EA4335]' :
-                                                            chat.channel.toLowerCase().includes('twitter') || chat.channel.toLowerCase().includes('x') ? 'bg-black' : 'bg-neutral-500'}
-                                    `}>
-                                        {chat.channel.toLowerCase().includes('whatsapp') ? (
-                                            <svg viewBox="0 0 24 24" className="w-2 h-2 text-white fill-current"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.414 0 0 5.414 0 12.05c0 2.123.551 4.197 1.597 6.03l-1.602 5.8 5.883-1.543a11.86 11.86 0 005.815 1.526h.005c6.634 0 12.048-5.414 12.048-12.05 0-3.213-1.252-6.234-3.525-8.508z" /></svg>
-                                        ) : chat.channel.toLowerCase().includes('instagram') ? (
-                                            <svg viewBox="0 0 24 24" className="w-2 h-2 text-white fill-current"><path d="M12 0C8.74 0 8.333.015 7.053.072 5.775.132 4.905.333 4.14.63c-.789.306-1.459.717-2.126 1.384S.935 3.35.63 4.14C.333 4.905.131 5.775.072 7.053.012 8.333 0 8.74 0 12s.015 3.667.072 4.947c.06 1.277.261 2.148.558 2.913.306.788.717 1.459 1.384 2.126.667.666 1.336 1.079 2.126 1.384.766.296 1.636.499 2.913.558C8.333 23.988 8.74 24 12 24s3.667-.015 4.947-.072c1.277-.06 2.148-.262 2.913-.558.788-.306 1.459-.718 2.126-1.384.666-.667 1.079-1.335 1.384-2.126.296-.765.499-1.636.558-2.913.06-1.28.072-1.687.072-4.947s-.015-3.667-.072-4.947c-.06-1.277-.262-2.149-.558-2.913-.306-.789-.718-1.459-1.384-2.126C21.319 1.347 20.651.935 19.86.63c-.765-.297-1.636-.499-2.913-.558C15.667.012 15.26 0 12 0zm0 2.16c3.203 0 3.585.016 4.85.071 1.17.055 1.805.249 2.227.415.562.217.96.477 1.382.896.419.42.679.819.896 1.381.164.422.36 1.057.413 2.227.057 1.266.07 1.646.07 4.85s-.015 3.585-.074 4.85c-.061 1.17-.256 1.805-.421 2.227-.224.562-.479.96-.899 1.382-.419.419-.824.679-1.38.896-.42.164-1.065.36-2.235.413-1.27.057-1.649.07-4.859.07s-3.585-.015-4.85-.074c-1.17-.061-1.805-.256-2.227-.421-.562-.224-.96-.479-1.382-.899-.419-.419-.679-.824-.896-1.38-.164-.42-.36-1.065-.413-2.235-.057-1.27-.07-1.649-.07-4.859s.015-3.585.074-4.85c.061-1.17.256-1.805.421-2.227.224-.562.479-.96.899-1.382.419-.419.824-.679 1.38-.896.42-.164 1.065-.36 2.235-.413 1.27-.057 1.649-.07 4.859-.07zM12 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" /></svg>
-                                        ) : chat.channel.toLowerCase().includes('messenger') ? (
-                                            <svg viewBox="0 0 24 24" className="w-2 h-2 text-white fill-current"><path d="M12 0C5.31 0 0 4.92 0 11.13c0 3.53 1.71 6.67 4.38 8.65.23.17.38.45.39.73l.03 2.18c.01.62.66 1.02 1.2.73l2.42-1.3c.21-.11.45-.14.67-.09 1 .25 2 .39 3.1.39 6.69 0 12-4.92 12-11.31C24 4.92 18.69 0 12 0zm1.34 14.88l-3.07-3.28-6 3.28 6.59-7 3.12 3.28 5.83-3.28-6.47 7z" /></svg>
-                                        ) : (
-                                            <MessageCircle size={6} className="text-white fill-current" />
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex justify-between items-baseline mb-0">
-                                        <h3 className={`font-semibold truncate pr-1 text-[12px] ${chat.unread > 0 ? 'text-white' : 'text-neutral-400'}`}>
-                                            {chat.name}
-                                        </h3>
-                                        <span className="text-[9px] text-neutral-600 flex-shrink-0 font-medium">
-                                            {chat.time}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                        {chat.unread > 0 && <div className="w-1 h-1 rounded-full bg-blue-500 flex-shrink-0" />}
-                                        <div className={`truncate text-[11px] ${chat.unread > 0 ? 'text-neutral-300 font-medium' : 'text-neutral-600'}`}>
-                                            {chat.presence === 'typing' ? (
-                                                <span className="text-blue-500 italic animate-pulse">Escribiendo...</span>
-                                            ) : chat.presence === 'recording' ? (
-                                                <span className="text-blue-500 italic animate-pulse flex items-center gap-1">
-                                                    <Mic size={10} /> Grabando audio...
-                                                </span>
+                                    <div className="relative flex-shrink-0">
+                                        <div className="w-10 h-10 bg-gradient-to-br from-neutral-700 to-neutral-800 rounded-full flex items-center justify-center font-bold text-xs text-white border border-neutral-700/50 shadow-sm overflow-hidden group-hover:scale-105 transition-transform">
+                                            {chat.name.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div className={`absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full border-2 border-[#0d0d0d] flex items-center justify-center p-0.5 shadow-md
+                                            ${chat.channel.toLowerCase().includes('whatsapp') ? 'bg-green-500' :
+                                                chat.channel.toLowerCase().includes('instagram') ? 'bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888]' :
+                                                    chat.channel.toLowerCase().includes('messenger') ? 'bg-blue-500' :
+                                                        chat.channel.toLowerCase().includes('telegram') ? 'bg-sky-500' :
+                                                            chat.channel.toLowerCase().includes('gmail') ? 'bg-red-500' :
+                                                                chat.channel.toLowerCase().includes('twitter') || chat.channel.toLowerCase().includes('x') ? 'bg-black' : 'bg-neutral-500'}
+                                        `}>
+                                            {chat.channel.toLowerCase().includes('whatsapp') ? (
+                                                <svg viewBox="0 0 24 24" className="w-2.5 h-2.5 text-white fill-current">
+                                                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.414 0 0 5.414 0 12.05c0 2.123.551 4.197 1.597 6.03l-1.602 5.8 5.883-1.543a11.86 11.86 0 005.815 1.526h.005c6.634 0 12.048-5.414 12.048-12.05 0-3.213-1.252-6.234-3.525-8.508z" />
+                                                </svg>
                                             ) : (
-                                                chat.snippet
+                                                <MessageCircle className="w-2.5 h-2.5 text-white" />
                                             )}
                                         </div>
                                     </div>
-                                </div>
 
-                                {chat.unread > 0 && (
-                                    <div className="ml-1 flex-shrink-0 pt-0.5">
-                                        <span className="bg-blue-600 text-white text-[8px] font-bold px-1 py-0 rounded-full inline-block min-w-[0.8rem] text-center">
-                                            {chat.unread}
-                                        </span>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex justify-between items-baseline mb-0.5">
+                                            <h3 className={`font-semibold truncate pr-1 text-[13px] tracking-tight ${chat.unread > 0 || activeConversationId === chat.id ? 'text-white' : 'text-neutral-400'}`}>
+                                                {chat.name}
+                                            </h3>
+                                            <span className="text-[9px] text-neutral-500 flex-shrink-0 font-medium whitespace-nowrap opacity-80 uppercase tracking-tighter">
+                                                {chat.time}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <div className={`truncate text-[11px] leading-snug ${chat.unread > 0 ? 'text-neutral-200 font-medium' : 'text-neutral-500'}`}>
+                                                {chat.presence === 'typing' ? (
+                                                    <span className="text-blue-400 italic">Escribiendo...</span>
+                                                ) : chat.presence === 'recording' ? (
+                                                    <span className="text-blue-400 italic flex items-center gap-1">
+                                                        <Mic size={10} /> Grabando...
+                                                    </span>
+                                                ) : (
+                                                    chat.snippet
+                                                )}
+                                            </div>
+                                            {chat.unread > 0 && (
+                                                <span className="ml-auto bg-blue-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-lg shadow-blue-600/20">
+                                                    {chat.unread}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
-                                )}
-                            </button>
-                        ))
+                                </button>
+                            ))}
+                        </div>
                     )}
                 </div>
             </div>
         </div>
     );
 }
-

@@ -19,9 +19,16 @@ exports.migrateCards = functions.https.onRequest(async (req, res) => {
         return;
     }
     functions.logger.info('[Migration] Starting card migration...');
-    const groupsSnap = await db.collection('kanban-groups').get();
+    const u = req.query.u;
+    const e = req.query.e;
+    if (!u || !e) {
+        res.status(400).send('Missing tenant identifiers (u, e)');
+        return;
+    }
+    const vaultPath = `users/${u}/entities/${e}/kanban-groups`;
+    const groupsSnap = await db.collection(vaultPath).get();
     if (groupsSnap.empty) {
-        res.json({ success: true, message: 'No groups found', updated: 0 });
+        res.json({ success: true, message: `No groups found in ${vaultPath}`, updated: 0 });
         return;
     }
     let totalUpdated = 0;

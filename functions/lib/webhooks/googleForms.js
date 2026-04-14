@@ -21,8 +21,15 @@ exports.googleFormsWebhook = functions.https.onRequest(async (req, res) => {
         return;
     }
     const { name, phone, email, message } = req.body;
+    const u = req.query.u;
+    const e = req.query.e;
     if (!phone) {
         res.status(400).send('Missing phone number');
+        return;
+    }
+    if (!u || !e) {
+        functions.logger.warn('[GoogleForms] Missing tenant IDs (u, e). Aborting.');
+        res.status(400).send('Missing tenant context');
         return;
     }
     try {
@@ -37,8 +44,8 @@ exports.googleFormsWebhook = functions.https.onRequest(async (req, res) => {
             timestamp: new Date(),
             platform_metadata: { email, original_name: name }
         };
-        // Creamos la tarjeta con origen 'form' pero usando la lógica Omnicanal
-        await (0, kanbanOperations_1.handleKanbanUpdateOmni)(unifiedMessage);
+        // Creamos la tarjeta con origen 'form' pero usando la lógica Omnicanal aislada
+        await (0, kanbanOperations_1.handleKanbanUpdateOmni)(unifiedMessage, u, e);
         functions.logger.info(`Lead created from Google Form (Omni): ${contactName} (${phone})`);
         res.status(200).send({ success: true, message: 'Lead imported correctly' });
     }

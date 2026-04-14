@@ -1,36 +1,38 @@
 'use client';
 
 import React from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { Megaphone, BarChart, Users, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-const tools = [
-    {
-        name: 'Global CRM',
-        description: 'Manage leads, contacts, and customer relationships across all regions.',
-        icon: Users,
-        path: '/nucleo/roosevelt/cmo/crm', // Updated path
-        color: 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-    },
-    {
-        name: 'Campaign Manager',
-        description: 'Orchestrate ad campaigns and track conversion funnels.',
-        icon: Megaphone,
-        path: '/nucleo/roosevelt/cmo/campaigns', // Updated path
-        color: 'bg-pink-500/10 text-pink-400 border-pink-500/20'
-    },
-    {
-        name: 'Revenue Analytics',
-        description: 'Real-time dashboards for sales performance and growth metrics.',
-        icon: BarChart,
-        path: '/nucleo/roosevelt/cmo/analytics', // Updated path
-        color: 'bg-orange-500/10 text-orange-400 border-orange-500/20'
-    }
-];
-
 export default function CMODashboard() {
     const router = useRouter();
+    const params = useParams();
+    const entityId = params.entityId as string;
+
+    const dynamicTools = [
+        {
+            name: 'Global CRM',
+            description: 'Manage leads, contacts, and customer relationships across all regions.',
+            icon: Users,
+            path: `/nucleo/${entityId}/cmo/crm`,
+            color: 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+        },
+        {
+            name: 'Campaign Manager',
+            description: 'Orchestrate ad campaigns and track conversion funnels.',
+            icon: Megaphone,
+            path: `/nucleo/${entityId}/cmo/campaigns`,
+            color: 'bg-pink-500/10 text-pink-400 border-pink-500/20'
+        },
+        {
+            name: 'Revenue Analytics',
+            description: 'Real-time dashboards for sales performance and growth metrics.',
+            icon: BarChart,
+            path: `/nucleo/${entityId}/cmo/analytics`,
+            color: 'bg-orange-500/10 text-orange-400 border-orange-500/20'
+        }
+    ];
 
     return (
         <div className="min-h-screen bg-[#050505] text-white p-8 pt-24">
@@ -50,7 +52,7 @@ export default function CMODashboard() {
                 </header>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {tools.map((tool, idx) => (
+                    {dynamicTools.map((tool, idx) => (
                         <motion.div
                             key={tool.name}
                             initial={{ opacity: 0, y: 20 }}

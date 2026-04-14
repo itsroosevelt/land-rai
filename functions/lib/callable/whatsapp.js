@@ -7,8 +7,8 @@ const admin = require("firebase-admin");
 const whatsappAPI_1 = require("../helpers/whatsappAPI");
 const db = admin.firestore();
 // Common function to log any outgoing message to the Firestore card
-async function logMessageInCard(groupId, cardId, text, whatsappMessageId) {
-    const cardRef = db.collection('kanban-groups').doc(groupId).collection('cards').doc(cardId);
+async function logMessageInCard(userId, entityId, groupId, cardId, text, whatsappMessageId) {
+    const cardRef = db.collection(`users/${userId}/entities/${entityId}/kanban-groups`).doc(groupId).collection('cards').doc(cardId);
     await cardRef.update({
         lastMessage: text.length > 40 ? text.substring(0, 37) + '...' : text,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -26,14 +26,15 @@ exports.sendWhatsappMessage = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'The function must be called while authenticated.');
     }
-    const { cardId, groupId, message, toNumber } = data;
-    if (!cardId || !groupId || !message || !toNumber) {
-        throw new functions.https.HttpsError('invalid-argument', 'Missing required data for sending a text message.');
+    const userId = context.auth.uid;
+    const { cardId, groupId, message, toNumber, entityId } = data;
+    if (!cardId || !groupId || !message || !toNumber || !entityId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing required data (cardId, groupId, entityId, message, toNumber).');
     }
     try {
         const response = await (0, whatsappAPI_1.sendMessage)(toNumber, message);
         const wa_id = (_b = (_a = response === null || response === void 0 ? void 0 : response.messages) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.id;
-        await logMessageInCard(groupId, cardId, message, wa_id);
+        await logMessageInCard(userId, entityId, groupId, cardId, message, wa_id);
         return { success: true, messageId: wa_id };
     }
     catch (error) {
@@ -47,15 +48,16 @@ exports.sendWhatsappMediaMessage = functions.https.onCall(async (data, context) 
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'The function must be called while authenticated.');
     }
-    const { cardId, groupId, fileUrl, toNumber, fileName } = data;
-    if (!cardId || !groupId || !fileUrl || !toNumber || !fileName) {
-        throw new functions.https.HttpsError('invalid-argument', 'Missing required data for sending a media message.');
+    const userId = context.auth.uid;
+    const { cardId, groupId, fileUrl, toNumber, fileName, entityId } = data;
+    if (!cardId || !groupId || !fileUrl || !toNumber || !fileName || !entityId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing required data (cardId, groupId, entityId, fileUrl, fileName, toNumber).');
     }
     try {
         const response = await (0, whatsappAPI_1.sendMediaMessage)(toNumber, fileUrl, fileName);
         const wa_id = (_b = (_a = response === null || response === void 0 ? void 0 : response.messages) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.id;
         const logText = `Archivo enviado: ${fileName}`;
-        await logMessageInCard(groupId, cardId, logText, wa_id);
+        await logMessageInCard(userId, entityId, groupId, cardId, logText, wa_id);
         return { success: true, messageId: wa_id };
     }
     catch (error) {

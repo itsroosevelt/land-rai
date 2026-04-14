@@ -59,22 +59,7 @@ export async function resolveTenant(platform: string, platformId: string | numbe
         functions.logger.warn(`[Tenant Resolver] ⚠️ Vault query skipped (index building?): ${error.message}`);
     }
 
-    // 2. LEGACY FALLBACK (Reliable Last Resort)
-    try {
-        const mappingPath = `system_mappings/${platform === 'whatsapp' ? 'whatsapp_numbers' : platform + '_mappings'}/numbers/${platformId}`;
-        const legacySnap = await db.doc(mappingPath).get();
-
-        if (legacySnap.exists) {
-            const data = legacySnap.data() as any;
-            if (data.userId && data.entityId) {
-                functions.logger.info(`[Tenant Resolver] ✅ Resolved via Legacy: ${data.userId}/${data.entityId}`);
-                return { userId: data.userId, entityId: data.entityId };
-            }
-        }
-    } catch (error: any) {
-        functions.logger.error(`[Tenant Resolver] ❌ Critical failure in Legacy resolution:`, error.message);
-    }
-
+    // 2. FINAL STATUS
     functions.logger.warn(`[Tenant Resolver] ❌ Final: UNRESOLVED for ${platform}:${platformId}`);
     return null;
 }

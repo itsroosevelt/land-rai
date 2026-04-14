@@ -9,6 +9,29 @@ const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 // --- LOCK SYSTEM: Prevents duplicate processing when user sends multiple messages quickly ---
 const LOCK_TIMEOUT_MS = 30000; // 30 seconds max lock duration
 
+async function logBotTrace(
+    userId: string, 
+    entityId: string, 
+    data: { 
+        step: string, 
+        status: 'info' | 'error' | 'success', 
+        details?: string, 
+        platform?: string, 
+        externalId?: string 
+    }
+) {
+    try {
+        const db = admin.firestore();
+        await db.collection(`users/${userId}/entities/${entityId}/system_logs`).add({
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            type: 'bot_trace',
+            ...data
+        });
+    } catch (e) {
+        functions.logger.warn(`[logBotTrace] Failed to write trace: ${e}`);
+    }
+}
+
 async function acquireBotLock(cardRef: FirebaseFirestore.DocumentReference): Promise<boolean> {
     const db = admin.firestore();
     try {
@@ -19,8 +42,13 @@ async function acquireBotLock(cardRef: FirebaseFirestore.DocumentReference): Pro
             const existingLock = data?.botLock;
             const now = Date.now();
             // If there's an active lock that hasn't expired, another instance is processing
-            if (existingLock && (now - existingLock) < LOCK_TIMEOUT_MS) {
-                functions.logger.warn(`[BotLock] Lock active for ${cardRef.id}, skipping (age: ${now - existingLock}ms)`);
+            // AGNOSTIC FIX: Support both legacy number locks and serverTimestamp locks
+            const lockMillis = typeof existingLock === 'number' ? existingLock : (existingLock?.toMillis?.() || existingLock?.seconds * 1000 || 0);
+            
+            // PRIORITY OVERRIDE: Commands like 'reset' should NOT be blocked by concurrency locks
+            // This is passed via a global context or we checked it before calling acquireBotLock
+            if (existingLock && (now - lockMillis) < LOCK_TIMEOUT_MS) {
+                functions.logger.warn(`[BotLock] Lock active for ${cardRef.id}, skipping (age: ${now - lockMillis}ms)`);
                 return false;
             }
             tx.update(cardRef, { botLock: now });
@@ -50,77 +78,131 @@ export async function resolveCardRef(
     const db = admin.firestore();
     const vaultPath = `users/${userId}/entities/${entityId}/kanban-groups`;
 
-    // Strategy A: By platform_ids.{platform} — FILTERED by tenant vaultPath
-    // Requires a Firestore index on platform_ids.{platform} — might fail if index not ready
+    // Strategy A: By platform_ids.{platform}
     try {
         const snap = await db.collectionGroup('cards')
             .where(`platform_ids.${platform}`, '==', contactNumber)
             .get();
         const tenantDoc = snap.docs.find(d => d.ref.path.includes(vaultPath));
         if (tenantDoc) {
-            functions.logger.info(`[resolveCardRef] ✅ Found via collectionGroup index: ${tenantDoc.ref.path}`);
+            functions.logger.info(`[resolveCardRef] ✅ Found via exact platform_id: ${tenantDoc.ref.path}`);
             return tenantDoc.ref;
         }
+
+        // Fallback A.1: Try without '+' if it has one, or with '+' if it doesn't (WhatsApp only)
+        if (platform === 'whatsapp') {
+            const altNumber = contactNumber.startsWith('+') ? contactNumber.slice(1) : '+' + contactNumber;
+            const altSnap = await db.collectionGroup('cards')
+                .where(`platform_ids.${platform}`, '==', altNumber)
+                .get();
+            const altDoc = altSnap.docs.find(d => d.ref.path.includes(vaultPath));
+            if (altDoc) {
+                functions.logger.info(`[resolveCardRef] ✅ Found via alt platform_id (${altNumber}): ${altDoc.ref.path}`);
+                return altDoc.ref;
+            }
+        }
     } catch (e: any) {
-        functions.logger.warn(`[resolveCardRef] ⚠️ index for platform_ids.${platform} not ready: ${e.message}`);
+        functions.logger.warn(`[resolveCardRef] ⚠️ Strategy A failed: ${e.message}`);
     }
 
     // Strategy B: Legacy contactNumber match (WhatsApp only)
     if (platform === 'whatsapp') {
         try {
+            const cleanNumber = contactNumber.replace(/\+/g, '');
             const snap = await db.collectionGroup('cards')
                 .where('contactNumber', '==', contactNumber)
                 .get();
             const tenantDoc = snap.docs.find(d => d.ref.path.includes(vaultPath));
-            if (tenantDoc) {
-                functions.logger.info(`[resolveCardRef] ✅ Found via contactNumber index: ${tenantDoc.ref.path}`);
-                return tenantDoc.ref;
-            }
+            if (tenantDoc) return tenantDoc.ref;
+
+            const snap2 = await db.collectionGroup('cards')
+                .where('contactNumber', '==', cleanNumber)
+                .get();
+            const tenantDoc2 = snap2.docs.find(d => d.ref.path.includes(vaultPath));
+            if (tenantDoc2) return tenantDoc2.ref;
         } catch (e) { }
     }
 
-    // Strategy C: ⚡ DIRECT SCAN — no index required
-    // Iterates tenant groups and searches cards by platform_ids field.
-    // This is the fallback for messenger/instagram where no index may exist.
+    // Strategy C: ⚡ DIRECT SCAN
     try {
-        functions.logger.info(`[resolveCardRef] 🔍 Falling back to direct scan for ${platform}:${contactNumber}`);
+        functions.logger.info(`[resolveCardRef] 🔍 Strategy C: Scanning groups for platform_ids.${platform}...`);
         const groupsSnap = await db.collection(vaultPath).get();
         for (const groupDoc of groupsSnap.docs) {
-            const cardsSnap = await groupDoc.ref.collection('cards')
-                .where(`platform_ids.${platform}`, '==', contactNumber)
-                .limit(1)
-                .get();
-            if (!cardsSnap.empty) {
-                functions.logger.info(`[resolveCardRef] ✅ Found via direct scan in group ${groupDoc.id}: ${cardsSnap.docs[0].ref.path}`);
-                return cardsSnap.docs[0].ref;
+            const cardsRef = groupDoc.ref.collection('cards');
+            const snap = await cardsRef.where(`platform_ids.${platform}`, '==', contactNumber).limit(1).get();
+            if (!snap.empty) {
+                functions.logger.info(`[resolveCardRef] ✅ Strategy C SUCCESS: Found in group ${groupDoc.id}`);
+                return snap.docs[0].ref;
+            }
+            
+            if (platform === 'whatsapp') {
+                const altNumber = contactNumber.startsWith('+') ? contactNumber.slice(1) : '+' + contactNumber;
+                const altSnap = await cardsRef.where(`platform_ids.${platform}`, '==', altNumber).limit(1).get();
+                if (!altSnap.empty) {
+                    functions.logger.info(`[resolveCardRef] ✅ Strategy C SUCCESS (AltNumber): Found in group ${groupDoc.id}`);
+                    return altSnap.docs[0].ref;
+                }
             }
         }
     } catch (e: any) {
-        functions.logger.error(`[resolveCardRef] ❌ Direct scan failed: ${e.message}`);
+        functions.logger.error(`[resolveCardRef] ❌ ALL strategies failed for ${platform}:${contactNumber}: ${e.message}`);
     }
-
-    functions.logger.warn(`[resolveCardRef] ❌ Could not find card for ${platform}:${contactNumber} in tenant ${userId}/${entityId}`);
+    
+    functions.logger.warn(`[resolveCardRef] ❌ Could NOT resolve card for ${platform}:${contactNumber}`);
     return null;
 }
 
-export async function getActiveBot(userId: string, entityId: string): Promise<any | null> {
+export async function getActiveBot(userId: string, entityId: string, platform?: string): Promise<any | null> {
     const db = admin.firestore();
-    const botsSnapshot = await db.collection(`users/${userId}/entities/${entityId}/chatbots`)
-        .where('isActive', 'in', [true, 'true'])
-        .get();
+    const botsRef = db.collection(`users/${userId}/entities/${entityId}/chatbots`);
+    
+    let allBots: any[] = [];
+    
+    try {
+        // Preferred: Index-based query
+        const botsSnapshot = await botsRef
+            .where('isActive', 'in', [true, 'true'])
+            .get();
+        allBots = botsSnapshot.docs.map(d => ({ id: d.id, ...d.data() as any }));
+    } catch (e: any) {
+        functions.logger.warn(`[getActiveBot] ⚠️ Index-based query failed, falling back to in-memory filter: ${e.message}`);
+        try {
+            // Fallback: Read all and filter in memory (Rule 4 isolation preserved)
+            const snap = await botsRef.get();
+            allBots = snap.docs
+                .map(d => ({ id: d.id, ...d.data() as any }))
+                .filter(b => b.isActive === true || b.isActive === 'true');
+        } catch (innerE: any) {
+            functions.logger.error(`[getActiveBot] ❌ Critical failure reading bots: ${innerE.message}`);
+            return null;
+        }
+    }
 
-    if (botsSnapshot.empty) return null;
+    if (allBots.length === 0) return null;
+
+    // Filter by platform: Bot must either have no specific platforms (Global) 
+    // or include the current message platform (Case-Insensitive Robustness).
+    const platformBots = platform 
+        ? allBots.filter(bot => {
+            const targets = (bot.targetPlatforms || []).map((t: string) => t.toLowerCase());
+            return targets.length === 0 || targets.includes(platform.toLowerCase());
+          })
+        : allBots;
+
+    if (platformBots.length === 0) return null;
 
     // Sort in memory to avoid mandatory composite index
-    const bots = botsSnapshot.docs.map(d => ({ id: d.id, ...d.data() as any }));
-    bots.sort((a, b) => {
+    platformBots.sort((a, b) => {
         const timeA = a.updatedAt?.toDate?.()?.getTime() || a.createdAt?.toDate?.()?.getTime() || 0;
         const timeB = b.updatedAt?.toDate?.()?.getTime() || b.createdAt?.toDate?.()?.getTime() || 0;
         return timeB - timeA;
     });
 
-    const botData = bots[0];
-    if (!botData.flow || !botData.flow.nodes || !botData.flow.edges) return null;
+    const botData = platformBots[0];
+    if (!botData.flow || !botData.flow.nodes || !botData.flow.edges) {
+        functions.logger.warn(`[getActiveBot] Bot ${botData.id} for entity ${entityId} has no flow. Skipping.`);
+        return null;
+    }
     return botData;
 }
 
@@ -229,17 +311,34 @@ export async function tryTriggerBot(
     messageId?: string,
     metadata?: any
 ): Promise<void> {
-    const activeBot = await getActiveBot(userId, entityId);
+    functions.logger.info(`[Bot Engine] 📥 Incoming message from ${externalId} on ${platform} for tenant ${userId}/${entityId}`);
+    await logBotTrace(userId, entityId, { 
+        step: 'incoming_webhook', status: 'info', platform, externalId, 
+        details: `Message received: "${messageText.substring(0, 50)}..."` 
+    });
+
+    const activeBot = await getActiveBot(userId, entityId, platform);
     if (!activeBot) {
-        functions.logger.debug(`[Bot Engine] No active bot for entity ${entityId}. Skipping.`);
+        const msg = `No active bot found for ${platform}`;
+        functions.logger.info(`[Bot Engine] 🔇 ${msg} in entity ${entityId}. Skipping execution.`);
+        await logBotTrace(userId, entityId, { step: 'bot_lookup', status: 'info', platform, externalId, details: msg });
         return;
     }
 
+    functions.logger.info(`[Bot Engine] 🤖 Found active bot: ${activeBot.name} (ID: ${activeBot.id})`);
+    await logBotTrace(userId, entityId, { step: 'bot_lookup', status: 'success', platform, externalId, details: `Active bot: ${activeBot.name}` });
+
     const cardRef = await resolveCardRef(userId, entityId, externalId, platform);
     if (!cardRef) {
-        functions.logger.error(`[Bot Engine] Could not resolve card for ${externalId} on ${platform} for tenant ${userId}/${entityId}`);
+        const errMsg = `Could not resolve card for ${externalId} on ${platform}`;
+        functions.logger.error(`[Bot Engine] ${errMsg} for tenant ${userId}/${entityId}`);
+        await logBotTrace(userId, entityId, { step: 'card_resolution', status: 'error', platform, externalId, details: errMsg });
         return;
     }
+
+    functions.logger.info(`[Bot Engine] ✅ Resolved card: ${cardRef.id}`);
+    await logBotTrace(userId, entityId, { step: 'card_resolution', status: 'success', platform, externalId, details: `Resolved card path: ${cardRef.path}` });
+
 
     const cardSnap = await cardRef.get();
     const cardData = { id: cardRef.id, ...cardSnap.data() } as any;
@@ -248,8 +347,15 @@ export async function tryTriggerBot(
     const FORTY_EIGHT_HOURS_IN_MS = 48 * 60 * 60 * 1000;
     const ONE_HOUR_IN_MS = 60 * 60 * 1000;
 
-    const input = messageText.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    const isCommand = input === 'reinicia todo ahora' || input === 'reiniciar' || input === 'reset';
+    const input = (messageText || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    
+    // Command categories (Refined: Removed common greetings from Menu)
+    const isReset = /^(reinicia(r| todo ahora)?|reinicio|reset|clear|limpiar)/i.test(input);
+    const isMenu = /^(menu|opciones|ayuda|ajustes|config|settings)/i.test(input);
+    const isStop = /^(detener|stop|salir|chau|adios|exit)/i.test(input);
+    
+    // Combined command flag
+    const isCommand = isReset || isMenu || isStop;
 
     // BILINGUAL STATUS RESOLUTION: Read both new and legacy state
     const botStatus = cardData.botState?.status || cardData.chatbotState?.status || 'none';
@@ -288,11 +394,17 @@ export async function tryTriggerBot(
             delete cardData.chatbotState;
         }
 
+    try {
         await executeBotFlow(activeBot, userId, entityId, externalId, cardData, messageText, messageId, metadata);
-    } else {
-        functions.logger.info(`[Bot Engine] Bot NOT triggered. Status: ${botStatus}, isCommand: ${isCommand}, externalId: ${externalId}`);
+        await logBotTrace(userId, entityId, { step: 'execution_start', status: 'success', platform, externalId });
+    } catch (e: any) {
+        functions.logger.error(`[tryTriggerBot] ❌ CRITICAL Error in executeBotFlow for ${externalId}: ${e.message}`, { stack: e.stack });
+        await logBotTrace(userId, entityId, { step: 'execution_start', status: 'error', platform, externalId, details: e.message });
+    }
     }
 }
+
+
 
 // --- MAIN ENGINE ---
 
@@ -315,6 +427,13 @@ export async function executeBotFlow(
     const platform = cardData.source || 'whatsapp'; // Default to whatsapp if not set
     const adapter = getMessagingAdapter(platform, userId, entityId);
 
+    if (!adapter) {
+        functions.logger.error(`[executeBotFlow] ❌ FAILED to initialize adapter for platform: ${platform}`);
+        return;
+    }
+    
+    functions.logger.info(`[executeBotFlow] 📡 Messaging adapter initialized for ${platform}`);
+
     // Resolve cardRef once and reuse it throughout the entire flow
     const cardRef = await resolveCardRef(userId, entityId, to, platform);
     if (!cardRef) {
@@ -327,44 +446,58 @@ export async function executeBotFlow(
     // Wrap everything in try/finally to ALWAYS release the lock
     try {
         // Acquire lock to prevent duplicate processing
-        lockAcquired = await acquireBotLock(cardRef);
-        if (!lockAcquired) {
-            functions.logger.info(`[executeBotFlow] Skipping duplicate execution for ${to} — lock active`);
-            return;
-        }
+        // COMMAND OVERRIDE: Reset/Menu commands don't wait for locks
+        const normInputForLock = (rawUserMessage || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const isPriorityCommand = /^(reinicia|reinicio|reset|clear|limpiar|menu|opciones|ayuda|help|inicio|start)/i.test(normInputForLock);
 
-        // --- RESTART COMMAND (For testing purposes) ---
-        const isRestartCommand = currentMsg.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === 'reinicia todo ahora' || currentMsg.trim().toLowerCase() === 'reiniciar' || currentMsg.trim().toLowerCase() === 'reset';
-
-        // --- ABSOLUTE RESTART COMMAND ---
-        if (isRestartCommand) {
-            functions.logger.info(`[Bot Engine] Absolute Restart requested for ${to}`);
-            await cardRef.update({
-                botState: admin.firestore.FieldValue.delete(),
-                chatbotState: admin.firestore.FieldValue.delete(), // Bilingual support
-                customFields: admin.firestore.FieldValue.delete(),
-                lastBotInteraction: admin.firestore.FieldValue.delete(),
-                botOutcome: admin.firestore.FieldValue.delete(), // Clear outcomes
-                lastError: admin.firestore.FieldValue.delete(),   // Clear trace of errors
-                updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            });
-
-            await adapter.sendMessage(to, "🔄 Reinicio completado, empezamos de nuevo.");
-            await logBotMessage(to, "🔄 Reinicio completado, empezamos de nuevo.", cardData.id, cardData.groupId, cardRef, 'text', undefined, userId, entityId, platform);
-
-            // RE-EJECUTAR EL FLOW DESDE EL INICIO (Master Fix)
-            const freshBot = await getActiveBot(userId, entityId);
-            if (freshBot) {
-                await executeBotFlow(freshBot, userId, entityId, to, { ...cardData, botState: undefined, chatbotState: undefined }, "");
+        if (!isPriorityCommand) {
+            lockAcquired = await acquireBotLock(cardRef);
+            if (!lockAcquired) {
+                functions.logger.info(`[executeBotFlow] ⏳ Skipping duplicate execution for ${to} — lock active`);
+                return;
             }
-            return;
+        } else {
+            functions.logger.info(`[executeBotFlow] ⚡ Priority command detected, bypassing lock for ${to}`);
         }
 
-        // --- BILINGUAL STATE RESOLUTION ---
-        // If botState doesn't exist but legacy chatbotState does, we migrate it or use it as fallback
-        let botState = cardData.botState;
-        if (!botState && cardData.chatbotState) {
-            functions.logger.info(`[Bot Engine] 🔄 Migrating legacy chatbotState to botState for ${to}`);
+        // --- RESTART / MENU COMMAND ---
+        const normInput = (rawUserMessage || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const isReset = /^(reinicia(r| todo ahora)?|reinicio|reset|clear|limpiar)/i.test(normInput);
+        const isMenu = /^(menu|opciones|ayuda|ajustes|config|settings)/i.test(normInput);
+
+        let botState = cardData.botState || cardData.chatbotState || { status: 'none' };
+
+        // --- ABSOLUTE RESTART / MENU TRIGGER ---
+        if (isReset || isMenu) {
+            functions.logger.info(`[Bot Engine] Priority Trigger: ${isReset ? 'RESET' : 'MENU'}`);
+            
+            const wipePayload: any = {
+                'botState.status': 'active',
+                'botState.currentNodeId': null,
+                'botState.waitingForInput': false,
+                'botState.lastInteraction': admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            };
+
+            if (isReset) {
+                wipePayload.customFields = admin.firestore.FieldValue.delete();
+                wipePayload.botOutcome = admin.firestore.FieldValue.delete();
+                wipePayload.lastError = admin.firestore.FieldValue.delete();
+                wipePayload.chatbotState = admin.firestore.FieldValue.delete();
+            }
+
+            await cardRef.update(wipePayload);
+
+            const confirmText = isReset ? "🔄 Reinicio completado, empezamos de nuevo." : "📋 Iniciando sistema...";
+            await adapter.sendMessage(to, confirmText);
+            await logBotMessage(to, confirmText, cardData.id, cardData.groupId, cardRef, 'text', undefined, userId, entityId, platform);
+            
+            // Local state sync for immediate flow start below
+            botState = { status: 'active', currentNodeId: null, waitingForInput: false };
+        } 
+        
+        // --- BILINGUAL STATE RESOLUTION / MIGRATION ---
+        if (botState.status === undefined && cardData.chatbotState) {
             botState = {
                 status: cardData.chatbotState.status || 'active',
                 currentNodeId: cardData.chatbotState.currentNodeId,

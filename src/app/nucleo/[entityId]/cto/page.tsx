@@ -1,36 +1,38 @@
 'use client';
 
 import React from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { Bot, Code2, Cpu, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-const tools = [
-    {
-        name: 'AI Automation Center',
-        description: 'Manage specialized agents, training data, and conversation flows.',
-        icon: Bot,
-        path: '/nucleo/roosevelt/cto/automation/chatbots', // Updated path
-        color: 'bg-purple-500/10 text-purple-400 border-purple-500/20'
-    },
-    {
-        name: 'Smart Contracts Hub',
-        description: 'Deploy and audit Solana programs directly from the dashboard.',
-        icon: Code2,
-        path: '/nucleo/roosevelt/cto/smart-contracts', // Updated path
-        color: 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-    },
-    {
-        name: 'Blockchain Nodes',
-        description: 'Monitor RPC node health and validator status in real-time.',
-        icon: Cpu,
-        path: '#', // Placeholder
-        color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-    }
-];
-
 export default function CTODashboard() {
     const router = useRouter();
+    const params = useParams();
+    const entityId = params.entityId as string;
+
+    const dynamicTools = [
+        {
+            name: 'AI Automation Center',
+            description: 'Manage specialized agents, training data, and conversation flows.',
+            icon: Bot,
+            path: `/nucleo/${entityId}/cto/automation/chatbots`,
+            color: 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+        },
+        {
+            name: 'Smart Contracts Hub',
+            description: 'Deploy and audit Solana programs directly from the dashboard.',
+            icon: Code2,
+            path: `/nucleo/${entityId}/cto/smart-contracts`,
+            color: 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+        },
+        {
+            name: 'Blockchain Nodes',
+            description: 'Monitor RPC node health and validator status in real-time.',
+            icon: Cpu,
+            path: '#',
+            color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+        }
+    ];
 
     return (
         <div className="min-h-screen bg-[#050505] text-white p-8 pt-24">
@@ -50,7 +52,7 @@ export default function CTODashboard() {
                 </header>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {tools.map((tool, idx) => (
+                    {dynamicTools.map((tool, idx) => (
                         <motion.div
                             key={tool.name}
                             initial={{ opacity: 0, y: 20 }}

@@ -19,7 +19,7 @@ export const metaWebhook = functions.https.onRequest(async (req, res) => {
         const u = req.query['u'] as string;
         const e = req.query['e'] as string;
 
-        let expectedToken = process.env.META_VERIFY_TOKEN || 'vg37e';
+        let expectedToken = process.env.META_VERIFY_TOKEN;
 
         if (u && e) {
             try {

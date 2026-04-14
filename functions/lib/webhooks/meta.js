@@ -20,7 +20,7 @@ exports.metaWebhook = functions.https.onRequest(async (req, res) => {
         const challenge = req.query['hub.challenge'];
         const u = req.query['u'];
         const e = req.query['e'];
-        let expectedToken = process.env.META_VERIFY_TOKEN || 'vg37e';
+        let expectedToken = process.env.META_VERIFY_TOKEN;
         if (u && e) {
             try {
                 const db = admin.firestore();
@@ -137,6 +137,16 @@ exports.metaWebhook = functions.https.onRequest(async (req, res) => {
                         }
                     }
                     if (u && e) {
+                        // [DIAGNOSTIC] Log entry into function
+                        try {
+                            const db = admin.firestore();
+                            await db.collection(`users/${u}/entities/${e}/system_logs`).add({
+                                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                                type: `${platform}_webhook_functions`,
+                                senderId: senderId
+                            });
+                        }
+                        catch (e) { }
                         // Fetch real profile name
                         let profile = null;
                         if (senderId) {

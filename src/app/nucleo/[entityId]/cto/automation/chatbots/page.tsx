@@ -1,10 +1,9 @@
-
 'use client';
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Plus, Loader2, MessageCircle, Power, ArrowLeft, Trash2 } from 'lucide-react';
+import { Plus, Loader2, Power, ArrowLeft, Trash2, MessageCircle, Facebook, Instagram, Send, Mail, Twitter } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { collection, onSnapshot, doc, updateDoc, deleteDoc, runTransaction, getDoc, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc, deleteDoc, runTransaction } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   Dialog,
@@ -14,6 +13,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from '@/components/ui/input';
 import { db } from '@/lib/firebase';
 import { toast } from 'sonner';
@@ -22,7 +27,23 @@ interface Bot {
   id: string;
   name: string;
   isActive: boolean;
+  targetPlatforms?: string[];
 }
+
+const WhatsAppIcon = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="currentColor">
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.414 0 0 5.414 0 12.05c0 2.123.551 4.197 1.597 6.03l-1.602 5.8 5.883-1.543a11.86 11.86 0 005.815 1.526h.005c6.634 0 12.048-5.414 12.048-12.05 0-3.213-1.252-6.234-3.525-8.508z" />
+  </svg>
+);
+
+const PLATFORMS = [
+  { id: 'whatsapp', icon: WhatsAppIcon, color: 'text-[#25D366]', label: 'WA', activeBg: 'bg-[#25D366]/10', activeBorder: 'border-[#25D366]/30' },
+  { id: 'messenger', icon: Facebook, color: 'text-[#0084FF]', label: 'FB', activeBg: 'bg-[#0084FF]/10', activeBorder: 'border-[#0084FF]/30' },
+  { id: 'instagram', icon: Instagram, color: 'text-[#E1306C]', label: 'IG', activeBg: 'bg-[#E1306C]/10', activeBorder: 'border-[#E1306C]/30' },
+  { id: 'telegram', icon: Send, color: 'text-[#0088cc]', label: 'TG', activeBg: 'bg-[#0088cc]/10', activeBorder: 'border-[#0088cc]/30' },
+  { id: 'x_twitter', icon: Twitter, color: 'text-white', label: 'X', activeBg: 'bg-white/10', activeBorder: 'border-white/30' },
+  { id: 'gmail', icon: Mail, color: 'text-[#EA4335]', label: 'GM', activeBg: 'bg-[#EA4335]/10', activeBorder: 'border-[#EA4335]/30' }
+];
 
 const ChatbotsPage = () => {
   const router = useRouter();
@@ -31,51 +52,11 @@ const ChatbotsPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [updatingBots, setUpdatingBots] = useState<string[]>([]);
   const [botToDelete, setBotToDelete] = useState<Bot | null>(null);
+  const [botToActivate, setBotToActivate] = useState<Bot | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'offline' | 'loading'>('loading');
-  const [activeChannels, setActiveChannels] = useState<string[]>([]);
-
-  useEffect(() => {
-    const checkConnections = async () => {
-      if (!currentUser || !activeEntity) return;
-      try {
-        const tenantPath = `users/${currentUser.uid}/entities/${activeEntity}`;
-        const integrationTypes = [
-            'whatsapp', 'whatsapp_internal', 'whatsapp_qr_business', 'whatsapp_qr_personal',
-            'messenger', 'instagram', 'telegram', 'gmail'
-        ];
-        
-        const snapshots = await Promise.all(
-          integrationTypes.map(type => getDoc(doc(db, tenantPath, 'integrations', type)))
-        );
-        
-        const connectedChannels: string[] = [];
-        snapshots.forEach((snap, index) => {
-          if (snap.exists()) {
-            const status = snap.data().status;
-            const validStatuses = ['Connected', 'connected', 'Internal', 'active', 'Active', 'Online', 'online'];
-            if (validStatuses.includes(status)) {
-                connectedChannels.push(integrationTypes[index]);
-            }
-          }
-        });
-        
-        setActiveChannels(connectedChannels);
-        if (connectedChannels.length > 0) {
-          setConnectionStatus('connected');
-        } else {
-          setConnectionStatus('offline');
-        }
-      } catch (error) {
-        console.error("Error checking connection status:", error);
-        setConnectionStatus('offline');
-      }
-    };
-    
-    checkConnections();
-    const interval = setInterval(checkConnections, 30000);
-    return () => clearInterval(interval);
-  }, [currentUser, activeEntity]);
+  const [activeChannelsCount, setActiveChannelsCount] = useState(0);
+  const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
 
   useEffect(() => {
     if (!currentUser || !activeEntity) return;
@@ -90,11 +71,17 @@ const ChatbotsPage = () => {
           ({
             id: doc.id,
             name: doc.data().name || 'Bot sin nombre',
-            isActive: doc.data().isActive || false,
+            isActive: doc.data().isActive === true || doc.data().isActive === 'true',
+            targetPlatforms: doc.data().targetPlatforms || [],
             ...doc.data(),
           } as Bot)
         );
         setBots(botsData);
+        
+        // Count active chatbots
+        const activeBotsCount = botsData.filter(bot => bot.isActive).length;
+        setActiveChannelsCount(activeBotsCount);
+        setConnectionStatus(activeBotsCount > 0 ? 'connected' : 'offline');
         setIsLoading(false);
       },
       (error) => {
@@ -103,6 +90,24 @@ const ChatbotsPage = () => {
         setIsLoading(false);
       }
     );
+
+    return () => unsubscribe();
+  }, [currentUser, activeEntity]);
+
+  // Fetch connected integrations to filter options
+  useEffect(() => {
+    if (!currentUser || !activeEntity) return;
+
+    const integrationsRef = collection(db, 'users', currentUser.uid, 'entities', activeEntity, 'integrations');
+    const unsubscribe = onSnapshot(integrationsRef, (snapshot) => {
+      const connected = snapshot.docs
+        .filter(d => d.id !== '_init' && d.data().status === 'Connected')
+        .map(d => {
+            if (d.id === 'whatsapp_internal') return 'whatsapp';
+            return d.id;
+        });
+      setConnectedPlatforms(connected);
+    });
 
     return () => unsubscribe();
   }, [currentUser, activeEntity]);
@@ -127,14 +132,14 @@ const ChatbotsPage = () => {
             
             const nextCount = currentCount + 1;
             transaction.set(counterRef, { count: nextCount }, { merge: true });
-            
-            const formattedId = String(nextCount).padStart(20, '0');
+            const formattedId = String(nextCount).padStart(8, '0');
             
             const botRef = doc(db, 'users', currentUser.uid, 'entities', activeEntity, 'chatbots', formattedId);
             transaction.set(botRef, {
                 id: formattedId,
                 name: 'Nuevo Chatbot',
                 isActive: false,
+                targetPlatforms: [],
                 createdAt: new Date(),
                 flow: {
                     nodes: [{ id: '1', type: 'startNode', position: { x: 250, y: 5 }, data: { label: 'Inicio' } }],
@@ -158,43 +163,71 @@ const ChatbotsPage = () => {
   };
 
   const handleToggleBotStatus = async (bot: Bot) => {
-    // GUARD: Block activation if no omnichannel service is connected
-    if (!bot.isActive && connectionStatus !== 'connected') {
-        toast.error('No puedes activar un chatbot sin al menos una conexión activa.', {
-            description: 'Por favor, conecta WhatsApp, Instagram, Messenger o Telegram en la sección de Integraciones primero.',
-            duration: 5000,
-        });
+    if (!bot.isActive && (!bot.targetPlatforms || bot.targetPlatforms.length === 0)) {
+        setBotToActivate(bot);
         return;
     }
 
     setUpdatingBots((prev) => [...prev, bot.id]);
     try {
       const newStatus = !bot.isActive;
-      const batch = writeBatch(db);
-
-      // Si vamos a ACTIVAR este bot, primero desactivamos todos los demás de forma atómica
-      if (newStatus) {
-        const otherActiveBots = bots.filter(b => b.isActive && b.id !== bot.id);
-        for (const otherBot of otherActiveBots) {
-          const otherBotRef = doc(db, 'users', currentUser!.uid, 'entities', activeEntity!, 'chatbots', otherBot.id);
-          batch.update(otherBotRef, { isActive: false });
-        }
-      }
-
       const botRef = doc(db, 'users', currentUser!.uid, 'entities', activeEntity!, 'chatbots', bot.id);
-      batch.update(botRef, { 
+      
+      await updateDoc(botRef, { 
         isActive: newStatus,
         updatedAt: new Date()
       });
       
-      await batch.commit();
-
       toast.success(
         `Bot "${bot.name}" ${newStatus ? 'activado' : 'desactivado'}.`
       );
     } catch (error) {
       console.error('Error updating bot status:', error);
       toast.error('No se pudo actualizar el estado del bot.');
+    } finally {
+      setUpdatingBots((prev) => prev.filter((id) => id !== bot.id));
+    }
+  };
+
+  const handleQuickAssignAndActivate = async (platformId: string) => {
+    if (!botToActivate) return;
+    const bot = botToActivate;
+    setBotToActivate(null);
+    setUpdatingBots((prev) => [...prev, bot.id]);
+
+    try {
+        const botRef = doc(db, 'users', currentUser!.uid, 'entities', activeEntity!, 'chatbots', bot.id);
+        await updateDoc(botRef, {
+            targetPlatforms: [platformId],
+            isActive: true,
+            updatedAt: new Date()
+        });
+        toast.success(`Bot "${bot.name}" asignado a ${platformId.toUpperCase()} y activado.`);
+    } catch (error) {
+        console.error('Error in quick activation:', error);
+        toast.error('No se pudo activar el bot.');
+    } finally {
+        setUpdatingBots((prev) => prev.filter((id) => id !== bot.id));
+    }
+  };
+
+  const handleTogglePlatform = async (bot: Bot, platformId: string) => {
+    setUpdatingBots((prev) => [...prev, bot.id]);
+    try {
+      const currentPlatforms = bot.targetPlatforms || [];
+      const isRemoving = currentPlatforms.includes(platformId);
+      const newPlatforms = isRemoving
+        ? currentPlatforms.filter(p => p !== platformId)
+        : [...currentPlatforms, platformId];
+      
+      const botRef = doc(db, 'users', currentUser!.uid, 'entities', activeEntity!, 'chatbots', bot.id);
+      await updateDoc(botRef, { 
+        targetPlatforms: newPlatforms,
+        updatedAt: new Date()
+      });
+      toast.success(`${platformId.toUpperCase()} ${!isRemoving ? 'asignada' : 'removida'} en "${bot.name}"`);
+    } catch (error) {
+      toast.error('No se pudo actualizar la plataforma.');
     } finally {
       setUpdatingBots((prev) => prev.filter((id) => id !== bot.id));
     }
@@ -238,7 +271,7 @@ const ChatbotsPage = () => {
               connectionStatus === 'connected' ? 'bg-green-500 animate-pulse' : 'bg-red-500'
             }`} />
             <span className="text-[10px] uppercase tracking-wider font-bold">
-              {connectionStatus === 'connected' ? `OMNICANAL: ${activeChannels.length} ACTIVOS` : connectionStatus === 'loading' ? 'Verificando...' : 'SIN CONEXIÓN'}
+              {connectionStatus === 'connected' ? `OMNICANAL: ${activeChannelsCount} ACTIVOS` : connectionStatus === 'loading' ? 'Verificando...' : 'SIN CONEXIÓN'}
             </span>
           </div>
         </div>
@@ -251,8 +284,9 @@ const ChatbotsPage = () => {
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center items-center mt-20">
+        <div className="flex flex-col justify-center items-center mt-32 gap-3">
           <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
+          <p className="text-neutral-500 text-[10px] font-bold uppercase tracking-widest">Cargando...</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -267,24 +301,66 @@ const ChatbotsPage = () => {
                   className="p-4 cursor-pointer flex-grow"
                 >
                   <div className="flex items-center justify-between mb-3">
-                    <MessageCircle className="w-6 h-6 text-blue-400 group-hover:text-blue-300 transition-colors" />
+                    <div className="flex items-center gap-3">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                <button className={`p-1.5 rounded-lg transition-all duration-300 hover:scale-105 active:scale-95 outline-none ${
+                                    bot.targetPlatforms && bot.targetPlatforms.length > 0 
+                                    ? PLATFORMS.find(p => p.id === bot.targetPlatforms![0])?.activeBg || 'bg-neutral-700/50'
+                                    : 'bg-neutral-700/50'
+                                }`}>
+                                    {bot.targetPlatforms && bot.targetPlatforms.length > 0 ? (
+                                        (() => {
+                                            const p = PLATFORMS.find(p => p.id === bot.targetPlatforms![0]);
+                                            if (p) return <p.icon className={`w-5 h-5 ${p.color}`} />;
+                                            return <MessageCircle className="w-5 h-5 text-blue-400" />;
+                                        })()
+                                    ) : (
+                                        <MessageCircle className="w-5 h-5 text-blue-400" />
+                                    )}
+                                </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="bg-neutral-900 border-neutral-700 rounded-xl p-1.5 shadow-2xl z-[100] min-w-[160px]">
+                                {PLATFORMS.filter(p => connectedPlatforms.includes(p.id)).map((p) => {
+                                    const isCurrent = bot.targetPlatforms?.[0] === p.id;
+                                    return (
+                                        <DropdownMenuItem
+                                            key={p.id}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleTogglePlatform(bot, p.id);
+                                            }}
+                                            className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all cursor-pointer ${
+                                                isCurrent ? p.activeBg + ' text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'
+                                            }`}
+                                        >
+                                            <p.icon className={`w-3.5 h-3.5 ${p.color}`} />
+                                            <span className="text-[11px] font-bold uppercase tracking-wider">{p.id}</span>
+                                            {isCurrent && <div className="ml-auto w-1 h-1 rounded-full bg-blue-500" />}
+                                        </DropdownMenuItem>
+                                    );
+                                })}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+
                     <div className="flex items-center gap-2">
-                      <span
-                        className={`px-2 py-0.5 text-[10px] uppercase font-medium tracking-wider rounded-full ${bot.isActive
-                          ? 'bg-green-500/20 text-green-300'
-                          : 'bg-neutral-600/50 text-neutral-400'
-                          }`}
-                      >
-                        {bot.isActive ? 'Activo' : 'Inactivo'}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 text-neutral-500 hover:text-red-400 hover:bg-red-500/10"
-                        onClick={(e) => handleDeleteClick(e, bot)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                        <span
+                          className={`px-2 py-0.5 text-[10px] uppercase font-bold tracking-wider rounded-full ${bot.isActive
+                            ? 'bg-green-500/20 text-green-300'
+                            : 'bg-neutral-600/50 text-neutral-400'
+                            }`}
+                        >
+                          {bot.isActive ? 'Activo' : 'Inactivo'}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-neutral-500 hover:text-red-400 hover:bg-red-500/10"
+                          onClick={(e) => handleDeleteClick(e, bot)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                     </div>
                   </div>
                   <h2 className="text-sm font-medium text-white truncate mb-1">
@@ -295,13 +371,13 @@ const ChatbotsPage = () => {
                   </p>
                 </div>
 
-                <div className="px-6 py-4 bg-neutral-800/50 rounded-b-xl border-t border-neutral-700">
+                <div className="px-6 py-4 bg-neutral-800/50 rounded-b-lg border-t border-neutral-700">
                   <Button
                     onClick={(e) => {
                       e.stopPropagation();
                       handleToggleBotStatus(bot);
                     }}
-                    className={`w-full font-medium transition-colors duration-200 flex items-center justify-center ${bot.isActive
+                    className={`w-full font-bold text-[10px] uppercase tracking-widest transition-colors duration-200 flex items-center justify-center ${bot.isActive
                       ? 'bg-red-600 hover:bg-red-700 text-white'
                       : 'bg-green-600 hover:bg-green-700 text-white'
                       }`}
@@ -321,44 +397,40 @@ const ChatbotsPage = () => {
             ))
           ) : (
             <div className="col-span-full text-center py-20 bg-neutral-800 rounded-xl border border-dashed border-neutral-700">
-              <p className="text-neutral-400 text-lg">
-                No se encontraron bots.
-              </p>
-              <p className="text-neutral-500 mt-2">
-                ¡Crea uno nuevo para empezar a automatizar!
-              </p>
+              <MessageCircle size={32} className="text-neutral-700 mx-auto mb-4" />
+              <h3 className="text-sm font-bold text-white mb-2">Sin Chatbots</h3>
+              <p className="text-neutral-600 text-[10px] mb-6">No tienes flujos configurados.</p>
+              <Button onClick={handleCreateNewBot} className="bg-blue-600 hover:bg-blue-700 font-bold px-6 py-2 rounded-lg h-8 text-[10px]">
+                Crear Ahora
+              </Button>
             </div>
           )}
         </div>
       )}
 
+      {/* Delete Dialog */}
       <Dialog open={!!botToDelete} onOpenChange={(open) => !open && setBotToDelete(null)}>
-        <DialogContent className="bg-neutral-900 border-neutral-700 text-white sm:max-w-md">
+        <DialogContent className="bg-neutral-900 border-neutral-700 text-white sm:max-w-md rounded-xl">
           <DialogHeader>
-            <DialogTitle>Eliminar Bot</DialogTitle>
+            <DialogTitle>Eliminar Chatbot</DialogTitle>
             <DialogDescription className="text-neutral-400">
-              Esta acción no se puede deshacer. Esto eliminará permanentemente el bot <span className="font-medium text-white">{botToDelete?.name}</span> y eliminará sus datos de nuestros servidores.
+              Confirma escribiendo "delete" para eliminar <span className="text-white font-bold">{botToDelete?.name}</span>.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <p className="text-sm text-neutral-300">
-                Escribe <span className="font-medium select-none">delete</span> para confirmar.
-              </p>
-              <Input
+          <div className="py-4">
+            <Input
                 value={deleteConfirmation}
                 onChange={(e) => setDeleteConfirmation(e.target.value)}
-                className="bg-neutral-800 border-neutral-700 text-white focus:ring-red-500 focus:border-red-500"
-                placeholder="Escribe delete"
+                className="bg-neutral-800 border-neutral-700 text-white rounded-lg py-5 px-4 placeholder:text-neutral-800 text-sm font-mono"
+                placeholder="delete"
                 autoComplete="off"
               />
-            </div>
           </div>
-          <DialogFooter className="flex gap-2 sm:justify-between">
+          <DialogFooter className="flex gap-3">
             <Button
               variant="secondary"
               onClick={() => setBotToDelete(null)}
-              className="bg-neutral-800 hover:bg-neutral-700 text-white border-neutral-700"
+              className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-white border-neutral-700 rounded-lg"
             >
               Cancelar
             </Button>
@@ -366,11 +438,63 @@ const ChatbotsPage = () => {
               variant="destructive"
               disabled={deleteConfirmation !== 'delete'}
               onClick={confirmDelete}
-              className="bg-red-600 hover:bg-red-700"
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold"
             >
-              Eliminar Permanentemente
+              Eliminar
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick Activation Platform Selection */}
+      <Dialog open={!!botToActivate} onOpenChange={(open) => !open && setBotToActivate(null)}>
+        <DialogContent className="bg-neutral-900 border-neutral-700 text-white max-w-sm rounded-xl p-8">
+            <DialogHeader className="mb-4">
+                <DialogTitle className="text-xl font-bold">Seleccionar Canal</DialogTitle>
+                <DialogDescription className="text-neutral-400 text-xs">
+                    Elige por qué canal responderá <span className="text-white font-bold">"{botToActivate?.name}"</span>
+                </DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-1 gap-3">
+                {PLATFORMS.filter(p => connectedPlatforms.includes(p.id)).map((p) => (
+                    <button
+                        key={p.id}
+                        onClick={() => handleQuickAssignAndActivate(p.id)}
+                        className={`group flex items-center justify-between p-4 rounded-xl border border-neutral-700 hover:border-neutral-600 transition-all ${p.activeBg}`}
+                    >
+                        <div className="flex items-center gap-4">
+                            <div className={`p-3 rounded-xl ${p.activeBg} border ${p.activeBorder}`}>
+                                <p.icon className={`w-5 h-5 ${p.color}`} />
+                            </div>
+                            <span className="font-bold text-sm">{p.id.toUpperCase()}</span>
+                        </div>
+                        <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Plus className="w-4 h-4 text-blue-400" />
+                        </div>
+                    </button>
+                ))}
+                {connectedPlatforms.length === 0 && (
+                    <div className="py-8 text-center bg-neutral-800 rounded-xl border border-dashed border-neutral-700">
+                        <p className="text-xs text-neutral-500 mb-4">No tienes integraciones conectadas para activar este bot.</p>
+                        <Button 
+                            variant="outline" 
+                            className="text-[10px] font-bold rounded-xl h-8 border-blue-500/30 text-blue-400"
+                            onClick={() => router.push(`/nucleo/${activeEntity}/cto/integrations`)}
+                        >
+                            Ir a Integraciones
+                        </Button>
+                    </div>
+                )}
+            </div>
+            <DialogFooter className="mt-6">
+                <Button 
+                    variant="ghost" 
+                    onClick={() => setBotToActivate(null)}
+                    className="w-full bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-white rounded-xl py-6"
+                >
+                    Cancelar
+                </Button>
+            </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
@@ -378,4 +502,3 @@ const ChatbotsPage = () => {
 };
 
 export default ChatbotsPage;
-

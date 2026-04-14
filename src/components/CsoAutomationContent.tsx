@@ -6,9 +6,11 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Button } from "@/components/ui/button";
 import { Bot, Zap, Clock, Users, FileText, Settings, ArrowRight } from "lucide-react";
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function CsoAutomationContent() {
   const router = useRouter();
+  const { activeEntity } = useAuth();
 
   const features = [
     {
@@ -23,7 +25,7 @@ export function CsoAutomationContent() {
       title: "Chatbots",
       description: "Construye y despliega chatbots para gestionar conversaciones automáticamente 24/7.",
       action: "Ir a Chatbots",
-      href: "/nucleo/roosevelt/cto/automation/chatbots"
+      href: `/nucleo/${activeEntity}/cto/automation/chatbots`
     },
     {
       icon: <Zap className="w-8 h-8 text-amber-400" />,

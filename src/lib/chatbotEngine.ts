@@ -37,14 +37,21 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             if (messageId && bState.lastProcessedMessageId === messageId) return false;
 
             // LOCK CHECK: If locked and lock is less than 30 seconds old, we let the existing runner handle it.
-            // Our webhook already pushed the message to 'messageQueue', so the active runner WILL see it.
-            if (data.botLock) {
+            // PRIORITY OVERRIDE: Reset/Menu commands should NOT wait for locks.
+            const normInputForLock = (text || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const isPriorityCommand = /^(reinicia|reinicio|reset|clear|limpiar|menu|opciones|ayuda|help|inicio|start)/i.test(normInputForLock);
+
+            if (data.botLock && !isPriorityCommand) {
                 const lockTime = data.botLock.toDate?.() || new Date(data.botLock);
                 const diff = (Date.now() - lockTime.getTime()) / 1000;
                 if (diff < 30) {
                     console.log(`[ChatbotEngine] 🔒 Card ${cardId} is actively locked (${diff}s). Skipping parallel execution.`);
                     return false;
                 }
+            }
+
+            if (isPriorityCommand) {
+                console.log(`[ChatbotEngine] ⚡ Priority command detected, bypassing lock for ${cardId}`);
             }
 
             // Acquire lock and mark start
@@ -129,8 +136,14 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     };
 
     const normalizedInput = text.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    const isReset = /^(reiniciar|reinicio|reset|menu|inicio|detener|stop|salir|clear)/i.test(normalizedInput);
-    const isStartTrigger = /^(hola|hi|buenas|inicio|buen(as)?\s*(dias|tardes|noches)|que\s*tal|saludos)/i.test(normalizedInput);
+    
+    // Command categorization (Master Engine Sync)
+    const isReset = /^(reinicia(r| todo ahora)?|reinicio|reset|clear|limpiar)/i.test(normalizedInput);
+    const isMenu = /^(menu|opciones|ayuda|help)/i.test(normalizedInput);
+    const isStop = /^(detener|stop|salir|chau|adios)/i.test(normalizedInput);
+    const isStartTrigger = /^(hola|hi|buenas|inicio|start|buen(as)?\s*(dias|tardes|noches)|que\s*tal|saludos)/i.test(normalizedInput);
+    
+    const isCommand = isReset || isMenu || isStop;
 
     const sessionVars = {
         nombre: (isStartTrigger || isReset) ? 'Usuario' : (cardData.contactName || 'Usuario'),
@@ -154,48 +167,94 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         return val;
     };
 
-    // --- B. MASTER BYPASS (Reset/Trigger) ---
-    if (isReset || isStartTrigger) {
-        console.log(`[ChatbotEngine] 🧹 Master Bypass for card ${cardRef.id}`);
-        await cardRef.update({
+    // --- B. MASTER BYPASS (Reset/Trigger Override) ---
+    if (isReset || isMenu || isStartTrigger) {
+        console.log(`[ChatbotEngine] 🧹 Master Bypass [${isReset ? 'RESET' : isMenu ? 'MENU' : 'START'}] for card ${cardRef.id}`);
+        
+        // Atomic wipe + Status reset (Rule 4: Root Isolation)
+        const resetPayload: any = {
             'botState.status': 'active',
             'botState.waitingForInput': false,
             'botState.currentNodeId': null,
-            'botState.messageQueue': [],
-            'botState.lastProcessedMessageId': null,
-            customFields: {}, 
+            customFields: {},
             contactName: 'Usuario'
-        });
+        };
+
+        // If it's a hard reset, we clear the queue to prevent "echoes" of previous flow messages
+        if (isReset) {
+            resetPayload['botState.messageQueue'] = [];
+            resetPayload['botState.lastProcessedMessageId'] = null; // Allow re-processing if needed
+        }
+
+        await cardRef.update(resetPayload);
         
-        cardData.botState = { status: 'active', waitingForInput: false, currentNodeId: null };
+        // Sync local cardData for current cycle execution
+        cardData.botState = { ...(cardData.botState || {}), status: 'active', waitingForInput: false, currentNodeId: null };
         cardData.customFields = {};
         cardData.contactName = 'Usuario';
         
         if (isReset) {
-            const resetText = "🔄 Reinicio completado. Escribe 'hola' para empezar de nuevo.";
+            const resetText = "🔄 Reinicio completado, empezamos de nuevo.";
             await dispatchMessage(resetText);
             await cardRef.update({
                 messages: admin.firestore.FieldValue.arrayUnion({
                     sender: 'agent', text: resetText, platform, timestamp: new Date(), messageId: `bot_sys_${Date.now()}`
                 })
             });
-            if (!isStartTrigger) return;
+            
+            // NOTE: After a Reset, we DO NOT return anymore if we want the bot to start immediately.
+            // We set status to 'active' and currentNodeId to null so the loop below starts from the 'start' node.
+        }
+
+        if (isMenu || (isReset && !isStartTrigger)) {
+            // If it's a menu or a reset (without a specific greeting like 'hola'), 
+            // we ensure the engine restarts by setting shouldRestart to true below.
+        } else if (!isStartTrigger && !isReset) {
+            // If it's not a restart trigger, we might want to stop here (e.g. for simple commands)
+            // But for Roosevelt, we usually want the flow to start.
         }
     }
 
     let bState = cardData.botState || {};
 
-    // C. FETCH BOT & FLOW
+    // --- C. FLOW RESOLUTION (Rule 4: Root Isolation) ---
     const botsRef = db.collection(`${entityPath}/chatbots`);
     const botsSnapshot = await botsRef.where('isActive', 'in', [true, 'true']).get();
-    if (botsSnapshot.empty) {
-        console.log(`[ChatbotEngine] 🛑 No active bots found for entity ${entityId}`);
+    const allActiveBots = botsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+
+    if (allActiveBots.length === 0) {
+        console.log(`[ChatbotEngine] ⚠️ No active bots found for entity ${entityId}`);
         return;
     }
 
-    const bots = botsSnapshot.docs.map(d => ({ id: d.id, ...d.data() as any }));
-    bots.sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
-    const flow = bots[0].flow || { nodes: [], edges: [] };
+    // Filter and score bots by platform relevance
+    const platformBots = allActiveBots.map(bot => {
+        const targets = bot.targetPlatforms || [];
+        let score = 0;
+        
+        if (targets.includes(platform)) {
+            score = 10; // Explicit match (High Priority)
+        } else if (targets.length === 0) {
+            score = 5;  // Global Match (Medium Priority)
+        }
+        
+        return { ...bot, _score: score };
+    }).filter(bot => bot._score > 0);
+
+    if (platformBots.length === 0) {
+        console.log(`[ChatbotEngine] ⚠️ No specific or global bot assigned for platform ${platform}`);
+        return;
+    }
+
+    // Sort by: 1. Score (Specificity) | 2. Recency
+    platformBots.sort((a, b) => {
+        if (b._score !== a._score) return b._score - a._score;
+        return (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0);
+    });
+
+    const botData = platformBots[0];
+    console.log(`[ChatbotEngine] 🤖 Selected Bot: "${botData.name}" (Score: ${botData._score}) for ${platform}`);
+    const flow = botData.flow || { nodes: [], edges: [] };
 
     const replaceVars = (val: string, overlay: any = {}) => {
         if (!val) return '';
@@ -214,10 +273,10 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
 
     // Handle incoming input for current node
     if (waitingForInput && currentNodeId) {
-        // AGNOSTIC RULE: Do not allow the same message that triggered the start to be captured as an input
-        // This prevents "mucho gusto hola" if 'hola' was the trigger.
-        if (isStartTrigger || (shouldRestart && !waitingForInput)) {
-            console.log(`[ChatbotEngine] 🛡️ Trigger message blocked from capture captureInputNode to prevent auto-fill.`);
+        // AGNOSTIC RULE: Do not allow the same message that triggered the start/reset to be captured as an input
+        // This prevents capturing "Reiniciar" or "Hola" as answers to questions.
+        if (isReset || isStartTrigger || (shouldRestart && !waitingForInput)) {
+            console.log(`[ChatbotEngine] 🛡️ Trigger message [${isReset?'RESET':'START'}] blocked from captureInputNode to prevent auto-fill.`);
         } else {
             const node = flow.nodes.find((n: any) => n.id === currentNodeId);
             if (node?.type === 'captureInputNode') {
