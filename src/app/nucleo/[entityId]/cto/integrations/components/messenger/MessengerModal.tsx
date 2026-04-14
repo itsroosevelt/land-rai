@@ -280,8 +280,9 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
                                                 <div className="absolute inset-0 bg-[#0084FF]/5 opacity-0 group-hover/card:opacity-100 transition-opacity" />
                                                 <div className="text-left relative z-10">
                                                     <span className="text-[9px] uppercase tracking-[0.2em] text-[#0084FF] block mb-2 font-black">PÁGINA VINCULADA</span>
-                                                    <p className="text-2xl font-light text-white tracking-tight leading-none truncate max-w-[200px]">{config.pageName || 'Fanpage Activa'}</p>
-                                                    <span className="text-[9px] text-white/40 mt-3 block font-medium italic">Listo para recibir mensajes</span>
+                                                    <p className="text-xl font-light text-white tracking-tight leading-none truncate max-w-[250px]">{config.pageName || 'Fanpage Activa'}</p>
+                                                    <span className="text-[9px] text-white/40 mt-1 block font-mono">PAGE ID: {config.pageId}</span>
+                                                    <span className="text-[9px] text-white/40 mt-2 block font-medium italic">Listo para recibir mensajes</span>
                                                     {config.tokenType === 'permanent' && (
                                                         <div className="mt-2 flex items-center gap-1.5">
                                                             <div className="w-1 h-1 rounded-full bg-blue-500 animate-pulse" />

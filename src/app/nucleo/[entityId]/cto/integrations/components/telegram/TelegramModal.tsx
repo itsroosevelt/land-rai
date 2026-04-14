@@ -229,8 +229,8 @@ export default function TelegramModal({ isOpen, onClose, activeEntity, currentUs
                                         <div className="w-full max-w-sm mt-8 border border-white/5 rounded-2xl bg-black/50 p-6 relative overflow-hidden group">
                                             <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-[#26A5E4]/30 to-transparent"></div>
                                             <div className="flex flex-col gap-1 items-start mb-6">
-                                                <span className="text-[9px] font-black uppercase tracking-widest text-[#26A5E4]">Bot Token Activo</span>
-                                                <code className="text-white font-mono text-[13px] tracking-tight">{botToken.substring(0, 15)}...</code>
+                                                <span className="text-[9px] font-black uppercase tracking-widest text-[#26A5E4]">Token Registrado</span>
+                                                <code className="text-white font-mono text-[13px] tracking-tight">{botToken}</code>
                                             </div>
                                             <div className="flex items-center gap-3">
                                                 <button onClick={onClose} className="flex-1 h-12 bg-white/5 hover:bg-white/10 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">TERMINAR</button>

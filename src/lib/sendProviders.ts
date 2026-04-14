@@ -86,8 +86,8 @@ export async function sendMetaMessage(
     }
 
     // The Messenger Send API strictly requires the '/me/messages' endpoint.
-    // Using the explicit pageId causes Graph API to throw 'Unsupported post request'.
-    const endpoint = 'me';
+    // For Instagram, we MUST use the instagramId (targetNodeId).
+    const endpoint = (options.provider === 'instagram' && targetNodeId) ? targetNodeId : 'me';
     const url = `https://graph.facebook.com/v21.0/${endpoint}/messages?access_token=${token}`;
 
     try {

@@ -184,7 +184,7 @@ export default function TwitterModal({ isOpen, onClose, activeEntity, currentUse
                                         <div className="w-full max-w-sm mt-8 border border-white/5 rounded-2xl bg-black/50 p-6 relative overflow-hidden group">
                                             <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-white/30 to-transparent"></div>
                                             <div className="flex flex-col gap-1 items-start mb-6">
-                                                <span className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Cuenta de X Activa</span>
+                                                <span className="text-[9px] font-black uppercase tracking-widest text-[#1DA1F2]">Cuenta de X Activa</span>
                                                 <code className="text-white font-mono text-[13px] tracking-tight">@{twitterHandle}</code>
                                             </div>
                                             <div className="flex items-center gap-3">

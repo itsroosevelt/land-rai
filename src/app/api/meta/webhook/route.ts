@@ -40,43 +40,48 @@ export async function POST(req: Request) {
         }
 
         const entry = body.entry?.[0];
-        if (!entry) return NextResponse.json({ success: true });
+        if (!entry) return NextResponse.json({ success: true, ignored: 'no_entry' });
 
         const targetId = entry.id; // Page ID or Instagram Account ID
         const messaging = entry.messaging?.[0];
+        const changes = entry.changes?.[0]; // Support for Instagram comments/mentions
 
-        if (!messaging || !messaging.sender || (!messaging.message && !messaging.postback)) {
-            return NextResponse.json({ success: true, ignored: 'not_a_valid_event' });
+        if (!messaging && !changes) {
+            return NextResponse.json({ success: true, ignored: 'no_data' });
         }
 
-        const senderId = messaging.sender.id;
+        const senderId = messaging?.sender?.id || changes?.value?.from?.id;
+        if (!senderId) {
+             return NextResponse.json({ success: true, ignored: 'no_sender' });
+        }
+
         let text = '';
 
-        if (messaging.message) {
-            if (messaging.message.is_echo) {
+        if (messaging) {
+            if (messaging.message?.is_echo) {
                 return NextResponse.json({ success: true, ignored: 'echo' });
             }
             // Prioritize Quick Reply payload, then text
-            text = messaging.message.quick_reply?.payload || messaging.message.text || '';
-        } else if (messaging.postback) {
-            // Prioritize Postback payload, then title
-            text = messaging.postback.payload || messaging.postback.title || '';
+            text = messaging.message?.quick_reply?.payload || messaging.message?.text || messaging.postback?.payload || messaging.postback?.title || '';
+            
+            if (!text && messaging.message?.attachments) {
+                text = '[Multimedia/Adjunto]';
+            }
+        } else if (changes) {
+            text = changes.value?.text || changes.value?.message || '[Interacción]';
         }
 
-        if (!text && !messaging.message?.attachments) {
+        if (!text) {
             return NextResponse.json({ success: true, ignored: 'empty_text' });
         }
 
-        if (!text) text = '[Multimedia/Otro]';
-
         // Try to extract name directly from payload (fastest, no API needed)
         const senderNameFromPayload =
-            messaging.sender?.name ||
-            messaging.message?.from?.name ||
-            messaging.postback?.from?.name ||
+            messaging?.sender?.name ||
+            changes?.value?.from?.username ||
             null;
 
-        debugLog(`[POST] Searching tenant for Target ID: ${targetId}`);
+        debugLog(`[POST] Searching tenant for Target ID: ${targetId} | From: ${senderId}`);
 
 
         // Search for the Tenant globally
@@ -90,17 +95,18 @@ export async function POST(req: Request) {
 
         // 1. MESSENGER PAGE SEARCH
         const messengerSnap = await db.collectionGroup('integrations')
-            .where('pageId', 'in', [targetId, numericId])
+            .where('pageId', 'in', [targetId, String(targetId), numericId])
             .limit(1)
             .get();
 
         if (!messengerSnap.empty) {
             tenantRef = messengerSnap.docs[0].ref;
             tenantData = messengerSnap.docs[0].data();
+            debugLog(`[POST] Resolved Messenger tenant: ${tenantRef.path}`);
         } else {
             // 2. INSTAGRAM ACCOUNT SEARCH
             const instagramSnap = await db.collectionGroup('integrations')
-                .where('instagramId', 'in', [targetId, numericId])
+                .where('instagramId', 'in', [targetId, String(targetId), numericId])
                 .limit(1)
                 .get();
 
@@ -108,6 +114,17 @@ export async function POST(req: Request) {
                 tenantRef = instagramSnap.docs[0].ref;
                 tenantData = instagramSnap.docs[0].data();
                 provider = 'instagram';
+                debugLog(`[POST] Resolved Instagram tenant: ${tenantRef.path}`);
+            } else {
+                debugLog(`[POST] ❌ Critical: No match found for targetId ${targetId} in collections.`);
+                // ROBUSTNESS: Log to a global system_logs for debugging
+                await db.collection('system_logs').add({
+                    type: 'WEBHOOK_RESOLVE_FAIL',
+                    platform: 'meta',
+                    targetId,
+                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                    payload: JSON.stringify(body).substring(0, 1000)
+                }).catch(() => {});
             }
         }
 

@@ -201,8 +201,8 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
                                             <div className="absolute inset-0 bg-emerald-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity" />
                                             <div className="text-left relative z-10">
                                                 <span className="text-[9px] font-black uppercase tracking-widest text-[#EA4335] block mb-2">Canal Activo</span>
-                                                <h4 className="text-white font-light text-2xl tracking-tight leading-none truncate max-w-[200px]">
-                                                    {gmailAddress.split('@')[0]}
+                                                <h4 className="text-white font-light text-xl tracking-tight leading-none truncate max-w-[250px]">
+                                                    {gmailAddress}
                                                 </h4>
                                                 <span className="text-[9px] text-white/40 mt-3 block font-medium italic">Listo para recibir hilos</span>
                                             </div>

@@ -326,8 +326,12 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                                                 <div className="absolute inset-0 bg-[#E4405F]/5 opacity-0 group-hover/card:opacity-100 transition-opacity" />
                                                 <div className="text-left relative z-10">
                                                     <span className="text-[9px] uppercase tracking-[0.2em] text-[#E4405F] block mb-2 font-black">CANAL ACTIVO</span>
-                                                    <p className="text-2xl font-light text-white tracking-tight leading-none truncate max-w-[250px]">{config.instagramName || config.pageName || 'Perfil Conectado'}</p>
-                                                    <span className="text-[9px] text-white/40 mt-3 block font-medium italic">Listo para recibir mensajes</span>
+                                                    <p className="text-xl font-light text-white tracking-tight leading-none truncate max-w-[250px]">{config.instagramName || config.pageName || 'Perfil Conectado'}</p>
+                                                    <div className="flex flex-col gap-0.5 mt-1">
+                                                        <span className="text-[10px] text-[#E4405F]/80 font-bold uppercase tracking-widest text-[8px]">@{config.instagramUsername}</span>
+                                                        <span className="text-[9px] text-white/40 font-mono">IG ID: {config.instagramId}</span>
+                                                    </div>
+                                                    <span className="text-[9px] text-white/40 mt-2 block font-medium italic">Listo para recibir hilos</span>
                                                     {config.tokenType === 'permanent' && (
                                                         <div className="mt-2 flex items-center gap-1.5">
                                                             <div className="w-1 h-1 rounded-full bg-green-500 animate-pulse" />

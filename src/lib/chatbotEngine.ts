@@ -232,7 +232,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         const targets = bot.targetPlatforms || [];
         let score = 0;
         
-        if (targets.includes(platform)) {
+        if (targets.some((t: string) => t.toLowerCase().trim() === platform.toLowerCase().trim())) {
             score = 10; // Explicit match (High Priority)
         } else if (targets.length === 0) {
             score = 5;  // Global Match (Medium Priority)
@@ -243,6 +243,10 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
 
     if (platformBots.length === 0) {
         console.log(`[ChatbotEngine] ⚠️ No specific or global bot assigned for platform ${platform}`);
+        await cardRef.update({
+            'botState.lastError': `El Chatbot activo no tiene '${platform}' en sus Redes Conectadas.`,
+            'botState.lastErrorAt': admin.firestore.FieldValue.serverTimestamp()
+        });
         return;
     }
 
