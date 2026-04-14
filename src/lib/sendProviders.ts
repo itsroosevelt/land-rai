@@ -98,12 +98,15 @@ export async function sendMetaMessage(
             sentTo: recipientId
         };
     } catch (error: any) {
-        const errorData = error.response?.data || error.message;
-        console.error('Meta API Error:', JSON.stringify(errorData, null, 2));
+        const errorData = error.response?.data || { message: error.message };
+        const detailedError = typeof errorData === 'object' ? JSON.stringify(errorData) : errorData;
+        console.error('Meta API Error:', detailedError);
 
         // Self-documenting error in Firestore for easier debugging
         if (options.userId && options.entityId && options.provider) {
             try {
+                // Find card to log error directly where user sees it
+                const entityPath = `users/${options.userId}/entities/${options.entityId}`;
                 const searchSnap = await db.collectionGroup('cards')
                     .where(`platform_ids.${options.provider}`, '==', recipientId)
                     .limit(1)
@@ -111,16 +114,24 @@ export async function sendMetaMessage(
 
                 if (!searchSnap.empty) {
                     await searchSnap.docs[0].ref.update({
-                        'botState.lastError': JSON.stringify(errorData),
-                        'botState.lastErrorAt': new Date()
+                        'botState.lastError': `Meta Error [${options.provider}]: ${detailedError}`,
+                        'botState.lastErrorAt': admin.firestore.FieldValue.serverTimestamp()
                     });
                 }
+                
+                // Also log to general entity logs
+                await db.collection(`${entityPath}/system_logs`).add({
+                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                    type: `error_${options.provider}`,
+                    error: errorData,
+                    recipientId
+                });
             } catch (fsErr) {
                 console.error('[sendMetaMessage] Failed to log error to Firestore:', fsErr);
             }
         }
 
-        throw new Error(`Meta API Error: ${JSON.stringify(errorData)}`);
+        throw new Error(`Meta API Error: ${detailedError}`);
     }
 }
 

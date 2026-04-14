@@ -33,14 +33,20 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             const data = snap.data() || {};
             const bState = data.botState || {};
 
-            // DEDUP: If this exact message ID was just processed, skip queueing (but runner might already have it)
+            const normInput = (text || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const isPriorityCommand = /^(reinicia|reinicio|reset|clear|limpiar|menu|opciones|ayuda|help|inicio|start)/i.test(normInput);
+
+            // ATOMIC UNLOCK for Priority Commands: If it's a reset, we REMOVE the lock before trying to re-acquire it.
+            if (isPriorityCommand && data.botLock) {
+                transaction.update(cardRef, { botLock: admin.firestore.FieldValue.delete() });
+                console.log(`[ChatbotEngine] 🔓 Priority command breaking existing lock for ${cardId}`);
+                // Don't return yet, let the next step re-acquire it fresh.
+            }
+
+            // DEDUP: If this exact message ID was just processed, skip queueing
             if (messageId && bState.lastProcessedMessageId === messageId) return false;
 
-            // LOCK CHECK: If locked and lock is less than 30 seconds old, we let the existing runner handle it.
-            // PRIORITY OVERRIDE: Reset/Menu commands should NOT wait for locks.
-            const normInputForLock = (text || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            const isPriorityCommand = /^(reinicia|reinicio|reset|clear|limpiar|menu|opciones|ayuda|help|inicio|start)/i.test(normInputForLock);
-
+            // LOCK CHECK: If still locked (not a priority command), check timeout
             if (data.botLock && !isPriorityCommand) {
                 const lockTime = data.botLock.toDate?.() || new Date(data.botLock);
                 const diff = (Date.now() - lockTime.getTime()) / 1000;
@@ -48,10 +54,6 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                     console.log(`[ChatbotEngine] 🔒 Card ${cardId} is actively locked (${diff}s). Skipping parallel execution.`);
                     return false;
                 }
-            }
-
-            if (isPriorityCommand) {
-                console.log(`[ChatbotEngine] ⚡ Priority command detected, bypassing lock for ${cardId}`);
             }
 
             // Acquire lock and mark start

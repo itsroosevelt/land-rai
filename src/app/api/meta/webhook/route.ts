@@ -417,6 +417,17 @@ export async function POST(req: Request) {
         // 4. TRIGGER UNIVERSAL CHATBOT
         if (groupId && cardId) {
             console.log(`[Meta Webhook] 🤖 Triggering chatbot for ${provider} | User: ${userId} | Entity: ${entityId}`);
+            
+            // TELEMETRY: Mark ingestion as successful in system logs
+            try {
+                await db.collection(`${entityPath}/system_logs`).add({
+                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                    type: `webhook_ingested_${provider}`,
+                    text: text.substring(0, 50),
+                    cardId: cardId
+                });
+            } catch (e) {}
+
             try {
                 await processChatbotFlow({
                     userId, entityId, groupId, cardId, platform: provider, from: senderId, text: text,
