@@ -238,7 +238,7 @@ const ChatbotCanvas = forwardRef<ChatbotCanvasRef, ChatbotCanvasProps>(
                 nds.map((node) => (node.id === nodeId ? { ...node, data: { ...node.data, ...data } } : node))
             );
             if (selectedNode?.id === nodeId) {
-                setSelectedNode(prev => ({ ...prev!, data: { ...prev!.data, ...data } }));
+                setSelectedNode(prev => prev ? { ...prev, data: { ...prev.data, ...data } } : null);
             }
         }, [selectedNode, setNodes]);
 

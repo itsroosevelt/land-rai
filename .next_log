@@ -1,0 +1,25 @@
+
+> roosevelt-platform@1.0.0 dev
+> next dev -p 3000
+
+▲ Next.js 16.2.2 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://10.128.0.2:3000
+- Environments: .env.local, .env
+✓ Ready in 1036ms
+
+○ Compiling /nucleo/[entityId]/cto/automation/chatbots/[id] ...
+🚀 [ROOSEVELT INFRASTRUCTURE]: Sistema de bases de datos Firebase inicializado con éxito. Listo para operar en la cuenta del nuevo dueño.
+ GET /nucleo/roosevelt/cto/automation/chatbots/00000002 200 in 14.4s (next.js: 12.5s, application-code: 1841ms)
+[browser] The method FB.getLoginStatus can no longer be called from http pages. https://developers.facebook.com/blog/post/2018/06/08/enforce-https-facebook-login/ 
+    at Object.s [as log] (https://connect.facebook.net/en_US/bundle/sdk.js/:77:299)
+    at u (https://connect.facebook.net/en_US/bundle/sdk.js/:171:234)
+    at Object.getLoginStatus (https://connect.facebook.net/en_US/bundle/sdk.js/:188:276)
+    at Object.<anonymous> (https://connect.facebook.net/en_US/bundle/sdk.js/:106:920)
+    at Object.getLoginStatus (https://connect.facebook.net/en_US/bundle/sdk.js/:96:259)
+    at window.fbAsyncInit (<anonymous>:22:22)
+    at e.__wrapper.e.__wrapper (https://connect.facebook.net/en_US/bundle/sdk.js/:96:825)
+    at <unknown> (https://connect.facebook.net/en_US/bundle/sdk.js/:230:819) (https://connect.facebook.net/en_US/bundle/sdk.js/:77:299)
+[browser] [React Flow]: It looks like you've created a new nodeTypes or edgeTypes object. If this wasn't on purpose please define the nodeTypes/edgeTypes outside of the component or memoize them. Help: https://reactflow.dev/error#002
+[browser] [React Flow]: It looks like you've created a new nodeTypes or edgeTypes object. If this wasn't on purpose please define the nodeTypes/edgeTypes outside of the component or memoize them. Help: https://reactflow.dev/error#002
+ GET /nucleo/roosevelt/cto/automation/chatbots 200 in 848ms (next.js: 768ms, application-code: 80ms)

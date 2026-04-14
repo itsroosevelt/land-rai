@@ -145,9 +145,7 @@ function FlowPage() {
     
     try {
       const isRemoving = targetPlatforms.includes(platformId);
-      const newPlatforms = isRemoving
-        ? targetPlatforms.filter(p => p !== platformId)
-        : [...targetPlatforms, platformId];
+      const newPlatforms = isRemoving ? [] : [platformId];
       
       const botRef = doc(db, 'users', currentUser.uid, 'entities', activeEntity, 'chatbots', chatbotId);
       await updateDoc(botRef, { 
