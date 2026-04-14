@@ -129,14 +129,24 @@ export async function POST(req: Request) {
         }
 
         if (!tenantRef) {
-            debugLog(`[POST] ❌ ALERTA: No se pudo resolver el tenant. Target ID recibido: ${targetId}.`);
-            debugLog(`[POST] Sugerencia: Verifica que el Instagram ID '${targetId}' esté registrado en Firestore.`);
-            return NextResponse.json({
-                success: false,
-                error: 'Tenant not mapped',
-                incomingId: targetId,
-                note: 'Ensure this ID is correctly stored in your integrations collection'
-            });
+            debugLog(`[POST] ❌ ALERTA: No se pudo resolver el tenant para Target ID: ${targetId}.`);
+            
+            // EMERGENCY BYPASS: If only one integration exists globally, use it (robustness for single-tenant users)
+            const allIntegrations = await db.collectionGroup('integrations').get();
+            if (allIntegrations.size === 1) {
+                const doc = allIntegrations.docs[0];
+                tenantRef = doc.ref;
+                tenantData = doc.data();
+                provider = tenantData.instagramId ? 'instagram' : 'messenger';
+                debugLog(`[POST] ⚠️ Emergency Bypass: Only one integration found, defaulting to ${tenantRef.path}`);
+            } else {
+                return NextResponse.json({
+                    success: false,
+                    error: 'Tenant not mapped',
+                    incomingId: targetId,
+                    note: 'Ensure this ID is correctly stored in your integrations collection'
+                });
+            }
         }
 
         const pathParts = tenantRef.path.split('/');
