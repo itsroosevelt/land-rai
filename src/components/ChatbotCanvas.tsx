@@ -98,6 +98,7 @@ interface ChatbotCanvasProps {
     onConnect: OnConnect;
     setNodes: React.Dispatch<React.SetStateAction<Node[]>>;
     setEdges: React.Dispatch<React.SetStateAction<Edge[]>>;
+    targetPlatforms?: string[];
 }
 
 interface SidebarNodeProps {
@@ -180,7 +181,7 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => 
 };
 
 const ChatbotCanvas = forwardRef<ChatbotCanvasRef, ChatbotCanvasProps>(
-    ({ nodes, edges, onNodesChange, onEdgesChange, onConnect, setNodes, setEdges }, ref) => {
+    ({ nodes, edges, onNodesChange, onEdgesChange, onConnect, setNodes, setEdges, targetPlatforms }, ref) => {
 
         const [selectedNode, setSelectedNode] = useState<Node | null>(null);
         const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
@@ -296,9 +297,18 @@ const ChatbotCanvas = forwardRef<ChatbotCanvasRef, ChatbotCanvasProps>(
                                 <h3 className={cn("text-[9px] font-black text-white/20 uppercase tracking-[2px] mb-3 mt-6 border-b border-white/5 pb-1", isLeftSidebarOpen ? "px-1" : "text-center")}>
                                     {isLeftSidebarOpen ? group.title : "•"}
                                 </h3>
-                                {group.nodes.map(nodeInfo => (
-                                    <SidebarNode key={nodeInfo.type} {...nodeInfo} onDragStart={(e, type) => e.dataTransfer.setData('application/reactflow', type)} isCollapsed={!isLeftSidebarOpen} />
-                                ))}
+                                {group.nodes.map(nodeInfo => {
+                                    const isMessengerIncompatible = nodeInfo.type === 'listMessageNode' && targetPlatforms?.includes('messenger');
+                                    return (
+                                        <SidebarNode 
+                                            key={nodeInfo.type} 
+                                            {...nodeInfo} 
+                                            disabled={nodeInfo.disabled || isMessengerIncompatible}
+                                            onDragStart={(e, type) => e.dataTransfer.setData('application/reactflow', type)} 
+                                            isCollapsed={!isLeftSidebarOpen} 
+                                        />
+                                    );
+                                })}
                             </div>
                         ))}
                     </div>

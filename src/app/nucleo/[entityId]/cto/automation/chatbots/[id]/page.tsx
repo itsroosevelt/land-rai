@@ -337,6 +337,7 @@ function FlowPage() {
           onConnect={onConnect}
           setNodes={setNodes}
           setEdges={setEdges}
+          targetPlatforms={targetPlatforms}
         />
       </div>
     </div>
