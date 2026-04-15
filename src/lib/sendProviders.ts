@@ -5,11 +5,14 @@ import { getGmailAccessToken } from './googleAuth';
 // --- Meta (Instagram & Messenger) ---
 
 export interface MetaSendOptions {
-    type?: 'text' | 'image' | 'quick_reply' | 'media';
+    type?: 'text' | 'image' | 'quick_reply' | 'media' | 'video' | 'audio' | 'document' | 'list';
+    mediaType?: string;
     userId?: string;
     entityId?: string;
     provider?: 'messenger' | 'instagram';
     buttons?: any[];
+    sections?: any[];
+    url?: string;
 }
 
 export async function sendMetaMessage(
@@ -17,7 +20,27 @@ export async function sendMetaMessage(
     text: string,
     options: MetaSendOptions | string = {}
 ): Promise<any> {
-    if (!text) return;
+    // If text is empty, it's okay IF it's a media message (image, video, audio, document)
+    const META_MEDIA_TYPES = ['image', 'media', 'video', 'audio', 'document'];
+    const isMedia = (typeof options !== 'string') && (
+        META_MEDIA_TYPES.includes(options.type || '') || META_MEDIA_TYPES.includes(options.mediaType || '')
+    );
+    if (!text && !isMedia) return;
+
+    // Fallback for list type from WhatsApp into text for Messenger
+    if (typeof options !== 'string' && options.type === 'list' && options.sections) {
+        let listText = '\n\n';
+        options.sections.forEach((section: any) => {
+            if (section.title && section.title !== 'Opciones') {
+                listText += `*${section.title}*\n`;
+            }
+            (section.rows || []).forEach((row: any) => {
+                listText += `- ${row.title}\n`;
+            });
+        });
+        text = (text || '') + listText;
+    }
+
     let token = process.env.META_PAGE_ACCESS_TOKEN;
 
     // Backwards compatibility with the old signature
@@ -51,26 +74,67 @@ export async function sendMetaMessage(
         throw new Error('Access Token is not configured.');
     }
 
+    const endpoint = (options.provider === 'instagram' && targetNodeId) ? targetNodeId : 'me';
+    const apiUrl = `https://graph.facebook.com/v21.0/${endpoint}/messages?access_token=${token}`;
+
     const messageData: any = {
         messaging_type: 'RESPONSE',
         recipient: { id: recipientId },
         message: {}
     };
 
-    const isImage = options.type === 'image' || (typeof options !== 'string' && options.type === 'media');
+    // Determine final media type — covers image, video, audio, document
+    const resolvedMediaType = (typeof options !== 'string') ? (options.mediaType || options.type || '') : '';
+    const isMediaFinal = (typeof options !== 'string') && !!resolvedMediaType && META_MEDIA_TYPES.includes(resolvedMediaType);
+    let mediaUrl = (typeof options !== 'string' && options.url) ? options.url : null;
 
-    if (isImage) {
+    // Safety check: if mediaUrl doesn't look like a URL, don't treat it as an attachment
+    if (mediaUrl && !mediaUrl.startsWith('http')) {
+        mediaUrl = null;
+    }
+
+    if (isMediaFinal && mediaUrl) {
+        // Map internal type to Meta attachment type ('document' → 'file' in Meta API)
+        const attachmentType = resolvedMediaType === 'document' ? 'file'
+            : resolvedMediaType === 'media' ? 'image'
+            : resolvedMediaType;
+
         messageData.message = {
             attachment: {
-                type: 'image',
+                type: attachmentType,
                 payload: {
-                    url: text,
-                    is_selectable: true
+                    url: mediaUrl,
+                    is_reusable: true
                 }
             }
         };
+
+        // If there's ALSO text (caption), we send the media first, then the caption separately for Messenger reliability
+        if (text && text.trim() && text !== mediaUrl) {
+            try {
+                // Send media-only first
+                await axios.post(apiUrl, messageData);
+                // Then send caption as separate text message
+                const textOnlyPayload = {
+                    messaging_type: 'RESPONSE',
+                    recipient: { id: recipientId },
+                    message: { text: text }
+                };
+                const textResponse = await axios.post(apiUrl, textOnlyPayload);
+                return {
+                    ...textResponse.data,
+                    message_id: textResponse.data.message_id || textResponse.data.id,
+                    sentTo: recipientId
+                };
+            } catch (err) {
+                console.error(`[Meta Sending] Multi-part delivery failed:`, err);
+                throw err;
+            }
+        }
     } else {
-        messageData.message = { text: text };
+        // Fallback: If it was supposed to be media but URL is missing,
+        // send the text (which might contain the link as text)
+        messageData.message = { text: text || mediaUrl || 'Mensaje sin contenido' };
     }
 
     // --- QUICK REPLY SUPPORT (FIXES MESSENGER MISSING BUTTONS) ---
@@ -85,13 +149,10 @@ export async function sendMetaMessage(
         });
     }
 
-    // The Messenger Send API strictly requires the '/me/messages' endpoint.
-    // For Instagram, we MUST use the instagramId (targetNodeId).
-    const endpoint = (options.provider === 'instagram' && targetNodeId) ? targetNodeId : 'me';
-    const url = `https://graph.facebook.com/v21.0/${endpoint}/messages?access_token=${token}`;
+    // Metadata for Instagram accounts is handled via targetNodeId above
 
     try {
-        const response = await axios.post(url, messageData);
+        const response = await axios.post(apiUrl, messageData);
         return {
             ...response.data,
             message_id: response.data.message_id || response.data.id,
@@ -105,8 +166,19 @@ export async function sendMetaMessage(
         // Self-documenting error in Firestore for easier debugging
         if (options.userId && options.entityId && options.provider) {
             try {
-                // Find card to log error directly where user sees it
                 const entityPath = `users/${options.userId}/entities/${options.entityId}`;
+                
+                // 1. Detect Token Death (Code 190) and mark integration as Error
+                if (detailedError.includes('Code 190') || detailedError.includes('OAuthException')) {
+                    const integrationRef = db.doc(`${entityPath}/integrations/${options.provider}`);
+                    await integrationRef.update({
+                        status: 'Error',
+                        lastError: `Token expirado: ${detailedError}`,
+                        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                    }).catch(() => {}); // Avoid crashing if doc missing
+                }
+
+                // 2. Find card to log error directly where user sees it
                 const searchSnap = await db.collectionGroup('cards')
                     .where(`platform_ids.${options.provider}`, '==', recipientId)
                     .limit(1)
@@ -138,7 +210,8 @@ export async function sendMetaMessage(
 // --- WhatsApp Business Cloud API (Multi-Tenant Aware) ---
 
 interface WhatsAppSendOptions {
-    type?: 'text' | 'template' | 'quick_reply' | 'list' | 'media';
+    type?: 'text' | 'template' | 'quick_reply' | 'list' | 'media' | 'image' | 'video' | 'audio' | 'document';
+    mediaType?: string;
     template?: any;
     buttons?: any[];
     button?: string;
@@ -235,9 +308,9 @@ export async function sendWhatsAppMessage(
         const typeIn = (options.type || 'image').toLowerCase();
         const mediaType = (typeIn === 'media' || typeIn === 'multimedia') ? 'document' : typeIn as 'image' | 'video' | 'audio' | 'document';
         payload.type = mediaType;
-        
-        // Build media object strictly (Meta rejects 'filename' inside 'image' or 'video')
-        const mediaData: any = { link: options.url, caption: message };
+
+        // Build media object — caption always included (even empty) to match WhatsApp Cloud API spec
+        const mediaData: any = { link: options.url, caption: message || '' };
         if (mediaType === 'document' && options.filename) {
             mediaData.filename = options.filename;
         }
@@ -249,19 +322,31 @@ export async function sendWhatsAppMessage(
         payload.text = { body: message, preview_url: false };
     }
 
-    try {
-        const response = await axios.post(url, payload, {
-            headers: { Authorization: `Bearer ${token}` }
-        });
-
-        console.log(`[sendWhatsAppMessage] Meta API Response:`, JSON.stringify(response.data, null, 2));
-
-        return { ...response.data, sentTo: cleanTo };
-    } catch (error: any) {
-        const errorData = error.response?.data || error.message;
-        console.error('WhatsApp API Error:', JSON.stringify(errorData, null, 2));
-        throw new Error(`WhatsApp API Error: ${JSON.stringify(errorData)}`);
+    // Retry logic (up to 3 attempts, same as Firebase Functions version)
+    let lastError: any = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            const response = await axios.post(url, payload, {
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+            });
+            console.log(`[sendWhatsAppMessage] ✅ Success (attempt ${attempt}):`, JSON.stringify(response.data));
+            return { ...response.data, sentTo: cleanTo };
+        } catch (error: any) {
+            lastError = error.response?.data || error.message;
+            const status = error.response?.status;
+            const isTransient = status === 429 || (status >= 500 && status <= 599);
+            if (isTransient && attempt < 3) {
+                const wait = Math.pow(2, attempt) * 1000;
+                console.warn(`[sendWhatsAppMessage] ⚠️ Transient error (attempt ${attempt}/3), retrying in ${wait}ms...`, lastError);
+                await new Promise(r => setTimeout(r, wait));
+                continue;
+            }
+            console.error(`[sendWhatsAppMessage] ❌ Error (attempt ${attempt}/3):`, JSON.stringify(lastError, null, 2));
+            console.error(`[sendWhatsAppMessage] Payload was:`, JSON.stringify(payload, null, 2));
+            break;
+        }
     }
+    throw new Error(`WhatsApp API Error: ${JSON.stringify(lastError)}`);
 }
 
 // --- Telegram Bot API ---

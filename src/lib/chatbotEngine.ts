@@ -36,11 +36,8 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             const normInput = (text || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
             const isPriorityCommand = /^(reinicia|reinicio|reset|clear|limpiar|menu|opciones|ayuda|help|inicio|start)/i.test(normInput);
 
-            // ATOMIC UNLOCK for Priority Commands: If it's a reset, we REMOVE the lock before trying to re-acquire it.
             if (isPriorityCommand && data.botLock) {
-                transaction.update(cardRef, { botLock: admin.firestore.FieldValue.delete() });
                 console.log(`[ChatbotEngine] 🔓 Priority command breaking existing lock for ${cardId}`);
-                // Don't return yet, let the next step re-acquire it fresh.
             }
 
             // DEDUP: If this exact message ID was just processed, skip queueing
