@@ -71,7 +71,8 @@ export async function POST(req: Request) {
                     let cardSnap: any = null;
 
                     // Strategy A: Search by platform_ids (Modern Schema — Messenger/Instagram PSID)
-                    const platformKey = targetPlatform === 'facebook' ? 'messenger' : targetPlatform;
+                    const rawPlatform = targetPlatform.toLowerCase();
+                    const platformKey = (rawPlatform === 'facebook' || rawPlatform === 'messenger') ? 'messenger' : rawPlatform;
                     const queryByPlatformId = await cardsRef.where(`platform_ids.${platformKey}`, '==', cleanTo).limit(1).get();
                     if (!queryByPlatformId.empty) {
                         resolvedCardId = queryByPlatformId.docs[0].id;

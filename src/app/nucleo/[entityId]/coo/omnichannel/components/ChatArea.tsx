@@ -4,7 +4,7 @@ import { useConversationLogic } from '../../whatsapp/components/ConversationModa
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase';
-import { doc, updateDoc, Timestamp } from 'firebase/firestore';
+import { doc, updateDoc, Timestamp, collection, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface ChatAreaProps {
@@ -152,6 +152,35 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
         return () => window.removeEventListener('focus', resetUnread);
     }, [card?.id, card?.unreadCount, card?.groupId, logic.liveCardData?.groupId, logic.liveCardData?.unreadCount, currentUser?.uid, activeEntity]);
 
+    const [integrationStatus, setIntegrationStatus] = useState<string | null>(null);
+
+    // Fetch current integration status
+    useEffect(() => {
+        if (!currentUser || !activeEntity || !card) return;
+        const source = (card.channel || card.source || card.primary_channel || '').toLowerCase();
+        let provider = source.includes('messenger') ? 'messenger' : 
+                       source.includes('instagram') ? 'instagram' :
+                       source.includes('whatsapp') ? 'whatsapp' : source;
+        
+        if (provider === 'whatsapp' && !integrationStatus) {
+            // Check both possible WhatsApp IDs
+            const integrationsRef = collection(db, `users/${currentUser.uid}/entities/${activeEntity}/integrations`);
+            const unsubscribe = onSnapshot(integrationsRef, (snapshot) => {
+                const wa = snapshot.docs.find(d => d.id === 'whatsapp' || d.id === 'whatsapp_internal');
+                if (wa) setIntegrationStatus(wa.data().status);
+            });
+            return () => unsubscribe();
+        } else if (provider) {
+            const integrationRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/integrations/${provider}`);
+            const unsubscribe = onSnapshot(integrationRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    setIntegrationStatus(docSnap.data().status);
+                }
+            });
+            return () => unsubscribe();
+        }
+    }, [card?.id, currentUser?.uid, activeEntity]);
+
     // Auto-scroll to bottom
     useEffect(() => {
         if (logic.messagesEndRef.current) {
@@ -283,6 +312,24 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
                     </div>
                 </div>
             </div>
+
+            {/* Connectivity Status Banner */}
+            {integrationStatus && integrationStatus !== 'Connected' && integrationStatus !== 'Internal' && (
+                <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-center justify-between group animate-in slide-in-from-top duration-300">
+                    <div className="flex items-center gap-2">
+                        <AlertCircle size={14} className="text-amber-500 animate-pulse" />
+                        <span className="text-[10px] font-bold text-amber-500/80 uppercase tracking-widest">
+                            Conexión Recalibrándose — El canal podría estar offline
+                        </span>
+                    </div>
+                    <button 
+                        onClick={() => window.open(`/nucleo/${activeEntity}/cto/integrations`, '_blank')}
+                        className="text-[9px] font-black underline uppercase text-amber-500 hover:text-amber-400 transition-colors"
+                    >
+                        Ver Integraciones <ExternalLink size={10} className="inline ml-1" />
+                    </button>
+                </div>
+            )}
 
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto p-4 bg-[#0a0a0a] space-y-3 no-scrollbar">

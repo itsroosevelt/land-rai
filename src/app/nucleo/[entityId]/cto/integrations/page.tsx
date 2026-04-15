@@ -50,9 +50,9 @@ export default function IntegrationsPage() {
                 if (d.id === '_init') return;
 
                 // Mapeo lógico: Si es la versión interna de whatsapp, cuenta como la integración principal 'whatsapp'
-                if (d.id === 'whatsapp_internal' && (docData.status === 'Internal' || docData.status === 'Connected')) {
+                if (d.id === 'whatsapp_internal' && (docData.status === 'Internal' || docData.status === 'Connected' || docData.status === 'Error')) {
                     data['whatsapp'] = docData;
-                } else if (docData.status === 'Connected') {
+                } else if (docData.status === 'Connected' || docData.status === 'Error' || docData.status === 'Disconnected') {
                     if (d.id === 'whatsapp' && !docData.phoneNumberId) return; // Ignore incomplete setups
                     data[d.id] = docData;
                 }
@@ -237,10 +237,14 @@ function IntegrationCard({
             {/* Status Badge */}
             <div className="flex justify-between items-start mb-4">
                 <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-[9px] uppercase font-black border transition-all ${
+                    integrationData?.status === 'Error' ? 'bg-red-500/10 border-red-500/30 text-red-500' :
                     isConnected ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/10 text-neutral-600'
                 }`}>
-                    <div className={`w-1 h-1 rounded-full ${isConnected ? 'bg-blue-400 shadow-[0_0_5px_rgba(59,130,246,1)]' : 'bg-neutral-600'}`} />
-                    {isConnected ? 'Activo' : 'Offline'}
+                    <div className={`w-1 h-1 rounded-full ${
+                        integrationData?.status === 'Error' ? 'bg-red-500 animate-pulse' :
+                        isConnected ? 'bg-blue-400 shadow-[0_0_5px_rgba(59,130,246,1)]' : 'bg-neutral-600'
+                    }`} />
+                    {integrationData?.status === 'Error' ? 'Error' : isConnected ? 'Activo' : 'Offline'}
                 </div>
                 {integration.popular && !isConnected && (
                     <div className="px-3 py-1 bg-white text-black rounded-full text-[9px] font-black uppercase tracking-tighter shadow-xl">

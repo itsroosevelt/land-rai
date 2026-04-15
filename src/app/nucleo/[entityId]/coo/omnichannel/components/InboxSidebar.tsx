@@ -1,5 +1,9 @@
-import React, { useState } from 'react';
-import { Mail, Users, CheckCircle, Tag, Hash, Settings, ChevronDown, ChevronRight, MessageSquare } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Mail, Users, CheckCircle, Tag, Hash, Settings, ChevronDown, ChevronRight, MessageSquare, AlertTriangle } from 'lucide-react';
+import { db } from '@/lib/firebase';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { useParams } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface SidebarProps {
     selectedFolder: string;
@@ -8,6 +12,24 @@ interface SidebarProps {
 }
 
 export default function InboxSidebar({ selectedFolder, setSelectedFolder, cards = [] }: SidebarProps) {
+    const { currentUser } = useAuth();
+    const params = useParams();
+    const activeEntity = params?.entityId as string;
+    const [integrationStatuses, setIntegrationStatuses] = useState<Record<string, string>>({});
+
+    useEffect(() => {
+        if (!currentUser || !activeEntity) return;
+        const integrationsRef = collection(db, `users/${currentUser.uid}/entities/${activeEntity}/integrations`);
+        const unsubscribe = onSnapshot(integrationsRef, (snapshot) => {
+            const statuses: Record<string, string> = {};
+            snapshot.docs.forEach(doc => {
+                if (doc.id === '_init') return;
+                statuses[doc.id] = doc.data().status;
+            });
+            setIntegrationStatuses(statuses);
+        });
+        return () => unsubscribe();
+    }, [currentUser, activeEntity]);
     const [expandedSections, setExpandedSections] = useState({
         inboxes: true,
         labels: true
@@ -100,8 +122,17 @@ export default function InboxSidebar({ selectedFolder, setSelectedFolder, cards 
                                             : 'text-neutral-400 hover:bg-neutral-900 hover:text-white'
                                         }`}
                                 >
-                                    <Hash size={14} className="mr-2.5 opacity-40" />
+                                    <div className="relative mr-2.5">
+                                        <Hash size={14} className="opacity-40" />
+                                        {(() => {
+                                            const status = integrationStatuses[channel.id] || integrationStatuses[`${channel.id}_internal`];
+                                            if (status === 'Connected') return <div className="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 bg-blue-500 rounded-full border border-[#0a0a0a]" />;
+                                            if (status === 'Error') return <div className="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 bg-amber-500 rounded-full border border-[#0a0a0a] animate-pulse" />;
+                                            return <div className="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 bg-neutral-800 rounded-full border border-[#0a0a0a]" />;
+                                        })()}
+                                    </div>
                                     <span className="truncate">{channel.label}</span>
+                                    {integrationStatuses[channel.id] === 'Error' && <AlertTriangle size={10} className="ml-auto text-amber-500/50" />}
                                 </button>
                             ))}
                         </div>

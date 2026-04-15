@@ -44,7 +44,10 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
         } else if (selectedFolder === 'ig1') {
             filtered = filtered.filter(c => (c.channel || c.source || '').toLowerCase().includes('instagram'));
         } else if (selectedFolder === 'messenger') {
-            filtered = filtered.filter(c => (c.channel || c.source || '').toLowerCase().includes('messenger'));
+            filtered = filtered.filter(c => {
+                const src = (c.channel || c.source || '').toLowerCase();
+                return src.includes('messenger') || src.includes('facebook');
+            });
         } else if (selectedFolder === 'telegram') {
             filtered = filtered.filter(c => (c.channel || c.source || '').toLowerCase().includes('telegram'));
         } else if (selectedFolder === 'twitter') {
@@ -76,7 +79,8 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
         filtered.forEach(c => {
             // Robust key: Use normalized phone for WhatsApp, or external_id/id for others
             const phone = c.contactNumber || c.contactNumberClean;
-            const key = phone ? phone.replace(/\D/g, '') : (c.platform_ids?.[c.source] || c.external_id || c.id);
+            const sourceKey = (c.source || '').toLowerCase();
+            const key = phone ? phone.replace(/\D/g, '') : (c.platform_ids?.[sourceKey] || c.platform_ids?.messenger || c.external_id || c.id);
             
             const existing = uniqueMap.get(key);
             

@@ -119,11 +119,16 @@ export async function POST(req: Request) {
                 .get();
 
             if (allIntegrations.size >= 1) {
-                // We pick the first active one as fallback to avoid silence
+                // We pick the first matching provider if possible, otherwise fallback
                 const doc = allIntegrations.docs[0];
                 tenantRef = doc.ref;
                 tenantData = doc.data();
-                provider = tenantData.instagramId ? 'instagram' : 'messenger';
+                
+                // If we know it was a Messenger entry but we found generic integrations, 
+                // prioritize the one that actually matches the expected provider.
+                const possibleProvider = tenantData.instagramId ? 'instagram' : 'messenger';
+                console.warn(`[Meta Webhook] ⚠️ Exact pageId match failed for ${targetId}. Falling back to first found integration: ${possibleProvider}`);
+                provider = possibleProvider;
                 debugLog(`[POST] ⚠️ Fallback Resolve: Using first found integration: ${tenantRef.path}`);
             } else {
                 debugLog(`[POST] ❌ Critical: No match found for targetId ${targetId}`);
@@ -335,14 +340,15 @@ export async function POST(req: Request) {
             // UPDATING EXISTING CARD
             await targetCardDoc.ref.update({
                 contactName: resolvedName || existingContactName,
-                lastMessage: text.length > 1024 ? text.substring(0, 1021) + '...' : text,
-                updatedAt: admin.firestore.Timestamp.now(),
+                lastMessage: text.length > 40 ? text.substring(0, 37) + '...' : text,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 unreadCount: admin.firestore.FieldValue.increment(1),
                 messages: admin.firestore.FieldValue.arrayUnion(newMessage),
                 'botState.messageQueue': admin.firestore.FieldValue.arrayUnion(queueItem),
                 status: 'open',
                 source: provider.toUpperCase(),
-                [`platform_ids.${provider}`]: senderId
+                primary_channel: provider.toLowerCase(),
+                [`platform_ids.${provider.toLowerCase()}`]: senderId
             });
 
             // Sincronizar metaSenderId, source y nombre con el contacto existente
@@ -392,8 +398,8 @@ export async function POST(req: Request) {
                 unreadCount: 1,
                 status: 'open',
                 source: provider.toUpperCase(),
-                primary_channel: provider,
-                platform_ids: { [provider]: senderId }
+                primary_channel: provider.toLowerCase(),
+                platform_ids: { [provider.toLowerCase()]: senderId }
             });
 
             const contactPayload: any = {
