@@ -61,7 +61,18 @@ export async function sendMetaMessage(
                 if (resolvedToken) {
                     token = resolvedToken;
                     targetNodeId = options.provider === 'messenger' ? data.pageId : data.instagramId;
-                    console.log(`[sendMetaMessage] Loaded resolved token for ${options.provider} in tenant ${options.entityId}`);
+                    console.log(`[sendMetaMessage] 💎 Using PERMANENT TOKEN from Firestore (${options.provider})`);
+                } else {
+                    // EMERGENCY RESOLUTION: If doc exists but no token, try checking a generic name
+                    const fallbackPath = `users/${options.userId}/entities/${options.entityId}/integrations/meta`;
+                    const fallbackDoc = await db.doc(fallbackPath).get();
+                    const fData = fallbackDoc.data();
+                    const fToken = fData?.accessToken || fData?.token;
+                    if (fToken) {
+                        token = fToken;
+                        targetNodeId = options.provider === 'messenger' ? fData.pageId : fData.instagramId;
+                        console.log(`[sendMetaMessage] Resolved via generic 'meta' fallback for ${options.entityId}`);
+                    }
                 }
             }
         } catch (err) {
@@ -74,7 +85,7 @@ export async function sendMetaMessage(
         throw new Error('Access Token is not configured.');
     }
 
-    const endpoint = (options.provider === 'instagram' && targetNodeId) ? targetNodeId : 'me';
+    const endpoint = 'me';
     const apiUrl = `https://graph.facebook.com/v21.0/${endpoint}/messages?access_token=${token}`;
 
     const messageData: any = {
@@ -139,6 +150,11 @@ export async function sendMetaMessage(
 
     // --- QUICK REPLY SUPPORT (FIXES MESSENGER MISSING BUTTONS) ---
     if (options.type === 'quick_reply' && options.buttons && options.buttons.length > 0) {
+        // Messenger REQUIRES text when sending quick_replies. If empty, add fallback.
+        if (!messageData.message.text) {
+            messageData.message.text = text || '¿Qué te gustaría hacer?';
+        }
+
         messageData.message.quick_replies = options.buttons.map((btn: any) => {
             const b = btn.reply || btn;
             return {
@@ -153,6 +169,18 @@ export async function sendMetaMessage(
 
     try {
         const response = await axios.post(apiUrl, messageData);
+
+        // Success! Autoclear Error status if we have the context
+        if (options.userId && options.entityId && options.provider) {
+            const integrationRef = db.doc(`users/${options.userId}/entities/${options.entityId}/integrations/${options.provider}`);
+            // Check status before updating to avoid unnecessary writes
+            integrationRef.get().then(snap => {
+                if (snap.exists && snap.data()?.status === 'Error') {
+                    integrationRef.update({ status: 'Connected', lastError: null, updatedAt: admin.firestore.FieldValue.serverTimestamp() }).catch(() => {});
+                }
+            }).catch(() => {});
+        }
+
         return {
             ...response.data,
             message_id: response.data.message_id || response.data.id,
@@ -306,16 +334,30 @@ export async function sendWhatsAppMessage(
         };
     } else if (['media', 'multimedia', 'image', 'video', 'audio', 'document'].includes((options.type || '').toLowerCase())) {
         const typeIn = (options.type || 'image').toLowerCase();
-        const mediaType = (typeIn === 'media' || typeIn === 'multimedia') ? 'document' : typeIn as 'image' | 'video' | 'audio' | 'document';
-        payload.type = mediaType;
+        const url = options.url || '';
+        
+        // Auto-detect image type from extension for better WhatsApp rendering
+        let mediaType: 'image' | 'video' | 'audio' | 'document' | 'file' = 'document';
+        if (typeIn === 'image' || url.match(/\.(jpg|jpeg|png|webp|gif)$/i)) {
+            mediaType = 'image';
+        } else if (typeIn === 'video' || url.match(/\.(mp4|mov)$/i)) {
+            mediaType = 'video';
+        } else if (typeIn === 'audio' || url.match(/\.(mp3|ogg|wav)$/i)) {
+            mediaType = 'audio';
+        } else if (typeIn === 'document' || typeIn === 'media' || typeIn === 'multimedia') {
+            mediaType = 'document';
+        }
 
-        // Build media object — caption always included (even empty) to match WhatsApp Cloud API spec
-        const mediaData: any = { link: options.url, caption: message || '' };
-        if (mediaType === 'document' && options.filename) {
+        const msgType = mediaType === 'document' ? 'document' : mediaType;
+        payload.type = msgType;
+
+        // Build media object — link is required for WhatsApp Cloud API
+        const mediaData: any = { link: url, caption: message || '' };
+        if (msgType === 'document' && options.filename) {
             mediaData.filename = options.filename;
         }
 
-        payload[mediaType] = mediaData;
+        payload[msgType] = mediaData;
     } else {
         console.warn(`[sendWhatsAppMessage] ⚠️ Falling back to TEXT. Received Type: "${options.type || 'undefined'}"`);
         payload.type = 'text';
@@ -333,16 +375,43 @@ export async function sendWhatsAppMessage(
             return { ...response.data, sentTo: cleanTo };
         } catch (error: any) {
             lastError = error.response?.data || error.message;
+            const detailedError = typeof lastError === 'object' ? JSON.stringify(lastError) : lastError;
             const status = error.response?.status;
             const isTransient = status === 429 || (status >= 500 && status <= 599);
+            
             if (isTransient && attempt < 3) {
                 const wait = Math.pow(2, attempt) * 1000;
-                console.warn(`[sendWhatsAppMessage] ⚠️ Transient error (attempt ${attempt}/3), retrying in ${wait}ms...`, lastError);
+                console.warn(`[sendWhatsAppMessage] ⚠️ Transient error (attempt ${attempt}/3), retrying in ${wait}ms...`);
                 await new Promise(r => setTimeout(r, wait));
                 continue;
             }
-            console.error(`[sendWhatsAppMessage] ❌ Error (attempt ${attempt}/3):`, JSON.stringify(lastError, null, 2));
-            console.error(`[sendWhatsAppMessage] Payload was:`, JSON.stringify(payload, null, 2));
+
+            // EXHAUSTIVE LOGGING: If it fails, log the error to the card so the user knows WHY
+            if (options.userId && options.entityId) {
+                try {
+                    const entityPath = `users/${options.userId}/entities/${options.entityId}`;
+                    const searchSnap = await db.collectionGroup('cards')
+                        .where('contactNumber', '==', toNumber)
+                        .limit(1)
+                        .get();
+
+                    if (!searchSnap.empty) {
+                        await searchSnap.docs[0].ref.update({
+                            'botState.lastError': `WhatsApp Error: ${detailedError}`,
+                            'botState.lastErrorAt': admin.firestore.FieldValue.serverTimestamp()
+                        });
+                    }
+                    
+                    await db.collection(`${entityPath}/system_logs`).add({
+                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                        type: 'error_whatsapp',
+                        error: lastError,
+                        recipient: toNumber
+                    });
+                } catch (fsErr) {
+                    console.error('[sendWhatsAppMessage] Failed to log error to Firestore:', fsErr);
+                }
+            }
             break;
         }
     }

@@ -17,7 +17,7 @@ export function getMessagingAdapter(platform: string, userId?: string, entityId?
         case 'instagram':
             return new MetaAdapter('instagram', userId, entityId);
         case 'telegram':
-            return new TelegramAdapter();
+            return new TelegramAdapter(userId, entityId);
         case 'x':
         case 'twitter':
             return new XAdapter();

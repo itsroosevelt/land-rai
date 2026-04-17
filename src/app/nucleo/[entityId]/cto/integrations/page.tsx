@@ -139,7 +139,7 @@ export default function IntegrationsPage() {
                             <IntegrationCard 
                                 key={integration.id}
                                 integration={integration}
-                                isConnected={!!connectedIntegrations[integration.id]}
+                                isConnected={connectedIntegrations[integration.id]?.status === 'Connected'}
                                 integrationData={connectedIntegrations[integration.id]}
                                 onConnect={() => handleConnect(integration)}
                             />

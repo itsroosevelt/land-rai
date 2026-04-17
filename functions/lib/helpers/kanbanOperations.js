@@ -44,7 +44,7 @@ async function handleKanbanUpdateOmni(message, userId, entityId) {
             .where('metaSenderId', '==', external_id)
             .get();
     }
-    const existingCard = cardSearchSnap.docs.find(d => d.ref.path.includes(vaultPath));
+    const existingCard = cardSearchSnap.docs.find(d => d.ref.path.startsWith(vaultPath + '/'));
     if (existingCard) {
         cardRef = existingCard.ref;
         await cardRef.update({

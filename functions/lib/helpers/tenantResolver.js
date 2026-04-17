@@ -22,9 +22,11 @@ async function resolveTenant(platform, platformId, secondaryId) {
     else if (platform === 'messenger')
         fieldName = 'pageId';
     else if (platform === 'telegram')
-        fieldName = 'botToken';
+        fieldName = 'secretToken'; // secretToken = webhook verification header
     else if (platform === 'x_twitter')
         fieldName = 'twitterHandle';
+    else if (platform === 'webchat')
+        fieldName = 'widgetId';
     // 1. MODERN VAULT SEARCH (Preferred)
     try {
         let integrationsSnap = await db.collectionGroup("integrations")
@@ -37,10 +39,17 @@ async function resolveTenant(platform, platformId, secondaryId) {
                 .limit(1)
                 .get();
         }
-        // Secondary search (WABA ID)
+        // Secondary search (WABA ID for WhatsApp)
         if (integrationsSnap.empty && platform === 'whatsapp' && secondaryId) {
             integrationsSnap = await db.collectionGroup("integrations")
                 .where("wabaId", "==", secondaryId)
+                .limit(1)
+                .get();
+        }
+        // Secondary search: Telegram botToken fallback (legacy integrations stored token, not secretToken)
+        if (integrationsSnap.empty && platform === 'telegram') {
+            integrationsSnap = await db.collectionGroup("integrations")
+                .where("botToken", "==", platformId)
                 .limit(1)
                 .get();
         }

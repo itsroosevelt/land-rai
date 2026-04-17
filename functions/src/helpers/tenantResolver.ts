@@ -21,8 +21,9 @@ export async function resolveTenant(platform: string, platformId: string | numbe
     if (platform === 'whatsapp') fieldName = 'phoneNumberId';
     else if (platform === 'instagram') fieldName = 'instagramId';
     else if (platform === 'messenger') fieldName = 'pageId';
-    else if (platform === 'telegram') fieldName = 'botToken';
+    else if (platform === 'telegram') fieldName = 'secretToken'; // secretToken = webhook verification header
     else if (platform === 'x_twitter') fieldName = 'twitterHandle';
+    else if (platform === 'webchat') fieldName = 'widgetId';
 
     // 1. MODERN VAULT SEARCH (Preferred)
     try {
@@ -38,10 +39,18 @@ export async function resolveTenant(platform: string, platformId: string | numbe
                 .get();
         }
 
-        // Secondary search (WABA ID)
+        // Secondary search (WABA ID for WhatsApp)
         if (integrationsSnap.empty && platform === 'whatsapp' && secondaryId) {
             integrationsSnap = await db.collectionGroup("integrations")
                 .where("wabaId", "==", secondaryId)
+                .limit(1)
+                .get();
+        }
+
+        // Secondary search: Telegram botToken fallback (legacy integrations stored token, not secretToken)
+        if (integrationsSnap.empty && platform === 'telegram') {
+            integrationsSnap = await db.collectionGroup("integrations")
+                .where("botToken", "==", platformId)
                 .limit(1)
                 .get();
         }

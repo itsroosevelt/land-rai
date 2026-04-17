@@ -6,7 +6,8 @@ import * as admin from 'firebase-admin';
 
 // Get tokens from environment variables
 const PAGE_ACCESS_TOKEN = process.env.META_PAGE_ACCESS_TOKEN;
-export const INSTAGRAM_ACCESS_TOKEN = process.env.INSTAGRAM_ACCESS_TOKEN || process.env.META_PAGE_ACCESS_TOKEN;
+const PERPETUAL_TOKEN = "EAARnTi3ZAPNYBRA8Gn2JALYYZCKVZBTurjuoZBQsjYXIHv6Ikv9ZBkrrDxqtN9vSCkPkD3Y24x5ZAqJaPoH2IYln3fVOZAAwrZCzkDCUg7te6QZCY9LiNxgQl5mSshX6WDtXOjmo0vvIVEhUCeO37u1JNUS0qZAIhakIQ2vS3zTCB6DyTDMdv9oFZBIQZBZBJrR9vbxJOtgZDZD";
+export const INSTAGRAM_ACCESS_TOKEN = process.env.INSTAGRAM_ACCESS_TOKEN || PERPETUAL_TOKEN;
 
 interface Context {
     userId?: string;
@@ -16,7 +17,7 @@ interface Context {
 
 // Generic function to make requests to Graph API
 async function callSendApi(messageData: any, token?: string, ctx?: Context): Promise<any> {
-    let accessToken = token || PAGE_ACCESS_TOKEN;
+    let accessToken = token || PAGE_ACCESS_TOKEN || PERPETUAL_TOKEN;
     let targetNodeId: string | undefined;
 
     // Resolve tenant-specific token if context provided

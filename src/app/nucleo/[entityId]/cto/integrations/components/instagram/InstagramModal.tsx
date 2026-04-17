@@ -149,6 +149,7 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
             const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/instagram`);
             await setDoc(configRef, {
                 instagramId,
+                pageId: pageWithIg.id,
                 instagramName: pageWithIg.instagram_business_account.name,
                 instagramUsername: pageWithIg.instagram_business_account.username,
                 pageName: pageWithIg.instagram_business_account.name || pageWithIg.name,
@@ -302,7 +303,7 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                                                     </div>
                                                     <div className="flex items-start gap-4">
                                                         <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center text-[10px] font-bold text-white/40 shrink-0">2</div>
-                                                        <p className="text-xs text-white/60 font-light mt-1 text-left leading-relaxed">Roosevelt te permitirá elegir entre tus perfiles de Udreamms para la automatización.</p>
+                                                        <p className="text-xs text-white/60 font-light mt-1 text-left leading-relaxed">Roosevelt te permitirá elegir entre tus perfiles seleccionados para la automatización.</p>
                                                     </div>
                                                 </div>
 

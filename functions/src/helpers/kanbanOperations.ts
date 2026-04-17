@@ -51,7 +51,7 @@ export async function handleKanbanUpdateOmni(message: UnifiedMessage, userId?: s
             .get();
     }
 
-    const existingCard = cardSearchSnap.docs.find(d => d.ref.path.includes(vaultPath));
+    const existingCard = cardSearchSnap.docs.find(d => d.ref.path.startsWith(vaultPath + '/'));
 
     if (existingCard) {
         cardRef = existingCard.ref;

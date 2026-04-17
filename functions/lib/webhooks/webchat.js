@@ -32,12 +32,27 @@ exports.webchatWebhook = functions.https.onRequest(async (req, res) => {
                 return;
             }
             functions.logger.info('Received WebChat message', body);
-            // For WebChat, we resolve tenant by sessionId OR a dedicated widgetId
-            // If body.entityId is provided by widget, we use it directly, but still resolve mapping for userId
-            const platformId = body.widgetId || body.entityId || 'default';
-            const tenant = await (0, tenantResolver_1.resolveTenant)('webchat', platformId);
-            const userId = (tenant === null || tenant === void 0 ? void 0 : tenant.userId) || 'legacy';
-            const entityId = (tenant === null || tenant === void 0 ? void 0 : tenant.entityId) || 'roosevelt';
+            // Resolve tenant: widgetId lookup → body-supplied entityId → URL params
+            let userId;
+            let entityId;
+            const widgetId = body.widgetId;
+            if (widgetId) {
+                const tenant = await (0, tenantResolver_1.resolveTenant)('webchat', widgetId);
+                if (tenant) {
+                    userId = tenant.userId;
+                    entityId = tenant.entityId;
+                }
+            }
+            // Fallback 1: widget sent explicit entityId with userId in URL
+            if (!userId || !entityId) {
+                userId = (req.query['u'] || body.userId);
+                entityId = (req.query['e'] || body.entityId);
+            }
+            if (!userId || !entityId) {
+                functions.logger.error(`[WebChat Webhook] ❌ Unresolved tenant. widgetId=${widgetId}. Dropping event.`);
+                res.status(400).json({ error: 'Tenant could not be resolved. Provide a valid widgetId or u/e params.' });
+                return;
+            }
             const unifiedMsg = (0, messageNormalizer_1.normalizeWebChatMessage)(body);
             const cardResult = await (0, kanbanOperations_1.handleKanbanUpdateOmni)(unifiedMsg, userId, entityId);
             // Trigger Bot (Unified Logic)

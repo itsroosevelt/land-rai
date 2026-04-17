@@ -13,14 +13,30 @@ const tenantResolver_1 = require("../helpers/tenantResolver");
  */
 exports.telegramWebhook = functions.https.onRequest(async (req, res) => {
     if (req.method === 'POST') {
-        const secretToken = req.headers['x-telegram-bot-api-secret-token'] || 'malamia';
+        const secretToken = req.headers['x-telegram-bot-api-secret-token'];
         // --- RESOLUCIÓN DE INQUILINO (TENANT RESOLUTION) ---
-        const tenant = await (0, tenantResolver_1.resolveTenant)('telegram', secretToken);
-        if (!tenant) {
-            functions.logger.error(`[Telegram Webhook] No mapping found for secret token: ${secretToken}`);
+        // Priority 1: resolve by secretToken (webhook secret header)
+        // Priority 2: resolve by URL query params u/e (legacy or manual setup)
+        let userId;
+        let entityId;
+        if (secretToken) {
+            const tenant = await (0, tenantResolver_1.resolveTenant)('telegram', secretToken);
+            if (tenant) {
+                userId = tenant.userId;
+                entityId = tenant.entityId;
+            }
         }
-        const userId = (tenant === null || tenant === void 0 ? void 0 : tenant.userId) || 'legacy';
-        const entityId = (tenant === null || tenant === void 0 ? void 0 : tenant.entityId) || 'roosevelt';
+        // Fallback: URL params for manual/legacy setups
+        if (!userId || !entityId) {
+            userId = req.query['u'];
+            entityId = req.query['e'];
+        }
+        if (!userId || !entityId) {
+            functions.logger.error(`[Telegram Webhook] ❌ Unresolved tenant. secretToken=${secretToken}. Dropping event.`);
+            // Return 200 to prevent Telegram from retrying with the same unresolvable payload
+            res.sendStatus(200);
+            return;
+        }
         const update = req.body;
         if (update.message) {
             functions.logger.info('Received Telegram message', update.message);

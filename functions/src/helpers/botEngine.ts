@@ -83,7 +83,7 @@ export async function resolveCardRef(
         const snap = await db.collectionGroup('cards')
             .where(`platform_ids.${platform}`, '==', contactNumber)
             .get();
-        const tenantDoc = snap.docs.find(d => d.ref.path.includes(vaultPath));
+        const tenantDoc = snap.docs.find(d => d.ref.path.startsWith(vaultPath + '/'));
         if (tenantDoc) {
             functions.logger.info(`[resolveCardRef] ✅ Found via exact platform_id: ${tenantDoc.ref.path}`);
             return tenantDoc.ref;
@@ -95,7 +95,7 @@ export async function resolveCardRef(
             const altSnap = await db.collectionGroup('cards')
                 .where(`platform_ids.${platform}`, '==', altNumber)
                 .get();
-            const altDoc = altSnap.docs.find(d => d.ref.path.includes(vaultPath));
+            const altDoc = altSnap.docs.find(d => d.ref.path.startsWith(vaultPath + '/'));
             if (altDoc) {
                 functions.logger.info(`[resolveCardRef] ✅ Found via alt platform_id (${altNumber}): ${altDoc.ref.path}`);
                 return altDoc.ref;
@@ -112,13 +112,13 @@ export async function resolveCardRef(
             const snap = await db.collectionGroup('cards')
                 .where('contactNumber', '==', contactNumber)
                 .get();
-            const tenantDoc = snap.docs.find(d => d.ref.path.includes(vaultPath));
+            const tenantDoc = snap.docs.find(d => d.ref.path.startsWith(vaultPath + '/'));
             if (tenantDoc) return tenantDoc.ref;
 
             const snap2 = await db.collectionGroup('cards')
                 .where('contactNumber', '==', cleanNumber)
                 .get();
-            const tenantDoc2 = snap2.docs.find(d => d.ref.path.includes(vaultPath));
+            const tenantDoc2 = snap2.docs.find(d => d.ref.path.startsWith(vaultPath + '/'));
             if (tenantDoc2) return tenantDoc2.ref;
         } catch (e) { }
     }

@@ -17,7 +17,7 @@ function getMessagingAdapter(platform, userId, entityId) {
         case 'instagram':
             return new meta_1.MetaAdapter('instagram', userId, entityId);
         case 'telegram':
-            return new telegram_1.TelegramAdapter();
+            return new telegram_1.TelegramAdapter(userId, entityId);
         case 'x':
         case 'twitter':
             return new x_1.XAdapter();

@@ -112,16 +112,43 @@ export async function sendMessage(to: string, message: string, options?: { previ
     return await makeWhatsAppRequest(payload, 'Text', options);
 }
 
-export async function sendMediaMessage(to: string, fileUrl: string, caption: string = '', fileName: string = 'file', ctx?: { userId?: string, entityId?: string }): Promise<any> {
-    const mediaType = getMediaType(fileUrl, fileName);
+export async function sendMediaMessage(
+    to: string,
+    fileUrl: string,
+    caption: string = '',
+    /** Pass the media type directly ('image'|'video'|'audio'|'document') or a filename for auto-detection */
+    mediaTypeOrFileName: string = 'file',
+    ctx?: { userId?: string, entityId?: string }
+): Promise<any> {
+    // If the caller already knows the type, use it directly; otherwise detect from URL/filename
+    const knownTypes = ['image', 'video', 'audio', 'document'] as const;
+    const mediaType = knownTypes.includes(mediaTypeOrFileName as any)
+        ? (mediaTypeOrFileName as typeof knownTypes[number])
+        : getMediaType(fileUrl, mediaTypeOrFileName);
+
     if (mediaType === 'unsupported') {
-        functions.logger.warn(`Unsupported media: ${fileName}`);
+        functions.logger.warn(`[WhatsApp] Unsupported media type for: ${fileUrl}`);
         return;
     }
+
     const cleanTo = cleanNumber(to);
+
+    // Build the media object — WhatsApp API does NOT accept 'caption' for audio
+    const mediaObj: any = { link: fileUrl };
+    if (caption && mediaType !== 'audio') {
+        mediaObj.caption = caption;
+    }
+    // Include a filename for document type so the recipient sees a readable name
+    if (mediaType === 'document') {
+        const cleanUrl = fileUrl.split('?')[0];
+        mediaObj.filename = cleanUrl.split('/').pop() || 'archivo';
+    }
+
     return await makeWhatsAppRequest({
-        messaging_product: 'whatsapp', to: cleanTo, type: mediaType,
-        [mediaType]: { link: fileUrl, caption: caption }
+        messaging_product: 'whatsapp',
+        to: cleanTo,
+        type: mediaType,
+        [mediaType]: mediaObj
     }, 'Media', ctx);
 }
 
@@ -211,21 +238,21 @@ export async function sendLocationMessage(to: string, lat: number, long: number,
     await makeWhatsAppRequest({
         messaging_product: 'whatsapp', to: cleanNumber(to), type: 'location',
         location: { latitude: lat, longitude: long, name: name, address: address }
-    }, 'Location');
+    }, 'Location', ctx);
 }
 
 function getMediaType(url: string, fileName: string): 'image' | 'document' | 'video' | 'audio' | 'unsupported' {
-    // Better extension extraction: split by '?' to remove query params, then take extension
+    // Extension extraction: prefer filename if it has a dot, otherwise use URL path (strip query params)
     const cleanUrl = url.split('?')[0];
-    const ext = (fileName && fileName.includes('.') 
-        ? fileName.split('.').pop() 
-        : cleanUrl.split('.').pop())?.toLowerCase();
-    
-    if (['jpg', 'jpeg', 'png', 'webp'].includes(ext || '')) return 'image';
-    if (['pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'csv'].includes(ext || '')) return 'document';
-    if (['mp4', '3gp', 'mov', 'avi', 'mkv'].includes(ext || '')) return 'video';
-    if (['mp3', 'aac', 'ogg', 'wav', 'm4a'].includes(ext || '')) return 'audio';
-    
-    // Default fallback
-    return 'image';
+    const ext = (fileName && fileName.includes('.')
+        ? fileName.split('.').pop()
+        : cleanUrl.split('/').pop()?.split('.').pop())?.toLowerCase();
+
+    if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext || '')) return 'image';
+    if (['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'zip'].includes(ext || '')) return 'document';
+    if (['mp4', '3gp', 'mov', 'avi', 'mkv', 'webm'].includes(ext || '')) return 'video';
+    if (['mp3', 'aac', 'ogg', 'wav', 'm4a', 'opus'].includes(ext || '')) return 'audio';
+
+    // Safer fallback: treat unknown binaries as document rather than image
+    return 'document';
 }

@@ -120,7 +120,11 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
  * Single Engine Cycle: Processes ONE message through the flow.
  */
 async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath: string, entityId: string, userId: string) {
-    const text = msg.text || '';
+    const rawText = msg.text || '';
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawText);
+    // If it's a UUID, it means standard UI messaging already saved the 'readable' text 
+    // to Firestore in the messages array, but for flow logic we might still need isUUID check.
+    const text = isUUID ? '' : rawText;
     const platform = msg.platform;
     const from = msg.from;
     const messageId = msg.messageId;
@@ -417,18 +421,38 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         // 2. MEDIA MESSAGE
         console.log(`[ChatbotEngine] 🎯 Checking Node: ${node.id} | Type: ${node.type}`);
         if (node.type === 'mediaMessageNode' || (node.type as string) === 'multimedia') {
-            const url = replaceVars(node.data?.url || '');
-            const caption = replaceVars(node.data?.caption || '');
+            const rawUrl = node.data?.url || node.data?.attachment || node.data?.link || '';
+            const url = replaceVars(rawUrl);
+            
+            // For caption, try caption, then body, then text, then content (only if content wasn't the URL)
+            let rawCaption = node.data?.caption || node.data?.body || node.data?.text || '';
+            if (!rawCaption && node.data?.content && node.data?.content !== rawUrl) {
+                rawCaption = node.data.content;
+            }
+            const caption = replaceVars(rawCaption);
+
             console.log(`[ChatbotEngine] 🖼️ Media Node Detected: URL=${url.substring(0, 30)}... Caption=${caption.substring(0, 20)}`);
             
             if (url) {
-                // Combined Send (Image + Caption) via options
-                const sendResult = await dispatchMessage(caption, { type: 'image', url: url, filename: node.data?.filename });
+                // Determine type based on extension if possible, default to image
+                const type = url.match(/\.(mp4|mov)$/i) ? 'video' : (url.match(/\.(mp3|ogg|wav)$/i) ? 'audio' : 'image');
+                
+                const sendResult = await dispatchMessage(caption, { 
+                    type, 
+                    url: url, 
+                    filename: node.data?.filename 
+                });
                 console.log(`[ChatbotEngine] 📦 Dispatch Result:`, JSON.stringify(sendResult));
 
                 await cardRef.update({
                     messages: admin.firestore.FieldValue.arrayUnion({
-                        sender: 'agent', text: caption || 'Imagen', platform, timestamp: new Date(), messageId: `bot_media_${Date.now()}`
+                        sender: 'agent', 
+                        text: caption || 'Imagen', 
+                        platform, 
+                        timestamp: new Date(), 
+                        messageId: `bot_media_${Date.now()}`,
+                        type: 'image',
+                        url: url
                     })
                 });
 
@@ -452,7 +476,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 }))
             }));
 
-            await dispatchMessage(body, { type: 'list', button: node.data?.buttonText || 'Ver opciones', sections });
+            await dispatchMessage(body || 'Selecciona una opción:', { type: 'list', button: node.data?.buttonText || 'Ver opciones', sections });
             
             await cardRef.update({
                 'botState.status': 'active',
@@ -478,8 +502,8 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 type: 'reply', reply: { id: (b.id || b.title || b).substring(0, 20), title: (b.title || b).substring(0, 20) }
             })).slice(0, 3);
 
-            if (content.trim()) {
-                await dispatchMessage(content, node.type === 'quickReplyNode' ? { type: 'quick_reply', buttons } : {});
+            if (content.trim() || node.type === 'quickReplyNode') {
+                await dispatchMessage(content || 'Elige una opción:', node.type === 'quickReplyNode' ? { type: 'quick_reply', buttons } : {});
             }
             
             const updatePayload: any = {

@@ -61,8 +61,16 @@ export async function POST(req: Request) {
             if (messaging.message?.is_echo) {
                 return NextResponse.json({ success: true, ignored: 'echo' });
             }
-            // Prioritize Quick Reply payload, then text
-            text = messaging.message?.quick_reply?.payload || messaging.message?.text || messaging.postback?.payload || messaging.postback?.title || '';
+
+            // --- UUID FILTER ---
+            // If the payload is a UUID, we prefer the button title/text for display purposes
+            const rawPayload = messaging.message?.quick_reply?.payload || messaging.postback?.payload || '';
+            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawPayload);
+            const readableText = messaging.message?.text || messaging.postback?.title || '';
+            
+            // For the chatbot engine, the payload (UUID) is important to trigger the next node.
+            // For the UI, the readable text is better.
+            text = (isUUID && readableText) ? readableText : (rawPayload || readableText);
             
             if (!text && messaging.message?.attachments) {
                 text = '[Multimedia/Adjunto]';
@@ -94,24 +102,30 @@ export async function POST(req: Request) {
         let tenantData: any = null;
 
         // 1. GLOBAL MULTI-PLATFORM SEARCH (Cross-Mapping Rule)
+        // Prioritizamos integraciones que estén marcadas como 'Connected' y sean las más recientes
         const crossSnap = await db.collectionGroup('integrations')
+            .where('status', '==', 'Connected')
             .where('pageId', 'in', [targetId, String(targetId), numericId])
             .get();
 
         const crossSnapInsta = await db.collectionGroup('integrations')
+            .where('status', '==', 'Connected')
             .where('instagramId', 'in', [targetId, String(targetId), numericId])
             .get();
 
         if (!crossSnap.empty) {
-            tenantRef = crossSnap.docs[0].ref;
-            tenantData = crossSnap.docs[0].data();
+            // Sort by updatedAt in memory to avoid needing complex Firestore indices for collectionGroup
+            const docs = crossSnap.docs.sort((a, b) => (b.data().updatedAt?.seconds || 0) - (a.data().updatedAt?.seconds || 0));
+            tenantRef = docs[0].ref;
+            tenantData = docs[0].data();
             provider = 'messenger';
-            debugLog(`[POST] Resolved Messenger tenant via CrossMapping: ${tenantRef.path}`);
+            debugLog(`[POST] Resolved Messenger tenant: ${tenantRef.path}`);
         } else if (!crossSnapInsta.empty) {
-            tenantRef = crossSnapInsta.docs[0].ref;
-            tenantData = crossSnapInsta.docs[0].data();
+            const docs = crossSnapInsta.docs.sort((a, b) => (b.data().updatedAt?.seconds || 0) - (a.data().updatedAt?.seconds || 0));
+            tenantRef = docs[0].ref;
+            tenantData = docs[0].data();
             provider = 'instagram';
-            debugLog(`[POST] Resolved Instagram tenant via CrossMapping: ${tenantRef.path}`);
+            debugLog(`[POST] Resolved Instagram tenant: ${tenantRef.path}`);
         } else {
             // EMERGENCY BYPASS: If still not found but only one integration exists globally, use it.
             const allIntegrations = await db.collectionGroup('integrations')
@@ -438,7 +452,7 @@ export async function POST(req: Request) {
 
             try {
                 await processChatbotFlow({
-                    userId, entityId, groupId, cardId, platform: provider, from: senderId, text: text,
+                    userId, entityId, groupId, cardId, platform: provider.toLowerCase() as any, from: senderId, text: text,
                     messageId: messaging.message?.mid || `mid_${Date.now()}`
                 });
                 console.log(`[Meta Webhook] ✅ Chatbot process completed for ${senderId}`);
