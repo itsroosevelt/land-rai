@@ -61,16 +61,8 @@ export async function POST(req: Request) {
             if (messaging.message?.is_echo) {
                 return NextResponse.json({ success: true, ignored: 'echo' });
             }
-
-            // --- UUID FILTER ---
-            // If the payload is a UUID, we prefer the button title/text for display purposes
-            const rawPayload = messaging.message?.quick_reply?.payload || messaging.postback?.payload || '';
-            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawPayload);
-            const readableText = messaging.message?.text || messaging.postback?.title || '';
-            
-            // For the chatbot engine, the payload (UUID) is important to trigger the next node.
-            // For the UI, the readable text is better.
-            text = (isUUID && readableText) ? readableText : (rawPayload || readableText);
+            // Prioritize Quick Reply payload, then text
+            text = messaging.message?.quick_reply?.payload || messaging.message?.text || messaging.postback?.payload || messaging.postback?.title || '';
             
             if (!text && messaging.message?.attachments) {
                 text = '[Multimedia/Adjunto]';
@@ -111,16 +103,13 @@ export async function POST(req: Request) {
             .get();
 
         if (!crossSnap.empty) {
-            // Sort by updatedAt in memory to avoid needing complex Firestore indices for collectionGroup
-            const docs = crossSnap.docs.sort((a, b) => (b.data().updatedAt?.seconds || 0) - (a.data().updatedAt?.seconds || 0));
-            tenantRef = docs[0].ref;
-            tenantData = docs[0].data();
+            tenantRef = crossSnap.docs[0].ref;
+            tenantData = crossSnap.docs[0].data();
             provider = 'messenger';
             debugLog(`[POST] Resolved Messenger tenant via CrossMapping: ${tenantRef.path}`);
         } else if (!crossSnapInsta.empty) {
-            const docs = crossSnapInsta.docs.sort((a, b) => (b.data().updatedAt?.seconds || 0) - (a.data().updatedAt?.seconds || 0));
-            tenantRef = docs[0].ref;
-            tenantData = docs[0].data();
+            tenantRef = crossSnapInsta.docs[0].ref;
+            tenantData = crossSnapInsta.docs[0].data();
             provider = 'instagram';
             debugLog(`[POST] Resolved Instagram tenant via CrossMapping: ${tenantRef.path}`);
         } else {
@@ -449,7 +438,7 @@ export async function POST(req: Request) {
 
             try {
                 await processChatbotFlow({
-                    userId, entityId, groupId, cardId, platform: provider.toLowerCase() as any, from: senderId, text: text,
+                    userId, entityId, groupId, cardId, platform: provider, from: senderId, text: text,
                     messageId: messaging.message?.mid || `mid_${Date.now()}`
                 });
                 console.log(`[Meta Webhook] ✅ Chatbot process completed for ${senderId}`);
