@@ -102,14 +102,11 @@ export async function POST(req: Request) {
         let tenantData: any = null;
 
         // 1. GLOBAL MULTI-PLATFORM SEARCH (Cross-Mapping Rule)
-        // Prioritizamos integraciones que estén marcadas como 'Connected' y sean las más recientes
         const crossSnap = await db.collectionGroup('integrations')
-            .where('status', '==', 'Connected')
             .where('pageId', 'in', [targetId, String(targetId), numericId])
             .get();
 
         const crossSnapInsta = await db.collectionGroup('integrations')
-            .where('status', '==', 'Connected')
             .where('instagramId', 'in', [targetId, String(targetId), numericId])
             .get();
 
@@ -119,13 +116,13 @@ export async function POST(req: Request) {
             tenantRef = docs[0].ref;
             tenantData = docs[0].data();
             provider = 'messenger';
-            debugLog(`[POST] Resolved Messenger tenant: ${tenantRef.path}`);
+            debugLog(`[POST] Resolved Messenger tenant via CrossMapping: ${tenantRef.path}`);
         } else if (!crossSnapInsta.empty) {
             const docs = crossSnapInsta.docs.sort((a, b) => (b.data().updatedAt?.seconds || 0) - (a.data().updatedAt?.seconds || 0));
             tenantRef = docs[0].ref;
             tenantData = docs[0].data();
             provider = 'instagram';
-            debugLog(`[POST] Resolved Instagram tenant: ${tenantRef.path}`);
+            debugLog(`[POST] Resolved Instagram tenant via CrossMapping: ${tenantRef.path}`);
         } else {
             // EMERGENCY BYPASS: If still not found but only one integration exists globally, use it.
             const allIntegrations = await db.collectionGroup('integrations')
