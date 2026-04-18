@@ -15,7 +15,7 @@ function cleanNumber(phone: string): string {
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-async function makeWhatsAppRequest(data: object, type: string, ctx?: { userId?: string, entityId?: string }) {
+async function getWhatsAppCredentials(ctx?: { userId?: string, entityId?: string }) {
     // Priority: Cloud Config > Environment Variables
     let apiToken = functions.config().whatsapp?.access_token || process.env.WHATSAPP_ACCESS_TOKEN || accessToken;
     let phoneId = functions.config().whatsapp?.phone_number_id || process.env.WHATSAPP_PHONE_NUMBER_ID || phoneNumberId;
@@ -23,7 +23,6 @@ async function makeWhatsAppRequest(data: object, type: string, ctx?: { userId?: 
     if (ctx?.userId && ctx?.entityId) {
         try {
             const db = admin.firestore();
-            // Try production config first, then dev/internal as fallback
             const paths = [
                 `users/${ctx.userId}/entities/${ctx.entityId}/integrations/whatsapp`,
                 `users/${ctx.userId}/entities/${ctx.entityId}/integrations/whatsapp_internal`
@@ -36,20 +35,24 @@ async function makeWhatsAppRequest(data: object, type: string, ctx?: { userId?: 
                     if (configData?.accessToken && configData?.phoneNumberId) {
                         apiToken = configData.accessToken;
                         phoneId = configData.phoneNumberId;
-                        functions.logger.info(`[WhatsApp API] Loaded credentials from: ${configPath.split('/').pop()}`);
-                        break; // Stop at first valid config
+                        break;
                     }
                 }
             }
         } catch (e) {
-            functions.logger.error("Failed to fetch custom credentials", e);
+            functions.logger.error("[WhatsApp API] Failed to fetch custom credentials", e);
         }
     }
 
     if (!apiToken || !phoneId) {
-        functions.logger.error('❌ [WhatsApp API] Missing credentials!', { hasToken: !!apiToken, hasPhoneId: !!phoneId });
         throw new Error('WhatsApp API credentials are not configured.');
     }
+
+    return { apiToken, phoneId };
+}
+
+async function makeWhatsAppRequest(data: object, type: string, ctx?: { userId?: string, entityId?: string }) {
+    const { apiToken, phoneId } = await getWhatsAppCredentials(ctx);
 
     const url = `https://graph.facebook.com/v19.0/${phoneId}/messages`;
 
@@ -112,6 +115,50 @@ export async function sendMessage(to: string, message: string, options?: { previ
     return await makeWhatsAppRequest(payload, 'Text', options);
 }
 
+
+/**
+ * Downloads media from URL and uploads it to Meta to get a media_id.
+ * This is the most reliable way to ensure images are displayed directly.
+ */
+async function uploadMediaToMeta(fileUrl: string, mediaType: string, ctx?: { userId?: string, entityId?: string }): Promise<string> {
+    try {
+        const { apiToken: token, phoneId } = await getWhatsAppCredentials(ctx);
+        
+        // 1. Download the file internally
+        const fileResponse = await axios.get(fileUrl, { responseType: 'arraybuffer' });
+        const buffer = Buffer.from(fileResponse.data);
+        
+        // 2. Prepare FormData for Meta
+        // Node 20 has built-in FormData, but axios handles Blob/Buffer better with specific headers
+        const formData = new FormData();
+        const blob = new Blob([buffer], { type: fileResponse.headers['content-type'] });
+        formData.append('file', blob);
+        formData.append('type', mediaType);
+        formData.append('messaging_product', 'whatsapp');
+
+        // 3. Upload to Meta
+        const uploadUrl = `https://graph.facebook.com/v19.0/${phoneId}/media`;
+        const response = await axios.post(uploadUrl, formData, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'multipart/form-data'
+            }
+        });
+
+        if (response.data && response.data.id) {
+            functions.logger.info(`[WhatsApp API] ✅ Media uploaded to Meta. ID: ${response.data.id}`);
+            return response.data.id;
+        }
+        throw new Error('No media ID returned from Meta');
+    } catch (err: any) {
+        functions.logger.error('[WhatsApp API] ❌ Failed to upload media to Meta:', err.message);
+        if (err.response?.data) {
+            functions.logger.error('[WhatsApp API] Meta Upload Error Details:', JSON.stringify(err.response.data));
+        }
+        throw err;
+    }
+}
+
 export async function sendMediaMessage(
     to: string,
     fileUrl: string,
@@ -133,23 +180,43 @@ export async function sendMediaMessage(
 
     const cleanTo = cleanNumber(to);
 
-    // Build the media object — WhatsApp API does NOT accept 'caption' for audio
-    const mediaObj: any = { link: fileUrl };
-    if (caption && mediaType !== 'audio') {
-        mediaObj.caption = caption;
-    }
-    // Include a filename for document type so the recipient sees a readable name
+    // 1. UPLOAD media directly to Meta's servers (Ensures high reliability and direct visualization)
+    const mediaId = await uploadMediaToMeta(fileUrl, mediaType, ctx);
+
+    // 2. Build the media object (Using ID instead of LINK)
+    const mediaObj: any = { 
+        id: mediaId
+    };
+    
+    // Include a filename for document type 
     if (mediaType === 'document') {
         const cleanUrl = fileUrl.split('?')[0];
-        mediaObj.filename = cleanUrl.split('/').pop() || 'archivo';
+        mediaObj.filename = (caption && caption.length < 50) ? caption : (cleanUrl.split('/').pop() || 'archivo');
     }
 
-    return await makeWhatsAppRequest({
+    functions.logger.info(`[WhatsApp API] 📤 Sending ${mediaType} via Media ID: ${mediaId}`);
+
+    // 3. Send the MEDIA (Using id instead of link)
+    const response = await makeWhatsAppRequest({
         messaging_product: 'whatsapp',
         to: cleanTo,
         type: mediaType,
         [mediaType]: mediaObj
     }, 'Media', ctx);
+    
+    functions.logger.info(`[WhatsApp API] ✅ Media (${mediaType}) delivered successfully.`);
+
+    // 4. Send the CAPTION as a separate message (STAGGERED DELIVERY)
+    if (caption && caption.trim()) {
+        try {
+            await sleep(1500); // Micro-delay for sequencing
+            await sendMessage(to, caption, ctx);
+        } catch (err) {
+            functions.logger.error('[WhatsApp API] Staggered caption failed', err);
+        }
+    }
+
+    return response;
 }
 
 export async function sendButtonMessage(to: string, bodyText: string, buttons: any[], header?: { type: string, text?: string, url?: string }, ctx?: { userId?: string, entityId?: string }): Promise<void> {

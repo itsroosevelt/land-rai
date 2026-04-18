@@ -417,24 +417,54 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         // 2. MEDIA MESSAGE
         console.log(`[ChatbotEngine] 🎯 Checking Node: ${node.id} | Type: ${node.type}`);
         if (node.type === 'mediaMessageNode' || (node.type as string) === 'multimedia') {
-            const url = replaceVars(node.data?.url || '');
-            const caption = replaceVars(node.data?.caption || '');
+            const rawUrl = node.data?.url || node.data?.attachment || node.data?.link || node.data?.content || '';
+            const url = replaceVars(rawUrl);
+            
+            // For caption, try caption, then body, then text, then content (only if content wasn't the URL)
+            let rawCaption = node.data?.caption || node.data?.body || node.data?.text || '';
+            if (!rawCaption && node.data?.content && node.data?.content !== rawUrl) {
+                rawCaption = node.data.content;
+            }
+            const caption = replaceVars(rawCaption);
+
             console.log(`[ChatbotEngine] 🖼️ Media Node Detected: URL=${url.substring(0, 30)}... Caption=${caption.substring(0, 20)}`);
             
-            if (url) {
-                // Combined Send (Image + Caption) via options
-                const sendResult = await dispatchMessage(caption, { type: 'image', url: url, filename: node.data?.filename });
+            if (url && url.startsWith('http')) {
+                // Determine type based on extension if possible, default to image
+                const type = url.match(/\.(mp4|mov|avi|webm)$/i) ? 'video' : (url.match(/\.(mp3|ogg|wav|m4a|opus)$/i) ? 'audio' : 'image');
+                
+                const sendResult = await dispatchMessage(caption, { 
+                    type, 
+                    url: url, 
+                    filename: node.data?.filename 
+                });
                 console.log(`[ChatbotEngine] 📦 Dispatch Result:`, JSON.stringify(sendResult));
 
                 await cardRef.update({
                     messages: admin.firestore.FieldValue.arrayUnion({
-                        sender: 'agent', text: caption || 'Imagen', platform, timestamp: new Date(), messageId: `bot_media_${Date.now()}`
+                        sender: 'agent', 
+                        text: caption || 'Medios', 
+                        platform, 
+                        timestamp: new Date(), 
+                        messageId: `bot_media_${Date.now()}`,
+                        type: 'image',
+                        url: url
                     })
                 });
 
                 // Crucial delay to allow media to be ingested before next node
                 await sleep(2000);
+            } else if (caption) {
+                // FALLBACK: If URL is missing or invalid but we have text, send text so the flow doesn't look dead
+                console.warn(`[ChatbotEngine] ⚠️ Media URL missing or invalid "${url}". Sending caption as text fallback.`);
+                await dispatchMessage(caption);
+                await cardRef.update({
+                    messages: admin.firestore.FieldValue.arrayUnion({
+                        sender: 'agent', text: caption, platform, timestamp: new Date(), messageId: `bot_fallback_${Date.now()}`
+                    })
+                });
             }
+
             const edge = flow.edges.find((e: any) => e.source === node.id);
             currentNodeId = edge ? edge.target : null;
             continue;
