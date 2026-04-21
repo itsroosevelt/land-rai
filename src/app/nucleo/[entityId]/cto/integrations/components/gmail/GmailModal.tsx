@@ -115,7 +115,7 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
                                 <div className="w-16 h-16 bg-[#EA4335] rounded-2xl flex items-center justify-center mb-8 shadow-[0_0_30px_rgba(234,67,53,0.3)]">
                                     <Mail className="w-8 h-8 text-white" />
                                 </div>
-                                <h2 className="text-5xl font-extralight text-white tracking-tighter mb-4 italic uppercase leading-none">Gmail</h2>
+                                <h2 className="text-3xl font-extralight text-white tracking-tighter mb-4 italic uppercase leading-none">Gmail</h2>
                                 <p className="text-[10px] text-white/40 uppercase tracking-[0.4em] font-bold leading-relaxed">Sincronización Cloud Email</p>
                             </div>
 

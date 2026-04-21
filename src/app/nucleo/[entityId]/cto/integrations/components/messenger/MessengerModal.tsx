@@ -185,7 +185,7 @@ export default function MessengerModal({ isOpen, onClose, activeEntity, currentU
                                 <div className="w-16 h-16 bg-[#0084FF] rounded-2xl flex items-center justify-center mb-8 shadow-[0_0_30px_rgba(0,132,255,0.3)]">
                                     <Facebook className="w-8 h-8 text-white" />
                                 </div>
-                                <h2 className="text-5xl font-extralight text-white tracking-tighter mb-4 italic uppercase leading-none">Messenger</h2>
+                                <h2 className="text-3xl font-extralight text-white tracking-tighter mb-4 italic uppercase leading-none">Messenger</h2>
                                 <p className="text-[10px] text-white/40 uppercase tracking-[0.4em] font-bold leading-relaxed">Protocolo de Mensajería Social</p>
                             </div>
 

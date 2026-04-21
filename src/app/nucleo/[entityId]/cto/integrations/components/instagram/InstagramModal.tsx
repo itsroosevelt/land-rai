@@ -186,7 +186,7 @@ export default function InstagramModal({ isOpen, onClose, activeEntity, currentU
                                 <div className="w-16 h-16 bg-gradient-to-tr from-[#FFDC80] via-[#E1306C] to-[#405DE6] rounded-2xl flex items-center justify-center mb-8 shadow-[0_0_30px_rgba(225,48,108,0.3)]">
                                     <Instagram className="w-8 h-8 text-white" />
                                 </div>
-                                <h2 className="text-5xl font-extralight text-white tracking-tighter mb-4 italic uppercase leading-none">Instagram</h2>
+                                <h2 className="text-3xl font-extralight text-white tracking-tighter mb-4 italic uppercase leading-none">Instagram</h2>
                                 <p className="text-[10px] text-white/40 uppercase tracking-[0.4em] font-bold leading-relaxed">Conexión de Negocios Visual</p>
                             </div>
 
