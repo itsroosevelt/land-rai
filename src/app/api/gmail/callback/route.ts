@@ -20,16 +20,12 @@ export async function GET(req: Request) {
     try {
         const { userId, entityId } = JSON.parse(Buffer.from(state, 'base64').toString('utf-8'));
         
-        const host = req.headers.get('host');
-        const protocol = req.headers.get('x-forwarded-proto') || (host?.includes('localhost') ? 'http' : 'https');
-        const dynamicRedirect = host ? `${protocol}://${host}/api/gmail/callback` : REDIRECT_URI;
-
         // 1. Exchange Code for Tokens
         const response = await axios.post('https://oauth2.googleapis.com/token', {
             code,
             client_id: CLIENT_ID,
             client_secret: CLIENT_SECRET,
-            redirect_uri: dynamicRedirect,
+            redirect_uri: REDIRECT_URI,
             grant_type: 'authorization_code'
         });
 
@@ -62,43 +58,8 @@ export async function GET(req: Request) {
             }, { merge: true })
         ]);
 
-        // 4. INITIATE REAL-TIME SYNC (Watch API)
-        const topicName = process.env.GMAIL_PUBSUB_TOPIC;
-        if (topicName) {
-            try {
-                console.log(`[Gmail Callback] Initiating Watch for ${gmailAddress} on topic ${topicName}`);
-                const watchRes = await axios.post('https://gmail.googleapis.com/gmail/v1/users/me/watch', {
-                    topicName,
-                    labelIds: ['INBOX'],
-                    labelFilterAction: 'include'
-                }, {
-                    headers: { Authorization: `Bearer ${access_token}` }
-                });
-                
-                // Save meta-data so we can confirm it's alive in our audits
-                await db.doc(`users/${userId}/entities/${entityId}/integrations/gmail`).update({
-                    watchExpiry: watchRes.data.expiration,
-                    historyId: watchRes.data.historyId,
-                    lastWatchRefresh: admin.firestore.FieldValue.serverTimestamp()
-                });
-                console.log(`[Gmail Callback] ✅ Watch successfully registered for ${gmailAddress}`);
-            } catch (watchErr: any) {
-                const errMsg = watchErr.response?.data ? JSON.stringify(watchErr.response.data) : watchErr.message;
-                console.error('[Gmail Callback] ⚠️ Watch Registration Failed:', errMsg);
-                
-                await db.doc(`users/${userId}/entities/${entityId}/integrations/gmail`).update({
-                    watchError: errMsg,
-                    lastWatchAttempt: admin.firestore.FieldValue.serverTimestamp()
-                });
-                // We DON'T fail the whole flow, as the user is already authenticated. 
-            }
-        } else {
-            console.warn('[Gmail Callback] ⚠️ GMAIL_PUBSUB_TOPIC not configured. Real-time sync will not work.');
-        }
-
-        // 5. Redirect back to Roosevelt (Agnostic Rule 1)
-        const redirectUrl = `${protocol}://${host}/nucleo/${entityId}/cto/integrations?gmail=success`;
-        
+        // 4. Redirect back to Roosevelt
+        const redirectUrl = `https://royalty-udreamms-platform-1.us-central1.hosted.app/nucleo/${entityId}/cto/integrations?gmail=success`;
         return NextResponse.redirect(redirectUrl);
 
     } catch (err: any) {

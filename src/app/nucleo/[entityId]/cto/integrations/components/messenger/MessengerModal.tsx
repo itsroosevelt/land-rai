@@ -18,13 +18,12 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
     const { currentUser } = useAuth();
     const params = useParams();
     const activeEntity = params?.entityId as string;
-
+    
     const [step, setStep] = useState<number>(1);
     const [initialLoading, setInitialLoading] = useState(true);
     const [updatedAt, setUpdatedAt] = useState<any>(null);
     const [availablePages, setAvailablePages] = useState<any[]>([]);
     const [isSelectingPage, setIsSelectingPage] = useState(false);
-    const [userAccessToken, setUserAccessToken] = useState<string>(''); // For permanent token exchange
     const [config, setConfig] = useState<any>({
         pageId: '',
         pageName: '',
@@ -39,7 +38,7 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
         setInitialLoading(true);
 
         const configRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/integrations/messenger`);
-
+        
         const unsub = onSnapshot(configRef, (snap) => {
             if (snap.exists()) {
                 const data = snap.data();
@@ -82,7 +81,6 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
 
             (window as any).FB.login((response: any) => {
                 if (response.authResponse) {
-                    setUserAccessToken(response.authResponse.accessToken);
                     toast.loading("Obteniendo tus Fanpages...", { id: "meta-auth" });
 
                     (window as any).FB.api('/me/accounts', async (pagesRes: any) => {
@@ -109,6 +107,7 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
     const connectPage = async (page: any) => {
         const pageId = page.id;
         const pageName = page.name;
+        const pageAccessToken = page.access_token;
 
         toast.loading(`Vinculando ${pageName}...`, { id: "meta-auth" });
 
@@ -116,48 +115,21 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
             const pagesQuery = query(collectionGroup(db, 'integrations'), where('pageId', '==', pageId));
             const pagesSnap = await getDocs(pagesQuery);
             const isUsedByAnotherTenant = !pagesSnap.empty && !pagesSnap.docs.every((d: any) => d.ref.path.includes(activeEntity));
-
+            
             if (isUsedByAnotherTenant) {
                 toast.error("Esta Fanpage ya está vinculada.", { id: "meta-auth" });
                 return;
             }
 
-            // Exchange token - REQUIRED TO BE PERMANENT (Agnosticism & Stability Rule)
-            let permanentPageToken = null;
-            if (userAccessToken) {
-                toast.loading('Generando token permanente...', { id: 'meta-auth' });
-                try {
-                    const exchangeRes = await fetch('/api/meta/exchange-token', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ userAccessToken, pageId })
-                    });
-                    const exchangeData = await exchangeRes.json();
-                    if (exchangeData.pageToken) {
-                        permanentPageToken = exchangeData.pageToken;
-                    } else {
-                        throw new Error(exchangeData.error || 'No se pudo obtener el token permanente');
-                    }
-                } catch (e: any) {
-                    console.error('Failed to get permanent token', e);
-                    toast.error(`Fallo crítico: ${e.message}. No se usará un token temporal.`, { id: 'meta-auth' });
-                    return; // STOP HERE. Don't save a temporary token.
-                }
-            } else {
-                toast.error("Falta el User Token para el intercambio permanente.", { id: "meta-auth" });
-                return;
-            }
-
             (window as any).FB.api(`/${pageId}/subscribed_apps`, 'post', {
                 subscribed_fields: ['messages', 'messaging_postbacks', 'message_deliveries', 'message_reads'],
-                access_token: permanentPageToken
+                access_token: pageAccessToken
             });
 
             const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/messenger`);
             await setDoc(configRef, {
-                pageId, pageName, accessToken: permanentPageToken,
+                pageId, pageName, accessToken: pageAccessToken,
                 status: 'Connected', provider: 'messenger', updatedAt: new Date(),
-                tokenType: 'permanent'
             }, { merge: true });
 
             toast.success(`¡Messenger vinculado!`, { id: "meta-auth" });
@@ -187,9 +159,9 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
             {isOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-
+                    
                     <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="relative w-full max-w-4xl h-[600px] bg-[#050505] border border-white/10 rounded-[40px] overflow-hidden flex shadow-2xl font-sans">
-
+                        
                         {/* Sidebar */}
                         <div className="w-1/3 border-r border-white/5 bg-[#080808] p-10 flex flex-col justify-between relative overflow-hidden">
                             <div className="absolute top-0 left-0 w-full h-full bg-blue-600/5 blur-[100px] pointer-events-none" />
@@ -229,14 +201,14 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
                                                 <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-8">Varias páginas detectadas</p>
                                                 <div className="space-y-3 max-h-[300px] overflow-y-auto no-scrollbar pr-2 mb-8">
                                                     {availablePages.map((p) => (
-                                                        <button
-                                                            key={p.id}
+                                                        <button 
+                                                            key={p.id} 
                                                             onClick={() => connectPage(p)}
                                                             className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-between hover:bg-white/10 transition-all group"
                                                         >
                                                             <div className="flex items-center gap-4 text-left">
                                                                 <div className="w-10 h-10 bg-[#0084FF]/10 rounded-full flex items-center justify-center border border-[#0084FF]/20 font-bold text-[#0084FF]">
-                                                                    FB
+                                                                   FB
                                                                 </div>
                                                                 <div>
                                                                     <p className="text-white text-sm font-medium">{p.name}</p>
@@ -255,7 +227,7 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
                                             <>
                                                 <h3 className="text-3xl font-extralight text-white tracking-tighter mb-2 italic uppercase">Vincular Fanpage</h3>
                                                 <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-12">Portal de Acceso Meta</p>
-
+                                                
                                                 <div className="space-y-6 mb-12">
                                                     <div className="flex items-start gap-4">
                                                         <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center text-[10px] font-bold text-white/40 shrink-0">1</div>
@@ -266,7 +238,7 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
                                                         <p className="text-xs text-white/60 font-light mt-1">Elegirás la Fanpage específica para automatizar.</p>
                                                     </div>
                                                 </div>
-
+        
                                                 <button onClick={handleConnectMessenger} className="w-full h-16 bg-[#0084FF] hover:bg-[#0073e6] text-white text-[11px] font-bold uppercase tracking-[0.3em] rounded-full transition-all shadow-[0_0_20px_rgba(0,132,255,0.2)]">
                                                     CONECTAR CON META
                                                 </button>
@@ -281,42 +253,21 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
                                         </div>
                                         <h3 className="text-3xl font-extralight text-white tracking-tighter mb-2 italic uppercase">Canal Sincronizado</h3>
                                         <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-10">{config.pageName}</p>
-
+                                        
                                         <div className="w-full space-y-4 px-2">
                                             <div className="h-28 bg-white/5 border border-white/10 rounded-[32px] flex items-center px-8 justify-between backdrop-blur-sm relative overflow-hidden group/card">
                                                 <div className="absolute inset-0 bg-[#0084FF]/5 opacity-0 group-hover/card:opacity-100 transition-opacity" />
                                                 <div className="text-left relative z-10">
                                                     <span className="text-[9px] uppercase tracking-[0.2em] text-[#0084FF] block mb-2 font-black">PÁGINA VINCULADA</span>
-                                                    <p className="text-xl font-light text-white tracking-tight leading-none truncate max-w-[250px]">{config.pageName || 'Fanpage Activa'}</p>
-                                                    <span className="text-[9px] text-white/40 mt-1 block font-mono">PAGE ID: {config.pageId}</span>
-                                                    <span className="text-[9px] text-white/40 mt-2 block font-medium italic">Listo para recibir mensajes</span>
-                                                    {config.tokenType === 'permanent' && (
-                                                        <div className="mt-2 flex items-center gap-1.5">
-                                                            <div className="w-1 h-1 rounded-full bg-blue-500 animate-pulse" />
-                                                            <span className="text-[8px] font-bold text-blue-500/80 uppercase tracking-widest text-left">Token Permanente</span>
-                                                        </div>
-                                                    )}
+                                                    <p className="text-2xl font-light text-white tracking-tight leading-none truncate max-w-[200px]">{config.pageName || 'Fanpage Activa'}</p>
+                                                    <span className="text-[9px] text-white/40 mt-3 block font-medium italic">Listo para recibir mensajes</span>
                                                 </div>
                                                 <div className="p-4 bg-green-500/5 border border-green-500/10 rounded-2xl relative z-10"><ShieldCheck className="w-6 h-6 text-green-500/40" /></div>
                                             </div>
 
-                                            {config.status === 'Error' && (
-                                                <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl">
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <Circle className="w-2 h-2 fill-red-500 text-red-500 animate-pulse" />
-                                                        <span className="text-[10px] font-bold text-red-500 uppercase tracking-widest">Sincronización Interrumpida</span>
-                                                    </div>
-                                                    <p className="text-[10px] text-red-400/80 leading-relaxed text-left">
-                                                        Tu sesión de Meta ha expirado o el token ha sido invalidado. 
-                                                        Por favor, <b>desconecta y vuelve a conectar</b> la cuenta para restaurar el servicio permanente.
-                                                    </p>
-                                                </div>
-                                            )}
-
                                             <div className="flex items-center gap-4 pt-10">
                                                 <button onClick={onClose} className="flex-1 h-14 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all">TERMINAR</button>
-                                                <button onClick={() => { setStep(1); setIsSelectingPage(false); }} className="flex-1 h-14 bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all shadow-lg shadow-blue-500/20">RECONECTAR</button>
-                                                <button onClick={handleDelete} className="flex-1 h-14 bg-red-500/5 hover:bg-red-500/10 text-red-500/50 border border-red-500/10 text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all">ELIMINAR</button>
+                                                <button onClick={handleDelete} className="flex-1 h-14 bg-red-500/5 hover:bg-red-500/10 text-red-500/50 border border-red-500/10 text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all">DESCONECTAR</button>
                                             </div>
                                         </div>
                                     </motion.div>
