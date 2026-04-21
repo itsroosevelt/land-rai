@@ -74,7 +74,7 @@ const MessengerModal: React.FC<MessengerModalProps> = ({ isOpen, onClose, active
 
     const fetchAvailablePages = async (userToken: string, toastId: any) => {
         try {
-            const res = await fetch(`https://graph.facebook.com/v19.0/me/accounts?access-token=${userToken}`);
+            const res = await fetch(`https://graph.facebook.com/v19.0/me/accounts?access_token=${userToken}`);
             const data = await res.json();
 
             if (data.data && data.data.length > 0) {
