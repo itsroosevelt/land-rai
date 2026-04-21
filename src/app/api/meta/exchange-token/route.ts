@@ -62,6 +62,29 @@ export async function POST(req: Request) {
         const permanentPageToken = targetPage.access_token;
         console.log(`[exchange-token] ✅ Got PERMANENT page token for page ${pageId} (${targetPage.name})`);
 
+        // STEP 3: ENFORCE WEBHOOK SUBSCRIPTION (The "Fix")
+        // This tells Meta to start sending messages to our webhook for this page
+        try {
+            await axios.post(`https://graph.facebook.com/v21.0/${pageId}/subscribed_apps`, {
+                subscribed_fields: [
+                    'messages', 
+                    'messaging_postbacks', 
+                    'message_deliveries', 
+                    'message_reads', 
+                    'messaging_optins',
+                    'instagram_manage_messages',
+                    'instagram_manage_comments',
+                    'feed'
+                ]
+            }, {
+                params: { access_token: permanentPageToken }
+            });
+            console.log(`[exchange-token] 🔔 Webhook subscription confirmed for page ${pageId}`);
+        } catch (subError: any) {
+            console.warn(`[exchange-token] ⚠️ Failed to auto-subscribe page ${pageId}:`, subError.response?.data || subError.message);
+            // We don't fail the whole request because we have the token, but we log it.
+        }
+
         return NextResponse.json({
             success: true,
             pageToken: permanentPageToken,

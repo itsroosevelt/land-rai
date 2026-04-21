@@ -283,21 +283,28 @@ export function MessengerModal({ isOpen, onClose, activeIntegration }: Props) {
                                         <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-10">{config.pageName}</p>
 
                                         <div className="w-full space-y-4 px-2">
-                                            <div className="h-28 bg-white/5 border border-white/10 rounded-[32px] flex items-center px-8 justify-between backdrop-blur-sm relative overflow-hidden group/card">
+                                            <div className="w-full max-w-lg h-32 bg-white/[0.03] border border-white/10 rounded-[32px] flex items-center px-8 justify-between backdrop-blur-md relative overflow-hidden group/card">
                                                 <div className="absolute inset-0 bg-[#0084FF]/5 opacity-0 group-hover/card:opacity-100 transition-opacity" />
                                                 <div className="text-left relative z-10">
-                                                    <span className="text-[9px] uppercase tracking-[0.2em] text-[#0084FF] block mb-2 font-black">PÁGINA VINCULADA</span>
-                                                    <p className="text-xl font-light text-white tracking-tight leading-none truncate max-w-[250px]">{config.pageName || 'Fanpage Activa'}</p>
-                                                    <span className="text-[9px] text-white/40 mt-1 block font-mono">PAGE ID: {config.pageId}</span>
-                                                    <span className="text-[9px] text-white/40 mt-2 block font-medium italic">Listo para recibir mensajes</span>
-                                                    {config.tokenType === 'permanent' && (
-                                                        <div className="mt-2 flex items-center gap-1.5">
-                                                            <div className="w-1 h-1 rounded-full bg-blue-500 animate-pulse" />
-                                                            <span className="text-[8px] font-bold text-blue-500/80 uppercase tracking-widest text-left">Token Permanente</span>
-                                                        </div>
-                                                    )}
+                                                    <span className="text-[8px] uppercase tracking-[0.2em] text-[#0084FF] block mb-2 font-black opacity-70">PÁGINA VINCULADA</span>
+                                                    <p className="text-xl font-extralight text-white tracking-tight leading-none truncate max-w-[250px]">{config.pageName || 'Fanpage Activa'}</p>
+                                                    <span className="text-[8px] text-white/20 mt-2 block font-mono uppercase tracking-widest">PAGE ID: {config.pageId}</span>
                                                 </div>
                                                 <div className="p-4 bg-green-500/5 border border-green-500/10 rounded-2xl relative z-10"><ShieldCheck className="w-6 h-6 text-green-500/40" /></div>
+                                            </div>
+
+                                            {/* External Status Indicators (Agnostic Design Rule) */}
+                                            <div className="w-full px-6 flex items-center justify-between mt-4">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-1 h-1 rounded-full bg-blue-500 animate-pulse" />
+                                                    <span className="text-[9px] text-white/40 font-medium italic uppercase tracking-tighter">Listo para recibir mensajes</span>
+                                                </div>
+                                                {config.tokenType === 'permanent' && (
+                                                    <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/5 border border-blue-500/10 rounded-full">
+                                                        <div className="w-1 h-1 rounded-full bg-blue-500" />
+                                                        <span className="text-[8px] font-bold text-blue-500/80 uppercase tracking-widest text-left">Token Permanente</span>
+                                                    </div>
+                                                )}
                                             </div>
 
                                             {config.status === 'Error' && (

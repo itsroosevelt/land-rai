@@ -87,6 +87,7 @@ export async function GET(req: Request) {
                 console.error('[Gmail Callback] ⚠️ Watch Registration Failed:', errMsg);
                 
                 await db.doc(`users/${userId}/entities/${entityId}/integrations/gmail`).update({
+                    status: 'Error',
                     watchError: errMsg,
                     lastWatchAttempt: admin.firestore.FieldValue.serverTimestamp()
                 });
@@ -96,10 +97,34 @@ export async function GET(req: Request) {
             console.warn('[Gmail Callback] ⚠️ GMAIL_PUBSUB_TOPIC not configured. Real-time sync will not work.');
         }
 
-        // 5. Redirect back to Roosevelt (Agnostic Rule 1)
-        const redirectUrl = `${protocol}://${host}/nucleo/${entityId}/cto/integrations?gmail=success`;
-        
-        return NextResponse.redirect(redirectUrl);
+        // 5. Success Page (Instead of Redirect)
+        // This script will close the popup and notify the parent window
+        return new Response(`
+            <html>
+                <body style="background: #0a0a0a; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0;">
+                    <div style="text-align: center; padding: 40px; border: 1px solid rgba(255,255,255,0.1); border-radius: 40px; background: rgba(255,255,255,0.03); backdrop-blur: 20px;">
+                        <div style="width: 80px; height: 80px; background: #EA4335; border-radius: 24px; display: flex; items-center: center; justify-content: center; margin: 0 auto 24px;">
+                            <svg style="width: 40px; height: 40px; color: white; margin-top: 20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                        </div>
+                        <h1 style="font-size: 24px; font-weight: 200; letter-spacing: -0.05em; margin-bottom: 8px; text-transform: uppercase; font-style: italic;">Conexión Exitosa</h1>
+                        <p style="font-size: 10px; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.3em; font-weight: 700;">El nodo Gmail ha sido sincronizado</p>
+                        <p style="font-size: 12px; color: rgba(255,255,255,0.6); margin-top: 20px;">Esta ventana se cerrará automáticamente...</p>
+                    </div>
+                    <script>
+                        setTimeout(() => {
+                            if (window.opener) {
+                                window.opener.postMessage({ type: 'GMAIL_SUCCESS', entityId: '${entityId}' }, '*');
+                            }
+                            window.close();
+                        }, 2000);
+                    </script>
+                </body>
+            </html>
+        `, {
+            headers: { 'Content-Type': 'text/html' }
+        });
 
     } catch (err: any) {
         console.error('[Gmail Callback Error]', err.response?.data || err.message);
