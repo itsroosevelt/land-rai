@@ -21,17 +21,6 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
     const [initialLoading, setInitialLoading] = useState(true);
 
     useEffect(() => {
-        const handleMessage = (event: MessageEvent) => {
-            if (event.data?.type === 'GMAIL_SUCCESS') {
-                toast.success("¡Gmail vinculado exitosamente!");
-                setIsLoading(false);
-            }
-        };
-        window.addEventListener('message', handleMessage);
-        return () => window.removeEventListener('message', handleMessage);
-    }, []);
-
-    useEffect(() => {
         if (!isOpen || !currentUser || !activeEntity) return;
         setInitialLoading(true);
 
@@ -104,14 +93,7 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
         if (!confirm("¿Desconectar la sincronización de correos permanentemente?")) return;
         const toastId = toast.loading("Revocando accesos IAM...");
         try {
-            const publicPath = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/gmail`);
-            const internalPath = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/gmail_internal`);
-            
-            await Promise.all([
-                deleteDoc(publicPath),
-                deleteDoc(internalPath)
-            ]);
-            
+            await deleteDoc(doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/gmail`));
             setStep(1);
             setGmailAddress('');
             toast.success("Bandeja de entrada desconectada.", { id: toastId });
@@ -215,30 +197,20 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
                                             <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold">Gmail Node <span className="text-emerald-500">Online</span></p>
                                         </div>
 
-                                        <div className="w-full max-w-lg h-40 bg-white/[0.03] border border-white/10 rounded-[32px] p-10 flex items-center justify-between backdrop-blur-md relative overflow-hidden group">
+                                        <div className="w-full max-w-sm h-32 bg-white/[0.03] border border-white/10 rounded-[32px] p-8 flex items-center justify-between backdrop-blur-sm relative overflow-hidden group">
                                             <div className="absolute inset-0 bg-emerald-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity" />
                                             <div className="text-left relative z-10">
-                                                <span className="text-[8px] font-black uppercase tracking-widest text-[#EA4335] block mb-2 opacity-70">Canal Activo</span>
-                                                <h4 className="text-white font-extralight text-sm md:text-lg tracking-tight leading-none truncate max-w-[320px]">
+                                                <span className="text-[9px] font-black uppercase tracking-widest text-[#EA4335] block mb-2">Canal Activo</span>
+                                                <h4 className="text-white font-light text-xl tracking-tight leading-none truncate max-w-[250px]">
                                                     {gmailAddress}
                                                 </h4>
-                                                <span className="text-[8px] text-white/30 mt-4 block font-medium italic uppercase tracking-tighter">Nodo sincronizado y listo para recibir hilos</span>
+                                                <span className="text-[9px] text-white/40 mt-3 block font-medium italic">Listo para recibir hilos</span>
                                             </div>
 
-                                            <div className="w-16 h-16 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl flex items-center justify-center relative z-10">
-                                                <ShieldCheck className="w-8 h-8 text-emerald-500/40" />
+                                            <div className="w-14 h-14 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl flex items-center justify-center relative z-10">
+                                                <ShieldCheck className="w-7 h-7 text-emerald-500/40" />
                                             </div>
                                         </div>
-
-                                        {/* Status Error Message (Agnostic Feedback Rule) */}
-                                        {step === 3 && gmailAddress && (
-                                            <div className="w-full max-w-sm">
-                                                <IntegrationErrorBlock 
-                                                    activeEntity={activeEntity} 
-                                                    currentUser={currentUser} 
-                                                />
-                                            </div>
-                                        )}
 
                                         <div className="flex items-center gap-4 w-full max-w-sm pt-6">
                                             <button 
@@ -248,16 +220,10 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
                                                 TERMINAR
                                             </button>
                                             <button 
-                                                onClick={() => setStep(1)} 
-                                                className="flex-1 h-14 bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all shadow-lg shadow-blue-500/20"
-                                            >
-                                                RECONECTAR
-                                            </button>
-                                            <button 
                                                 onClick={handleDelete} 
                                                 className="flex-1 h-14 bg-red-500/5 hover:bg-red-500/10 text-red-500/50 border border-red-500/10 text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all"
                                             >
-                                                ELIMINAR
+                                                DESCONECTAR
                                             </button>
                                         </div>
                                     </motion.div>
@@ -269,41 +235,5 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
                 </div>
             )}
         </AnimatePresence>
-    );
-}
-
-function IntegrationErrorBlock({ activeEntity, currentUser }: { activeEntity: string, currentUser: any }) {
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        if (!currentUser || !activeEntity) return;
-        const ref = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/integrations/gmail`);
-        return onSnapshot(ref, (snap) => {
-            if (snap.exists() && snap.data().status === 'Error') {
-                setError(snap.data().watchError || 'Error desconocido en Pub/Sub');
-            } else {
-                setError(null);
-            }
-        });
-    }, [currentUser, activeEntity]);
-
-    if (!error) return null;
-
-    return (
-        <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-left">
-            <div className="flex items-center gap-2 mb-1">
-                <div className="w-2 h-2 fill-red-500 bg-red-500 rounded-full animate-pulse" />
-                <span className="text-[10px] font-bold text-red-500 uppercase tracking-widest">Sincronización Fallida</span>
-            </div>
-            <p className="text-[10px] text-red-400/80 leading-relaxed mb-2">
-                Google no pudo activar las notificaciones en tiempo real (Push).
-            </p>
-            <div className="p-2 bg-black/40 rounded-lg border border-white/5 mb-2 overflow-x-auto">
-                <code className="text-[8px] text-red-300/60 font-mono break-all">{error}</code>
-            </div>
-            <p className="text-[9px] text-white/40 italic leading-tight">
-                Verifica que el tópico de Pub/Sub tenga permisos para <b>gmail-api-push@system.gserviceaccount.com</b>.
-            </p>
-        </div>
     );
 }
