@@ -122,8 +122,8 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                 return;
             }
 
-            // Exhange token
-            let permanentPageToken = pageWithIg.access_token;
+            // Exchange token - REQUIRED TO BE PERMANENT (Stability Rule)
+            let permanentPageToken = null;
             if (userAccessToken) {
                 toast.loading('Generando token permanente...', { id: 'meta-auth' });
                 try {
@@ -135,10 +135,17 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                     const exchangeData = await exchangeRes.json();
                     if (exchangeData.pageToken) {
                         permanentPageToken = exchangeData.pageToken;
+                    } else {
+                        throw new Error(exchangeData.error || 'No se pudo obtener el token permanente');
                     }
-                } catch (e) {
+                } catch (e: any) {
                     console.error('Failed to get permanent token', e);
+                    toast.error(`Fallo crítico: ${e.message}. Se requiere token permanente.`, { id: 'meta-auth' });
+                    return; // HALT. Only permanent is allowed.
                 }
+            } else {
+                toast.error("Falta User Token para intercambio.", { id: "meta-auth" });
+                return;
             }
 
             (window as any).FB.api(`/${pageWithIg.id}/subscribed_apps`, 'post', {
@@ -343,9 +350,23 @@ export function InstagramModal({ isOpen, onClose, activeIntegration }: Props) {
                                                 <div className="p-4 bg-green-500/5 border border-green-500/10 rounded-2xl relative z-10"><ShieldCheck className="w-6 h-6 text-green-500/40" /></div>
                                             </div>
 
+                                            {config.status === 'Error' && (
+                                                <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-left">
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <Circle className="w-2 h-2 fill-red-500 text-red-500 animate-pulse" />
+                                                        <span className="text-[10px] font-bold text-red-500 uppercase tracking-widest">Sincronización Interrumpida</span>
+                                                    </div>
+                                                    <p className="text-[10px] text-red-400/80 leading-relaxed">
+                                                        Tu sesión de Meta ha expirado o el token ha sido invalidado. 
+                                                        Por favor, <b>desconecta y vuelve a conectar</b> la cuenta para restaurar el servicio permanente.
+                                                    </p>
+                                                </div>
+                                            )}
+
                                             <div className="flex items-center gap-4 pt-10">
                                                 <button onClick={onClose} className="flex-1 h-14 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all">TERMINAR</button>
-                                                <button onClick={handleDelete} className="flex-1 h-14 bg-red-500/5 hover:bg-red-500/10 text-red-500/50 border border-red-500/10 text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all">DESCONECTAR</button>
+                                                <button onClick={() => { setStep(1); setIsSelectingPage(false); }} className="flex-1 h-14 bg-gradient-to-r from-[#E4405F] to-[#F58529] hover:opacity-90 text-white text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all shadow-lg">RECONECTAR</button>
+                                                <button onClick={handleDelete} className="flex-1 h-14 bg-red-500/5 hover:bg-red-500/10 text-red-500/50 border border-red-500/10 text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all">ELIMINAR</button>
                                             </div>
                                         </div>
                                     </motion.div>

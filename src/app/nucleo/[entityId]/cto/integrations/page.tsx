@@ -237,14 +237,12 @@ function IntegrationCard({
             {/* Status Badge */}
             <div className="flex justify-between items-start mb-4">
                 <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-[9px] uppercase font-black border transition-all ${
-                    integrationData?.status === 'Error' ? 'bg-red-500/10 border-red-500/30 text-red-500' :
-                    isConnected ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/10 text-neutral-600'
+                    isConnected || integrationData?.status === 'Error' ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/10 text-neutral-600'
                 }`}>
                     <div className={`w-1 h-1 rounded-full ${
-                        integrationData?.status === 'Error' ? 'bg-red-500 animate-pulse' :
-                        isConnected ? 'bg-blue-400 shadow-[0_0_5px_rgba(59,130,246,1)]' : 'bg-neutral-600'
+                        isConnected || integrationData?.status === 'Error' ? 'bg-blue-400 shadow-[0_0_5px_rgba(59,130,246,1)]' : 'bg-neutral-600'
                     }`} />
-                    {integrationData?.status === 'Error' ? 'Error' : isConnected ? 'Activo' : 'Offline'}
+                    {isConnected || integrationData?.status === 'Error' ? 'Activo' : 'Offline'}
                 </div>
                 {integration.popular && !isConnected && (
                     <div className="px-3 py-1 bg-white text-black rounded-full text-[9px] font-black uppercase tracking-tighter shadow-xl">
