@@ -14,16 +14,19 @@ import {
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { doc, setDoc, getDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
-import { toast } from 'react-hot-toast';
+import { toast } from 'sonner';
 
 interface InstagramModalProps {
     isOpen: boolean;
     onClose: () => void;
-    entityId: string;
-    userId: string;
+    activeEntity: string;
+    currentUser: any;
+    activeIntegration?: any;
 }
 
-export default function InstagramModal({ isOpen, onClose, entityId, userId }: InstagramModalProps) {
+export default function InstagramModal({ isOpen, onClose, activeEntity, currentUser }: InstagramModalProps) {
+    const userId = currentUser?.uid;
+    const entityId = activeEntity;
     const [isConnected, setIsConnected] = useState(false);
     const [isSelectingPage, setIsSelectingPage] = useState(false);
     const [availablePages, setAvailablePages] = useState<any[]>([]);
@@ -58,14 +61,14 @@ export default function InstagramModal({ isOpen, onClose, entityId, userId }: In
             return;
         }
 
-        toast.loading("Abriendo Meta Auth...", { id: "meta-auth" });
+        const toastId = toast.loading("Abriendo Meta Auth...");
 
         (window as any).FB.login((response: any) => {
             if (response.authResponse) {
                 const shortLivedToken = response.authResponse.accessToken;
                 setUserAccessToken(shortLivedToken);
                 
-                toast.loading("Buscando cuentas de Instagram...", { id: "meta-auth" });
+                toast.loading("Buscando cuentas de Instagram...", { id: toastId });
 
                 (window as any).FB.api('/me/accounts', { fields: 'name,access_token,instagram_business_account' }, (pagesRes: any) => {
                     if (pagesRes && pagesRes.data) {
@@ -73,22 +76,22 @@ export default function InstagramModal({ isOpen, onClose, entityId, userId }: In
                         if (igPages.length > 0) {
                             setAvailablePages(igPages);
                             setIsSelectingPage(true);
-                            toast.dismiss("meta-auth");
+                            toast.dismiss(toastId);
                         } else {
-                            toast.error("No se encontraron cuentas de Instagram Business vinculadas.", { id: "meta-auth" });
+                            toast.error("No se encontraron cuentas de Instagram Business vinculadas.", { id: toastId });
                         }
                     } else {
-                        toast.error("Error al obtener páginas.", { id: "meta-auth" });
+                        toast.error("Error al obtener páginas.", { id: toastId });
                     }
                 });
             } else {
-                toast.error("Conexión cancelada.", { id: "meta-auth" });
+                toast.error("Conexión cancelada.", { id: toastId });
             }
         }, { scope: 'pages_messaging,pages_show_list,instagram_basic,instagram_manage_messages,pages_read_engagement' });
     };
 
     const handleSelectPage = async (page: any) => {
-        toast.loading(`Sincronizando ${page.instagram_business_account.username}...`, { id: "page-sync" });
+        const toastId = toast.loading(`Sincronizando ${page.instagram_business_account.username}...`);
 
         try {
             let finalToken = page.access_token;
@@ -139,17 +142,17 @@ export default function InstagramModal({ isOpen, onClose, entityId, userId }: In
             setConfig(instagramConfig);
             setIsConnected(true);
             setIsSelectingPage(false);
-            toast.success("Instagram conectado con éxito.", { id: "page-sync" });
+            toast.success("Instagram conectado con éxito.", { id: toastId });
         } catch (error) {
             console.error("Error saving Instagram config:", error);
-            toast.error("Fallo al guardar la configuración.", { id: "page-sync" });
+            toast.error("Fallo al guardar la configuración.", { id: toastId });
         }
     };
 
     const handleDelete = async () => {
         if (!confirm("¿Desconectar Instagram?")) return;
         
-        toast.loading("Desconectando...", { id: "delete" });
+        const toastId = toast.loading("Desconectando...");
         try {
             await deleteDoc(doc(db, `users/${userId}/entities/${entityId}/integrations/instagram`));
             if (config?.instagramId) {
@@ -157,9 +160,9 @@ export default function InstagramModal({ isOpen, onClose, entityId, userId }: In
             }
             setIsConnected(false);
             setConfig(null);
-            toast.success("Desconectado correctamente.", { id: "delete" });
+            toast.success("Desconectado correctamente.", { id: toastId });
         } catch (error) {
-            toast.error("Error al desconectar.", { id: "delete" });
+            toast.error("Error al desconectar.", { id: toastId });
         }
     };
 

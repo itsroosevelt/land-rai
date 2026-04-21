@@ -14,16 +14,19 @@ import {
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { doc, setDoc, getDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
-import { toast } from 'react-hot-toast';
+import { toast } from 'sonner';
 
 interface MessengerModalProps {
     isOpen: boolean;
     onClose: () => void;
-    entityId: string;
-    userId: string;
+    activeEntity: string;
+    currentUser: any;
+    activeIntegration?: any;
 }
 
-export default function MessengerModal({ isOpen, onClose, entityId, userId }: MessengerModalProps) {
+export default function MessengerModal({ isOpen, onClose, activeEntity, currentUser }: MessengerModalProps) {
+    const userId = currentUser?.uid;
+    const entityId = activeEntity;
     const [isConnected, setIsConnected] = useState(false);
     const [isSelectingPage, setIsSelectingPage] = useState(false);
     const [availablePages, setAvailablePages] = useState<any[]>([]);
@@ -58,32 +61,32 @@ export default function MessengerModal({ isOpen, onClose, entityId, userId }: Me
             return;
         }
 
-        toast.loading("Abriendo Meta Auth...", { id: "meta-auth" });
+        const toastId = toast.loading("Abriendo Meta Auth...");
 
         (window as any).FB.login((response: any) => {
             if (response.authResponse) {
                 const shortLivedToken = response.authResponse.accessToken;
                 setUserAccessToken(shortLivedToken);
                 
-                toast.loading("Obteniendo tus Fanpages...", { id: "meta-auth" });
+                toast.loading("Obteniendo tus Fanpages...", { id: toastId });
 
                 (window as any).FB.api('/me/accounts', (pagesRes: any) => {
                     if (pagesRes && pagesRes.data && pagesRes.data.length > 0) {
                         setAvailablePages(pagesRes.data);
                         setIsSelectingPage(true);
-                        toast.dismiss("meta-auth");
+                        toast.dismiss(toastId);
                     } else {
-                        toast.error("No se encontraron Fanpages.", { id: "meta-auth" });
+                        toast.error("No se encontraron Fanpages.", { id: toastId });
                     }
                 });
             } else {
-                toast.error("Conexión cancelada.", { id: "meta-auth" });
+                toast.error("Conexión cancelada.", { id: toastId });
             }
         }, { scope: 'pages_messaging,pages_show_list,pages_manage_metadata,pages_read_engagement' });
     };
 
     const handleSelectPage = async (page: any) => {
-        toast.loading(`Sincronizando ${page.name}...`, { id: "page-sync" });
+        const toastId = toast.loading(`Sincronizando ${page.name}...`);
 
         try {
             let finalToken = page.access_token;
@@ -134,17 +137,17 @@ export default function MessengerModal({ isOpen, onClose, entityId, userId }: Me
             setConfig(messengerConfig);
             setIsConnected(true);
             setIsSelectingPage(false);
-            toast.success("Messenger conectado con éxito.", { id: "page-sync" });
+            toast.success("Messenger conectado con éxito.", { id: toastId });
         } catch (error) {
             console.error("Error saving Messenger config:", error);
-            toast.error("Fallo al guardar la configuración.", { id: "page-sync" });
+            toast.error("Fallo al guardar la configuración.", { id: toastId });
         }
     };
 
     const handleDelete = async () => {
         if (!confirm("¿Desconectar Messenger? Perderás la automatización de esta Fanpage.")) return;
         
-        toast.loading("Desconectando...", { id: "delete" });
+        const toastId = toast.loading("Desconectando...");
         try {
             // Delete from entity
             await deleteDoc(doc(db, `users/${userId}/entities/${entityId}/integrations/messenger`));
@@ -156,9 +159,9 @@ export default function MessengerModal({ isOpen, onClose, entityId, userId }: Me
 
             setIsConnected(false);
             setConfig(null);
-            toast.success("Desconectado correctamente.", { id: "delete" });
+            toast.success("Desconectado correctamente.", { id: toastId });
         } catch (error) {
-            toast.error("Error al desconectar.", { id: "delete" });
+            toast.error("Error al desconectar.", { id: toastId });
         }
     };
 

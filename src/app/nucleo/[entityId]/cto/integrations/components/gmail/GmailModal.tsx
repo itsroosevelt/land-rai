@@ -14,16 +14,18 @@ import {
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
-import { toast } from 'react-hot-toast';
+import { toast } from 'sonner';
 
 interface GmailModalProps {
     isOpen: boolean;
     onClose: () => void;
-    entityId: string;
-    userId: string;
+    activeEntity: string;
+    currentUser: any;
 }
 
-export default function GmailModal({ isOpen, onClose, entityId, userId }: GmailModalProps) {
+export default function GmailModal({ isOpen, onClose, activeEntity, currentUser }: GmailModalProps) {
+    const userId = currentUser?.uid;
+    const entityId = activeEntity;
     const [isConnected, setIsConnected] = useState(false);
     const [config, setConfig] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -79,7 +81,7 @@ export default function GmailModal({ isOpen, onClose, entityId, userId }: GmailM
     const handleDelete = async () => {
         if (!confirm("¿Desvincular Gmail? Se detendrá la sincronización de correos.")) return;
         
-        toast.loading("Eliminando conexión...", { id: "delete-gmail" });
+        const toastId = toast.loading("Eliminando conexión...");
         try {
             // 1. Delete from public/integrations (internal routing)
             await deleteDoc(doc(db, `integrations/gmail/users/${userId}_${entityId}`));
@@ -87,9 +89,9 @@ export default function GmailModal({ isOpen, onClose, entityId, userId }: GmailM
             // 2. Delete from entity (UI state)
             await deleteDoc(doc(db, `users/${userId}/entities/${entityId}/integrations/gmail`));
             
-            toast.success("Gmail desconectado.", { id: "delete-gmail" });
+            toast.success("Gmail desconectado.", { id: toastId });
         } catch (error) {
-            toast.error("Error al desconectar.", { id: "delete-gmail" });
+            toast.error("Error al desconectar.", { id: toastId });
         }
     };
 

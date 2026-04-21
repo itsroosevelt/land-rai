@@ -13,8 +13,8 @@ import { Category, Integration, INTEGRATIONS, CATEGORIES } from './config';
 import { WhatsAppCloudAPIModal } from './components/whatsapp_cloud_api/WhatsAppCloudAPIModal';
 import { WhatsAppQRBusinessModal } from './components/whatsapp_qr_business/WhatsAppQRBusinessModal';
 import { WhatsAppQRPersonalModal } from './components/whatsapp_qr_personal/WhatsAppQRPersonalModal';
-import { MessengerModal } from './components/messenger/MessengerModal';
-import { InstagramModal } from './components/instagram/InstagramModal';
+import MessengerModal from './components/messenger/MessengerModal';
+import InstagramModal from './components/instagram/InstagramModal';
 import TelegramModal from './components/telegram/TelegramModal';
 import TwitterModal from './components/twitter/TwitterModal';
 import GmailModal from './components/gmail/GmailModal';
@@ -177,6 +177,8 @@ export default function IntegrationsPage() {
                     isOpen={isModalOpen} 
                     onClose={() => setIsModalOpen(false)} 
                     activeIntegration={activeIntegration} 
+                    activeEntity={activeEntity}
+                    currentUser={currentUser}
                 />
             )}
             {activeIntegration?.id === 'instagram' && (
@@ -184,6 +186,8 @@ export default function IntegrationsPage() {
                     isOpen={isModalOpen} 
                     onClose={() => setIsModalOpen(false)} 
                     activeIntegration={activeIntegration} 
+                    activeEntity={activeEntity}
+                    currentUser={currentUser}
                 />
             )}
             {activeIntegration?.id === 'telegram' && (

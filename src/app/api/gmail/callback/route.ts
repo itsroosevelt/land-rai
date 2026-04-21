@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { google } from 'googleapis';
+import { OAuth2Client } from 'google-auth-library';
 import { db } from '@/lib/firebase-admin';
 import * as admin from 'firebase-admin';
 
@@ -16,7 +16,7 @@ export async function GET(req: Request) {
 
     const { entityId, userId } = JSON.parse(Buffer.from(state, 'base64').toString());
 
-    const oauth2Client = new google.auth.OAuth2(
+    const oauth2Client = new OAuth2Client(
         process.env.GMAIL_CLIENT_ID,
         process.env.GMAIL_CLIENT_SECRET,
         `${process.env.NEXT_PUBLIC_APP_URL}/api/gmail/callback`
@@ -26,9 +26,12 @@ export async function GET(req: Request) {
         const { tokens } = await oauth2Client.getToken(code);
         oauth2Client.setCredentials(tokens);
 
-        const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-        const profile = await gmail.users.getProfile({ userId: 'me' });
-        const email = profile.data.emailAddress;
+        // Get profile using fetch and access token (leaner than googleapis)
+        const profileRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
+            headers: { Authorization: `Bearer ${tokens.access_token}` }
+        });
+        const profileData = await profileRes.json();
+        const email = profileData.emailAddress;
 
         // Save tokens and info in Firestore
         const integrationData = {
@@ -50,14 +53,18 @@ export async function GET(req: Request) {
             userId
         });
 
-        // Register Watch for real-time notifications
+        // Register Watch for real-time notifications via fetch
         try {
-            await gmail.users.watch({
-                userId: 'me',
-                requestBody: {
+            await fetch('https://gmail.googleapis.com/gmail/v1/users/me/watch', {
+                method: 'POST',
+                headers: { 
+                    Authorization: `Bearer ${tokens.access_token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
                     labelIds: ['INBOX'],
                     topicName: process.env.GMAIL_PUBSUB_TOPIC
-                }
+                })
             });
         } catch (watchError) {
             console.error('Gmail Watch Error:', watchError);
