@@ -22,9 +22,25 @@ export async function POST(req: Request) {
         const APP_ID = process.env.NEXT_PUBLIC_META_APP_ID;
         const APP_SECRET = process.env.META_APP_SECRET;
 
+        // DIAGNOSTIC LOG (Secure)
+        console.log('[exchange-token] 🔍 Diagnostic Check:', {
+            hasAppId: !!APP_ID,
+            appIdPrefix: APP_ID ? APP_ID.substring(0, 4) : 'null',
+            hasAppSecret: !!APP_SECRET,
+            secretLength: APP_SECRET ? APP_SECRET.length : 0,
+            allKeys: Object.keys(process.env).filter(k => k.includes('META'))
+        });
+
         if (!APP_ID || !APP_SECRET) {
-            console.error('[exchange-token] Missing META_APP_ID or META_APP_SECRET env vars');
-            return NextResponse.json({ error: 'Server misconfiguration: missing Meta app credentials' }, { status: 500 });
+            console.error('[exchange-token] ❌ Missing Meta credentials in process.env');
+            return NextResponse.json({ 
+                error: 'Server misconfiguration: missing Meta app credentials',
+                diagnostics: {
+                    id: !!APP_ID,
+                    secret: !!APP_SECRET,
+                    envKeys: Object.keys(process.env).filter(k => k.includes('META'))
+                }
+            }, { status: 500 });
         }
 
         // STEP 1: Exchange short-lived user token → long-lived user token (60 days)
