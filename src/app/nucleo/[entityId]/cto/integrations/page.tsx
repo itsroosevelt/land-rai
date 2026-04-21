@@ -176,7 +176,6 @@ export default function IntegrationsPage() {
                 <MessengerModal 
                     isOpen={isModalOpen} 
                     onClose={() => setIsModalOpen(false)} 
-                    activeIntegration={activeIntegration} 
                     activeEntity={activeEntity}
                     currentUser={currentUser}
                 />
@@ -185,7 +184,6 @@ export default function IntegrationsPage() {
                 <InstagramModal 
                     isOpen={isModalOpen} 
                     onClose={() => setIsModalOpen(false)} 
-                    activeIntegration={activeIntegration} 
                     activeEntity={activeEntity}
                     currentUser={currentUser}
                 />
