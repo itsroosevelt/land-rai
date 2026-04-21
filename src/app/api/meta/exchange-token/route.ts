@@ -11,17 +11,11 @@ export async function POST(req: Request) {
         const APP_ID = (process.env.NEXT_PUBLIC_META_APP_ID || '').trim().replace(/['"]/g, '');
         const APP_SECRET = (process.env.META_APP_SECRET || '').trim().replace(/['"]/g, '');
 
-        // --- ESCUDO DE SEGURIDAD (FALLBACK) ---
-        // Si no hay credenciales, devolvemos el mismo token marcándolo como temporal
-        // Esto evita el Error 500 y permite que la app funcione aunque Vercel falle.
         if (!APP_ID || !APP_SECRET) {
-            console.warn('[exchange-token] ⚠️ Missing Meta credentials. Falling back to short-lived token mode.');
+            console.error('[exchange-token] ❌ Missing Meta credentials (META_APP_SECRET or NEXT_PUBLIC_META_APP_ID).');
             return NextResponse.json({
-                accessToken: shortLivedToken,
-                tokenType: 'temporal',
-                expiresIn: 7200, // ~2 horas
-                warning: 'Modo de compatibilidad activado: Credenciales de servidor no detectadas.'
-            });
+                error: 'Credenciales de servidor no configuradas. Configura META_APP_SECRET y NEXT_PUBLIC_META_APP_ID en Vercel.'
+            }, { status: 500 });
         }
 
         // STEP 1: Exchange short-lived user token → long-lived user token (60 days)

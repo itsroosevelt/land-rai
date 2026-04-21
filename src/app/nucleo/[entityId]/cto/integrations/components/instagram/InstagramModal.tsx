@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-    Instagram, 
-    X, 
-    CheckCircle2, 
-    ShieldCheck, 
-    ExternalLink, 
-    AlertCircle, 
+import {
+    Instagram,
+    X,
+    CheckCircle2,
+    ShieldCheck,
+    ExternalLink,
     ArrowRight,
     Lock
 } from 'lucide-react';
@@ -95,24 +94,18 @@ const InstagramModal: React.FC<InstagramModalProps> = ({ isOpen, onClose, active
     const handleSelectPage = async (page: any) => {
         const toastId = toast.loading(`Vinculando @${page.instagram_business_account.username}...`);
         try {
-            let finalToken = page.access_token;
-            let tokenType = 'Temporal (2h)';
+            const exchangeRes = await fetch('/api/meta/exchange-token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shortLivedToken: page.access_token, pageId: page.id })
+            });
 
-            try {
-                const exchangeRes = await fetch('/api/meta/exchange-token', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ accessToken: page.access_token, type: 'instagram' })
-                });
-
-                if (exchangeRes.ok) {
-                    const data = await exchangeRes.json();
-                    finalToken = data.accessToken;
-                    tokenType = data.tokenType;
-                }
-            } catch (err) {
-                console.warn("[Instagram] Server exchange failed, falling back to client token.", err);
+            if (!exchangeRes.ok) {
+                const errData = await exchangeRes.json().catch(() => ({}));
+                throw new Error(errData.error || 'No se pudo obtener el token permanente.');
             }
+
+            const { accessToken: finalToken } = await exchangeRes.json();
 
             const instagramConfig = {
                 instagramId: page.instagram_business_account.id,
@@ -120,7 +113,7 @@ const InstagramModal: React.FC<InstagramModalProps> = ({ isOpen, onClose, active
                 name: page.name,
                 pageId: page.id,
                 accessToken: finalToken,
-                tokenType: tokenType,
+                tokenType: 'Permanente',
                 status: 'Connected',
                 updatedAt: serverTimestamp()
             };
@@ -269,15 +262,6 @@ const InstagramModal: React.FC<InstagramModalProps> = ({ isOpen, onClose, active
                                                     <span className="text-[8px] text-pink-500 font-black uppercase tracking-widest">TOKEN {config?.tokenType || 'TEMPORAL'}</span>
                                                 </div>
                                             </div>
-
-                                            {config?.tokenType?.includes('Temporal') && (
-                                                <div className="p-4 bg-yellow-500/5 border border-yellow-500/10 rounded-2xl flex items-start gap-3">
-                                                    <AlertCircle className="w-4 h-4 text-yellow-500/50 mt-0.5" />
-                                                    <p className="text-[10px] text-yellow-500/60 text-left leading-relaxed">
-                                                        <span className="font-bold">Aviso:</span> Conexión de corta duración. Para activar el modo Permanente, verifica la configuración de Vercel.
-                                                    </p>
-                                                </div>
-                                            )}
 
                                             <div className="flex items-center gap-4 pt-6">
                                                 <button onClick={onClose} className="flex-1 h-14 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all">TERMINAR</button>

@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-    Facebook, 
-    X, 
-    CheckCircle2, 
-    ShieldCheck, 
-    ExternalLink, 
-    AlertCircle, 
+import {
+    Facebook,
+    X,
+    CheckCircle2,
+    ShieldCheck,
+    ExternalLink,
     ArrowRight,
     Lock
 } from 'lucide-react';
@@ -93,31 +92,25 @@ const MessengerModal: React.FC<MessengerModalProps> = ({ isOpen, onClose, active
     const handleSelectPage = async (page: any) => {
         const toastId = toast.loading(`Vinculando ${page.name}...`);
         try {
-            let finalToken = page.access_token;
-            let tokenType = 'Temporal (2h)';
+            const exchangeRes = await fetch('/api/meta/exchange-token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shortLivedToken: page.access_token, pageId: page.id })
+            });
 
-            try {
-                const exchangeRes = await fetch('/api/meta/exchange-token', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ accessToken: page.access_token, type: 'messenger' })
-                });
-
-                if (exchangeRes.ok) {
-                    const data = await exchangeRes.json();
-                    finalToken = data.accessToken;
-                    tokenType = data.tokenType;
-                }
-            } catch (err) {
-                console.warn("[Messenger] Server exchange failed, falling back to client token.", err);
+            if (!exchangeRes.ok) {
+                const errData = await exchangeRes.json().catch(() => ({}));
+                throw new Error(errData.error || 'No se pudo obtener el token permanente.');
             }
+
+            const { accessToken: finalToken } = await exchangeRes.json();
 
             const messengerConfig = {
                 pageId: page.id,
                 pageName: page.name,
                 name: page.name,
                 accessToken: finalToken,
-                tokenType: tokenType,
+                tokenType: 'Permanente',
                 status: 'Connected',
                 updatedAt: serverTimestamp()
             };
@@ -266,15 +259,6 @@ const MessengerModal: React.FC<MessengerModalProps> = ({ isOpen, onClose, active
                                                     <span className="text-[8px] text-blue-500 font-black uppercase tracking-widest">TOKEN {config?.tokenType || 'TEMPORAL'}</span>
                                                 </div>
                                             </div>
-
-                                            {config?.tokenType?.includes('Temporal') && (
-                                                <div className="p-4 bg-yellow-500/5 border border-yellow-500/10 rounded-2xl flex items-start gap-3">
-                                                    <AlertCircle className="w-4 h-4 text-yellow-500/50 mt-0.5" />
-                                                    <p className="text-[10px] text-yellow-500/60 text-left leading-relaxed">
-                                                        <span className="font-bold">Aviso:</span> El servidor no detectó las credenciales maestras. Tu conexión expirará pronto. Por favor, verifica el Secret en Vercel para activar el modo Permanente.
-                                                    </p>
-                                                </div>
-                                            )}
 
                                             <div className="flex items-center gap-4 pt-6">
                                                 <button onClick={onClose} className="flex-1 h-14 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all">TERMINAR</button>
