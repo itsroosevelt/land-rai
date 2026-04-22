@@ -244,32 +244,27 @@ export async function POST(req: Request) {
             }
         }
 
-        // 6. FALLBACK SEARCH: If still no card, scan groups (like WhatsApp does)
+        // 6. FALLBACK SEARCH: collectionGroup query (COLLECTION_GROUP index, avoids per-group loop)
         if (!targetCardDoc) {
-            debugLog(`[POST] No card found via contact. Searching all groups for platform_ids.${provider} == ${senderId}...`);
-            const allMatches: any[] = [];
-            const groupsRef = db.collection(`${entityPath}/kanban-groups`);
-            const groupsSnapshot = await groupsRef.get();
+            debugLog(`[POST] No card found via contact. Searching collectionGroup for platform_ids.${provider} == ${senderId}...`);
+            const allCardsSnap = await db.collectionGroup('cards')
+                .where(`platform_ids.${provider}`, '==', senderId)
+                .get();
 
-            for (const groupDoc of groupsSnapshot.docs) {
-                const cardsSnapshot = await groupDoc.ref.collection('cards')
-                    .where(`platform_ids.${provider}`, '==', senderId)
-                    .get();
-
-                cardsSnapshot.forEach(doc => {
-                    allMatches.push({ doc, groupId: groupDoc.id });
-                });
-            }
-
-            if (allMatches.length > 0) {
-                allMatches.sort((a, b) => {
-                    const tA = (a.doc.data().updatedAt?.toDate?.() || new Date(0)).getTime();
-                    const tB = (b.doc.data().updatedAt?.toDate?.() || new Date(0)).getTime();
+            const tenantCards = allCardsSnap.docs
+                .filter(d => d.ref.path.startsWith(entityPath + '/'))
+                .sort((a, b) => {
+                    const tA = (a.data().updatedAt?.toDate?.() || new Date(0)).getTime();
+                    const tB = (b.data().updatedAt?.toDate?.() || new Date(0)).getTime();
                     return tB - tA;
                 });
-                targetCardDoc = allMatches[0].doc;
-                targetGroupId = allMatches[0].groupId;
-                debugLog(`[POST] Found existing card via Deep Search: ${targetCardDoc.id} in group ${targetGroupId}`);
+
+            if (tenantCards.length > 0) {
+                targetCardDoc = tenantCards[0];
+                const pathParts = tenantCards[0].ref.path.split('/');
+                const gIdx = pathParts.indexOf('kanban-groups');
+                targetGroupId = gIdx !== -1 ? pathParts[gIdx + 1] : null;
+                debugLog(`[POST] Found existing card via collectionGroup: ${targetCardDoc.id} in group ${targetGroupId}`);
             }
         }
 

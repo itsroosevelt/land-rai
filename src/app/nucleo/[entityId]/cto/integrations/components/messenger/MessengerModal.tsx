@@ -5,7 +5,6 @@ import {
     X,
     CheckCircle2,
     ShieldCheck,
-    AlertCircle,
     ArrowRight,
     Lock
 } from 'lucide-react';
@@ -26,6 +25,7 @@ const MessengerModal: React.FC<MessengerModalProps> = ({ isOpen, onClose, active
     const [isSelectingPage, setIsSelectingPage] = useState(false);
     const [availablePages, setAvailablePages] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [userToken, setUserToken] = useState<string | null>(null);
 
     const userId = currentUser?.uid;
     const entityId = activeEntity?.id || activeEntity;
@@ -60,6 +60,7 @@ const MessengerModal: React.FC<MessengerModalProps> = ({ isOpen, onClose, active
             // @ts-ignore
             window.FB.login((response: any) => {
                 if (response.authResponse) {
+                    setUserToken(response.authResponse.accessToken);
                     fetchAvailablePages(response.authResponse.accessToken, toastId);
                 } else {
                     toast.error("Conexión cancelada.", { id: toastId });
@@ -92,33 +93,33 @@ const MessengerModal: React.FC<MessengerModalProps> = ({ isOpen, onClose, active
     const handleSelectPage = async (page: any) => {
         const toastId = toast.loading(`Vinculando ${page.name}...`);
         try {
-            let finalToken = page.access_token;
-            let tokenType = 'Temporal (2h)';
-
-            try {
-                const exchangeRes = await fetch('/api/meta/exchange-token', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ shortLivedToken: page.access_token, pageId: page.id })
-                });
-
-                if (exchangeRes.ok) {
-                    const data = await exchangeRes.json();
-                    if (data.accessToken) {
-                        finalToken = data.accessToken;
-                        tokenType = 'Permanente';
-                    }
-                }
-            } catch (err) {
-                console.warn("[Messenger] Fallback a token temporal activo.", err);
+            if (!userToken) {
+                toast.error("Sesión expirada. Vuelve a iniciar sesión con Facebook.", { id: toastId });
+                return;
             }
+
+            const exchangeRes = await fetch('/api/meta/exchange-token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shortLivedToken: userToken, pageId: page.id })
+            });
+
+            const exchangeData = await exchangeRes.json();
+
+            if (!exchangeRes.ok || !exchangeData.accessToken) {
+                const detail = exchangeData.details || exchangeData.error || 'Error desconocido';
+                toast.error(`No se pudo obtener el token permanente: ${detail}. Verifica que META_APP_SECRET esté configurado en Vercel.`, { id: toastId });
+                return;
+            }
+
+            const permanentToken = exchangeData.accessToken;
 
             const messengerConfig = {
                 pageId: page.id,
                 pageName: page.name,
                 name: page.name,
-                accessToken: finalToken,
-                tokenType: tokenType,
+                accessToken: permanentToken,
+                tokenType: 'Permanente',
                 status: 'Connected',
                 updatedAt: serverTimestamp()
             };
@@ -128,14 +129,14 @@ const MessengerModal: React.FC<MessengerModalProps> = ({ isOpen, onClose, active
                 entityId,
                 userId,
                 pageName: page.name,
-                accessToken: finalToken,
+                accessToken: permanentToken,
                 updatedAt: serverTimestamp()
             });
 
             setConfig(messengerConfig);
             setIsConnected(true);
             setIsSelectingPage(false);
-            toast.success("Messenger conectado con éxito.", { id: toastId });
+            toast.success("Messenger conectado con token permanente.", { id: toastId });
         } catch (error) {
             toast.error("Error al guardar configuración.", { id: toastId });
         }
@@ -264,18 +265,9 @@ const MessengerModal: React.FC<MessengerModalProps> = ({ isOpen, onClose, active
                                                     <span className="text-[8px] text-white/40 uppercase tracking-widest font-bold">Listo para recibir mensajes</span>
                                                 </div>
                                                 <div className="px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full">
-                                                    <span className="text-[8px] text-blue-500 font-black uppercase tracking-widest">TOKEN {config?.tokenType || 'TEMPORAL'}</span>
+                                                    <span className="text-[8px] text-blue-500 font-black uppercase tracking-widest">TOKEN PERMANENTE</span>
                                                 </div>
                                             </div>
-
-                                            {config?.tokenType === 'Temporal (2h)' && (
-                                                <div className="p-4 bg-yellow-500/5 border border-yellow-500/10 rounded-2xl flex items-start gap-3">
-                                                    <AlertCircle className="w-4 h-4 text-yellow-500/50 mt-0.5 shrink-0" />
-                                                    <p className="text-[10px] text-yellow-500/60 text-left leading-relaxed">
-                                                        <span className="font-bold">Aviso:</span> Conexión activa en modo temporal (~2h). Para modo permanente, configura <span className="font-mono">META_APP_SECRET</span> en Vercel.
-                                                    </p>
-                                                </div>
-                                            )}
 
                                             <div className="flex items-center gap-4 pt-6">
                                                 <button onClick={onClose} className="flex-1 h-14 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all">TERMINAR</button>

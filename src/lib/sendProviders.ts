@@ -41,47 +41,40 @@ export async function sendMetaMessage(
         text = (text || '') + listText;
     }
 
-    let token = process.env.META_PAGE_ACCESS_TOKEN;
-
     // Backwards compatibility with the old signature
+    let token: string | undefined = undefined;
     if (typeof options === 'string') {
         token = options;
         options = {};
     }
 
-    let targetNodeId: string | undefined;
     if (options.userId && options.entityId && options.provider) {
         try {
             const configPath = `users/${options.userId}/entities/${options.entityId}/integrations/${options.provider}`;
             const configDoc = await db.doc(configPath).get();
             if (configDoc.exists) {
                 const data = configDoc.data();
-                // SUPPORT MULTIPLE TOKEN KEYS (Agnosticism Rule)
                 const resolvedToken = data?.accessToken || data?.pageAccessToken || data?.token;
                 if (resolvedToken) {
                     token = resolvedToken;
-                    targetNodeId = options.provider === 'messenger' ? data.pageId : data.instagramId;
-                    console.log(`[sendMetaMessage] 💎 Using PERMANENT TOKEN from Firestore (${options.provider})`);
-                } else {
-                    // EMERGENCY RESOLUTION: If doc exists but no token, try checking a generic name
-                    const fallbackPath = `users/${options.userId}/entities/${options.entityId}/integrations/meta`;
-                    const fallbackDoc = await db.doc(fallbackPath).get();
-                    const fData = fallbackDoc.data();
-                    const fToken = fData?.accessToken || fData?.token;
-                    if (fToken) {
-                        token = fToken;
-                        targetNodeId = options.provider === 'messenger' ? fData.pageId : fData.instagramId;
-                        console.log(`[sendMetaMessage] Resolved via generic 'meta' fallback for ${options.entityId}`);
-                    }
+                    console.log(`[sendMetaMessage] Using PERMANENT TOKEN from Firestore (${options.provider})`);
                 }
             }
-        } catch (err) {
-            console.error(`[sendMetaMessage] Error resolving config:`, err);
+
+            if (!token) {
+                throw new Error(
+                    `Token permanente no encontrado en Firestore para ${options.provider} (entity: ${options.entityId}). ` +
+                    `Reconecta la integración desde Configuración → Integraciones.`
+                );
+            }
+        } catch (err: any) {
+            console.error(`[sendMetaMessage] Error resolving config:`, err.message);
+            throw err;
         }
     }
 
     if (!token) {
-        console.error('Missing Access Token (Meta/Instagram).');
+        console.error('[sendMetaMessage] No tenant context provided and no token available.');
         throw new Error('Access Token is not configured.');
     }
 
