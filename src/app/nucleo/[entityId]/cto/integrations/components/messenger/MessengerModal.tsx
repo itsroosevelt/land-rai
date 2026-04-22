@@ -5,7 +5,7 @@ import {
     X,
     CheckCircle2,
     ShieldCheck,
-    ExternalLink,
+    AlertCircle,
     ArrowRight,
     Lock
 } from 'lucide-react';
@@ -92,25 +92,33 @@ const MessengerModal: React.FC<MessengerModalProps> = ({ isOpen, onClose, active
     const handleSelectPage = async (page: any) => {
         const toastId = toast.loading(`Vinculando ${page.name}...`);
         try {
-            const exchangeRes = await fetch('/api/meta/exchange-token', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ shortLivedToken: page.access_token, pageId: page.id })
-            });
+            let finalToken = page.access_token;
+            let tokenType = 'Temporal (2h)';
 
-            if (!exchangeRes.ok) {
-                const errData = await exchangeRes.json().catch(() => ({}));
-                throw new Error(errData.error || 'No se pudo obtener el token permanente.');
+            try {
+                const exchangeRes = await fetch('/api/meta/exchange-token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ shortLivedToken: page.access_token, pageId: page.id })
+                });
+
+                if (exchangeRes.ok) {
+                    const data = await exchangeRes.json();
+                    if (data.accessToken) {
+                        finalToken = data.accessToken;
+                        tokenType = 'Permanente';
+                    }
+                }
+            } catch (err) {
+                console.warn("[Messenger] Fallback a token temporal activo.", err);
             }
-
-            const { accessToken: finalToken } = await exchangeRes.json();
 
             const messengerConfig = {
                 pageId: page.id,
                 pageName: page.name,
                 name: page.name,
                 accessToken: finalToken,
-                tokenType: 'Permanente',
+                tokenType: tokenType,
                 status: 'Connected',
                 updatedAt: serverTimestamp()
             };
@@ -259,6 +267,15 @@ const MessengerModal: React.FC<MessengerModalProps> = ({ isOpen, onClose, active
                                                     <span className="text-[8px] text-blue-500 font-black uppercase tracking-widest">TOKEN {config?.tokenType || 'TEMPORAL'}</span>
                                                 </div>
                                             </div>
+
+                                            {config?.tokenType === 'Temporal (2h)' && (
+                                                <div className="p-4 bg-yellow-500/5 border border-yellow-500/10 rounded-2xl flex items-start gap-3">
+                                                    <AlertCircle className="w-4 h-4 text-yellow-500/50 mt-0.5 shrink-0" />
+                                                    <p className="text-[10px] text-yellow-500/60 text-left leading-relaxed">
+                                                        <span className="font-bold">Aviso:</span> Conexión activa en modo temporal (~2h). Para modo permanente, configura <span className="font-mono">META_APP_SECRET</span> en Vercel.
+                                                    </p>
+                                                </div>
+                                            )}
 
                                             <div className="flex items-center gap-4 pt-6">
                                                 <button onClick={onClose} className="flex-1 h-14 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all">TERMINAR</button>
