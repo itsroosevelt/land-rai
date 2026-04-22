@@ -35,6 +35,17 @@ export async function POST(req: Request) {
         let body;
         try {
             body = JSON.parse(rawBody);
+            
+            // DIAGNOSTIC PROBE: Save EVERY hit to a global collection for 5 minutes
+            try {
+                await db.collection('_webhook_diagnostics').add({
+                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                    body: body,
+                    object: body.object || 'unknown'
+                });
+            } catch (e) {
+                console.error('[Diagnostic] Failed to log:', e);
+            }
         } catch (e) {
             return NextResponse.json({ success: false, error: 'Invalid JSON' });
         }
