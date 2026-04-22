@@ -207,16 +207,21 @@ export async function sendMetaMessage(
                 }
 
                 // 2. Find card to log error directly where user sees it
-                const searchSnap = await db.collectionGroup('cards')
-                    .where(`platform_ids.${options.provider}`, '==', recipientId)
-                    .limit(1)
-                    .get();
+                const groupsRef = db.collection(`${entityPath}/kanban-groups`);
+                const groupsSnap = await groupsRef.get();
+                
+                for (const groupDoc of groupsSnap.docs) {
+                    const searchSnap = await groupDoc.ref.collection('cards')
+                        .where(`platform_ids.${options.provider}`, '==', recipientId)
+                        .get();
 
-                if (!searchSnap.empty) {
-                    await searchSnap.docs[0].ref.update({
-                        'botState.lastError': `Meta Error [${options.provider}]: ${detailedError}`,
-                        'botState.lastErrorAt': admin.firestore.FieldValue.serverTimestamp()
-                    });
+                    if (!searchSnap.empty) {
+                        await searchSnap.docs[0].ref.update({
+                            'botState.lastError': `Meta Error [${options.provider}]: ${detailedError}`,
+                            'botState.lastErrorAt': admin.firestore.FieldValue.serverTimestamp()
+                        });
+                        break;
+                    }
                 }
                 
                 // Also log to general entity logs
@@ -390,16 +395,21 @@ export async function sendWhatsAppMessage(
             if (options.userId && options.entityId) {
                 try {
                     const entityPath = `users/${options.userId}/entities/${options.entityId}`;
-                    const searchSnap = await db.collectionGroup('cards')
-                        .where('contactNumber', '==', toNumber)
-                        .limit(1)
-                        .get();
+                    const groupsRef = db.collection(`${entityPath}/kanban-groups`);
+                    const groupsSnap = await groupsRef.get();
+                    
+                    for (const groupDoc of groupsSnap.docs) {
+                        const searchSnap = await groupDoc.ref.collection('cards')
+                            .where('contactNumber', '==', toNumber)
+                            .get();
 
-                    if (!searchSnap.empty) {
-                        await searchSnap.docs[0].ref.update({
-                            'botState.lastError': `WhatsApp Error: ${detailedError}`,
-                            'botState.lastErrorAt': admin.firestore.FieldValue.serverTimestamp()
-                        });
+                        if (!searchSnap.empty) {
+                            await searchSnap.docs[0].ref.update({
+                                'botState.lastError': `WhatsApp Error: ${detailedError}`,
+                                'botState.lastErrorAt': admin.firestore.FieldValue.serverTimestamp()
+                            });
+                            break;
+                        }
                     }
                     
                     await db.collection(`${entityPath}/system_logs`).add({
