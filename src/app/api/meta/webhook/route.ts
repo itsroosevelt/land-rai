@@ -42,9 +42,10 @@ export async function POST(req: Request) {
         const entry = body.entry?.[0];
         if (!entry) return NextResponse.json({ success: true, ignored: 'no_entry' });
 
+        const objectType = body.object; // 'page' or 'instagram'
         const targetId = entry.id; // Page ID or Instagram Account ID
         const messaging = entry.messaging?.[0];
-        const changes = entry.changes?.[0]; // Support for Instagram comments/mentions
+        const changes = entry.changes?.[0];
 
         if (!messaging && !changes) {
             return NextResponse.json({ success: true, ignored: 'no_data' });
@@ -56,102 +57,52 @@ export async function POST(req: Request) {
         }
 
         let text = '';
-
         if (messaging) {
-            if (messaging.message?.is_echo) {
-                return NextResponse.json({ success: true, ignored: 'echo' });
-            }
-            // Prioritize Quick Reply payload, then text
+            if (messaging.message?.is_echo) return NextResponse.json({ success: true, ignored: 'echo' });
             text = messaging.message?.quick_reply?.payload || messaging.message?.text || messaging.postback?.payload || messaging.postback?.title || '';
-            
-            if (!text && messaging.message?.attachments) {
-                text = '[Multimedia/Adjunto]';
-            }
+            if (!text && messaging.message?.attachments) text = '[Multimedia/Adjunto]';
         } else if (changes) {
             text = changes.value?.text || changes.value?.message || '[Interacción]';
         }
 
-        if (!text) {
-            return NextResponse.json({ success: true, ignored: 'empty_text' });
-        }
+        if (!text) return NextResponse.json({ success: true, ignored: 'empty_text' });
 
-        // Try to extract name directly from payload (fastest, no API needed)
-        const senderNameFromPayload =
-            messaging?.sender?.name ||
-            changes?.value?.from?.username ||
-            null;
+        const senderNameFromPayload = messaging?.sender?.name || changes?.value?.from?.username || changes?.value?.from?.name || null;
 
-        debugLog(`[POST] Searching tenant for Target ID: ${targetId} | From: ${senderId}`);
+        debugLog(`[POST] Searching tenant for Object: ${objectType} | Target ID: ${targetId}`);
 
-
-        // Search for the Tenant globally
         let tenantRef: admin.firestore.DocumentReference | null = null;
-        let provider: 'messenger' | 'instagram' = 'messenger';
-
-        // SUPPORT BOTH STRING AND NUMBER IDS (Agnostic normalization)
+        let provider: 'messenger' | 'instagram' = objectType === 'instagram' ? 'instagram' : 'messenger';
+        let tenantData: any = null;
         const numericId = parseInt(targetId);
 
-        let tenantData: any = null;
+        // 1. GLOBAL SEARCH (Try both fields for maximum compatibility)
+        const integrationSnap = await db.collectionGroup('integrations').get();
+        
+        for (const doc of integrationSnap.docs) {
+            const data = doc.data();
+            const matchesPage = data.pageId === targetId || String(data.pageId) === String(targetId) || data.pageId === numericId;
+            const matchesInsta = data.instagramId === targetId || String(data.instagramId) === String(targetId) || data.instagramId === numericId;
 
-        // 1. GLOBAL MULTI-PLATFORM SEARCH (Cross-Mapping Rule)
-        const crossSnap = await db.collectionGroup('integrations')
-            .where('pageId', 'in', [targetId, String(targetId), numericId])
-            .get();
-
-        const crossSnapInsta = await db.collectionGroup('integrations')
-            .where('instagramId', 'in', [targetId, String(targetId), numericId])
-            .get();
-
-        if (!crossSnap.empty) {
-            tenantRef = crossSnap.docs[0].ref;
-            tenantData = crossSnap.docs[0].data();
-            provider = 'messenger';
-            debugLog(`[POST] Resolved Messenger tenant via CrossMapping: ${tenantRef.path}`);
-        } else if (!crossSnapInsta.empty) {
-            tenantRef = crossSnapInsta.docs[0].ref;
-            tenantData = crossSnapInsta.docs[0].data();
-            provider = 'instagram';
-            debugLog(`[POST] Resolved Instagram tenant via CrossMapping: ${tenantRef.path}`);
-        } else {
-            // EMERGENCY BYPASS: If still not found, try to search by checking the values inside the objects
-            const allIntegrations = await db.collectionGroup('integrations')
-                .where('isActive', 'in', [true, 'true', undefined])
-                .get();
-
-            for (const doc of allIntegrations.docs) {
-                const data = doc.data();
-                if (data.pageId === targetId || String(data.pageId) === String(targetId) || 
-                    data.instagramId === targetId || String(data.instagramId) === String(targetId)) {
-                    tenantRef = doc.ref;
-                    tenantData = data;
-                    provider = data.instagramId ? 'instagram' : 'messenger';
-                    break;
-                }
-            }
-
-            if (!tenantRef) {
-                debugLog(`[POST] ❌ Critical: No match found for targetId ${targetId}`);
+            if (matchesPage || matchesInsta) {
+                tenantRef = doc.ref;
+                tenantData = data;
+                // Override provider based on what matched or what Meta says
+                if (matchesInsta) provider = 'instagram';
+                else if (matchesPage) provider = 'messenger';
+                break;
             }
         }
 
         if (!tenantRef) {
-            debugLog(`[POST] ❌ ALERTA: No se pudo resolver el tenant para Target ID: ${targetId}.`);
-            
-            // EMERGENCY BYPASS: If only one integration exists globally, use it (robustness for single-tenant users)
-            const allIntegrations = await db.collectionGroup('integrations').get();
-            if (allIntegrations.size === 1) {
-                const doc = allIntegrations.docs[0];
-                tenantRef = doc.ref;
-                tenantData = doc.data();
-                provider = tenantData.instagramId ? 'instagram' : 'messenger';
-                debugLog(`[POST] ⚠️ Emergency Bypass: Only one integration found, defaulting to ${tenantRef.path}`);
+            debugLog(`[POST] ❌ Critical: No match found for targetId ${targetId}. Ingesting to first active integration as emergency.`);
+            const activeIntegrations = integrationSnap.docs.filter(d => d.data().isActive !== false);
+            if (activeIntegrations.length > 0) {
+                tenantRef = activeIntegrations[0].ref;
+                tenantData = activeIntegrations[0].data();
+                provider = objectType === 'instagram' ? 'instagram' : 'messenger';
             } else {
-                return NextResponse.json({
-                    success: false,
-                    error: 'Tenant not mapped',
-                    incomingId: targetId,
-                    note: 'Ensure this ID is correctly stored in your integrations collection'
-                });
+                return NextResponse.json({ success: false, error: 'Tenant not mapped' });
             }
         }
 
