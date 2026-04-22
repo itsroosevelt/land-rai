@@ -28,7 +28,7 @@ const MessengerModal: React.FC<MessengerModalProps> = ({ isOpen, onClose, active
     const [loading, setLoading] = useState(true);
 
     const userId = currentUser?.uid;
-    const entityId = activeEntity?.id;
+    const entityId = activeEntity?.id || activeEntity;
 
     useEffect(() => {
         if (!userId || !entityId) return;
