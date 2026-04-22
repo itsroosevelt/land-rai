@@ -57,7 +57,7 @@ export async function POST(req: Request) {
         return NextResponse.json({
             accessToken: permanentToken,
             tokenType: 'permanent',
-            pageName: pageTokenRes.data.name
+            pageName: pageTokenRes.data.name || 'Meta Page'
         });
 
     } catch (error: any) {

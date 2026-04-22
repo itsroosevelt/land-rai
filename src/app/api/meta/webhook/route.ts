@@ -113,24 +113,23 @@ export async function POST(req: Request) {
             provider = 'instagram';
             debugLog(`[POST] Resolved Instagram tenant via CrossMapping: ${tenantRef.path}`);
         } else {
-            // EMERGENCY BYPASS: If still not found but only one integration exists globally, use it.
+            // EMERGENCY BYPASS: If still not found, try to search by checking the values inside the objects
             const allIntegrations = await db.collectionGroup('integrations')
                 .where('isActive', 'in', [true, 'true', undefined])
                 .get();
 
-            if (allIntegrations.size >= 1) {
-                // We pick the first matching provider if possible, otherwise fallback
-                const doc = allIntegrations.docs[0];
-                tenantRef = doc.ref;
-                tenantData = doc.data();
-                
-                // If we know it was a Messenger entry but we found generic integrations, 
-                // prioritize the one that actually matches the expected provider.
-                const possibleProvider = tenantData.instagramId ? 'instagram' : 'messenger';
-                console.warn(`[Meta Webhook] ⚠️ Exact pageId match failed for ${targetId}. Falling back to first found integration: ${possibleProvider}`);
-                provider = possibleProvider;
-                debugLog(`[POST] ⚠️ Fallback Resolve: Using first found integration: ${tenantRef.path}`);
-            } else {
+            for (const doc of allIntegrations.docs) {
+                const data = doc.data();
+                if (data.pageId === targetId || String(data.pageId) === String(targetId) || 
+                    data.instagramId === targetId || String(data.instagramId) === String(targetId)) {
+                    tenantRef = doc.ref;
+                    tenantData = data;
+                    provider = data.instagramId ? 'instagram' : 'messenger';
+                    break;
+                }
+            }
+
+            if (!tenantRef) {
                 debugLog(`[POST] ❌ Critical: No match found for targetId ${targetId}`);
             }
         }
