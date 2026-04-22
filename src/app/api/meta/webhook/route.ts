@@ -254,8 +254,6 @@ export async function POST(req: Request) {
             for (const groupDoc of groupsSnapshot.docs) {
                 const cardsSnapshot = await groupDoc.ref.collection('cards')
                     .where(`platform_ids.${provider}`, '==', senderId)
-                    .orderBy('updatedAt', 'desc')
-                    .limit(1)
                     .get();
 
                 cardsSnapshot.forEach(doc => {
