@@ -259,14 +259,12 @@ const MessengerModal: React.FC<MessengerModalProps> = ({ isOpen, onClose, active
                                                 <div className="p-4 bg-green-500/5 border border-green-500/10 rounded-2xl relative z-10"><ShieldCheck className="w-6 h-6 text-green-500/40" /></div>
                                             </div>
 
-                                            <div className="flex items-center justify-between px-6 py-4 bg-white/5 rounded-2xl border border-white/5">
+                                            <div className="flex items-center justify-between px-2 pt-2">
                                                 <div className="flex items-center gap-2">
                                                     <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
                                                     <span className="text-[8px] text-white/40 uppercase tracking-widest font-bold">Listo para recibir mensajes</span>
                                                 </div>
-                                                <div className="px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full">
-                                                    <span className="text-[8px] text-blue-500 font-black uppercase tracking-widest">TOKEN PERMANENTE</span>
-                                                </div>
+                                                <span className="text-[8px] text-blue-500 font-black uppercase tracking-widest">TOKEN PERMANENTE</span>
                                             </div>
 
                                             <div className="flex items-center gap-4 pt-6">
