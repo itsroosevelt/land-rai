@@ -33,16 +33,30 @@ export async function GET(req: Request) {
         const { tokens } = await oauth2Client.getToken(code);
         oauth2Client.setCredentials(tokens);
 
-        // Get profile using fetch and access token (leaner than googleapis)
+        // Get Gmail profile and fall back to userinfo if Gmail profile is incomplete.
         const profileRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
             headers: { Authorization: `Bearer ${tokens.access_token}` }
         });
-        const profileData = await profileRes.json();
-        const email = profileData.emailAddress;
+        const profileData = await profileRes.json().catch(() => null);
+
+        const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+            headers: { Authorization: `Bearer ${tokens.access_token}` }
+        });
+        const userInfo = await userInfoRes.json().catch(() => null);
+
+        const email =
+            profileData?.emailAddress?.trim?.() ||
+            userInfo?.email?.trim?.() ||
+            null;
+
+        if (!email) {
+            throw new Error('No se pudo obtener el correo de la cuenta de Gmail autorizada.');
+        }
 
         // Save tokens and info in Firestore
         const integrationData = {
             email,
+            gmailAddress: email,
             accessToken: tokens.access_token,
             refreshToken: tokens.refresh_token,
             expiryDate: tokens.expiry_date,
@@ -52,6 +66,17 @@ export async function GET(req: Request) {
 
         // 1. Save in entity (for UI)
         await db.doc(`users/${userId}/entities/${entityId}/integrations/gmail`).set(integrationData);
+
+        // 1b. Save internal auth document used by token refresh/send providers
+        await db.doc(`users/${userId}/entities/${entityId}/integrations/gmail_internal`).set({
+            email,
+            gmailAddress: email,
+            accessToken: tokens.access_token,
+            refreshToken: tokens.refresh_token || null,
+            expiryDate: tokens.expiry_date || null,
+            expiresAt: typeof tokens.expiry_date === 'number' ? tokens.expiry_date : null,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
 
         // 2. Save in public integrations (for Pub/Sub workers)
         await db.doc(`integrations/gmail/users/${userId}_${entityId}`).set({
@@ -80,6 +105,11 @@ export async function GET(req: Request) {
                 status: 'Error',
                 lastError: 'Fallo al activar tiempo real (Watch API)'
             });
+            await db.doc(`users/${userId}/entities/${entityId}/integrations/gmail_internal`).set({
+                status: 'Error',
+                lastError: 'Fallo al activar tiempo real (Watch API)',
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
         }
 
         // Return a success page — handles both popup and main-window redirect flows

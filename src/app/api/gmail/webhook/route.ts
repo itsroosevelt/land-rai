@@ -22,10 +22,17 @@ export async function POST(req: Request) {
         console.log(`[Gmail Webhook] Notification for ${emailAddress}`);
 
         // 2. Identify Tenant
-        const tenantSnap = await db.collectionGroup('integrations')
+        let tenantSnap = await db.collectionGroup('integrations')
             .where('gmailAddress', '==', emailAddress)
             .limit(1)
             .get();
+
+        if (tenantSnap.empty) {
+            tenantSnap = await db.collectionGroup('integrations')
+                .where('email', '==', emailAddress)
+                .limit(1)
+                .get();
+        }
 
         if (tenantSnap.empty) return NextResponse.json({ success: false, error: 'Tenant not found' });
 

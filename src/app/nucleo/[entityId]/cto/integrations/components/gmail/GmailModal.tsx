@@ -103,7 +103,10 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
             // 1. Delete from public/integrations (internal routing)
             await deleteDoc(doc(db, `integrations/gmail/users/${userId}_${entityId}`));
             
-            // 2. Delete from entity (UI state)
+            // 2. Delete internal auth state
+            await deleteDoc(doc(db, `users/${userId}/entities/${entityId}/integrations/gmail_internal`));
+
+            // 3. Delete from entity (UI state)
             await deleteDoc(doc(db, `users/${userId}/entities/${entityId}/integrations/gmail`));
             
             toast.success("Gmail desconectado.", { id: toastId });
