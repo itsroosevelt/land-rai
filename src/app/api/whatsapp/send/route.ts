@@ -7,9 +7,9 @@ export async function POST(req: Request) {
         const bodyValue = await req.json();
         const { message, toNumber, cardId, groupId, type, template, url, filename, platform = 'kamban', userId, entityId } = bodyValue;
 
-        if (!message || !toNumber) {
+        if ((!message && !url) || !toNumber) {
             return NextResponse.json(
-                { error: 'Missing required fields: message and toNumber' },
+                { error: 'Missing required fields: toNumber and message or url' },
                 { status: 400 }
             );
         }
@@ -37,6 +37,8 @@ export async function POST(req: Request) {
                 console.log(`[Omnichannel API] Sending to ${targetPlatform} (ID: ${toNumber}) for tenant ${entityId}`);
                 const { sendMetaMessage } = await import('@/lib/sendProviders');
                 responseData = await sendMetaMessage(toNumber, message, {
+                    type,
+                    url,
                     userId,
                     entityId,
                     provider: targetPlatform as 'messenger' | 'instagram'
@@ -116,16 +118,31 @@ export async function POST(req: Request) {
 
                 const newMessage = {
                     sender: 'agent',
-                    text: message,
+                    text: message || '',
                     timestamp: new Date(),
                     whatsappMessageId: messageId || null,
                     platform: targetPlatform,
+                    ...(url ? {
+                        fileUrl: url,
+                        fileType: type === 'image' ? 'image/*' :
+                            type === 'video' ? 'video/*' :
+                            type === 'audio' ? 'audio/*' :
+                            'application/octet-stream',
+                        fileName: filename || null,
+                        type: 'media',
+                        metadata: {
+                            url,
+                            filename: filename || null
+                        }
+                    } : {}),
                     status: apiError ? 'failed' : 'sent',
                     error: apiError ? (typeof apiError === 'object' ? JSON.stringify(apiError) : apiError) : null
                 };
 
                 await cardRef.update({
-                    lastMessage: message.length > 40 ? message.substring(0, 37) + '...' : message,
+                    lastMessage: (message || filename || 'Adjunto').length > 40
+                        ? (message || filename || 'Adjunto').substring(0, 37) + '...'
+                        : (message || filename || 'Adjunto'),
                     updatedAt: new Date(),
                     ...(targetPlatform === 'whatsapp' ? { contactNumberClean: cleanTo.replace(/\D/g, '') } : {}),
                     messages: admin.firestore.FieldValue.arrayUnion(newMessage),

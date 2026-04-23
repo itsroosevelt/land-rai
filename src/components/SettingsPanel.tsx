@@ -1,7 +1,7 @@
 // src/components/SettingsPanel.tsx
 'use client';
 import React from 'react';
-import { Node } from 'reactflow';
+import { Edge, Node } from 'reactflow';
 import { Button } from './ui/button';
 import { Trash2, ChevronRight, ChevronLeft, Bot } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -34,6 +34,7 @@ import { HumanHandoffSettings } from './settings/nodes/HumanHandoffSettings';
 interface SettingsPanelProps {
   selectedNode: Node | null;
   allNodes: Node[];
+  allEdges: Edge[];
   updateNodeConfig: (nodeId: string, data: object) => void;
   deleteNode: (nodeId: string) => void;
   isOpen: boolean;
@@ -43,10 +44,11 @@ interface SettingsPanelProps {
 interface NodeSettingsProps {
   node: Node;
   allNodes: Node[];
+  allEdges: Edge[];
   updateNodeConfig: (nodeId: string, data: object) => void;
 }
 
-const SettingsPanel = ({ selectedNode, allNodes, updateNodeConfig, deleteNode, isOpen, onToggle }: SettingsPanelProps) => {
+const SettingsPanel = ({ selectedNode, allNodes, allEdges, updateNodeConfig, deleteNode, isOpen, onToggle }: SettingsPanelProps) => {
   if (!isOpen) {
     return (
       <div className="absolute top-1/2 right-0 -translate-y-1/2 z-10">
@@ -106,7 +108,7 @@ const SettingsPanel = ({ selectedNode, allNodes, updateNodeConfig, deleteNode, i
             )}
             
             {NodeSpecificSettings ? (
-              <NodeSpecificSettings node={selectedNode} allNodes={allNodes} updateNodeConfig={updateNodeConfig} />
+              <NodeSpecificSettings node={selectedNode} allNodes={allNodes} allEdges={allEdges} updateNodeConfig={updateNodeConfig} />
             ) : (
               <p className="text-neutral-600 text-center py-6 text-[10px] font-bold uppercase tracking-wider">No additional settings.</p>
             )}

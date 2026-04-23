@@ -336,6 +336,7 @@ export default function ContactsPage() {
     // Helper to process contacts: deduplicate and ensure clientId
     const processContacts = (data: any[]) => {
         const seenIds = new Set();
+        const seenMetaKeys = new Set();
 
         const filtered = data.filter(contact => {
             if (!contact.id || seenIds.has(contact.id)) return false;
@@ -348,6 +349,16 @@ export default function ContactsPage() {
             if (!hasPhone && !hasName) {
                 // If the contact has no phone and no real name, don't show it (prevents empty ghost records)
                 return false;
+            }
+
+            const normalizedSource = String(contact.source || '').trim().toLowerCase();
+            const metaSenderId = String(contact.metaSenderId || '').trim();
+            const isMetaContact = metaSenderId && (normalizedSource.includes('instagram') || normalizedSource.includes('messenger'));
+
+            if (isMetaContact) {
+                const metaKey = `${normalizedSource}:${metaSenderId}`;
+                if (seenMetaKeys.has(metaKey)) return false;
+                seenMetaKeys.add(metaKey);
             }
 
             seenIds.add(contact.id);

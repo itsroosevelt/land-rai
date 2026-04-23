@@ -37,6 +37,34 @@ export const useMessageSender = ({
 
     const { uploading, progress, uploadFile } = useFileUpload();
 
+    const resolveRecipientId = () => {
+        const platform = activePlatform.toLowerCase();
+        const isMetaPlatform = platform === 'messenger' || platform === 'facebook' || platform === 'instagram';
+        const cardData = liveCardData || card;
+
+        if (isMetaPlatform) {
+            const platformKey = (platform === 'messenger' || platform === 'facebook') ? 'messenger' : 'instagram';
+            const recipientId = cardData?.platform_ids?.[platformKey] || cardData?.metaSenderId || '';
+
+            if (!recipientId) {
+                toast.error('No se puede enviar: no se encontró el ID del contacto de Messenger/Instagram.');
+                return null;
+            }
+
+            return recipientId;
+        }
+
+        const rawPhone = liveCardData?.contactNumber || card?.contactNumber;
+        const recipientId = normalizePhoneNumber(rawPhone || '');
+
+        if (!recipientId) {
+            toast.error('No se puede enviar: falta el número de teléfono del contacto.');
+            return null;
+        }
+
+        return recipientId;
+    };
+
     // 24h Window Check (Improved Resilience)
     const isWithin24Hours = useMemo(() => {
         const messages = liveCardData?.messages || card?.messages || [];
@@ -74,31 +102,15 @@ export const useMessageSender = ({
     }, [liveCardData?.messages]);
 
     const handleSendMessage = async () => {
-        if (!newMessage.trim() || isSending) return;
+        if (isSending || (!newMessage.trim() && !selectedFile)) return;
 
-        // Platform-aware recipient ID resolution
-        const platform = activePlatform.toLowerCase();
-        const isMetaPlatform = platform === 'messenger' || platform === 'facebook' || platform === 'instagram';
-        let recipientId: string;
-
-        if (isMetaPlatform) {
-            // For Messenger/Instagram use PSID/IGSID — NOT phone number
-            const platformKey = (platform === 'messenger' || platform === 'facebook') ? 'messenger' : 'instagram';
-            const cardData = liveCardData || card;
-            recipientId = cardData?.platform_ids?.[platformKey] || cardData?.metaSenderId || '';
-            if (!recipientId) {
-                toast.error('No se puede enviar: no se encontró el ID del contacto de Messenger/Instagram.');
-                return;
-            }
-        } else {
-            // WhatsApp and other phone-based platforms — existing logic unchanged
-            const rawPhone = liveCardData?.contactNumber || card?.contactNumber;
-            recipientId = normalizePhoneNumber(rawPhone || '');
-            if (!recipientId) {
-                toast.error('No se puede enviar: falta el número de teléfono del contacto.');
-                return;
-            }
+        if (selectedFile) {
+            await handleDisplayFileSend();
+            return;
         }
+
+        const recipientId = resolveRecipientId();
+        if (!recipientId) return;
 
         setIsSending(true);
 
@@ -298,20 +310,36 @@ export const useMessageSender = ({
     };
 
     const handleDisplayFileSend = async () => {
-        if (!selectedFile || !liveCardData?.contactNumber) return;
+        if (!selectedFile) return;
         if (!currentCardId || currentCardId.startsWith('temp-')) {
             toast.error('Envía un mensaje de texto primero para iniciar la conversación.');
             return;
         }
-        await uploadFile(selectedFile, { cardId: currentCardId, groupId: currentGroupId!, toNumber: liveCardData.contactNumber });
-        if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
-        setSelectedFile(null);
-        setFilePreviewUrl(null);
+
+        const recipientId = resolveRecipientId();
+        if (!recipientId || !currentGroupId) return;
+
+        try {
+            await uploadFile(selectedFile, {
+                cardId: currentCardId,
+                groupId: currentGroupId,
+                recipientId,
+                platform: activePlatform,
+                caption: newMessage
+            });
+            if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
+            setSelectedFile(null);
+            setFilePreviewUrl(null);
+            setNewMessage('');
+        } catch (error) {
+            console.error('[useMessageSender] Error sending file:', error);
+        }
     };
 
     const onDrop = (acceptedFiles: File[]) => {
         const file = acceptedFiles[0];
         if (file) {
+            if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
             setSelectedFile(file);
             setFilePreviewUrl(URL.createObjectURL(file));
         }
@@ -329,6 +357,7 @@ export const useMessageSender = ({
     });
 
     const handleCancelPreview = () => {
+        if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
         setSelectedFile(null);
         setFilePreviewUrl(null);
     };
@@ -368,4 +397,3 @@ export const useMessageSender = ({
         isDragActive
     };
 };
-

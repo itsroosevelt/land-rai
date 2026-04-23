@@ -85,39 +85,39 @@ export async function GET(req: Request) {
         // Return a success page — handles both popup and main-window redirect flows
         return new NextResponse(`
             <html>
-                <body>
+                <head><meta charset="utf-8"></head>
+                <body style="font-family:sans-serif;text-align:center;padding:50px;background:#111;color:#fff;">
                     <script>
                         if (window.opener) {
                             window.opener.postMessage('gmail-auth-success', '*');
                             window.close();
                         } else {
-                            // Came via main-window redirect (popup was blocked)
                             window.location.href = '/nucleo/${entityId}/cto/integrations';
                         }
                     </script>
-                    <div style="font-family: sans-serif; text-align: center; padding: 50px;">
-                        <h2 style="color: #4CAF50;">¡Conexión Exitosa!</h2>
-                        <p>Redirigiendo...</p>
-                    </div>
+                    <h2 style="color:#4CAF50;">Conexion Exitosa</h2>
+                    <p>Redirigiendo...</p>
                 </body>
             </html>
-        `, { headers: { 'Content-Type': 'text/html' } });
+        `, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 
-    } catch (error) {
-        console.error('Gmail Callback Error:', error);
+    } catch (error: any) {
+        const errMsg = error?.message || error?.toString() || 'Unknown error';
+        const errDetail = error?.response?.data ? JSON.stringify(error.response.data) : '';
+        console.error('Gmail Callback Error:', errMsg, errDetail);
         return new NextResponse(`
             <html>
-                <body>
+                <head><meta charset="utf-8"></head>
+                <body style="font-family:sans-serif;text-align:center;padding:50px;background:#111;color:#fff;">
                     <script>
                         if (window.opener) window.opener.postMessage('gmail-auth-error', '*');
                     </script>
-                    <div style="font-family: sans-serif; text-align: center; padding: 50px;">
-                        <h2 style="color: #EA4335;">Error de Conexión</h2>
-                        <p>No se pudo completar la conexión con Gmail.</p>
-                        <p style="color:#888;font-size:12px;">Puedes cerrar esta ventana e intentarlo de nuevo.</p>
-                    </div>
+                    <h2 style="color:#EA4335;">Error de Conexion con Gmail</h2>
+                    <p>No se pudo completar la autenticacion.</p>
+                    <pre style="background:#222;padding:16px;border-radius:8px;text-align:left;font-size:12px;color:#f87171;white-space:pre-wrap;word-break:break-all;">${errMsg}${errDetail ? '\n' + errDetail : ''}</pre>
+                    <p style="color:#888;font-size:12px;">Puedes cerrar esta ventana.</p>
                 </body>
             </html>
-        `, { status: 200, headers: { 'Content-Type': 'text/html' } });
+        `, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     }
 }

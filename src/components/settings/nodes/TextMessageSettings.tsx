@@ -2,7 +2,7 @@
 // src/components/settings/nodes/TextMessageSettings.tsx
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
-import { Node } from 'reactflow';
+import { Edge, Node } from 'reactflow';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,25 +21,16 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import EmojiPicker, { EmojiClickData, Theme } from 'emoji-picker-react';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { VariablePicker } from '../SharedComponents';
 
 interface NodeSettingsProps {
     node: Node;
     allNodes: Node[];
+    allEdges: Edge[];
     updateNodeConfig: (nodeId: string, data: object) => void;
 }
 
-const COMMON_VARIABLES = [
-    { label: 'Nombre Contacto', value: '{{name}}' },
-    { label: 'Teléfono', value: '{{phone}}' },
-];
-
-export const TextMessageSettings = ({ node, allNodes, updateNodeConfig }: NodeSettingsProps) => {
+export const TextMessageSettings = ({ node, allNodes, allEdges, updateNodeConfig }: NodeSettingsProps) => {
     const [content, setContent] = useState(node.data.content || '');
     const [previewUrl, setPreviewUrl] = useState(node.data.previewUrl !== false);
     // Nuevo estado: por defecto true (humano), false = máquina rápida
@@ -105,42 +96,7 @@ export const TextMessageSettings = ({ node, allNodes, updateNodeConfig }: NodeSe
                                 <EmojiPicker onEmojiClick={(e) => insertText(e.emoji)} theme={Theme.DARK} lazyLoadEmojis={true} height={300} width={280} />
                             </PopoverContent>
                         </Popover>
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm" className="h-6 px-1.5 text-[10px] text-purple-500 hover:text-purple-400 gap-1 font-bold uppercase tracking-wider"><span className="font-mono text-[11px]">{`{}`}</span> Vars</Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent className="bg-neutral-900 border-neutral-800 text-white max-h-[300px] overflow-y-auto">
-                                <div className="px-2 py-1.5 border-b border-neutral-800">
-                                    <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">Globales</span>
-                                </div>
-                                {COMMON_VARIABLES.map((v) => (
-                                    <DropdownMenuItem key={v.value} onClick={() => insertText(v.value)} className="hover:bg-neutral-800 cursor-pointer flex justify-between gap-4 py-1.5">
-                                        <span className="text-[10px] font-bold uppercase">{v.label}</span><span className="font-mono text-neutral-500 text-[9px]">{v.value}</span>
-                                    </DropdownMenuItem>
-                                ))}
-                                
-                                {allNodes.filter(n => (n.type === 'captureInputNode' || n.type === 'setVariableNode') && n.data?.variableName).length > 0 && (
-                                    <>
-                                        <div className="px-2 py-1.5 border-b border-neutral-800 mt-1">
-                                            <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">Capturadas en el flujo</span>
-                                        </div>
-                                        {allNodes
-                                            .filter(n => (n.type === 'captureInputNode' || n.type === 'setVariableNode') && n.data?.variableName)
-                                            .map((n) => {
-                                                const varName = n.data.variableName;
-                                                const label = n.data.label || (n.type === 'captureInputNode' ? 'Entrada' : 'Variable');
-                                                return (
-                                                    <DropdownMenuItem key={n.id} onClick={() => insertText(`{{${varName}}}`)} className="hover:bg-neutral-800 cursor-pointer flex justify-between gap-4 py-1.5">
-                                                        <span className="text-[10px] font-bold uppercase">{label}</span>
-                                                        <span className="font-mono text-purple-500 text-[9px]">{`{{${varName}}}`}</span>
-                                                    </DropdownMenuItem>
-                                                );
-                                            })
-                                        }
-                                    </>
-                                )}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                        <VariablePicker node={node} allNodes={allNodes} allEdges={allEdges} onInsert={(value) => insertText(value)} />
                     </div>
                 </div>
 

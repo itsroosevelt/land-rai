@@ -299,11 +299,12 @@ const ChatbotCanvas = forwardRef<ChatbotCanvasRef, ChatbotCanvasProps>(
                                 </h3>
                                 {group.nodes.map(nodeInfo => {
                                     const isMessengerIncompatible = nodeInfo.type === 'listMessageNode' && targetPlatforms?.includes('messenger');
+                                    const isInstagramIncompatible = nodeInfo.type === 'quickReplyNode' && targetPlatforms?.includes('instagram');
                                     return (
                                         <SidebarNode 
                                             key={nodeInfo.type} 
                                             {...nodeInfo} 
-                                            disabled={nodeInfo.disabled || isMessengerIncompatible}
+                                            disabled={nodeInfo.disabled || isMessengerIncompatible || isInstagramIncompatible}
                                             onDragStart={(e, type) => e.dataTransfer.setData('application/reactflow', type)} 
                                             isCollapsed={!isLeftSidebarOpen} 
                                         />
@@ -342,6 +343,7 @@ const ChatbotCanvas = forwardRef<ChatbotCanvasRef, ChatbotCanvasProps>(
                 <SettingsPanel
                     selectedNode={selectedNode}
                     allNodes={nodes}
+                    allEdges={edges}
                     updateNodeConfig={updateNodeConfig}
                     deleteNode={deleteNode}
                     isOpen={isRightSidebarOpen}
@@ -362,5 +364,3 @@ const ChatbotCanvasWithProvider = forwardRef<ChatbotCanvasRef, ChatbotCanvasProp
 ChatbotCanvasWithProvider.displayName = 'ChatbotCanvasWithProvider';
 
 export default ChatbotCanvasWithProvider;
-
-

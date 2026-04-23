@@ -1,7 +1,7 @@
 // src/components/settings/nodes/QuickReplySettings.tsx
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Node } from 'reactflow';
+import { Edge, Node } from 'reactflow';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,7 @@ import {
     Trash2, Plus, GripVertical, Image as ImageIcon,
     Type, FileText, Film, AlertCircle, Settings2, ArrowDown, ArrowUp
 } from 'lucide-react';
-import { SettingsSection, Field, FileUploader } from '../SharedComponents';
+import { SettingsSection, Field, FileUploader, VariablePicker } from '../SharedComponents';
 import { cn } from '@/lib/utils';
 import { produce } from 'immer';
 
@@ -26,6 +26,7 @@ interface ButtonItem {
 interface NodeSettingsProps {
     node: Node;
     allNodes: Node[];
+    allEdges: Edge[];
     updateNodeConfig: (nodeId: string, data: object) => void;
 }
 
@@ -35,7 +36,7 @@ const MAX_HEADER_CHARS = 60;
 const MAX_BODY_CHARS = 1024;
 const MAX_FOOTER_CHARS = 60;
 
-export const QuickReplySettings = ({ node, allNodes, updateNodeConfig }: NodeSettingsProps) => {
+export const QuickReplySettings = ({ node, allNodes, allEdges, updateNodeConfig }: NodeSettingsProps) => {
     // Estado inicial complejo para soportar todas las features
     const [config, setConfig] = useState({
         headerType: node.data.headerType || 'none', // none, text, image, video, document
@@ -160,12 +161,22 @@ export const QuickReplySettings = ({ node, allNodes, updateNodeConfig }: NodeSet
             {/* SECCIÓN 2: CUERPO (BODY) */}
             <SettingsSection title="2. Mensaje Principal">
                 <div className="space-y-1">
-                    <Textarea
-                        placeholder="Escribe aquí el contenido principal de tu mensaje..."
-                        value={config.bodyText || ''}
-                        onChange={(e) => update({ bodyText: e.target.value })}
-                        className="min-h-[120px] bg-neutral-900 border-neutral-700 resize-none font-medium"
-                    />
+                    <div className="relative">
+                        <Textarea
+                            placeholder="Escribe aquí el contenido principal de tu mensaje..."
+                            value={config.bodyText || ''}
+                            onChange={(e) => update({ bodyText: e.target.value })}
+                            className="min-h-[120px] bg-neutral-900 border-neutral-700 resize-none font-medium pr-10"
+                        />
+                        <div className="absolute top-2 right-2">
+                            <VariablePicker
+                                node={node}
+                                allNodes={allNodes}
+                                allEdges={allEdges}
+                                onInsert={(value) => update({ bodyText: `${config.bodyText || ''}${value}` })}
+                            />
+                        </div>
+                    </div>
                     <div className="flex justify-between items-center px-1">
                         <span className="text-[10px] text-neutral-500">Soporta variables y formato.</span>
                         <CharCounter current={config.bodyText.length} max={MAX_BODY_CHARS} />

@@ -125,6 +125,17 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     const from = msg.from;
     const messageId = msg.messageId;
 
+    const appendAgentMessage = async (message: any) => {
+        await cardRef.update({
+            messages: admin.firestore.FieldValue.arrayUnion({
+                sender: 'agent',
+                platform,
+                timestamp: new Date(),
+                ...message
+            })
+        });
+    };
+
     // --- A. HELPERS (Essentials) ---
     const dispatchMessage = async (content: string, options: any = {}) => {
         const opts = { userId, entityId, ...options };
@@ -195,11 +206,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         if (isReset) {
             const resetText = "🔄 Reinicio completado. Por favor, envíanos un mensaje para empezar de nuevo.";
             await dispatchMessage(resetText);
-            await cardRef.update({
-                messages: admin.firestore.FieldValue.arrayUnion({
-                    sender: 'agent', text: resetText, platform, timestamp: new Date(), messageId: `bot_sys_${Date.now()}`
-                })
-            });
+            await appendAgentMessage({ text: resetText, type: 'text', messageId: `bot_sys_${Date.now()}` });
             
             // Detenemos la ejecución aquí para que el bot ESPERE un nuevo mensaje
             // antes de iniciar el flujo principal nuevamente.
@@ -325,6 +332,11 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                     console.log(`[ChatbotEngine] ⚠️ Validation failed for ${varName}: "${extracted}"`);
                     const errorContent = replaceVars(errorMessage);
                     await dispatchMessage(errorContent);
+                    await appendAgentMessage({
+                        text: errorContent,
+                        type: 'text',
+                        messageId: `bot_validation_${Date.now()}`
+                    });
                     return;
                 }
 
@@ -404,10 +416,10 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             const content = replaceVars(node.data?.content || node.data?.text || 'Hola');
             await dispatchMessage(content);
             if (content.trim()) {
-                await cardRef.update({
-                    messages: admin.firestore.FieldValue.arrayUnion({
-                        sender: 'agent', text: content, platform, timestamp: new Date(), messageId: `bot_${Date.now()}`
-                    })
+                await appendAgentMessage({
+                    text: content,
+                    type: 'text',
+                    messageId: `bot_${Date.now()}`
                 });
             }
             const edge = flow.edges.find((e: any) => e.source === node.id);
@@ -441,16 +453,17 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 });
                 console.log(`[ChatbotEngine] 📦 Dispatch Result:`, JSON.stringify(sendResult));
 
-                await cardRef.update({
-                    messages: admin.firestore.FieldValue.arrayUnion({
-                        sender: 'agent', 
-                        text: caption || 'Medios', 
-                        platform, 
-                        timestamp: new Date(), 
-                        messageId: `bot_media_${Date.now()}`,
-                        type: 'image',
-                        url: url
-                    })
+                await appendAgentMessage({
+                    text: caption || '',
+                    messageId: `bot_media_${Date.now()}`,
+                    type: 'media',
+                    fileUrl: url,
+                    fileType: type === 'image' ? 'image/*' : type === 'video' ? 'video/*' : type === 'audio' ? 'audio/*' : 'application/octet-stream',
+                    fileName: node.data?.filename || null,
+                    metadata: {
+                        url,
+                        filename: node.data?.filename || null
+                    }
                 });
 
                 // Crucial delay to allow media to be ingested before next node
@@ -459,10 +472,10 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 // FALLBACK: If URL is missing or invalid but we have text, send text so the flow doesn't look dead
                 console.warn(`[ChatbotEngine] ⚠️ Media URL missing or invalid "${url}". Sending caption as text fallback.`);
                 await dispatchMessage(caption);
-                await cardRef.update({
-                    messages: admin.firestore.FieldValue.arrayUnion({
-                        sender: 'agent', text: caption, platform, timestamp: new Date(), messageId: `bot_fallback_${Date.now()}`
-                    })
+                await appendAgentMessage({
+                    text: caption,
+                    type: 'text',
+                    messageId: `bot_fallback_${Date.now()}`
                 });
             }
 
@@ -490,13 +503,16 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 'botState.waitingForInput': true,
                 'botState.currentNodeId': node.id,
                 messages: admin.firestore.FieldValue.arrayUnion({
-                    sender: 'agent', 
-                    text: body, 
-                    platform, 
-                    timestamp: new Date(), 
+                    sender: 'agent',
+                    text: body,
+                    platform,
+                    timestamp: new Date(),
                     messageId: `bot_list_${Date.now()}`,
                     type: 'list',
-                    sections: sections
+                    metadata: {
+                        buttonText: node.data?.buttonText || 'Ver opciones',
+                        sections
+                    }
                 })
             });
             return;
@@ -527,8 +543,15 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                     platform, 
                     timestamp: new Date(), 
                     messageId: `bot_wait_${Date.now()}`,
-                    type: node.type === 'quickReplyNode' ? 'quick_reply' : 'text',
-                    buttons: node.type === 'quickReplyNode' ? buttons : []
+                    type: node.type === 'quickReplyNode' ? 'buttons' : 'text',
+                    ...(node.type === 'quickReplyNode' ? {
+                        metadata: {
+                            buttons: buttons.map((button: any) => ({
+                                text: button.reply?.title || '',
+                                id: button.reply?.id || ''
+                            }))
+                        }
+                    } : {})
                 });
             }
             
@@ -571,4 +594,3 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         if (!edge) break; // End of flow if no way forward
     }
 }
-

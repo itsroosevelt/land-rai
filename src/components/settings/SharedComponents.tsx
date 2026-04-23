@@ -1,15 +1,22 @@
 // src/components/settings/SharedComponents.tsx
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { Edge, Node } from 'reactflow';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Progress } from "@/components/ui/progress";
 import { cn } from '@/lib/utils';
-import { UploadCloud, XCircle } from 'lucide-react';
+import { UploadCloud, Variable, XCircle } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
 import { toast } from 'sonner';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export const SettingsSection = ({ title, children }: { title: string, children: React.ReactNode }) => (
     <div className="flex flex-col space-y-4 py-3 border-b border-neutral-800/50 last:border-0 px-1">
@@ -119,6 +126,112 @@ export const FileUploader = ({ onUploadSuccess, initialUrl = null, initialFilena
                 </div>
             )}
         </div>
+    );
+};
+
+const COMMON_VARIABLES = [
+    { label: 'Nombre Contacto', value: '{{name}}' },
+    { label: 'Teléfono', value: '{{phone}}' },
+];
+
+export const getSequentialVariableNodes = (node: Node, allNodes: Node[], allEdges: Edge[]) => {
+    const incomingMap = new Map<string, string[]>();
+
+    allEdges.forEach((edge) => {
+        if (!incomingMap.has(edge.target)) incomingMap.set(edge.target, []);
+        incomingMap.get(edge.target)!.push(edge.source);
+    });
+
+    const visited = new Set<string>();
+    const orderedIds: string[] = [];
+
+    const visit = (nodeId: string) => {
+        const parentIds = incomingMap.get(nodeId) || [];
+        parentIds.forEach((parentId) => {
+            if (visited.has(parentId)) return;
+            visited.add(parentId);
+            visit(parentId);
+            orderedIds.push(parentId);
+        });
+    };
+
+    visit(node.id);
+
+    const seenVariables = new Set<string>();
+
+    return orderedIds
+        .map((nodeId) => allNodes.find((candidate) => candidate.id === nodeId))
+        .filter((candidate): candidate is Node => !!candidate)
+        .filter((candidate) => (candidate.type === 'captureInputNode' || candidate.type === 'setVariableNode') && candidate.data?.variableName)
+        .filter((candidate) => {
+            const variableName = String(candidate.data?.variableName || '');
+            if (!variableName || seenVariables.has(variableName)) return false;
+            seenVariables.add(variableName);
+            return true;
+        });
+};
+
+interface VariablePickerProps {
+    node: Node;
+    allNodes: Node[];
+    allEdges: Edge[];
+    onInsert: (value: string) => void;
+    className?: string;
+}
+
+export const VariablePicker = ({ node, allNodes, allEdges, onInsert, className }: VariablePickerProps) => {
+    const capturedVariables = getSequentialVariableNodes(node, allNodes, allEdges);
+
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn("h-7 w-7 text-purple-500 hover:text-purple-400 hover:bg-purple-500/10", className)}
+                    title="Insertar variables"
+                >
+                    <Variable size={14} />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="bg-neutral-900 border-neutral-800 text-white max-h-[300px] overflow-y-auto w-72">
+                <div className="px-3 py-2 border-b border-neutral-800">
+                    <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">Globales</span>
+                </div>
+                {COMMON_VARIABLES.map((variable) => (
+                    <DropdownMenuItem
+                        key={variable.value}
+                        onClick={() => onInsert(variable.value)}
+                        className="hover:bg-neutral-800 cursor-pointer flex justify-between gap-4 py-2"
+                    >
+                        <span className="text-[10px] font-bold uppercase">{variable.label}</span>
+                        <span className="font-mono text-neutral-500 text-[9px]">{variable.value}</span>
+                    </DropdownMenuItem>
+                ))}
+
+                {capturedVariables.length > 0 && (
+                    <>
+                        <div className="px-3 py-2 border-y border-neutral-800 mt-1">
+                            <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">Capturadas en secuencia</span>
+                        </div>
+                        {capturedVariables.map((capturedNode) => {
+                            const variableName = capturedNode.data?.variableName;
+                            const label = capturedNode.data?.label || (capturedNode.type === 'captureInputNode' ? 'Entrada' : 'Variable');
+                            return (
+                                <DropdownMenuItem
+                                    key={capturedNode.id}
+                                    onClick={() => onInsert(`{{${variableName}}}`)}
+                                    className="hover:bg-neutral-800 cursor-pointer flex justify-between gap-4 py-2"
+                                >
+                                    <span className="text-[10px] font-bold uppercase">{label}</span>
+                                    <span className="font-mono text-purple-500 text-[9px]">{`{{${variableName}}}`}</span>
+                                </DropdownMenuItem>
+                            );
+                        })}
+                    </>
+                )}
+            </DropdownMenuContent>
+        </DropdownMenu>
     );
 };
 

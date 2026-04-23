@@ -1,17 +1,18 @@
 // src/components/settings/nodes/ListMessageSettings.tsx
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
-import { Node } from 'reactflow';
+import { Edge, Node } from 'reactflow';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Trash2, Plus, GripVertical, List, AlertCircle } from 'lucide-react';
 import { produce } from 'immer';
-import { SettingsSection, Field } from '../SharedComponents';
+import { SettingsSection, Field, VariablePicker } from '../SharedComponents';
 
 interface NodeSettingsProps {
     node: Node;
     allNodes: Node[];
+    allEdges: Edge[];
     updateNodeConfig: (nodeId: string, data: object) => void;
 }
 
@@ -57,7 +58,7 @@ const normalizeNodeData = (data: any) => {
     return safeData;
 };
 
-export const ListMessageSettings = ({ node, allNodes, updateNodeConfig }: NodeSettingsProps) => {
+export const ListMessageSettings = ({ node, allNodes, allEdges, updateNodeConfig }: NodeSettingsProps) => {
     // Inicializamos con datos normalizados para evitar crashes
     const [config, setConfig] = useState(() => normalizeNodeData(node.data));
 
@@ -139,12 +140,22 @@ export const ListMessageSettings = ({ node, allNodes, updateNodeConfig }: NodeSe
                     />
                 </Field>
                 <Field label="Cuerpo del Mensaje (Body)" htmlFor="list-body">
-                    <Textarea
-                        value={config.body || ''}
-                        onChange={(e) => handleUpdate({ ...config, body: e.target.value })}
-                        placeholder="Selecciona una opción de la lista..."
-                        className="min-h-[80px] bg-neutral-950 border-neutral-800"
-                    />
+                    <div className="relative">
+                        <Textarea
+                            value={config.body || ''}
+                            onChange={(e) => handleUpdate({ ...config, body: e.target.value })}
+                            placeholder="Selecciona una opción de la lista..."
+                            className="min-h-[80px] bg-neutral-950 border-neutral-800 pr-10"
+                        />
+                        <div className="absolute top-2 right-2">
+                            <VariablePicker
+                                node={node}
+                                allNodes={allNodes}
+                                allEdges={allEdges}
+                                onInsert={(value) => handleUpdate({ ...config, body: `${config.body || ''}${value}` })}
+                            />
+                        </div>
+                    </div>
                 </Field>
                 <div className="grid grid-cols-2 gap-2">
                     <Field label="Encabezado (Opcional)" htmlFor="list-header">

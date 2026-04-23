@@ -9,6 +9,12 @@ function debugLog(msg: string) {
     console.log(`[Meta Webhook Debug] ${msg}`);
 }
 
+function isGenericProfileName(value: any) {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return true;
+    return normalized.includes('usuario meta') || normalized.includes('usuario') || normalized.includes('meta') || normalized === 'instagram user';
+}
+
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
@@ -67,13 +73,20 @@ export async function POST(req: Request) {
              return NextResponse.json({ success: true, ignored: 'no_sender' });
         }
 
+        const rawAttachments = messaging?.message?.attachments || [];
+        const firstAttachment = rawAttachments[0];
+        const quickReplyPayload = messaging?.message?.quick_reply?.payload || '';
+        const visibleMessageText = messaging?.message?.text || messaging?.postback?.title || changes?.value?.text || changes?.value?.message || '';
+        const botInputText = quickReplyPayload || messaging?.postback?.payload || visibleMessageText;
         let text = '';
         if (messaging) {
             if (messaging.message?.is_echo) return NextResponse.json({ success: true, ignored: 'echo' });
-            text = messaging.message?.quick_reply?.payload || messaging.message?.text || messaging.postback?.payload || messaging.postback?.title || '';
-            if (!text && messaging.message?.attachments) text = '[Multimedia/Adjunto]';
+            text = visibleMessageText || quickReplyPayload || messaging.postback?.payload || '';
+            if (!text && rawAttachments.length > 0) {
+                text = firstAttachment?.type === 'image' ? '[Imagen]' : '[Multimedia/Adjunto]';
+            }
         } else if (changes) {
-            text = changes.value?.text || changes.value?.message || '[Interacción]';
+            text = visibleMessageText || '[Interacción]';
         }
 
         if (!text) return NextResponse.json({ success: true, ignored: 'empty_text' });
@@ -149,11 +162,26 @@ export async function POST(req: Request) {
         // 3. PRIMARY SEARCH: Try to find if user exists by meta sender ID in Contacts
         const contactSnap = await db.collection(`${entityPath}/contacts`)
             .where('metaSenderId', '==', senderId)
-            .limit(1)
             .get();
 
         if (!contactSnap.empty) {
-            const contactDoc = contactSnap.docs[0];
+            const rankedContacts = contactSnap.docs.sort((a, b) => {
+                const aData = a.data();
+                const bData = b.data();
+                const aScore =
+                    ((aData.source || '').toLowerCase().includes(provider) ? 10 : 0) +
+                    (aData.name && !String(aData.name).toLowerCase().includes('usuario meta') ? 3 : 0) +
+                    (aData.kanbanCardId ? 2 : 0);
+                const bScore =
+                    ((bData.source || '').toLowerCase().includes(provider) ? 10 : 0) +
+                    (bData.name && !String(bData.name).toLowerCase().includes('usuario meta') ? 3 : 0) +
+                    (bData.kanbanCardId ? 2 : 0);
+                if (bScore !== aScore) return bScore - aScore;
+                const aTime = aData.updatedAt?.toMillis?.() || aData.updatedAt?.seconds * 1000 || 0;
+                const bTime = bData.updatedAt?.toMillis?.() || bData.updatedAt?.seconds * 1000 || 0;
+                return bTime - aTime;
+            });
+            const contactDoc = rankedContacts[0];
             const contactData = contactDoc.data();
             existingContactId = contactDoc.id;
             existingContactName = contactData.name || null;
@@ -172,10 +200,7 @@ export async function POST(req: Request) {
         // 4. CAPTURE REAL PROFILE NAME FROM META (Critical for identity & fusion)
         // Priority: payload name > existing stored name > Graph API call > fallback
         let resolvedName = senderNameFromPayload || existingContactName;
-        const isGenericName = !resolvedName ||
-            resolvedName.toLowerCase().includes('usuario') ||
-            resolvedName.toLowerCase().includes('meta') ||
-            resolvedName === senderId;
+        const isGenericName = isGenericProfileName(resolvedName) || resolvedName === senderId;
 
         if (isGenericName) {
             try {
@@ -196,9 +221,7 @@ export async function POST(req: Request) {
                         debugLog(`[Profile Fetch] Meta API Error: ${JSON.stringify(profileData.error)}`);
                     } else if (profileData) {
                         if (provider === 'instagram') {
-                            resolvedName = profileData.username
-                                ? `@${profileData.username}`
-                                : (profileData.name || resolvedName);
+                            resolvedName = profileData.username || profileData.name || resolvedName;
                         } else {
                             // Prefer full 'name' field; fallback to first+last
                             const fullName = profileData.name ||
@@ -268,6 +291,55 @@ export async function POST(req: Request) {
             }
         }
 
+        if (targetCardDoc && isGenericProfileName(resolvedName)) {
+            const cardData = targetCardDoc.data();
+            if (!isGenericProfileName(cardData?.contactName)) {
+                resolvedName = cardData.contactName;
+            }
+        }
+
+        if (!targetCardDoc && existingContactId) {
+            debugLog(`[POST] No card found yet. Searching collectionGroup for contactId/crmId == ${existingContactId}...`);
+            const [byContactIdSnap, byCrmIdSnap] = await Promise.all([
+                db.collectionGroup('cards').where('contactId', '==', existingContactId).get(),
+                db.collectionGroup('cards').where('crmId', '==', existingContactId).get()
+            ]);
+
+            const tenantCards = [...byContactIdSnap.docs, ...byCrmIdSnap.docs]
+                .filter((doc, idx, arr) => arr.findIndex(d => d.ref.path === doc.ref.path) === idx)
+                .filter(d => d.ref.path.startsWith(entityPath + '/'))
+                .sort((a, b) => {
+                    const tA = (a.data().updatedAt?.toDate?.() || new Date(0)).getTime();
+                    const tB = (b.data().updatedAt?.toDate?.() || new Date(0)).getTime();
+                    return tB - tA;
+                });
+
+            if (tenantCards.length > 0) {
+                targetCardDoc = tenantCards[0];
+                const pathParts = tenantCards[0].ref.path.split('/');
+                const gIdx = pathParts.indexOf('kanban-groups');
+                targetGroupId = gIdx !== -1 ? pathParts[gIdx + 1] : null;
+                debugLog(`[POST] Found existing card via contactId/crmId: ${targetCardDoc.id} in group ${targetGroupId}`);
+            }
+        }
+
+        if (targetCardDoc && !existingContactId) {
+            const cardData = targetCardDoc.data();
+            const linkedContactId = cardData?.contactId || cardData?.crmId || null;
+            if (linkedContactId) {
+                const linkedContactRef = db.collection(`${entityPath}/contacts`).doc(linkedContactId);
+                const linkedContactSnap = await linkedContactRef.get();
+                if (linkedContactSnap.exists) {
+                    const linkedContactData = linkedContactSnap.data() || {};
+                    existingContactId = linkedContactSnap.id;
+                    existingContactName = linkedContactData.name || existingContactName;
+                    if (isGenericProfileName(resolvedName) && !isGenericProfileName(existingContactName)) {
+                        resolvedName = existingContactName;
+                    }
+                }
+            }
+        }
+
         const groupsRef = db.collection(`${entityPath}/kanban-groups`);
         const groupsSnapshot = await groupsRef.get();
 
@@ -276,7 +348,23 @@ export async function POST(req: Request) {
             text: text,
             timestamp: admin.firestore.Timestamp.now(),
             messageId: messaging.message?.mid || `mid_${Date.now()}`,
-            platform: provider
+            platform: provider,
+            ...(firstAttachment ? {
+                fileUrl: firstAttachment?.payload?.url || null,
+                fileType: firstAttachment?.type === 'image' ? 'image/*' :
+                    firstAttachment?.type === 'video' ? 'video/*' :
+                    firstAttachment?.type === 'audio' ? 'audio/*' :
+                    'application/octet-stream',
+                fileName: firstAttachment?.name || null,
+                type: 'media',
+                metadata: {
+                    attachments: rawAttachments.map((attachment: any) => ({
+                        type: attachment?.type || null,
+                        url: attachment?.payload?.url || null,
+                        name: attachment?.name || null
+                    }))
+                }
+            } : {})
         };
 
         let cardId = targetCardDoc?.id;
@@ -284,7 +372,7 @@ export async function POST(req: Request) {
 
         if (targetCardDoc && targetGroupId) {
             const queueItem = {
-                text: text || '',
+                text: botInputText || text || '',
                 messageId: messaging.message?.mid || `mid_${Date.now()}`,
                 platform: provider,
                 from: senderId,
@@ -302,6 +390,8 @@ export async function POST(req: Request) {
                 status: 'open',
                 source: provider.toUpperCase(),
                 primary_channel: provider.toLowerCase(),
+                contactId: existingContactId || targetCardDoc.data()?.contactId || null,
+                crmId: existingContactId || targetCardDoc.data()?.crmId || null,
                 [`platform_ids.${provider.toLowerCase()}`]: senderId
             });
 
@@ -310,6 +400,8 @@ export async function POST(req: Request) {
                 await db.collection(`${entityPath}/contacts`).doc(existingContactId).update({
                     name: resolvedName || existingContactName,
                     metaSenderId: senderId,
+                    kanbanGroupId: targetGroupId,
+                    kanbanCardId: targetCardDoc.id,
                     source: provider.toUpperCase(),
                     updatedAt: admin.firestore.Timestamp.now()
                 });
@@ -332,7 +424,7 @@ export async function POST(req: Request) {
             const contactIdToUse = existingContactId || String(Date.now()).slice(-10);
 
             const queueItem = {
-                text: text || '',
+                text: botInputText || text || '',
                 messageId: messaging.message?.mid || `mid_${Date.now()}`,
                 platform: provider,
                 from: senderId,
@@ -341,6 +433,7 @@ export async function POST(req: Request) {
 
             await newCardRef.set({
                 crmId: contactIdToUse,
+                contactId: contactIdToUse,
                 contactName: resolvedName || 'Usuario Meta',
                 contactNumber: senderId,
                 metaSenderId: senderId,
@@ -392,7 +485,7 @@ export async function POST(req: Request) {
 
             try {
                 await processChatbotFlow({
-                    userId, entityId, groupId, cardId, platform: provider, from: senderId, text: text,
+                    userId, entityId, groupId, cardId, platform: provider, from: senderId, text: botInputText || text,
                     messageId: messaging.message?.mid || `mid_${Date.now()}`
                 });
                 console.log(`[Meta Webhook] ✅ Chatbot process completed for ${senderId}`);

@@ -247,6 +247,72 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
         setShowMoreMenu(false);
     };
 
+    const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+        const items = Array.from(event.clipboardData?.items || []);
+        const imageItem = items.find(item => item.type.startsWith('image/'));
+
+        if (!imageItem) return;
+
+        const file = imageItem.getAsFile();
+        if (!file) return;
+
+        event.preventDefault();
+
+        if (logic.filePreviewUrl) {
+            URL.revokeObjectURL(logic.filePreviewUrl);
+        }
+
+        logic.setSelectedFile(file);
+        logic.setFilePreviewUrl(URL.createObjectURL(file));
+    };
+
+    const getMessageAttachment = (msg: any) => {
+        const metadata = msg?.metadata || {};
+        const attachments = Array.isArray(metadata.attachments) ? metadata.attachments : [];
+        const firstAttachment = attachments[0] || null;
+
+        const fileUrl =
+            msg?.fileUrl ||
+            msg?.attachmentUrl ||
+            msg?.mediaUrl ||
+            msg?.url ||
+            metadata?.url ||
+            metadata?.fileUrl ||
+            firstAttachment?.url ||
+            firstAttachment?.payload?.url ||
+            null;
+
+        const rawType =
+            msg?.fileType ||
+            msg?.type ||
+            metadata?.mimeType ||
+            metadata?.fileType ||
+            firstAttachment?.mimeType ||
+            firstAttachment?.type ||
+            '';
+
+        const normalizedType =
+            rawType?.startsWith?.('image/') ? rawType :
+            rawType === 'image' ? 'image/*' :
+            rawType === 'video' ? 'video/*' :
+            rawType === 'audio' ? 'audio/*' :
+            rawType === 'file' || rawType === 'document' ? 'application/octet-stream' :
+            rawType || '';
+
+        const fileName =
+            msg?.fileName ||
+            metadata?.filename ||
+            metadata?.fileName ||
+            firstAttachment?.name ||
+            (normalizedType.startsWith('image/') ? 'Imagen' : 'Archivo');
+
+        return {
+            fileUrl,
+            fileType: normalizedType,
+            fileName
+        };
+    };
+
     return (
         <div className="flex-1 flex flex-col h-full relative">
 
@@ -340,6 +406,17 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
                         {(msgs as any[]).map((msg: any, msgIdx: number) => {
                             const prevMsg = (msgs as any[])[msgIdx - 1];
                             const EXPIRE_THRESHOLD = 48 * 60 * 60 * 1000; // 48 hours
+                            const attachment = getMessageAttachment(msg);
+                            const isAgentButtons = msg.sender === 'agent' && (msg.type === 'buttons' || msg.type === 'quick_reply');
+                            const isAgentList = msg.sender === 'agent' && msg.type === 'list';
+                            const isAgentMedia = msg.sender === 'agent' && (
+                                msg.type === 'media' ||
+                                msg.type === 'image' ||
+                                msg.type === 'video' ||
+                                msg.type === 'audio' ||
+                                msg.type === 'document'
+                            );
+                            const shouldRenderPlainText = !!msg.text && !isAgentButtons && !isAgentList;
 
                             const showGapMarker = prevMsg && msg.timestamp?.toDate && prevMsg.timestamp?.toDate &&
                                 (msg.timestamp.toDate().getTime() - prevMsg.timestamp.toDate().getTime() > EXPIRE_THRESHOLD);
@@ -368,20 +445,20 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
                                                 }`}>
 
                                                 {/* File Support */}
-                                                {msg.fileUrl && (
+                                                {attachment.fileUrl && (
                                                     <div className="mb-1.5">
-                                                        {msg.fileType?.startsWith('image/') ? (
-                                                            <img src={msg.fileUrl} alt={msg.fileName} className="max-w-full rounded max-h-40" />
+                                                        {attachment.fileType?.startsWith('image/') ? (
+                                                            <img src={attachment.fileUrl} alt={attachment.fileName} className="max-w-full rounded max-h-40" />
                                                         ) : (
-                                                            <a href={msg.fileUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 underline text-[11px] opacity-80 hover:opacity-100">
-                                                                <FileText size={12} /> {msg.fileName || 'Archivo'}
+                                                            <a href={attachment.fileUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 underline text-[11px] opacity-80 hover:opacity-100">
+                                                                <FileText size={12} /> {attachment.fileName || 'Archivo'}
                                                             </a>
                                                         )}
                                                     </div>
                                                 )}
 
                                                 {/* Specialized Rendering for Agent Interactive Messages */}
-                                                {msg.sender === 'agent' && msg.type === 'buttons' && (
+                                                {isAgentButtons && (
                                                     <div className="mb-2 space-y-2">
                                                         {msg.metadata?.header && msg.metadata.header.type !== 'none' && (
                                                             <div className="mb-2 pb-2 border-b border-white/10">
@@ -393,21 +470,21 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
                                                                 )}
                                                             </div>
                                                         )}
-                                                        <p className="text-[13px] leading-snug whitespace-pre-wrap mb-2">{msg.text}</p>
+                                                        {msg.text && <p className="text-[13px] leading-snug whitespace-pre-wrap mb-2">{msg.text}</p>}
                                                         <div className="flex flex-wrap gap-1.5 pt-1">
-                                                            {msg.metadata?.buttons?.map((btn: any, idx: number) => (
+                                                            {(msg.metadata?.buttons || msg.buttons || []).map((btn: any, idx: number) => (
                                                                 <div key={idx} className="bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 flex items-center gap-2 text-[11px] font-bold shadow-sm">
                                                                     <MousePointer2 size={10} className="text-blue-200" />
-                                                                    {btn.text}
+                                                                    {btn.text || btn.reply?.title || btn.title || btn}
                                                                 </div>
                                                             ))}
                                                         </div>
                                                     </div>
                                                 )}
 
-                                                {msg.sender === 'agent' && msg.type === 'list' && (
+                                                {isAgentList && (
                                                     <div className="mb-1">
-                                                        <p className="text-[13px] leading-snug whitespace-pre-wrap mb-3">{msg.text}</p>
+                                                        {msg.text && <p className="text-[13px] leading-snug whitespace-pre-wrap mb-3">{msg.text}</p>}
                                                         <div className="bg-black/20 border border-white/10 rounded-lg overflow-hidden">
                                                             <div className="px-3 py-2 flex items-center justify-between border-b border-white/5">
                                                                 <div className="flex items-center gap-2">
@@ -424,21 +501,21 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
                                                 )}
 
                                                 {/* Standard Text or Fallback */}
-                                                {(!msg.type || msg.type === 'text' || (msg.sender !== 'agent')) && (
+                                                {shouldRenderPlainText && (
                                                     <p className="text-[13px] leading-snug whitespace-pre-wrap">{msg.text}</p>
                                                 )}
 
-                                                {msg.sender === 'agent' && msg.type === 'media' && (
+                                                {isAgentMedia && (
                                                     <div className="mb-1">
-                                                        {msg.metadata?.url && (
+                                                        {attachment.fileUrl && attachment.fileType?.startsWith('image/') && (
                                                             <div className="mb-2 relative group">
-                                                                <img src={msg.metadata.url} alt="media" className="rounded-lg w-full max-h-60 object-cover border border-white/10" />
+                                                                <img src={attachment.fileUrl} alt={attachment.fileName || 'media'} className="rounded-lg w-full max-h-60 object-cover border border-white/10" />
                                                                 <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/60 to-transparent rounded-b-lg">
-                                                                    <div className="text-[9px] font-bold truncate opacity-80">{msg.metadata.filename || 'Medios'}</div>
+                                                                    <div className="text-[9px] font-bold truncate opacity-80">{attachment.fileName || 'Medios'}</div>
                                                                 </div>
                                                             </div>
                                                         )}
-                                                        <p className="text-[13px] leading-snug whitespace-pre-wrap">{msg.text}</p>
+                                                        {msg.text && <p className="text-[13px] leading-snug whitespace-pre-wrap">{msg.text}</p>}
                                                     </div>
                                                 )}
                                             </div>
@@ -658,6 +735,7 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
                                     logic.handleSendMessage();
                                 }
                             }}
+                            onPaste={handlePaste}
                         />
                     )}
 

@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, setDoc, onSnapshot, collection, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, collection } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   addEdge,
@@ -24,9 +24,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from 'sonner';
-import { Loader2, ArrowLeft, Cloud, Check, Save, Facebook, Instagram, Send, Mail, Twitter, MessageCircle } from 'lucide-react';
+import { Loader2, ArrowLeft, Cloud, Check, Save, Facebook, Instagram, Send, Mail, Twitter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { getPrimaryPlatform, normalizeTargetPlatforms, updateExclusiveBotPlatform } from '../utils';
 
 const WhatsAppIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" className={className} fill="currentColor">
@@ -96,7 +97,7 @@ function FlowPage() {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setChatbotName(data.name || 'Mi Chatbot');
-        setTargetPlatforms(data.targetPlatforms || []);
+        setTargetPlatforms(normalizeTargetPlatforms(data.targetPlatforms));
 
         const flowData = data.flow || {};
         const savedNodes = flowData.nodes || [];
@@ -122,6 +123,22 @@ function FlowPage() {
     fetchChatbotData();
   }, [chatbotId, saveData, currentUser, activeEntity]);
 
+  useEffect(() => {
+    if (!chatbotId || !currentUser || !activeEntity) return;
+
+    const docRef = doc(db, 'users', currentUser.uid, 'entities', activeEntity, 'chatbots', chatbotId);
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (!docSnap.exists()) return;
+      const data = docSnap.data();
+      setTargetPlatforms(normalizeTargetPlatforms(data.targetPlatforms));
+      if (typeof data.name === 'string') {
+        setChatbotName((prev) => prev === data.name ? prev : data.name);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [chatbotId, currentUser, activeEntity]);
+
   // Fetch connected integrations to filter options
   useEffect(() => {
     if (!currentUser || !activeEntity) return;
@@ -144,16 +161,20 @@ function FlowPage() {
     if (!currentUser || !activeEntity || !chatbotId) return;
     
     try {
-      const isRemoving = targetPlatforms.includes(platformId);
-      const newPlatforms = isRemoving ? [] : [platformId];
-      
-      const botRef = doc(db, 'users', currentUser.uid, 'entities', activeEntity, 'chatbots', chatbotId);
-      await updateDoc(botRef, { 
-        targetPlatforms: newPlatforms,
-        updatedAt: new Date()
+      const currentPlatform = getPrimaryPlatform(targetPlatforms);
+      const isRemoving = currentPlatform === platformId;
+      const botSnap = await getDoc(doc(db, 'users', currentUser.uid, 'entities', activeEntity, 'chatbots', chatbotId));
+      const isActive = botSnap.exists() ? (botSnap.data().isActive === true || botSnap.data().isActive === 'true') : false;
+
+      await updateExclusiveBotPlatform({
+        db,
+        userId: currentUser.uid,
+        entityId: activeEntity,
+        botId: chatbotId,
+        platformId: isRemoving ? null : platformId,
+        activate: isRemoving ? false : isActive
       });
       
-      setTargetPlatforms(newPlatforms);
       toast.success(`${platformId.toUpperCase()} ${!isRemoving ? 'vinculado' : 'removido'}`);
     } catch (error) {
       console.error('Error updating platform:', error);
@@ -251,11 +272,12 @@ function FlowPage() {
                     </span>
                     <div className="flex items-center gap-1">
                         {targetPlatforms.length > 0 ? (
-                            targetPlatforms.map(pId => {
-                                const p = PLATFORMS_MAP[pId];
-                                if (!p) return null;
-                                return <p.icon key={pId} className={`w-3.5 h-3.5 ${p.color}`} />;
-                            })
+                            (() => {
+                                const currentPlatform = getPrimaryPlatform(targetPlatforms);
+                                const p = currentPlatform ? PLATFORMS_MAP[currentPlatform] : null;
+                                if (!p || !currentPlatform) return null;
+                                return <p.icon key={currentPlatform} className={`w-3.5 h-3.5 ${p.color}`} />;
+                            })()
                         ) : (
                             <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                         )}
@@ -268,7 +290,7 @@ function FlowPage() {
                 </div>
                 {Object.keys(PLATFORMS_MAP).filter(pId => connectedPlatforms.includes(pId)).map((pId) => {
                     const p = PLATFORMS_MAP[pId];
-                    const isCurrent = targetPlatforms.includes(pId);
+                    const isCurrent = getPrimaryPlatform(targetPlatforms) === pId;
                     return (
                         <DropdownMenuItem
                             key={pId}

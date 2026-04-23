@@ -48,6 +48,18 @@ export async function sendMetaMessage(
         options = {};
     }
 
+    // Instagram DM does not support Messenger quick replies; degrade gracefully to plain text options.
+    if (options.provider === 'instagram' && options.type === 'quick_reply' && Array.isArray(options.buttons) && options.buttons.length > 0) {
+        const quickReplyText = options.buttons
+            .map((btn: any) => {
+                const base = btn.reply || btn;
+                return `- ${base.title || base.text || base}`;
+            })
+            .join('\n');
+        text = `${text || 'Selecciona una opción:'}\n\n${quickReplyText}`;
+        options = { ...options, type: 'text', buttons: [] };
+    }
+
     if (options.userId && options.entityId && options.provider) {
         try {
             const configPath = `users/${options.userId}/entities/${options.entityId}/integrations/${options.provider}`;
@@ -142,7 +154,7 @@ export async function sendMetaMessage(
     }
 
     // --- QUICK REPLY SUPPORT (FIXES MESSENGER MISSING BUTTONS) ---
-    if (options.type === 'quick_reply' && options.buttons && options.buttons.length > 0) {
+    if (options.provider !== 'instagram' && options.type === 'quick_reply' && options.buttons && options.buttons.length > 0) {
         // Messenger REQUIRES text when sending quick_replies. If empty, add fallback.
         if (!messageData.message.text) {
             messageData.message.text = text || '¿Qué te gustaría hacer?';

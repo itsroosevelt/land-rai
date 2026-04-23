@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Plus, Loader2, Power, ArrowLeft, Trash2, MessageCircle, Facebook, Instagram, Send, Mail, Twitter } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { collection, onSnapshot, doc, updateDoc, deleteDoc, runTransaction } from 'firebase/firestore';
+import { collection, onSnapshot, doc, deleteDoc, runTransaction } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   Dialog,
@@ -22,6 +22,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { db } from '@/lib/firebase';
 import { toast } from 'sonner';
+import { getPrimaryPlatform, normalizeTargetPlatforms, updateExclusiveBotPlatform } from './utils';
 
 interface Bot {
   id: string;
@@ -72,7 +73,7 @@ const ChatbotsPage = () => {
             id: doc.id,
             name: doc.data().name || 'Bot sin nombre',
             isActive: doc.data().isActive === true || doc.data().isActive === 'true',
-            targetPlatforms: doc.data().targetPlatforms || [],
+            targetPlatforms: normalizeTargetPlatforms(doc.data().targetPlatforms),
             ...doc.data(),
           } as Bot)
         );
@@ -168,14 +169,23 @@ const ChatbotsPage = () => {
         return;
     }
 
+    const primaryPlatform = getPrimaryPlatform(bot.targetPlatforms);
+    if (!bot.isActive && primaryPlatform && !connectedPlatforms.includes(primaryPlatform)) {
+      toast.error(`No puedes activar este bot porque ${primaryPlatform.toUpperCase()} no está conectado. Conecta la integración e inténtalo de nuevo.`);
+      return;
+    }
+
     setUpdatingBots((prev) => [...prev, bot.id]);
     try {
       const newStatus = !bot.isActive;
-      const botRef = doc(db, 'users', currentUser!.uid, 'entities', activeEntity!, 'chatbots', bot.id);
-      
-      await updateDoc(botRef, { 
-        isActive: newStatus,
-        updatedAt: new Date()
+
+      await updateExclusiveBotPlatform({
+        db,
+        userId: currentUser!.uid,
+        entityId: activeEntity!,
+        botId: bot.id,
+        platformId: primaryPlatform,
+        activate: newStatus
       });
       
       toast.success(
@@ -196,11 +206,13 @@ const ChatbotsPage = () => {
     setUpdatingBots((prev) => [...prev, bot.id]);
 
     try {
-        const botRef = doc(db, 'users', currentUser!.uid, 'entities', activeEntity!, 'chatbots', bot.id);
-        await updateDoc(botRef, {
-            targetPlatforms: [platformId],
-            isActive: true,
-            updatedAt: new Date()
+        await updateExclusiveBotPlatform({
+            db,
+            userId: currentUser!.uid,
+            entityId: activeEntity!,
+            botId: bot.id,
+            platformId,
+            activate: true
         });
         toast.success(`Bot "${bot.name}" asignado a ${platformId.toUpperCase()} y activado.`);
     } catch (error) {
@@ -214,16 +226,16 @@ const ChatbotsPage = () => {
   const handleTogglePlatform = async (bot: Bot, platformId: string) => {
     setUpdatingBots((prev) => [...prev, bot.id]);
     try {
-      const currentPlatforms = bot.targetPlatforms || [];
-      const isRemoving = currentPlatforms.includes(platformId);
-      const newPlatforms = isRemoving
-        ? currentPlatforms.filter(p => p !== platformId)
-        : [...currentPlatforms, platformId];
-      
-      const botRef = doc(db, 'users', currentUser!.uid, 'entities', activeEntity!, 'chatbots', bot.id);
-      await updateDoc(botRef, { 
-        targetPlatforms: newPlatforms,
-        updatedAt: new Date()
+      const currentPlatform = getPrimaryPlatform(bot.targetPlatforms);
+      const isRemoving = currentPlatform === platformId;
+
+      await updateExclusiveBotPlatform({
+        db,
+        userId: currentUser!.uid,
+        entityId: activeEntity!,
+        botId: bot.id,
+        platformId: isRemoving ? null : platformId,
+        activate: isRemoving ? false : bot.isActive
       });
       toast.success(`${platformId.toUpperCase()} ${!isRemoving ? 'asignada' : 'removida'} en "${bot.name}"`);
     } catch (error) {
@@ -306,12 +318,12 @@ const ChatbotsPage = () => {
                             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                                 <button className={`p-1.5 rounded-lg transition-all duration-300 hover:scale-105 active:scale-95 outline-none ${
                                     bot.targetPlatforms && bot.targetPlatforms.length > 0 
-                                    ? PLATFORMS.find(p => p.id === bot.targetPlatforms![0])?.activeBg || 'bg-neutral-700/50'
+                                    ? PLATFORMS.find(p => p.id === getPrimaryPlatform(bot.targetPlatforms))?.activeBg || 'bg-neutral-700/50'
                                     : 'bg-neutral-700/50'
                                 }`}>
                                     {bot.targetPlatforms && bot.targetPlatforms.length > 0 ? (
                                         (() => {
-                                            const p = PLATFORMS.find(p => p.id === bot.targetPlatforms![0]);
+                                            const p = PLATFORMS.find(p => p.id === getPrimaryPlatform(bot.targetPlatforms));
                                             if (p) return <p.icon className={`w-5 h-5 ${p.color}`} />;
                                             return <MessageCircle className="w-5 h-5 text-blue-400" />;
                                         })()
@@ -322,7 +334,7 @@ const ChatbotsPage = () => {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent className="bg-neutral-900 border-neutral-700 rounded-xl p-1.5 shadow-2xl z-[100] min-w-[160px]">
                                 {PLATFORMS.filter(p => connectedPlatforms.includes(p.id)).map((p) => {
-                                    const isCurrent = bot.targetPlatforms?.[0] === p.id;
+                                    const isCurrent = getPrimaryPlatform(bot.targetPlatforms) === p.id;
                                     return (
                                         <DropdownMenuItem
                                             key={p.id}

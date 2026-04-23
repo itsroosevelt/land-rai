@@ -11,7 +11,9 @@ import { db } from '@/lib/firebase';
 interface FileUploadOptions {
     cardId: string;
     groupId: string;
-    toNumber: string;
+    recipientId: string;
+    platform?: string;
+    caption?: string;
 }
 
 export const useFileUpload = () => {
@@ -25,8 +27,8 @@ export const useFileUpload = () => {
             return;
         }
 
-        const { cardId, groupId, toNumber } = options;
-        if (!cardId || !groupId || !toNumber || !activeEntity) {
+        const { cardId, groupId, recipientId, platform, caption } = options;
+        if (!cardId || !groupId || !recipientId || !activeEntity) {
             toast.error("Faltan datos o contexto (entidad) para enviar el archivo multimedia.");
             return;
         }
@@ -38,6 +40,13 @@ export const useFileUpload = () => {
 
         setUploading(true);
         setProgress(0);
+
+        const lowerMime = (file.type || '').toLowerCase();
+        const mediaType =
+            lowerMime.startsWith('image/') ? 'image' :
+            lowerMime.startsWith('video/') ? 'video' :
+            lowerMime.startsWith('audio/') ? 'audio' :
+            'document';
 
         const promise = new Promise<void>((resolve, reject) => {
             uploadTask.on('state_changed',
@@ -58,13 +67,14 @@ export const useFileUpload = () => {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                message: `Archivo enviado: ${file.name}`,
-                                toNumber: toNumber,
+                                message: caption?.trim() || '',
+                                toNumber: recipientId,
                                 cardId: cardId,
                                 groupId: groupId,
-                                type: 'media',
+                                type: mediaType,
                                 url: downloadURL,
                                 filename: file.name,
+                                platform,
                                 userId: user.uid,
                                 entityId: activeEntity
                             })
