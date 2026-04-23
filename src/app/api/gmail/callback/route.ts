@@ -16,10 +16,17 @@ export async function GET(req: Request) {
 
     const { entityId, userId } = JSON.parse(Buffer.from(state, 'base64').toString());
 
+    // Rebuild the same redirect_uri used in auth-url/route.ts so Google accepts the exchange
+    const host = req.headers.get('host');
+    const protocol = req.headers.get('x-forwarded-proto') || (host?.includes('localhost') ? 'http' : 'https');
+    const redirectUri = host
+        ? `${protocol}://${host}/api/gmail/callback`
+        : process.env.GMAIL_REDIRECT_URI || `${process.env.NEXT_PUBLIC_APP_URL}/api/gmail/callback`;
+
     const oauth2Client = new OAuth2Client(
         process.env.GMAIL_CLIENT_ID,
         process.env.GMAIL_CLIENT_SECRET,
-        `${process.env.NEXT_PUBLIC_APP_URL}/api/gmail/callback`
+        redirectUri
     );
 
     try {
@@ -75,17 +82,22 @@ export async function GET(req: Request) {
             });
         }
 
-        // Return a success page that closes the popup and notifies the opener
+        // Return a success page — handles both popup and main-window redirect flows
         return new NextResponse(`
             <html>
                 <body>
                     <script>
-                        window.opener.postMessage('gmail-auth-success', '*');
-                        window.close();
+                        if (window.opener) {
+                            window.opener.postMessage('gmail-auth-success', '*');
+                            window.close();
+                        } else {
+                            // Came via main-window redirect (popup was blocked)
+                            window.location.href = '/nucleo/${entityId}/cto/integrations';
+                        }
                     </script>
                     <div style="font-family: sans-serif; text-align: center; padding: 50px;">
                         <h2 style="color: #4CAF50;">¡Conexión Exitosa!</h2>
-                        <p>Puedes cerrar esta ventana ahora.</p>
+                        <p>Redirigiendo...</p>
                     </div>
                 </body>
             </html>
@@ -93,6 +105,19 @@ export async function GET(req: Request) {
 
     } catch (error) {
         console.error('Gmail Callback Error:', error);
-        return NextResponse.json({ error: 'Failed to exchange token' }, { status: 500 });
+        return new NextResponse(`
+            <html>
+                <body>
+                    <script>
+                        if (window.opener) window.opener.postMessage('gmail-auth-error', '*');
+                    </script>
+                    <div style="font-family: sans-serif; text-align: center; padding: 50px;">
+                        <h2 style="color: #EA4335;">Error de Conexión</h2>
+                        <p>No se pudo completar la conexión con Gmail.</p>
+                        <p style="color:#888;font-size:12px;">Puedes cerrar esta ventana e intentarlo de nuevo.</p>
+                    </div>
+                </body>
+            </html>
+        `, { status: 200, headers: { 'Content-Type': 'text/html' } });
     }
 }

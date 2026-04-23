@@ -193,7 +193,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         cardData.contactName = 'Usuario';
         
         if (isReset) {
-            const resetText = "🔄 Reinicio completado, empezamos de nuevo.";
+            const resetText = "🔄 Reinicio completado. Por favor, envíanos un mensaje para empezar de nuevo.";
             await dispatchMessage(resetText);
             await cardRef.update({
                 messages: admin.firestore.FieldValue.arrayUnion({
@@ -201,8 +201,9 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 })
             });
             
-            // NOTE: After a Reset, we DO NOT return anymore if we want the bot to start immediately.
-            // We set status to 'active' and currentNodeId to null so the loop below starts from the 'start' node.
+            // Detenemos la ejecución aquí para que el bot ESPERE un nuevo mensaje
+            // antes de iniciar el flujo principal nuevamente.
+            return;
         }
 
         if (isMenu || (isReset && !isStartTrigger)) {

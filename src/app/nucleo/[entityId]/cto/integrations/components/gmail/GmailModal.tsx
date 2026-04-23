@@ -49,33 +49,50 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
         }
     }, [isOpen, entityId]);
 
-    const handleConnectGmail = () => {
-        const width = 600;
-        const height = 700;
-        const left = window.screenX + (window.outerWidth - width) / 2;
-        const top = window.screenY + (window.outerHeight - height) / 2;
+    const handleConnectGmail = async () => {
+        try {
+            const res = await fetch(`/api/gmail/auth-url?e=${entityId}&u=${userId}`);
+            if (!res.ok) throw new Error(`Auth URL error: ${res.status}`);
+            const data = await res.json();
 
-        const authUrl = `/api/gmail/auth?entityId=${entityId}&userId=${userId}`;
-        const popup = window.open(
-            authUrl,
-            'Google Login',
-            `width=${width},height=${height},left=${left},top=${top}`
-        );
+            if (!data.url) {
+                toast.error("Error al generar la URL de conexión con Google.");
+                return;
+            }
 
-        const checkPopup = setInterval(() => {
+            const width = 600;
+            const height = 700;
+            const left = window.screenX + (window.outerWidth - width) / 2;
+            const top = window.screenY + (window.outerHeight - height) / 2;
+
+            const popup = window.open(
+                data.url,
+                'Google Login',
+                `width=${width},height=${height},left=${left},top=${top}`
+            );
+
             if (!popup || popup.closed) {
-                clearInterval(checkPopup);
+                // Popup was blocked — redirect in main window as fallback
+                toast.info("El navegador bloqueó el popup. Redirigiendo en esta ventana...");
+                window.location.href = data.url;
+                return;
             }
-        }, 1000);
 
-        // Listen for success message from the callback route
-        const handleMessage = (event: MessageEvent) => {
-            if (event.data === 'gmail-auth-success') {
-                toast.success("Gmail vinculado correctamente.");
-                window.removeEventListener('message', handleMessage);
-            }
-        };
-        window.addEventListener('message', handleMessage);
+            const handleMessage = (event: MessageEvent) => {
+                if (event.data === 'gmail-auth-success') {
+                    toast.success("Gmail vinculado correctamente.");
+                    window.removeEventListener('message', handleMessage);
+                } else if (event.data === 'gmail-auth-error') {
+                    toast.error("No se pudo conectar Gmail. Verifica la configuración e inténtalo de nuevo.");
+                    window.removeEventListener('message', handleMessage);
+                }
+            };
+            window.addEventListener('message', handleMessage);
+
+        } catch (error) {
+            console.error('Gmail connect error:', error);
+            toast.error("Fallo de conexión con el servidor.");
+        }
     };
 
     const handleDelete = async () => {
