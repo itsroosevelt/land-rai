@@ -236,22 +236,26 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
 
     // Filter and score bots by platform relevance
     const platformBots = allActiveBots.map(bot => {
-        const targets = bot.targetPlatforms || [];
+        const targets = (bot.targetPlatforms || []).map((t: string) => t.toLowerCase().trim());
         let score = 0;
         
         // Match platform case-insensitive and trimmed
         const currentPlatform = platform.toLowerCase().trim();
-        const hasMatch = targets.some((t: string) => t.toLowerCase().trim() === currentPlatform);
+        const simplifiedPlatform = currentPlatform === 'messenger' ? 'facebook' : currentPlatform;
+
+        const hasMatch = targets.some((t: string) => 
+            t === currentPlatform || 
+            t === simplifiedPlatform ||
+            (currentPlatform === 'facebook' && t === 'messenger')
+        );
 
         if (hasMatch) {
             score = 10; // Explicit match (High Priority)
         } else if (currentPlatform === 'gmail') {
-            score = 0; // STRIC MATCH REQUIRED: Gmail should never be targeted by a global/wildcard bot
-        } else if (targets.length === 0 || targets.includes('*')) {
-            score = 5;  // Global Match (Medium Priority) for other platforms
+            score = 0; // STRIC MATCH REQUIRED
+        } else if (targets.length === 0 || targets.includes('*') || targets.includes('all')) {
+            score = 5;  // Global Match (Medium Priority)
         } else {
-            // FALLBACK RULE: If we have multiple bots, but none match this platform, 
-            // the oldest/first active bot acts as a general fallback.
             score = 1;
         }
         
@@ -259,7 +263,11 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     }).filter(bot => bot._score > 0);
 
     if (platformBots.length === 0) {
-        console.log(`[ChatbotEngine] ⚠️ No matching bots found for platform ${platform} on entity ${entityId}`);
+        console.warn(`[ChatbotEngine] ⚠️ No matching bots found for platform ${platform} (simplified: ${platform === 'messenger' ? 'facebook' : platform}) on entity ${entityId}`);
+        await cardRef.update({ 
+            'botState.lastError': `Plataforma ${platform} no asignada a ningún bot activo.`,
+            'botState.status': 'inactive' 
+        });
         return;
     }
 
@@ -286,7 +294,8 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     let waitingForInput = bState.waitingForInput || false;
 
     // FIX: If status is 'active' but we have no node (stuck) or it's 'completed', we should try to restart
-    const shouldRestart = isStartTrigger || !currentNodeId || bState.status === 'completed' || bState.status === 'inactive';
+    // Enhanced restart check for new cards (status undefined)
+    const shouldRestart = isStartTrigger || !currentNodeId || !bState.status || bState.status === 'completed' || bState.status === 'inactive';
 
     // Handle incoming input for current node
     if (waitingForInput && currentNodeId) {

@@ -134,12 +134,33 @@ const Card = ({ card, groupId, onClick, cardColor = 'bg-neutral-800', contacts =
             }
 
             if (contactDocId) {
-              const { updateDoc, deleteField } = await import('firebase/firestore');
-              await updateDoc(doc(db, `${tenantPath}/contacts/${contactDocId}`), {
-                kanbanGroupId: deleteField(),
-                kanbanCardId: deleteField()
-              });
-              console.log(`[Card] 🔗 Unlinked contact ${contactDocId}`);
+              // FULL CASCADE DELETE FROM KANBAN
+              await deleteDoc(doc(db, `${tenantPath}/contacts/${contactDocId}`));
+              console.log(`[Card] 🗑️ Full Cascade: Deleted contact ${contactDocId}`);
+              
+              // Purge main chat history
+              const chatRef = doc(db, `${tenantPath}/chats/${contactDocId}`);
+              await deleteDoc(chatRef).catch(() => {});
+              
+              if (card.metaSenderId) {
+                const metaChatRef = doc(db, `${tenantPath}/chats/${card.metaSenderId}`);
+                await deleteDoc(metaChatRef).catch(() => {});
+                
+                // NEW: Purge message deduplication history to allow immediate restart
+                try {
+                  const { collection, getDocs, where, query } = await import('firebase/firestore');
+                  const dedupRef = collection(db, `${tenantPath}/processed_messages`);
+                  const q = query(dedupRef, where('senderId', '==', card.metaSenderId));
+                  const snap = await getDocs(q);
+                  const batch = snap.docs.map(d => deleteDoc(d.ref));
+                  await Promise.all(batch);
+                } catch (e) { console.error("Dedup purge failed:", e); }
+              }
+              
+              // Also purge specific chat archive for this card
+              const cardChatRef = doc(db, `${tenantPath}/chats/${card.id}`);
+              await deleteDoc(cardChatRef).catch(() => {});
+              console.log(`[Card] 💬 Chat history purged.`);
             }
           } catch (err) {
             console.error("[Card] Error unlinking contact:", err);

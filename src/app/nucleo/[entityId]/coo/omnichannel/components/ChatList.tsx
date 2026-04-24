@@ -46,8 +46,8 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
             filtered = filtered.filter(c => (c.channel || c.source || '').toLowerCase().includes('instagram'));
         } else if (selectedFolder === 'messenger') {
             filtered = filtered.filter(c => {
-                const src = (c.channel || c.source || '').toLowerCase();
-                return src.includes('messenger') || src.includes('facebook');
+                const src = (c.channel || c.source || c.primary_channel || '').toLowerCase();
+                return src.includes('messenger') || src.includes('facebook') || src.includes('meta');
             });
         } else if (selectedFolder === 'telegram') {
             filtered = filtered.filter(c => (c.channel || c.source || '').toLowerCase().includes('telegram'));
@@ -55,10 +55,14 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
             filtered = filtered.filter(c => (c.channel || c.source || '').toLowerCase().includes('x') || (c.channel || c.source || '').toLowerCase().includes('twitter'));
         } else if (selectedFolder === 'gmail') {
             filtered = filtered.filter(c => (c.channel || c.source || '').toLowerCase().includes('gmail'));
+        } else if (selectedFolder === 'all') {
+            // No filter applied for 'all'
         } else if (selectedFolder.startsWith('label:')) {
             const labelFilter = selectedFolder.replace('label:', '');
             filtered = filtered.filter(c => c.labels?.includes(labelFilter));
         }
+
+        console.log(`[ChatList] Filtered ${filtered.length} cards for folder: ${selectedFolder}`);
 
         // 2. Unread Filter
         if (filterBy === 'unread') {
@@ -104,8 +108,8 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
         // 5. Sorting
         filtered.sort((a, b) => {
             const getTimestamp = (card: any) => {
-                const ts = card.updatedAt;
-                if (!ts) return 0;
+                const ts = card.updatedAt || card.createdAt; // Use createdAt as fallback for new cards
+                if (!ts) return Date.now(); // If brand new, put at top
                 if (typeof ts.toDate === 'function') return ts.toDate().getTime();
                 if (ts.seconds) return ts.seconds * 1000;
                 if (ts instanceof Date) return ts.getTime();

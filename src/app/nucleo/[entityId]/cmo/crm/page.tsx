@@ -614,144 +614,112 @@ export default function ContactsPage() {
     };
     const handleSyncWhatsAppContacts = async () => {
         setIsSyncing(true);
-        setSyncStatus('Iniciando sincronización inteligente...');
+        setSyncStatus('Iniciando sincronización omnicanal...');
         try {
             const tenantPath = getTenantPath();
             if (!tenantPath) throw new Error("No tenant path found");
 
-            // Iterative Fetching to avoid collectionGroup index requirement
+            // 1. Fetch all cards from all groups
             let allCardDocs: any[] = [];
             for (const group of groups) {
                 const cardsRef = collection(db, `${tenantPath}/kanban-groups/${group.id}/cards`);
                 const snap = await getDocs(cardsRef);
-                snap.docs.forEach(d => allCardDocs.push({ id: d.id, ref: d.ref, ...d.data() }));
+                snap.docs.forEach(d => allCardDocs.push({ id: d.id, ref: d.ref, ...d.data(), groupId: group.id }));
             }
 
             let importedCount = 0;
             let updatedCount = 0;
-            let skippedCount = 0;
-
-            // Dictionary to track cards by phone for auto-merging
-            const phoneToCardsMap: { [key: string]: any[] } = {};
 
             for (const cardData of allCardDocs) {
-                if (!cardData.contactNumber) continue;
-
-                // Use the standard normalization utility
-                const phone = normalizePhoneNumber(cardData.contactNumber);
-                if (!phone) continue;
-
-                if (!phoneToCardsMap[phone]) phoneToCardsMap[phone] = [];
-                phoneToCardsMap[phone].push(cardData);
-            }
-
-            for (const phone in phoneToCardsMap) {
-                const cardGroup = phoneToCardsMap[phone];
-                let primaryCard = cardGroup[0];
-
-                // --- AUTO MERGE KANBAN CARDS IF MULTIPLE EXIST ---
-                if (cardGroup.length > 1) {
-                    setSyncStatus(`Fusionando ${cardGroup.length} tarjetas para ${phone}...`);
-                    // Sort by message count to pick best primary
-                    const sortedGroup = [...cardGroup].sort((a, b) => (b.messages?.length || 0) - (a.messages?.length || 0));
-                    primaryCard = sortedGroup[0];
-                    const secondaryCards = sortedGroup.slice(1);
-
-                    const mergedMessages = [...(primaryCard.messages || [])];
-                    const mergedNotes = [...(primaryCard.notes || [])];
-                    secondaryCards.forEach(s => {
-                        if (s.messages) mergedMessages.push(...s.messages);
-                        if (s.notes) mergedNotes.push(...s.notes);
-                    });
-
-                    // Utility for timestamps
-                    const getMs = (ts: any) => {
-                        if (!ts) return 0;
-                        if (typeof ts.toMillis === 'function') return ts.toMillis();
-                        if (ts.seconds !== undefined) return ts.seconds * 1000;
-                        if (ts instanceof Date) return ts.getTime();
-                        return 0;
-                    };
-
-                    // Dedup messages
-                    const uniqueMessages = Array.from(new Map(mergedMessages.map(m => [`${m.sender}-${m.text}-${getMs(m.timestamp)}`, m])).values())
-                        .sort((a, b) => getMs(a.timestamp) - getMs(b.timestamp));
-
-                    await updateDoc(primaryCard.ref, {
-                        messages: uniqueMessages,
-                        notes: Array.from(new Map(mergedNotes.map(n => [n.id || JSON.stringify(n), n])).values()),
-                        updatedAt: serverTimestamp()
-                    });
-
-                    for (const s of secondaryCards) {
-                        await deleteDoc(s.ref);
-                    }
-                }
-
-                // --- CRM SYNC LOGIC ---
-
-                if (!primaryCard.contactName && !primaryCard.email && !phone) {
-                    continue; // Skip completely empty kanban cards
-                }
-
-                const nameStr = (primaryCard.contactName || 'Sin Nombre').trim();
-                const phoneStr = String(phone || '').replace(/\D/g, '');
+                // Identity Resolution
+                const rawSource = (cardData.source || cardData.platform || 'OTHER').toUpperCase();
+                const isMeta = rawSource.includes('MESSENGER') || rawSource.includes('INSTAGRAM') || rawSource.includes('FACEBOOK');
                 
-                // Final validation before saving
-                if (phoneStr.length < 5 && nameStr.toLowerCase() === 'sin nombre') {
-                    continue; // Do NOT generate empty ghost records in CRM
+                const metaId = cardData.metaSenderId || (isMeta ? cardData.contactNumber : null);
+                const rawPhone = !isMeta ? cardData.contactNumber : null;
+                const phone = rawPhone ? normalizePhoneNumber(rawPhone) : null;
+                const nameStr = (cardData.contactName || 'Sin Nombre').trim();
+
+                // Skip ghost cards (no identity whatsoever)
+                if (!phone && !metaId && nameStr.toLowerCase() === 'sin nombre') continue;
+
+                // 2. DUAL SEARCH: Find existing contact by Phone OR Meta ID
+                let existingContactDoc: any = null;
+
+                if (metaId) {
+                    const qMeta = query(collection(db, `${tenantPath}/contacts`), where('metaSenderId', '==', metaId));
+                    const snapMeta = await getDocs(qMeta);
+                    if (!snapMeta.empty) existingContactDoc = snapMeta.docs[0];
                 }
 
-                // 1. Check if contact already exists by phone (normalized match)
-                // We fetch all and filter in memory to be safe with formatting variations, 
-                // but usually the normalizePhoneNumber is stable.
-                const existingContactQuery = query(collection(db, `${getTenantPath()}/contacts`), where('phone', '==', phone));
-                const existingDocs = await getDocs(existingContactQuery);
+                if (!existingContactDoc && phone) {
+                    const qPhone = query(collection(db, `${tenantPath}/contacts`), where('phone', '==', phone));
+                    const snapPhone = await getDocs(qPhone);
+                    if (!snapPhone.empty) existingContactDoc = snapPhone.docs[0];
+                }
 
                 const contactData: any = {
                     name: nameStr,
-                    email: primaryCard.email || '',
-                    source: 'WhatsApp',
-                    stage: 'In Progress',
+                    email: cardData.email || '',
+                    source: rawSource,
+                    stage: cardData.stage || 'In Progress',
                     lastUpdated: serverTimestamp(),
+                    tags: Array.from(new Set([...(cardData.tags || [])])),
+                    metaSenderId: metaId || null,
+                    phone: phone || null,
+                    kanbanCardId: cardData.id,
+                    kanbanGroupId: cardData.groupId
                 };
 
-                if (!existingDocs.empty) {
-                    // UPDATE EXISTING
-                    const existingDoc = existingDocs.docs[0];
-                    const existingData = existingDoc.data();
-                    const mergedData: any = { ...contactData };
+                const isGenericMetaName = (value: any) => {
+                    const normalized = String(value || '').trim().toLowerCase();
+                    if (!normalized) return true;
+                    const isGenericKeyword = normalized === 'usuario meta' || 
+                                             normalized === 'usuario' || 
+                                             normalized === 'desconocido' ||
+                                             normalized === 'instagram user' ||
+                                             normalized === 'messenger user';
+                    
+                    const isSystemFallback = /^instagram [a-f0-9]+$/i.test(normalized) || 
+                                             /^messenger [a-f0-9]+$/i.test(normalized) ||
+                                             /^[a-z]+ [0-9]+$/i.test(normalized);
+                    
+                    return isGenericKeyword || isSystemFallback;
+                };
 
-                    if (mergedData.name === 'Sin Nombre' && existingData.name !== 'Sin Nombre') delete mergedData.name;
-                    if (!mergedData.email && existingData.email) delete mergedData.email;
+                if (existingContactDoc) {
+                    // UPDATE EXISTING: Guard real names from being overwritten by generics
+                    const existingData = existingContactDoc.data();
+                    if (isGenericMetaName(contactData.name) && !isGenericMetaName(existingData.name)) {
+                        delete contactData.name;
+                    }
+                    
+                    // Merge tags
+                    contactData.tags = Array.from(new Set([...(existingData.tags || []), ...contactData.tags]));
 
-                    const combinedTags = Array.from(new Set([...(existingData.tags || []), ...(primaryCard.tags || [])]));
-                    mergedData.tags = combinedTags;
-
-                    await updateDoc(doc(db, `${getTenantPath()}/contacts`, existingDoc.id), mergedData);
+                    await updateDoc(doc(db, `${tenantPath}/contacts`, existingContactDoc.id), contactData);
                     updatedCount++;
                 } else {
                     // CREATE NEW
-                    const newContactData = {
+                    const newId = cardData.id; // Keep link to card
+                    const finalData = {
                         ...contactData,
-                        phone: phone,
-                        id: primaryCard.id,
-                        importedFrom: 'whatsapp-kanban',
-                        importedAt: serverTimestamp(),
+                        id: newId,
+                        createdAt: serverTimestamp(),
                         date: new Date().toISOString().split('T')[0],
-                        tags: primaryCard.tags || [],
                         clientId: generateClientId()
                     };
-                    await setDoc(doc(db, `${getTenantPath()}/contacts`, primaryCard.id), newContactData);
+                    await setDoc(doc(db, `${tenantPath}/contacts`, newId), sanitizeData(finalData));
                     importedCount++;
                 }
             }
-            setSyncStatus(`✅ Sincronización: ${importedCount} nuevos, ${updatedCount} actualizados.`);
 
-            // Refresh local state
+            setSyncStatus(`✅ Sincronización: ${importedCount} nuevos, ${updatedCount} actualizados.`);
+            
+            // Refresh View
             const querySnapshot = await getDocs(collection(db, `${getTenantPath()}/contacts`));
             const allContacts = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setRawContacts(allContacts); // Update raw contacts for duplicate manager
+            setRawContacts(allContacts);
             setContacts(processContacts(allContacts));
         } catch (error) {
             console.error('Error syncing contacts:', error);
@@ -990,75 +958,109 @@ export default function ContactsPage() {
 
     const confirmDelete = async () => {
         try {
-            if (deleteTarget.type === 'single' && deleteTarget.id) {
-                const contactToDelete = contacts.find(c => c.id === deleteTarget.id);
-                if (!contactToDelete) return;
+            const tenantPath = getTenantPath();
+            if (!tenantPath) return;
 
-                const phone = contactToDelete.phone;
+            const deleteContactCascade = async (id: string) => {
+                const contact = contacts.find(c => c.id === id);
+                if (!contact) return;
+
+                const phone = contact.phone;
+                const metaId = contact.metaSenderId;
                 const cleanPhone = phone?.replace(/\D/g, '');
 
-                await deleteDoc(doc(db, `${getTenantPath()}/contacts`, deleteTarget.id));
+                // 1. Delete Contact from CRM
+                await deleteDoc(doc(db, `${tenantPath}/contacts`, id));
 
-                const groupsSnap = await getDocs(collection(db, `${getTenantPath()}/kanban-groups`));
+                // 2. Cascade Delete Kanban Cards
+                const groupsSnap = await getDocs(collection(db, `${tenantPath}/kanban-groups`));
                 for (const groupDoc of groupsSnap.docs) {
-                    const cardsRef = collection(db, `${getTenantPath()}/kanban-groups/${groupDoc.id}/cards`);
+                    const cardsRef = collection(db, `${tenantPath}/kanban-groups/${groupDoc.id}/cards`);
+                    
+                    // Build queries for all possible identifiers
+                    const queries = [
+                        query(cardsRef, where('contactId', '==', id)),
+                        query(cardsRef, where('crmId', '==', id))
+                    ];
+                    
+                    if (phone) queries.push(query(cardsRef, where('contactNumber', '==', phone)));
+                    if (cleanPhone) queries.push(query(cardsRef, where('contactNumberClean', '==', cleanPhone)));
+                    if (metaId) {
+                        queries.push(query(cardsRef, where('metaSenderId', '==', metaId)));
+                        // Also check inside platform_ids
+                        queries.push(query(cardsRef, where('platform_ids.messenger', '==', metaId)));
+                        queries.push(query(cardsRef, where('platform_ids.instagram', '==', metaId)));
+                        queries.push(query(cardsRef, where('platform_ids.whatsapp', '==', metaId)));
+                    }
 
-                    const q1 = query(cardsRef, where('contactId', '==', deleteTarget.id));
-                    const q2 = phone ? query(cardsRef, where('contactNumber', '==', phone)) : null;
-                    const q3 = cleanPhone ? query(cardsRef, where('contactNumberClean', '==', cleanPhone)) : null;
+                    const snaps = await Promise.all(queries.map(q => getDocs(q)));
+                    const cardRefs = Array.from(new Set(snaps.flatMap(s => s.docs.map(d => d.ref.path))))
+                                         .map(path => doc(db, path));
 
-                    const snaps = await Promise.all([
-                        getDocs(q1),
-                        q2 ? getDocs(q2) : Promise.resolve({ docs: [] }),
-                        q3 ? getDocs(q3) : Promise.resolve({ docs: [] })
-                    ]);
-
-                    const allCardDocs = [...snaps[0].docs, ...snaps[1].docs, ...snaps[2].docs];
-                    const uniqueCardRefs = Array.from(new Set(allCardDocs.map(d => d.ref.path))).map(path => doc(db, path));
-
-                    await Promise.all(uniqueCardRefs.map(ref => deleteDoc(ref)));
-                }
-
-                setContacts(contacts.filter(c => c.id !== deleteTarget.id));
-                setSelectedContactIds(prev => prev.filter(selectedId => selectedId !== deleteTarget.id));
-                toast.success("Contacto e instancias eliminados");
-            } else if (deleteTarget.type === 'bulk') {
-                for (const id of selectedContactIds) {
-                    const contact = contacts.find(c => c.id === id);
-                    if (!contact) continue;
-
-                    const phone = contact.phone;
-                    const cleanPhone = phone?.replace(/\D/g, '');
-
-                    await deleteDoc(doc(db, `${getTenantPath()}/contacts`, id));
-
-                    const groupsSnap = await getDocs(collection(db, `${getTenantPath()}/kanban-groups`));
-                    for (const groupDoc of groupsSnap.docs) {
-                        const cardsRef = collection(db, `${getTenantPath()}/kanban-groups/${groupDoc.id}/cards`);
-                        const q1 = query(cardsRef, where('contactId', '==', id));
-                        const q2 = phone ? query(cardsRef, where('contactNumber', '==', phone)) : null;
-                        const q3 = cleanPhone ? query(cardsRef, where('contactNumberClean', '==', cleanPhone)) : null;
-
-                        const snaps = await Promise.all([
-                            getDocs(q1),
-                            q2 ? getDocs(q2) : Promise.resolve({ docs: [] }),
-                            q3 ? getDocs(q3) : Promise.resolve({ docs: [] })
-                        ]);
-
-                        const allCardDocs = [...snaps[0].docs, ...snaps[1].docs, ...snaps[2].docs];
-                        const uniqueCardRefs = Array.from(new Set(allCardDocs.map(d => d.ref.path))).map(path => doc(db, path));
-                        await Promise.all(uniqueCardRefs.map(ref => deleteDoc(ref)));
+                    if (cardRefs.length > 0) {
+                        await Promise.all(cardRefs.map(ref => deleteDoc(ref)));
+                        
+                        // 3. Purge associated chat docs for these cards
+                        for (const cardDoc of snaps.flatMap(s => s.docs)) {
+                            const chatRef = doc(db, `${tenantPath}/chats/${cardDoc.id}`);
+                            await deleteDoc(chatRef).catch(() => {}); // Chat might not exist
+                        }
                     }
                 }
 
-                setContacts(contacts.filter(c => !selectedContactIds.includes(c.id)));
+                // 4. Purge Chat History by Platform ID (The main history doc)
+                if (metaId) {
+                    const chatRef = doc(db, `${tenantPath}/chats/${metaId}`);
+                    await deleteDoc(chatRef).catch(() => {});
+                    console.log(`[CRM] 💬 Purged main chat history for Meta ID: ${metaId}`);
+
+                    // 5. Purge deduplication history
+                    try {
+                        const dedupRef = collection(db, `${tenantPath}/processed_messages`);
+                        const q = query(dedupRef, where('senderId', '==', metaId));
+                        const dedupPathSnap = await getDocs(q);
+                        const batch = dedupPathSnap.docs.map(d => deleteDoc(d.ref));
+                        await Promise.all(batch);
+                        console.log(`[CRM] 🛡️ Purged deduplication history for Meta ID: ${metaId}`);
+                    } catch (e) {
+                        console.error("[CRM] Error purging dedup history:", e);
+                    }
+                }
+
+                // 6. EXTRA SAFETY: Purge chat doc named after the contact ID itself
+                const contactChatRef = doc(db, `${tenantPath}/chats/${id}`);
+                await deleteDoc(contactChatRef).catch(() => {});
+                
+                // 7. BRUTE FORCE: If contact has a phone, purge that too
+                if (contact.phone) {
+                    const phoneChatRef = doc(db, `${tenantPath}/chats/${contact.phone}`);
+                    await deleteDoc(phoneChatRef).catch(() => {});
+                }
+
+                console.log(`[CRM] 🏁 Full cascading delete completed for ${id}`);
+            };
+
+            if (deleteTarget.type === 'single' && deleteTarget.id) {
+                await deleteContactCascade(deleteTarget.id);
+                setContacts(prev => prev.filter(c => c.id !== deleteTarget.id));
+                setSelectedContactIds(prev => prev.filter(id => id !== deleteTarget.id));
+                toast.success("Contacto e historial eliminados por completo");
+            } else if (deleteTarget.type === 'bulk') {
+                setSyncStatus(`Eliminando ${selectedContactIds.length} contactos...`);
+                for (const id of selectedContactIds) {
+                    await deleteContactCascade(id);
+                }
+                setContacts(prev => prev.filter(c => !selectedContactIds.includes(c.id)));
                 setSelectedContactIds([]);
-                toast.success(`${selectedContactIds.length} contactos e instancias eliminados`);
+                toast.success("Eliminación masiva completada con éxito");
             }
+
             setIsDeleteDialogOpen(false);
+            setSyncStatus('');
         } catch (error) {
-            console.error("Error deleting:", error);
-            toast.error("Error al eliminar.");
+            console.error("Error in cascading delete:", error);
+            toast.error("Error al realizar la eliminación total.");
+            setSyncStatus('');
         }
     };
 
