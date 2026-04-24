@@ -159,8 +159,27 @@ export async function POST(req: Request) {
             });
 
             const candidate = candidateRes.data;
+            const headers = candidate.payload?.headers || [];
             const labelIds = candidate.labelIds || [];
-            const fromEmail = extractEmailAddress(extractHeader(candidate.payload?.headers || [], 'From'));
+            const fromEmail = extractEmailAddress(extractHeader(headers, 'From'));
+            
+            // --- INTELLIGENT FILTERING (Agnostic Rule 4: Anti-Spam/Automation) ---
+            const listUnsubscribe = extractHeader(headers, 'List-Unsubscribe');
+            const autoSubmitted = extractHeader(headers, 'Auto-Submitted');
+            const precedence = extractHeader(headers, 'Precedence');
+            const subject = extractHeader(headers, 'Subject').toLowerCase();
+
+            const isAutomation = 
+                !!listUnsubscribe || 
+                (autoSubmitted && autoSubmitted !== 'no') || 
+                ['bulk', 'list', 'junk'].includes(precedence.toLowerCase()) ||
+                /no-reply|noreply|notifications|newsletter|alerts|support@/i.test(fromEmail) ||
+                /confirmacion|boletin|actualizacion|subscription|welcome/i.test(subject);
+
+            if (isAutomation) {
+                console.log(`[Gmail Filter] 🛡️ Ignored automated email from ${fromEmail}: "${subject.substring(0, 30)}..."`);
+                continue;
+            }
 
             if (fromEmail && fromEmail !== String(emailAddress).toLowerCase() && !labelIds.includes('SENT') && !labelIds.includes('DRAFT')) {
                 msgId = candidateId;
@@ -174,7 +193,7 @@ export async function POST(req: Request) {
                 lastHistoryId: notificationHistoryId || previousHistoryId || null,
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
-            return NextResponse.json({ success: true, ignored: 'no_inbound_messages' });
+            return NextResponse.json({ success: true, ignored: 'no_human_messages' });
         }
 
         const fromHeader = extractHeader(msgData.payload?.headers || [], 'From');
