@@ -66,7 +66,7 @@ export default function RootLayout({
               const appId = '${process.env.NEXT_PUBLIC_META_APP_ID}';
               
               if (!appId || appId === 'undefined') {
-                console.error('🚀 [ROOSEVELT META SDK]: Error - NEXT_PUBLIC_META_APP_ID no configurado.');
+                console.warn('🚀 [ROOSEVELT META SDK]: NEXT_PUBLIC_META_APP_ID no configurado.');
                 return;
               }
 
@@ -77,22 +77,22 @@ export default function RootLayout({
                 version: 'v21.0'
               });
               
-              // Solo ejecutar verificación de estado si estamos en HTTPS (Meta lo exige)
-              const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+              // Meta (Facebook) obliga estrictamente a usar HTTPS para getLoginStatus
+              // Localhost ya no es suficiente sin SSL
+              const isHttps = window.location.protocol === 'https:';
               
-              if (isSecure && typeof FB !== 'undefined' && FB.getLoginStatus) {
+              if (isHttps && typeof FB !== 'undefined' && FB.getLoginStatus) {
                 try {
                   FB.getLoginStatus(function() {
                     window.FB_READY = true;
                     console.log('🚀 [ROOSEVELT META SDK]: Inicializado.');
                   });
                 } catch (e) {
-                  console.warn('🚀 [ROOSEVELT META SDK]: getLoginStatus bloqueado.');
                   window.FB_READY = true;
                 }
               } else {
                 window.FB_READY = true;
-                console.log('🚀 [ROOSEVELT META SDK]: SDK listo (Modo limitado por HTTP o carga diferida).');
+                console.log('🚀 [ROOSEVELT META SDK]: Inicializado en modo HTTP (Funciones de sesión limitadas).');
               }
             };
             (function(d, s, id) {

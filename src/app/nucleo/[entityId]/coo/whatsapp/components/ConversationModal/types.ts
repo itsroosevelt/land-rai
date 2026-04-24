@@ -4,12 +4,15 @@ export interface Message {
     text: string;
     sender: 'user' | 'agent';
     timestamp: Timestamp;
+    subject?: string;
+    platform?: string;
     fileUrl?: string;
     fileType?: string;
     fileName?: string;
     status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
     type?: string;
     metadata?: any;
+    error?: string;
 }
 
 export interface CheckIn {

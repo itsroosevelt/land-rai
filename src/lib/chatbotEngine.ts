@@ -245,8 +245,10 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
 
         if (hasMatch) {
             score = 10; // Explicit match (High Priority)
+        } else if (currentPlatform === 'gmail') {
+            score = 0; // STRIC MATCH REQUIRED: Gmail should never be targeted by a global/wildcard bot
         } else if (targets.length === 0 || targets.includes('*')) {
-            score = 5;  // Global Match (Medium Priority)
+            score = 5;  // Global Match (Medium Priority) for other platforms
         } else {
             // FALLBACK RULE: If we have multiple bots, but none match this platform, 
             // the oldest/first active bot acts as a general fallback.
@@ -254,7 +256,12 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         }
         
         return { ...bot, _score: score };
-    });
+    }).filter(bot => bot._score > 0);
+
+    if (platformBots.length === 0) {
+        console.log(`[ChatbotEngine] ⚠️ No matching bots found for platform ${platform} on entity ${entityId}`);
+        return;
+    }
 
     // Sort by: 1. Score (Specificity) | 2. Recency
     platformBots.sort((a, b) => {

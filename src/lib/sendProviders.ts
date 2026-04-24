@@ -498,12 +498,11 @@ export async function sendGmailMessage(
     text: string,
     options: { userId: string; entityId: string; subject?: string }
 ): Promise<any> {
-    if (!text) return;
+    if (!text) throw new Error('El mensaje está vacío.');
 
     try {
         const accessToken = await getGmailAccessToken(options.userId, options.entityId);
 
-        // Gmail requires a base64url encoded raw message for its 'send' endpoint
         const subject = options.subject || 'Respuesta de Roosevelt';
         const str = [
             `To: ${to}`,
@@ -511,10 +510,10 @@ export async function sendGmailMessage(
             'MIME-Version: 1.0',
             `Subject: ${subject}`,
             '',
-            text
-        ].join('\n');
+            text.replace(/\n/g, '<br/>')
+        ].join('\r\n');
 
-        const encodedMail = Buffer.from(str).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        const encodedMail = Buffer.from(str, 'utf-8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
         const url = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
         const response = await axios.post(url, { raw: encodedMail }, {
@@ -526,7 +525,9 @@ export async function sendGmailMessage(
 
         return { ...response.data, sentTo: to };
     } catch (error: any) {
-        console.error('Gmail Send API Error:', error.response?.data || error.message);
-        throw new Error('Fallo al enviar correo desde Gmail.');
+        const apiErr = error.response?.data || { message: error.message };
+        const detailedMsg = typeof apiErr === 'object' ? JSON.stringify(apiErr) : apiErr;
+        console.error('Gmail Send API Error:', detailedMsg);
+        throw new Error(`Google API Error: ${detailedMsg}`);
     }
 }

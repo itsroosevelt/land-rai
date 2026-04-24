@@ -43,6 +43,7 @@ export const useConversationLogic = (props: ConversationModalProps) => {
             else if (rawSource.includes('telegram')) targetPlatform = 'Telegram';
             else if (rawSource.includes('x') || rawSource.includes('twitter')) targetPlatform = 'X';
             else if (rawSource.includes('tiktok')) targetPlatform = 'TikTok';
+            else if (rawSource.includes('gmail') || rawSource.includes('email')) targetPlatform = 'Gmail';
             else if (rawSource.includes('web')) targetPlatform = 'Web';
 
             setActivePlatform(targetPlatform);

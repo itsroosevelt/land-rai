@@ -44,6 +44,15 @@ export async function POST(req: Request) {
                     provider: targetPlatform as 'messenger' | 'instagram'
                 });
                 messageId = responseData?.message_id;
+            } else if (targetPlatform === 'gmail') {
+                console.log(`[Omnichannel API] Sending to Gmail (To: ${toNumber}) for tenant ${entityId}`);
+                const { sendGmailMessage } = await import('@/lib/sendProviders');
+                responseData = await sendGmailMessage(toNumber, message, {
+                    userId,
+                    entityId,
+                    subject: bodyValue.subject || 'Re: Respuesta de soporte'
+                });
+                messageId = responseData?.id; 
             } else {
                 const { sendWhatsAppMessage } = await import('@/lib/sendProviders');
                 console.log(`[Omnichannel API] Attempting to send WhatsApp message to ${toNumber}...`);
@@ -83,7 +92,18 @@ export async function POST(req: Request) {
                         break;
                     }
 
-                    // Strategy B: Legacy phone-based search (WhatsApp)
+                    // Strategy B: Search by email (Gmail specific)
+                    if (targetPlatform === 'gmail') {
+                        const queryByEmail = await cardsRef.where('email', '==', cleanTo).limit(1).get();
+                        if (!queryByEmail.empty) {
+                            resolvedCardId = queryByEmail.docs[0].id;
+                            resolvedGroupId = groupDoc.id;
+                            console.log(`[Omnichannel API] ✅ Found via email field: ${resolvedCardId}`);
+                            break;
+                        }
+                    }
+
+                    // Strategy C: Legacy phone-based search (WhatsApp)
                     if (targetPlatform === 'whatsapp' || targetPlatform === 'kamban') {
                         const searchNo = cleanTo.replace(/\+/g, '').replace(/\D/g, '');
                         const query1 = await cardsRef.where('contactNumberClean', '==', searchNo).get();
@@ -122,6 +142,7 @@ export async function POST(req: Request) {
                     timestamp: new Date(),
                     whatsappMessageId: messageId || null,
                     platform: targetPlatform,
+                    subject: bodyValue.subject || null,
                     ...(url ? {
                         fileUrl: url,
                         fileType: type === 'image' ? 'image/*' :

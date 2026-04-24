@@ -31,6 +31,7 @@ export const useMessageSender = ({
 }: UseMessageSenderProps) => {
     const { currentUser, activeEntity } = useAuth();
     const [newMessage, setNewMessage] = useState('');
+    const [gmailSubject, setGmailSubject] = useState('');
     const [isSending, setIsSending] = useState(false);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
@@ -51,6 +52,15 @@ export const useMessageSender = ({
                 return null;
             }
 
+            return recipientId;
+        }
+
+        if (platform === 'gmail') {
+            const recipientId = cardData?.email || cardData?.platform_ids?.gmail || cardData?.contactNumber || cardData?.contactName;
+            if (!recipientId || !recipientId.includes('@')) {
+                toast.error('No se puede enviar: no se encontró una dirección de correo válida.');
+                return null;
+            }
             return recipientId;
         }
 
@@ -118,8 +128,10 @@ export const useMessageSender = ({
         const tempMessage: Message & { id?: string } = {
             id: tempMsgId,
             text: newMessage,
+            subject: activePlatform.toLowerCase() === 'gmail' ? (gmailSubject || 'Sin Asunto') : undefined,
             sender: 'agent',
             timestamp: Timestamp.now(),
+            platform: activePlatform.toLowerCase(),
             status: 'sending'
         };
 
@@ -151,7 +163,8 @@ export const useMessageSender = ({
                 groupId: currentGroupId,
                 platform: activePlatform,
                 userId: currentUser?.uid,
-                entityId: activeEntity
+                entityId: activeEntity,
+                ...(activePlatform.toLowerCase() === 'gmail' ? { subject: gmailSubject || 'Sin Asunto' } : {})
             };
 
             if (activePlatform === 'WhatsApp' && !isWithin24Hours) {
@@ -378,6 +391,8 @@ export const useMessageSender = ({
     return {
         newMessage,
         setNewMessage,
+        gmailSubject,
+        setGmailSubject,
         isSending,
         selectedFile,
         filePreviewUrl,
