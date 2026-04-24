@@ -80,13 +80,7 @@ export async function GET(req: Request) {
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
 
-        // 2. Save in public integrations (for Pub/Sub workers)
-        await db.doc(`integrations/gmail/users/${userId}_${entityId}`).set({
-            ...integrationData,
-            entityId,
-            userId
-        });
-
+        // (No longer saving to public integrations per Master Mold rules)
         // Register Watch for real-time notifications via fetch
         try {
             const watchResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/watch', {
@@ -122,27 +116,22 @@ export async function GET(req: Request) {
                 ...watchMeta,
                 lastHistoryId: watchData?.historyId || null
             }, { merge: true });
-            await db.doc(`integrations/gmail/users/${userId}_${entityId}`).set(watchMeta, { merge: true });
+            // (No longer saving to public integrations per Master Mold rules)
         } catch (watchError) {
             console.error('Gmail Watch Error:', watchError);
             // Even if watch fails, we keep the connection but mark it with warning
             await db.doc(`users/${userId}/entities/${entityId}/integrations/gmail`).update({
-                status: 'Error',
+                status: 'Connected',
                 watchStatus: 'error',
                 lastError: 'Fallo al activar tiempo real (Watch API)'
             });
             await db.doc(`users/${userId}/entities/${entityId}/integrations/gmail_internal`).set({
-                status: 'Error',
+                status: 'Connected',
                 watchStatus: 'error',
                 lastError: 'Fallo al activar tiempo real (Watch API)',
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
-            await db.doc(`integrations/gmail/users/${userId}_${entityId}`).set({
-                status: 'Error',
-                watchStatus: 'error',
-                lastError: 'Fallo al activar tiempo real (Watch API)',
-                updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
+            // (No longer saving to public integrations per Master Mold rules)
         }
 
         // Return a success page — handles both popup and main-window redirect flows

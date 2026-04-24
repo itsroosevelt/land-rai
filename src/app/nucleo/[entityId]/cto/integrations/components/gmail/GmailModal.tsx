@@ -32,7 +32,7 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
 
     const isHealthyConnection = (data: any) => {
         if (!data) return false;
-        return data.status === 'Connected' && data.watchStatus === 'active';
+        return data.status === 'Connected';
     };
 
     useEffect(() => {
@@ -107,7 +107,7 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
         const toastId = toast.loading("Eliminando conexión...");
         try {
             // 1. Delete from public/integrations (internal routing)
-            await deleteDoc(doc(db, `integrations/gmail/users/${userId}_${entityId}`));
+            // (Removed per Master Mold rules)
             
             // 2. Delete internal auth state
             await deleteDoc(doc(db, `users/${userId}/entities/${entityId}/integrations/gmail_internal`));

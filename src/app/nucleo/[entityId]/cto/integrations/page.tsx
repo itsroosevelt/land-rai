@@ -218,9 +218,6 @@ export default function IntegrationsPage() {
 
 function isIntegrationConnected(integrationId: string, integrationData?: any) {
     if (!integrationData) return false;
-    if (integrationId === 'gmail') {
-        return integrationData.status === 'Connected' && integrationData.watchStatus === 'active';
-    }
     return integrationData.status === 'Connected';
 }
 
