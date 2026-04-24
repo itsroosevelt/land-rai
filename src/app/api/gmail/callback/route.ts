@@ -117,21 +117,20 @@ export async function GET(req: Request) {
                 lastHistoryId: watchData?.historyId || null
             }, { merge: true });
             // (No longer saving to public integrations per Master Mold rules)
-        } catch (watchError) {
+        } catch (watchError: any) {
             console.error('Gmail Watch Error:', watchError);
-            // Even if watch fails, we keep the connection but mark it with warning
+            const detailedError = watchError?.message || String(watchError);
             await db.doc(`users/${userId}/entities/${entityId}/integrations/gmail`).update({
                 status: 'Connected',
                 watchStatus: 'error',
-                lastError: 'Fallo al activar tiempo real (Watch API)'
+                lastError: `Google API Error: ${detailedError}`
             });
             await db.doc(`users/${userId}/entities/${entityId}/integrations/gmail_internal`).set({
                 status: 'Connected',
                 watchStatus: 'error',
-                lastError: 'Fallo al activar tiempo real (Watch API)',
+                lastError: `Google API Error: ${detailedError}`,
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
-            // (No longer saving to public integrations per Master Mold rules)
         }
 
         // Return a success page — handles both popup and main-window redirect flows
