@@ -6,6 +6,45 @@ import { processChatbotFlow } from '@/lib/chatbotEngine';
 
 export const dynamic = 'force-dynamic';
 
+function extractHeader(headers: any[] = [], name: string) {
+    return headers.find((header: any) => String(header?.name || '').toLowerCase() === name.toLowerCase())?.value || '';
+}
+
+function extractEmailAddress(headerValue: string) {
+    const normalized = String(headerValue || '').trim();
+    if (!normalized) return '';
+    const match = normalized.match(/<([^>]+)>/);
+    return (match?.[1] || normalized).trim().toLowerCase();
+}
+
+function getMessageText(msgData: any) {
+    const snippet = String(msgData?.snippet || '').trim();
+    if (snippet) return snippet;
+
+    const decodePart = (data?: string) => {
+        if (!data) return '';
+        try {
+            return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8').trim();
+        } catch {
+            return '';
+        }
+    };
+
+    const payload = msgData?.payload;
+    const directBody = decodePart(payload?.body?.data);
+    if (directBody) return directBody;
+
+    const queue = [...(payload?.parts || [])];
+    while (queue.length > 0) {
+        const part = queue.shift();
+        const body = decodePart(part?.body?.data);
+        if (body) return body;
+        if (Array.isArray(part?.parts)) queue.push(...part.parts);
+    }
+
+    return '';
+}
+
 export async function POST(req: Request) {
     try {
         const body = await req.json();
@@ -18,14 +57,29 @@ export async function POST(req: Request) {
         // 1. Decode Pub/Sub Data
         const decodedData = JSON.parse(Buffer.from(message.data, 'base64').toString());
         const emailAddress = decodedData.emailAddress;
+        const notificationHistoryId = decodedData.historyId ? String(decodedData.historyId) : null;
         
         console.log(`[Gmail Webhook] Notification for ${emailAddress}`);
 
         // 2. Identify Tenant
-        let tenantSnap = await db.collectionGroup('integrations')
+        let tenantSnap = await db.collection('integrations/gmail/users')
             .where('gmailAddress', '==', emailAddress)
             .limit(1)
             .get();
+
+        if (tenantSnap.empty) {
+            tenantSnap = await db.collection('integrations/gmail/users')
+                .where('email', '==', emailAddress)
+                .limit(1)
+                .get();
+        }
+
+        if (tenantSnap.empty) {
+            tenantSnap = await db.collectionGroup('integrations')
+                .where('gmailAddress', '==', emailAddress)
+                .limit(1)
+                .get();
+        }
 
         if (tenantSnap.empty) {
             tenantSnap = await db.collectionGroup('integrations')
@@ -43,26 +97,99 @@ export async function POST(req: Request) {
 
         // 3. Fetch Latest Email
         const accessToken = await getGmailAccessToken(userId, entityId);
-        const listRes = await axios.get(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=1&q=is:unread`, {
-            headers: { Authorization: `Bearer ${accessToken}` }
-        });
+        const internalIntegrationRef = db.doc(`${entityPath}/integrations/gmail_internal`);
+        const internalIntegrationSnap = await internalIntegrationRef.get();
+        const previousHistoryId = internalIntegrationSnap.data()?.lastHistoryId
+            ? String(internalIntegrationSnap.data()?.lastHistoryId)
+            : null;
 
-        if (!listRes.data.messages || listRes.data.messages.length === 0) {
+        const messageIds: string[] = [];
+
+        if (previousHistoryId) {
+            try {
+                const historyRes = await axios.get('https://gmail.googleapis.com/gmail/v1/users/me/history', {
+                    headers: { Authorization: `Bearer ${accessToken}` },
+                    params: {
+                        startHistoryId: previousHistoryId,
+                        historyTypes: 'messageAdded'
+                    }
+                });
+
+                const historyItems = historyRes.data?.history || [];
+                for (const item of historyItems) {
+                    const addedMessages = item?.messagesAdded || [];
+                    for (const added of addedMessages) {
+                        const addedMessageId = added?.message?.id;
+                        if (addedMessageId) {
+                            messageIds.push(String(addedMessageId));
+                        }
+                    }
+                }
+            } catch (historyError: any) {
+                const status = historyError?.response?.status;
+                if (status !== 404) {
+                    throw historyError;
+                }
+                console.warn(`[Gmail Webhook] History cursor expired for ${emailAddress}. Falling back to unread scan.`);
+            }
+        }
+
+        if (messageIds.length === 0) {
+            const listRes = await axios.get('https://gmail.googleapis.com/gmail/v1/users/me/messages', {
+                headers: { Authorization: `Bearer ${accessToken}` },
+                params: {
+                    maxResults: 10,
+                    labelIds: 'INBOX',
+                    q: 'is:unread -category:promotions -category:social -in:drafts'
+                }
+            });
+
+            const fallbackIds = (listRes.data.messages || []).map((msg: any) => String(msg.id));
+            messageIds.push(...fallbackIds);
+        }
+
+        if (messageIds.length === 0) {
+            await internalIntegrationRef.set({
+                lastHistoryId: notificationHistoryId || previousHistoryId || null,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
             return NextResponse.json({ success: true });
         }
 
-        const msgId = listRes.data.messages[0].id;
-        const msgRes = await axios.get(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msgId}`, {
-            headers: { Authorization: `Bearer ${accessToken}` }
-        });
+        const uniqueMessageIds = Array.from(new Set(messageIds));
+        let msgId: string | null = null;
+        let msgData: any = null;
 
-        const msgData = msgRes.data;
-        const fromHeader = msgData.payload.headers.find((h: any) => h.name === 'From')?.value || '';
-        const subject = msgData.payload.headers.find((h: any) => h.name === 'Subject')?.value || '';
-        const bodySnippet = msgData.snippet || '';
+        for (const candidateId of uniqueMessageIds) {
+            const candidateRes = await axios.get(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${candidateId}`, {
+                headers: { Authorization: `Bearer ${accessToken}` }
+            });
+
+            const candidate = candidateRes.data;
+            const labelIds = candidate.labelIds || [];
+            const fromEmail = extractEmailAddress(extractHeader(candidate.payload?.headers || [], 'From'));
+
+            if (fromEmail && fromEmail !== String(emailAddress).toLowerCase() && !labelIds.includes('SENT') && !labelIds.includes('DRAFT')) {
+                msgId = candidateId;
+                msgData = candidate;
+                break;
+            }
+        }
+
+        if (!msgId || !msgData) {
+            await internalIntegrationRef.set({
+                lastHistoryId: notificationHistoryId || previousHistoryId || null,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+            return NextResponse.json({ success: true, ignored: 'no_inbound_messages' });
+        }
+
+        const fromHeader = extractHeader(msgData.payload?.headers || [], 'From');
+        const subject = extractHeader(msgData.payload?.headers || [], 'Subject');
+        const bodySnippet = getMessageText(msgData);
 
         // Extract clean email from "Name <email@gmail.com>"
-        const fromEmail = fromHeader.includes('<') ? fromHeader.match(/<(.*)>/)?.[1] : fromHeader;
+        const fromEmail = extractEmailAddress(fromHeader);
 
         if (!fromEmail) return NextResponse.json({ success: true });
 
@@ -213,6 +340,11 @@ export async function POST(req: Request) {
             cardId = newCardRef.id;
             groupId = destinationGroupId;
         }
+
+        await internalIntegrationRef.set({
+            lastHistoryId: notificationHistoryId || String(msgData.historyId || previousHistoryId || ''),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
 
         // 5. TRIGGER UNIVERSAL CHATBOT
         if (groupId && cardId) {

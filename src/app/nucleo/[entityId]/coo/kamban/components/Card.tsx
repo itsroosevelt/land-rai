@@ -179,6 +179,50 @@ const Card = ({ card, groupId, onClick, cardColor = 'bg-neutral-800', contacts =
 
   const { flag, code } = getCountryInfo(card.contactNumber);
 
+  const isGenericMetaName = (value: any) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return true;
+    return normalized === 'usuario meta' || normalized === 'usuario' || normalized === 'instagram user';
+  };
+
+  const resolveCardChannel = () => {
+    const c = String(card.channel || card.source || card.primary_channel || '').toLowerCase();
+    if (c.includes('instagram')) return 'instagram';
+    if (c.includes('messenger') || c.includes('facebook')) return 'messenger';
+    if (c.includes('web')) return 'web';
+    if (c.includes('telegram')) return 'telegram';
+    if (c.includes('x') || c.includes('twitter')) return 'x';
+    if (c.includes('tiktok')) return 'tiktok';
+    if (c.includes('whatsapp') || c === 'manual') return 'whatsapp';
+    if (card.platform_ids?.instagram) return 'instagram';
+    if (card.platform_ids?.messenger || card.metaSenderId) return 'messenger';
+    if (card.platform_ids?.telegram) return 'telegram';
+    if (card.platform_ids?.whatsapp || card.contactNumber) return 'whatsapp';
+    return 'whatsapp';
+  };
+
+  const resolveDisplayName = () => {
+    const contactId = (card as any).contactId || (card as any).crmId;
+    let linkedContact: any = null;
+
+    if (contactId) linkedContact = (contacts as any[]).find(c => c.id === contactId);
+    if (!linkedContact && card.metaSenderId) {
+      linkedContact = (contacts as any[]).find(c => c.metaSenderId === card.metaSenderId);
+    }
+    if (!linkedContact && card.contactNumber) {
+      const normalizedCardPhone = card.contactNumber.replace(/\D/g, '');
+      if (normalizedCardPhone) {
+        linkedContact = (contacts as any[]).find(c => (c.phone || '').replace(/\D/g, '') === normalizedCardPhone);
+      }
+    }
+
+    const linkedName = linkedContact?.name || `${linkedContact?.firstName || ''} ${linkedContact?.lastName || ''}`.trim();
+    if (linkedName && !isGenericMetaName(linkedName)) return linkedName;
+    if (card.contactName && !isGenericMetaName(card.contactName)) return card.contactName;
+    if (linkedName) return linkedName;
+    return card.contactName || 'Unknown';
+  };
+
   const getChannelColor = (channel = '') => {
     const c = (channel || '').toLowerCase();
     if (c.includes('instagram')) return 'border-pink-500';
@@ -190,7 +234,8 @@ const Card = ({ card, groupId, onClick, cardColor = 'bg-neutral-800', contacts =
     return 'border-emerald-500';
   };
 
-  const channelColorClass = getChannelColor(card.channel || card.source);
+  const resolvedChannel = resolveCardChannel();
+  const channelColorClass = getChannelColor(resolvedChannel);
 
   return (
     <TooltipProvider>
@@ -210,22 +255,12 @@ const Card = ({ card, groupId, onClick, cardColor = 'bg-neutral-800', contacts =
         <div className="flex items-center justify-between min-w-0">
           <h3 className="font-semibold text-[13px] text-white/90 truncate leading-tight tracking-tight flex items-center gap-1.5">
             {(() => {
-              const c = (card.channel || card.source || '').toLowerCase();
-              if (c.includes('instagram')) return <Instagram size={12} className="text-pink-500" />;
-              if (c.includes('messenger') || c.includes('facebook')) return <Facebook size={12} className="text-blue-600" />;
-              if (c.includes('web')) return <Globe2 size={12} className="text-cyan-400" />;
+              if (resolvedChannel === 'instagram') return <Instagram size={12} className="text-pink-500" />;
+              if (resolvedChannel === 'messenger') return <Facebook size={12} className="text-blue-600" />;
+              if (resolvedChannel === 'web') return <Globe2 size={12} className="text-cyan-400" />;
               return <MessageCircle size={12} className="text-emerald-500" />;
             })()}
-            {(() => {
-              const contactId = (card as any).contactId;
-              let linkedContact: any = null;
-              if (contactId) linkedContact = (contacts as any[]).find(c => c.id === contactId);
-              if (!linkedContact && card.contactNumber) {
-                const normalizedCardPhone = card.contactNumber.replace(/\D/g, '');
-                if (normalizedCardPhone) linkedContact = (contacts as any[]).find(c => (c.phone || '').replace(/\D/g, '') === normalizedCardPhone);
-              }
-              return linkedContact?.name || `${linkedContact?.firstName || ''} ${linkedContact?.lastName || ''} `.trim() || card.contactName || 'Unknown';
-            })()}
+            {resolveDisplayName()}
           </h3>
 
           <div className="flex items-center gap-2">

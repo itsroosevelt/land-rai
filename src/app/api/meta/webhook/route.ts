@@ -15,6 +15,11 @@ function isGenericProfileName(value: any) {
     return normalized.includes('usuario meta') || normalized.includes('usuario') || normalized.includes('meta') || normalized === 'instagram user';
 }
 
+function buildMetaFallbackName(provider: 'messenger' | 'instagram', senderId: string) {
+    const suffix = String(senderId || '').slice(-6) || 'contacto';
+    return provider === 'instagram' ? `Instagram ${suffix}` : `Messenger ${suffix}`;
+}
+
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
@@ -342,6 +347,11 @@ export async function POST(req: Request) {
 
         const groupsRef = db.collection(`${entityPath}/kanban-groups`);
         const groupsSnapshot = await groupsRef.get();
+        const finalResolvedName = !isGenericProfileName(resolvedName)
+            ? resolvedName
+            : !isGenericProfileName(existingContactName)
+                ? existingContactName
+                : buildMetaFallbackName(provider, senderId);
 
         const newMessage = {
             sender: 'user',
@@ -381,7 +391,7 @@ export async function POST(req: Request) {
 
             // UPDATING EXISTING CARD
             await targetCardDoc.ref.update({
-                contactName: resolvedName || existingContactName,
+                contactName: finalResolvedName,
                 lastMessage: text.length > 40 ? text.substring(0, 37) + '...' : text,
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 unreadCount: admin.firestore.FieldValue.increment(1),
@@ -398,7 +408,7 @@ export async function POST(req: Request) {
             // Sincronizar metaSenderId, source y nombre con el contacto existente
             if (existingContactId) {
                 await db.collection(`${entityPath}/contacts`).doc(existingContactId).update({
-                    name: resolvedName || existingContactName,
+                    name: finalResolvedName,
                     metaSenderId: senderId,
                     kanbanGroupId: targetGroupId,
                     kanbanCardId: targetCardDoc.id,
@@ -434,7 +444,7 @@ export async function POST(req: Request) {
             await newCardRef.set({
                 crmId: contactIdToUse,
                 contactId: contactIdToUse,
-                contactName: resolvedName || 'Usuario Meta',
+                contactName: finalResolvedName,
                 contactNumber: senderId,
                 metaSenderId: senderId,
                 lastMessage: text.length > 1024 ? text.substring(0, 1021) + '...' : text,
@@ -451,7 +461,7 @@ export async function POST(req: Request) {
 
             const contactPayload: any = {
                 crmId: contactIdToUse,
-                name: resolvedName || 'Usuario Meta',
+                name: finalResolvedName,
                 metaSenderId: senderId,
                 kanbanGroupId: destinationGroupId,
                 kanbanCardId: newCardRef.id,

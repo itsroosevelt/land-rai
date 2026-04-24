@@ -60,7 +60,9 @@ export async function GET(req: Request) {
             accessToken: tokens.access_token,
             refreshToken: tokens.refresh_token,
             expiryDate: tokens.expiry_date,
+            expiresAt: typeof tokens.expiry_date === 'number' ? tokens.expiry_date : null,
             status: 'Connected',
+            watchStatus: 'pending',
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         };
 
@@ -87,7 +89,7 @@ export async function GET(req: Request) {
 
         // Register Watch for real-time notifications via fetch
         try {
-            await fetch('https://gmail.googleapis.com/gmail/v1/users/me/watch', {
+            const watchResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/watch', {
                 method: 'POST',
                 headers: { 
                     Authorization: `Bearer ${tokens.access_token}`,
@@ -98,15 +100,45 @@ export async function GET(req: Request) {
                     topicName: process.env.GMAIL_PUBSUB_TOPIC
                 })
             });
+
+            const watchData = await watchResponse.json().catch(() => null);
+
+            if (!watchResponse.ok) {
+                const watchError = watchData?.error?.message || watchData?.error || `HTTP ${watchResponse.status}`;
+                throw new Error(`Gmail Watch API: ${watchError}`);
+            }
+
+            const watchMeta = {
+                watchStatus: 'active',
+                watchHistoryId: watchData?.historyId || null,
+                watchExpiration: watchData?.expiration ? Number(watchData.expiration) : null,
+                watchActivatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                lastError: admin.firestore.FieldValue.delete()
+            };
+
+            await db.doc(`users/${userId}/entities/${entityId}/integrations/gmail`).set(watchMeta, { merge: true });
+            await db.doc(`users/${userId}/entities/${entityId}/integrations/gmail_internal`).set({
+                ...watchMeta,
+                lastHistoryId: watchData?.historyId || null
+            }, { merge: true });
+            await db.doc(`integrations/gmail/users/${userId}_${entityId}`).set(watchMeta, { merge: true });
         } catch (watchError) {
             console.error('Gmail Watch Error:', watchError);
             // Even if watch fails, we keep the connection but mark it with warning
             await db.doc(`users/${userId}/entities/${entityId}/integrations/gmail`).update({
                 status: 'Error',
+                watchStatus: 'error',
                 lastError: 'Fallo al activar tiempo real (Watch API)'
             });
             await db.doc(`users/${userId}/entities/${entityId}/integrations/gmail_internal`).set({
                 status: 'Error',
+                watchStatus: 'error',
+                lastError: 'Fallo al activar tiempo real (Watch API)',
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+            await db.doc(`integrations/gmail/users/${userId}_${entityId}`).set({
+                status: 'Error',
+                watchStatus: 'error',
                 lastError: 'Fallo al activar tiempo real (Watch API)',
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
             }, { merge: true });

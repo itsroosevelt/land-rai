@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   DndContext,
   closestCorners,
@@ -21,7 +21,7 @@ import { useSidebar } from '@/components/SidebarContext';
 import { SelectContactModal } from './SelectContactModal';
 import { CreateClientModal } from './CreateClientModal';
 import { useRouter } from 'next/navigation';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { toast } from 'sonner';
 
@@ -42,10 +42,47 @@ export default function KambanBoard() {
 
   const [isGlobalSelectContactOpen, setIsGlobalSelectContactOpen] = useState(false);
   const [isGlobalCreateClientOpen, setIsGlobalCreateClientOpen] = useState(false);
+  const [contacts, setContacts] = useState<any[]>([]);
   const router = useRouter();
 
   const { isCollapsed, toggleSidebar } = useSidebar();
   const { groups, cards, loading, handleDragEnd, handleUpdateColor, handleAddGroup } = useKambanBoard(searchTerm);
+
+  useEffect(() => {
+    const tenantPath = getTenantPath();
+    if (!tenantPath) return;
+
+    const unsubscribe = onSnapshot(collection(db, `${tenantPath}/contacts`), (snapshot) => {
+      setContacts(snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data()
+      })));
+    });
+
+    return () => unsubscribe();
+  }, [currentUser?.uid, activeEntity]);
+
+  const resolveCardChannel = (card: any) => {
+    const explicitChannel = String(card.channel || card.source || card.primary_channel || '').toLowerCase();
+
+    if (explicitChannel.includes('instagram')) return 'instagram';
+    if (explicitChannel.includes('messenger') || explicitChannel.includes('facebook')) return 'messenger';
+    if (explicitChannel.includes('snapchat')) return 'snapchat';
+    if (explicitChannel.includes('telegram')) return 'telegram';
+    if (explicitChannel.includes('twitter') || explicitChannel.includes('x')) return 'x';
+    if (explicitChannel.includes('tiktok')) return 'tiktok';
+    if (explicitChannel.includes('web')) return 'web';
+    if (explicitChannel.includes('whatsapp') || explicitChannel === 'manual') return 'whatsapp';
+
+    if (card.platform_ids?.instagram) return 'instagram';
+    if (card.platform_ids?.messenger) return 'messenger';
+    if (card.platform_ids?.telegram) return 'telegram';
+    if (card.platform_ids?.whatsapp) return 'whatsapp';
+    if (card.metaSenderId) return 'messenger';
+    if (card.contactNumber) return 'whatsapp';
+
+    return 'others';
+  };
 
   const onAddGroup = async () => {
     const name = window.prompt('New group name:');
@@ -119,19 +156,16 @@ export default function KambanBoard() {
       snapchat: 0, x: 0, tiktok: 0, telegram: 0, others: 0
     };
     cards.forEach(card => {
-      const channel = (card.channel || card.source || card.primary_channel || '').toLowerCase();
-      const hasNumber = !!card.contactNumber;
+      const channel = resolveCardChannel(card);
 
-      if (channel.includes('whatsapp') || channel === 'manual' || (hasNumber && !channel.includes('instagram') && !channel.includes('telegram'))) {
-        stats.whatsapp++;
-      } else if (channel.includes('instagram')) stats.instagram++;
-      else if (channel.includes('messenger')) stats.messenger++;
-      else if (channel.includes('web')) stats.web++;
-      else if (channel.includes('facebook')) stats.facebook++;
-      else if (channel.includes('snapchat')) stats.snapchat++;
-      else if (channel.includes('x') || channel.includes('twitter')) stats.x++;
-      else if (channel.includes('tiktok')) stats.tiktok++;
-      else if (channel.includes('telegram')) stats.telegram++;
+      if (channel === 'whatsapp') stats.whatsapp++;
+      else if (channel === 'instagram') stats.instagram++;
+      else if (channel === 'messenger') stats.messenger++;
+      else if (channel === 'web') stats.web++;
+      else if (channel === 'snapchat') stats.snapchat++;
+      else if (channel === 'x') stats.x++;
+      else if (channel === 'tiktok') stats.tiktok++;
+      else if (channel === 'telegram') stats.telegram++;
       else stats.others++;
     });
     return stats;
@@ -171,6 +205,7 @@ export default function KambanBoard() {
                 cards={filteredCards.filter(c => c.groupId === group.id)}
                 onCardClick={handleCardClick}
                 onUpdateColor={handleUpdateColor}
+                contacts={contacts}
                 isCompact={isCompact}
               />
             ))}
