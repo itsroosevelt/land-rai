@@ -90,9 +90,16 @@ export async function POST(req: Request) {
 
         if (tenantSnap.empty) return NextResponse.json({ success: false, error: 'Tenant not found' });
 
-        const pathParts = tenantSnap.docs[0].ref.path.split('/');
-        const userId = pathParts[1];
-        const entityId = pathParts[3];
+        const tenantDoc = tenantSnap.docs[0];
+        const tenantData = tenantDoc.data() || {};
+        const pathParts = tenantDoc.ref.path.split('/');
+        const userId = tenantData.userId || (pathParts[0] === 'users' ? pathParts[1] : null);
+        const entityId = tenantData.entityId || (pathParts[0] === 'users' ? pathParts[3] : null);
+
+        if (!userId || !entityId) {
+            throw new Error(`Invalid Gmail tenant mapping for ${emailAddress} at ${tenantDoc.ref.path}`);
+        }
+
         const entityPath = `users/${userId}/entities/${entityId}`;
 
         // 3. Fetch Latest Email

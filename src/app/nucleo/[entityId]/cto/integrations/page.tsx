@@ -139,7 +139,7 @@ export default function IntegrationsPage() {
                             <IntegrationCard 
                                 key={integration.id}
                                 integration={integration}
-                                isConnected={connectedIntegrations[integration.id]?.status === 'Connected'}
+                                isConnected={isIntegrationConnected(integration.id, connectedIntegrations[integration.id])}
                                 integrationData={connectedIntegrations[integration.id]}
                                 onConnect={() => handleConnect(integration)}
                             />
@@ -216,6 +216,18 @@ export default function IntegrationsPage() {
     );
 }
 
+function isIntegrationConnected(integrationId: string, integrationData?: any) {
+    if (!integrationData) return false;
+    if (integrationId === 'gmail') {
+        return integrationData.status === 'Connected' && integrationData.watchStatus === 'active';
+    }
+    return integrationData.status === 'Connected';
+}
+
+function getIntegrationStatusLabel(integrationId: string, integrationData?: any) {
+    return isIntegrationConnected(integrationId, integrationData) ? 'Activo' : 'Offline';
+}
+
 function IntegrationCard({ 
     integration, 
     isConnected, 
@@ -239,12 +251,12 @@ function IntegrationCard({
             {/* Status Badge */}
             <div className="flex justify-between items-start mb-4">
                 <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-[9px] uppercase font-black border transition-all ${
-                    isConnected || integrationData?.status === 'Error' ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/10 text-neutral-600'
+                    isConnected ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/10 text-neutral-600'
                 }`}>
                     <div className={`w-1 h-1 rounded-full ${
-                        isConnected || integrationData?.status === 'Error' ? 'bg-blue-400 shadow-[0_0_5px_rgba(59,130,246,1)]' : 'bg-neutral-600'
+                        isConnected ? 'bg-blue-400 shadow-[0_0_5px_rgba(59,130,246,1)]' : 'bg-neutral-600'
                     }`} />
-                    {isConnected || integrationData?.status === 'Error' ? 'Activo' : 'Offline'}
+                    {getIntegrationStatusLabel(integration.id, integrationData)}
                 </div>
                 {integration.popular && !isConnected && (
                     <div className="px-3 py-1 bg-white text-black rounded-full text-[9px] font-black uppercase tracking-tighter shadow-xl">

@@ -109,6 +109,7 @@ export async function GET(req: Request) {
             }
 
             const watchMeta = {
+                status: 'Connected',
                 watchStatus: 'active',
                 watchHistoryId: watchData?.historyId || null,
                 watchExpiration: watchData?.expiration ? Number(watchData.expiration) : null,

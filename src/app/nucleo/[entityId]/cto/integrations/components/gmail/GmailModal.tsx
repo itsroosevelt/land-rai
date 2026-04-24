@@ -30,14 +30,20 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
     const [config, setConfig] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
+    const isHealthyConnection = (data: any) => {
+        if (!data) return false;
+        return data.status === 'Connected' && data.watchStatus === 'active';
+    };
+
     useEffect(() => {
         if (isOpen) {
             const unsubscribe = onSnapshot(
                 doc(db, `users/${userId}/entities/${entityId}/integrations/gmail`),
                 (doc) => {
                     if (doc.exists()) {
-                        setConfig(doc.data());
-                        setIsConnected(true);
+                        const nextConfig = doc.data();
+                        setConfig(nextConfig);
+                        setIsConnected(isHealthyConnection(nextConfig));
                     } else {
                         setIsConnected(false);
                         setConfig(null);
@@ -181,7 +187,9 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
                                             <CheckCircle2 className="w-10 h-10 text-green-500" />
                                         </div>
                                         <h3 className="text-4xl font-extralight text-white tracking-tighter mb-1 italic uppercase leading-none">Bandeja Vinculada</h3>
-                                        <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-10">Google API Status: Operational</p>
+                                        <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-10">
+                                            Google API Status: {isConnected ? 'Operational' : 'Connection Required'}
+                                        </p>
                                         
                                         <div className="w-full space-y-4 px-2">
                                             <div className="h-28 bg-white/5 border border-white/10 rounded-[32px] flex items-center px-8 justify-between backdrop-blur-sm relative overflow-hidden group/card">
@@ -189,7 +197,9 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
                                                 <div className="text-left relative z-10">
                                                     <span className="text-[8px] uppercase tracking-[0.2em] text-red-500 block mb-2 font-black opacity-70">CORREO ELECTRÓNICO</span>
                                                     <p className="text-xl font-extralight text-white tracking-tight leading-none truncate max-w-[250px]">{config.email || 'Cuenta Activa'}</p>
-                                                    <span className="text-[8px] text-white/20 mt-2 block font-mono uppercase tracking-widest text-left">SYNC MODE: REAL-TIME (PUB/SUB)</span>
+                                                    <span className="text-[8px] text-white/20 mt-2 block font-mono uppercase tracking-widest text-left">
+                                                        {isConnected ? 'SYNC MODE: REAL-TIME (PUB/SUB)' : `SYNC MODE: ${String(config?.watchStatus || 'offline').toUpperCase()}`}
+                                                    </span>
                                                 </div>
                                                 <div className="p-4 bg-red-500/5 border border-red-500/10 rounded-2xl relative z-10"><ShieldCheck className="w-6 h-6 text-red-500/40" /></div>
                                             </div>
