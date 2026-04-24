@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, Users, CheckCircle, Tag, Hash, Settings, ChevronDown, ChevronRight, MessageSquare, AlertTriangle } from 'lucide-react';
+import { Mail, Users, CheckCircle, Tag, Hash, Settings, ChevronDown, ChevronRight, MessageSquare, AlertTriangle, Instagram, Facebook, Twitter, Music, Send } from 'lucide-react';
+import WhatsappIcon from '@/components/icons/WhatsappIcon';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { useParams } from 'next/navigation';
@@ -123,7 +124,17 @@ export default function InboxSidebar({ selectedFolder, setSelectedFolder, cards 
                                         }`}
                                 >
                                     <div className="relative mr-2.5">
-                                        <Hash size={14} className="opacity-40" />
+                                        {(() => {
+                                            const type = channel.type?.toLowerCase();
+                                            if (type === 'whatsapp') return <WhatsappIcon className="w-3.5 h-3.5 text-neutral-400" />;
+                                            if (type === 'instagram') return <Instagram size={14} className="text-neutral-400" />;
+                                            if (type === 'messenger' || type === 'facebook') return <Facebook size={14} className="text-neutral-400" />;
+                                            if (type === 'gmail') return <Mail size={14} className="text-neutral-400" />;
+                                            if (type === 'twitter' || type === 'x') return <Twitter size={14} className="text-neutral-400" />;
+                                            if (type === 'tiktok') return <Music size={14} className="text-neutral-400" />;
+                                            if (type === 'telegram') return <Send size={14} className="text-neutral-400" />;
+                                            return <Hash size={14} className="opacity-40" />;
+                                        })()}
                                         {(() => {
                                             const status = integrationStatuses[channel.id] || integrationStatuses[`${channel.id}_internal`];
                                             if (status === 'Connected') return <div className="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 bg-blue-500 rounded-full border border-[#0a0a0a]" />;

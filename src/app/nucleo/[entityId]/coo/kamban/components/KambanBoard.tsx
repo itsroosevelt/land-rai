@@ -65,6 +65,7 @@ export default function KambanBoard() {
   const resolveCardChannel = (card: any) => {
     const explicitChannel = String(card.channel || card.source || card.primary_channel || '').toLowerCase();
 
+    if (explicitChannel.includes('gmail')) return 'gmail';
     if (explicitChannel.includes('instagram')) return 'instagram';
     if (explicitChannel.includes('messenger') || explicitChannel.includes('facebook')) return 'messenger';
     if (explicitChannel.includes('snapchat')) return 'snapchat';
@@ -73,6 +74,8 @@ export default function KambanBoard() {
     if (explicitChannel.includes('tiktok')) return 'tiktok';
     if (explicitChannel.includes('web')) return 'web';
     if (explicitChannel.includes('whatsapp') || explicitChannel === 'manual') return 'whatsapp';
+
+    if (card.platform === 'gmail' || card.metadata?.platform === 'gmail') return 'gmail';
 
     if (card.platform_ids?.instagram) return 'instagram';
     if (card.platform_ids?.messenger) return 'messenger';
@@ -153,7 +156,7 @@ export default function KambanBoard() {
   const channelStats = useMemo(() => {
     const stats = {
       whatsapp: 0, instagram: 0, messenger: 0, web: 0, facebook: 0,
-      snapchat: 0, x: 0, tiktok: 0, telegram: 0, others: 0
+      snapchat: 0, x: 0, tiktok: 0, telegram: 0, gmail: 0, others: 0
     };
     cards.forEach(card => {
       const channel = resolveCardChannel(card);
@@ -166,6 +169,7 @@ export default function KambanBoard() {
       else if (channel === 'x') stats.x++;
       else if (channel === 'tiktok') stats.tiktok++;
       else if (channel === 'telegram') stats.telegram++;
+      else if (channel === 'gmail') stats.gmail++;
       else stats.others++;
     });
     return stats;

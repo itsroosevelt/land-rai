@@ -496,7 +496,7 @@ export async function sendTelegramMessage(
 export async function sendGmailMessage(
     to: string,
     text: string,
-    options: { userId: string; entityId: string; subject?: string }
+    options: { userId: string; entityId: string; subject?: string; threadId?: string }
 ): Promise<any> {
     if (!text) throw new Error('El mensaje está vacío.');
 
@@ -504,11 +504,23 @@ export async function sendGmailMessage(
         const accessToken = await getGmailAccessToken(options.userId, options.entityId);
 
         const subject = options.subject || 'Respuesta de Roosevelt';
-        const str = [
+        const headers = [
             `To: ${to}`,
             'Content-Type: text/html; charset=utf-8',
             'MIME-Version: 1.0',
-            `Subject: ${subject}`,
+            `Subject: ${subject}`
+        ];
+
+        // If we have a threadId, we should ideally include threading headers
+        // Note: For a "perfect" reply we'd need the specific Message-ID of the parent email.
+        // Gmail API automatically handles most threading if threadId is provided in the root object.
+        if (options.threadId) {
+            headers.push(`Thread-Topic: ${subject}`);
+            // headers.push(`In-Reply-To: <${options.threadId}@gmail.com>`); // Partial logic
+        }
+
+        const str = [
+            ...headers,
             '',
             text.replace(/\n/g, '<br/>')
         ].join('\r\n');
@@ -516,7 +528,10 @@ export async function sendGmailMessage(
         const encodedMail = Buffer.from(str, 'utf-8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
         const url = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
-        const response = await axios.post(url, { raw: encodedMail }, {
+        const response = await axios.post(url, { 
+            raw: encodedMail,
+            threadId: options.threadId // This is key for grouping in Gmail
+        }, {
             headers: {
                 Authorization: `Bearer ${accessToken}`,
                 'Content-Type': 'application/json'

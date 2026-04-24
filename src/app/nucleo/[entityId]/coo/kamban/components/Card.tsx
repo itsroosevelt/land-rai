@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import { doc, deleteDoc } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
+import WhatsappIcon from '@/components/icons/WhatsappIcon';
 import { Trash2, GripVertical } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -18,7 +19,7 @@ import {
   Youtube,
   Twitter,
   Globe2,
-  FileSpreadsheet
+  FileSpreadsheet, Mail, Send
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { countryData } from '@/lib/utils';
@@ -193,11 +194,13 @@ const Card = ({ card, groupId, onClick, cardColor = 'bg-neutral-800', contacts =
     if (c.includes('telegram')) return 'telegram';
     if (c.includes('x') || c.includes('twitter')) return 'x';
     if (c.includes('tiktok')) return 'tiktok';
+    if (c.includes('gmail')) return 'gmail';
     if (c.includes('whatsapp') || c === 'manual') return 'whatsapp';
     if (card.platform_ids?.instagram) return 'instagram';
     if (card.platform_ids?.messenger || card.metaSenderId) return 'messenger';
     if (card.platform_ids?.telegram) return 'telegram';
     if (card.platform_ids?.whatsapp || card.contactNumber) return 'whatsapp';
+    if (card.platform === 'gmail' || card.metadata?.platform === 'gmail') return 'gmail';
     return 'whatsapp';
   };
 
@@ -255,10 +258,12 @@ const Card = ({ card, groupId, onClick, cardColor = 'bg-neutral-800', contacts =
         <div className="flex items-center justify-between min-w-0">
           <h3 className="font-semibold text-[13px] text-white/90 truncate leading-tight tracking-tight flex items-center gap-1.5">
             {(() => {
+              if (resolvedChannel === 'gmail') return <Mail size={12} className="text-red-500" />;
               if (resolvedChannel === 'instagram') return <Instagram size={12} className="text-pink-500" />;
               if (resolvedChannel === 'messenger') return <Facebook size={12} className="text-blue-600" />;
               if (resolvedChannel === 'web') return <Globe2 size={12} className="text-cyan-400" />;
-              return <MessageCircle size={12} className="text-emerald-500" />;
+              if (resolvedChannel === 'telegram') return <Send size={12} className="text-sky-500" />;
+              return <WhatsappIcon className="w-3 h-3 text-emerald-500 fill-current" />;
             })()}
             {resolveDisplayName()}
           </h3>

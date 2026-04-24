@@ -156,6 +156,15 @@ export const useMessageSender = ({
         try {
             const apiCardId = currentCardId?.startsWith('temp-') ? undefined : currentCardId;
 
+            // 🧵 Thread Detection for Gmail
+            let threadId: string | undefined;
+            const messagesList = liveCardData?.messages || card?.messages || [];
+            if (activePlatform.toLowerCase() === 'gmail' && messagesList.length > 0) {
+                // Find the latest message that has a threadId
+                const lastEmail = [...messagesList].reverse().find(m => m.metadata?.threadId || m.whatsappMessageId);
+                threadId = lastEmail?.metadata?.threadId || lastEmail?.whatsappMessageId;
+            }
+
             let payload: any = {
                 message: messageToSend,
                 toNumber: recipientId,
@@ -164,7 +173,10 @@ export const useMessageSender = ({
                 platform: activePlatform,
                 userId: currentUser?.uid,
                 entityId: activeEntity,
-                ...(activePlatform.toLowerCase() === 'gmail' ? { subject: gmailSubject || 'Sin Asunto' } : {})
+                ...(activePlatform.toLowerCase() === 'gmail' ? { 
+                    subject: gmailSubject || 'Sin Asunto',
+                    threadId: threadId 
+                } : {})
             };
 
             if (activePlatform === 'WhatsApp' && !isWithin24Hours) {

@@ -45,15 +45,19 @@ export async function POST(req: Request) {
                 });
                 messageId = responseData?.message_id;
             } else if (targetPlatform === 'gmail') {
-                console.log(`[Omnichannel API] Sending to Gmail (To: ${toNumber}) for tenant ${entityId}`);
+                console.log(`[Omnichannel API] Sending to Gmail (To: ${toNumber}) for tenant ${entityId} | Thread: ${bodyValue.threadId || 'New'}`);
                 const { sendGmailMessage } = await import('@/lib/sendProviders');
                 responseData = await sendGmailMessage(toNumber, message, {
                     userId,
                     entityId,
-                    subject: bodyValue.subject || 'Re: Respuesta de soporte'
+                    subject: bodyValue.subject || 'Re: Respuesta de soporte',
+                    threadId: bodyValue.threadId
                 });
                 messageId = responseData?.id; 
-            } else {
+                if (responseData?.threadId) {
+                    // Update bodyValue with resolved threadId for logger
+                    bodyValue.threadId = responseData.threadId;
+                }            } else {
                 const { sendWhatsAppMessage } = await import('@/lib/sendProviders');
                 console.log(`[Omnichannel API] Attempting to send WhatsApp message to ${toNumber}...`);
                 responseData = await sendWhatsAppMessage(toNumber, message, { type, template, url, filename, userId, entityId });

@@ -1,4 +1,4 @@
-import { Search, Filter, MoreHorizontal, ArrowLeft, UserPlus, Download, RefreshCw, Settings, Instagram, Facebook, Globe, Ghost, MessageSquare, Twitter, Send, Music, LayoutGrid, Columns2, Check } from 'lucide-react';
+import { Search, Filter, MoreHorizontal, ArrowLeft, UserPlus, Download, RefreshCw, Settings, Instagram, Facebook, Globe, Ghost, MessageSquare, Twitter, Send, Music, LayoutGrid, Columns2, Check, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -102,6 +102,15 @@ export const KambanHeader = ({
                         <div className="flex flex-col items-center -space-y-0.5">
                             <span className="text-[8px] font-bold text-neutral-500 uppercase tracking-tighter group-hover/pill:text-neutral-400 transition-colors"></span>
                             <span className="text-[9px] font-bold text-neutral-300">{channelStats.telegram}</span>
+                        </div>
+                    </div>
+
+                    {/* Gmail */}
+                    <div className="flex flex-col items-center gap-0.5 transition-all cursor-pointer group/pill hover:opacity-80">
+                        <Mail size={14} className="text-neutral-500 group-hover/pill:text-red-500/50 transition-all" />
+                        <div className="flex flex-col items-center -space-y-0.5">
+                            <span className="text-[8px] font-bold text-neutral-500 uppercase tracking-tighter group-hover/pill:text-neutral-400 transition-colors"></span>
+                            <span className="text-[9px] font-bold text-neutral-300">{channelStats.gmail}</span>
                         </div>
                     </div>
                 </div>
