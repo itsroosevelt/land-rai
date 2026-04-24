@@ -162,58 +162,58 @@ export default function TelegramModal({ isOpen, onClose, activeEntity, currentUs
 
                         <div className="flex-1 flex flex-col justify-center">
                             <AnimatePresence mode="wait">
-                                {step === 1 ? (
-                                    <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-12">
-                                        <div className="space-y-8">
-                                            {[
-                                                { id: 1, text: <>Abre <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="text-[#26A5E4] hover:underline">@BotFather</a> en Telegram y crea tu bot con <span className="text-white">/newbot</span>.</> },
-                                                { id: 2, text: <>Copia el <span className="text-white font-medium">HTTP API Token</span> que te entregue al finalizar.</> },
-                                                { id: 3, text: <>Pégalo aquí para <span className="text-[#3b82f6] underline underline-offset-4">activar el protocolo</span> de IA en tiempo real.</> }
-                                            ].map((step) => (
-                                                <div key={step.id} className="flex items-start gap-5 group">
-                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-black shrink-0 transition-all duration-500 ${
-                                                        step.id === 3 
-                                                        ? 'bg-[#1e293b] border border-[#3b82f6]/50 text-[#3b82f6] shadow-[0_0_15px_rgba(59,130,246,0.3)]' 
-                                                        : 'bg-black border border-white/10 text-white/40'
-                                                    }`}>
-                                                        {step.id}
-                                                    </div>
-                                                    <p className={`text-[13px] leading-relaxed transition-colors duration-500 ${step.id === 3 ? 'text-white' : 'text-neutral-400'}`}>
-                                                        {step.text}
-                                                    </p>
+                                {step === 1 || step === 2 ? (
+                                    <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-8">
+                                        
+                                        {/* Micro-Tutorial */}
+                                        <div className="bg-[#26A5E4]/5 border border-[#26A5E4]/20 rounded-3xl p-6 relative overflow-hidden">
+                                            <div className="absolute top-0 right-0 w-32 h-32 bg-[#26A5E4] opacity-[0.03] blur-[50px] rounded-full pointer-events-none" />
+                                            <h3 className="text-white text-lg font-medium mb-4 flex items-center gap-2">
+                                                <div className="w-2 h-2 rounded-full bg-[#26A5E4] animate-pulse"></div>
+                                                Obligatorio: Conseguir el Bot Token
+                                            </h3>
+                                            <p className="text-white/60 text-[13px] leading-relaxed mb-6 max-w-sm">
+                                                Telegram no usa inicios de sesión. Obliga a que tú crees el bot primero con su asistente oficial.
+                                            </p>
+                                            
+                                            <div className="flex items-start gap-4">
+                                                <div className="w-8 h-8 rounded-full bg-[#26A5E4]/10 border border-[#26A5E4]/20 flex items-center justify-center shrink-0 text-[#26A5E4] text-[10px] font-black">1</div>
+                                                <div className="text-[12px] text-white/50 pt-1.5 font-light">
+                                                    Háblale a <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="text-[#26A5E4] font-medium hover:underline">@BotFather</a> en Telegram y pon <span className="bg-white/5 px-2 py-0.5 rounded text-white/80 font-mono">/newbot</span>
                                                 </div>
-                                            ))}
-                                        </div>
-                                        <button 
-                                            onClick={() => setStep(2)}
-                                            className="w-full h-16 bg-[#26A5E4] text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.4em] tracking-widest hover:brightness-110 transition-all"
-                                        >
-                                            CONTINUAR VINCULACIÓN
-                                        </button>
-                                    </motion.div>
-                                ) : step === 2 ? (
-                                    <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-8">
-                                        <div className="space-y-4">
-                                            <h3 className="text-2xl font-light text-white tracking-tight">Credenciales del Nodo</h3>
-                                            <div className="space-y-2">
-                                                <label className="text-[9px] text-white/30 tracking-[0.2em] uppercase font-black block pl-1">Bot API Token</label>
-                                                <input 
-                                                    type="text"
-                                                    placeholder="0000000000:AAeb..."
-                                                    value={botToken}
-                                                    onChange={(e) => setBotToken(e.target.value)}
-                                                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-5 text-white font-mono text-sm focus:outline-none focus:border-[#26A5E4]/50 transition-colors"
-                                                />
+                                            </div>
+                                            <div className="flex items-start gap-4 mt-4">
+                                                <div className="w-8 h-8 rounded-full bg-[#26A5E4]/10 border border-[#26A5E4]/20 flex items-center justify-center shrink-0 text-[#26A5E4] text-[10px] font-black">2</div>
+                                                <div className="text-[12px] text-white/50 pt-1.5 font-light">
+                                                    Copia el <span className="text-white font-medium">HTTP API Token</span> y pégalo abajo.
+                                                </div>
                                             </div>
                                         </div>
-                                        <div className="flex gap-4">
-                                            <button onClick={() => setStep(1)} className="flex-1 h-14 bg-white/5 text-white/40 text-[10px] font-black uppercase tracking-widest rounded-xl hover:text-white transition-all">Regresar</button>
+
+                                        {/* Input Area */}
+                                        <div className="space-y-3">
+                                            <label className="text-[9px] text-[#26A5E4] tracking-[0.2em] uppercase font-black block pl-2">Ingresar "HTTP API Token"</label>
+                                            <input 
+                                                type="text"
+                                                placeholder="Ejemplo: 1234567890:AAeb..."
+                                                value={botToken}
+                                                onChange={(e) => setBotToken(e.target.value)}
+                                                className="w-full bg-white/[0.03] border border-white/10 rounded-2xl px-6 py-5 text-white font-mono text-sm focus:outline-none focus:border-[#26A5E4]/50 focus:bg-white/[0.05] transition-all"
+                                            />
+                                        </div>
+
+                                        <div className="flex gap-4 pt-2">
+                                            <button onClick={onClose} className="flex-1 h-14 bg-white/5 text-white/40 text-[10px] font-black uppercase tracking-widest rounded-xl hover:text-white transition-all">Cancelar</button>
                                             <button 
                                                 onClick={handleConnect}
                                                 disabled={isLoading}
-                                                className="flex-[2] h-14 bg-white text-black font-black uppercase tracking-widest text-[11px] rounded-xl hover:bg-gray-200 transition-all"
+                                                className={`flex-[2] h-14 font-black uppercase tracking-widest text-[11px] rounded-xl transition-all shadow-[0_0_20px_rgba(38,165,228,0.2)] ${
+                                                    isLoading 
+                                                    ? 'bg-gray-800 text-white/50 shadow-none' 
+                                                    : 'bg-[#26A5E4] text-white hover:bg-[#1f88c0] hover:shadow-[0_0_30px_rgba(38,165,228,0.4)] hover:scale-[1.02] active:scale-[0.98]'
+                                                }`}
                                             >
-                                                {isLoading ? 'VERIFICANDO...' : 'ACTIVAR PROTOCOLO'}
+                                                {isLoading ? 'Conectando...' : 'Activar Protocolo Telegram'}
                                             </button>
                                         </div>
                                     </motion.div>
