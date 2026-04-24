@@ -155,7 +155,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
             accessToken: validateField('accessToken', waConfig.accessToken) ? '' : formErrors.accessToken,
         };
 
-        if (Object.values(errors).some(e => e !== '') || !waConfig.phoneNumberId || !waConfig.accessToken) {
+        if (Object.values(errors).some(e => e !== '') || !waConfig.phoneNumberId) {
             toast.error("Revisa los campos marcados en rojo.");
             return;
         }
@@ -408,27 +408,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                     {formErrors.wabaId && <p className="text-[8px] text-red-500 mt-1 font-bold italic pl-1">{formErrors.wabaId}</p>}
                 </div>
 
-                <div className="space-y-2">
-                    <div className="flex justify-between px-1">
-                        <label className="text-[9px] font-black uppercase tracking-widest text-neutral-500">TOKEN DE ACCESO (PERMANENTE)</label>
-                        <a href="https://business.facebook.com/latest/settings/system_users" target="_blank" rel="noreferrer" className="text-[8px] text-blue-500 font-bold uppercase italic tracking-tighter">¿CÓMO CREARLO?</a>
-                    </div>
-                    <div className="relative">
-                        <input
-                            type="password" placeholder="••••••••••••••••••••••••••••••••••••"
-                            value={waConfig.accessToken}
-                            onChange={(e) => {
-                                setWaConfig({ ...waConfig, accessToken: e.target.value });
-                                validateField('accessToken', e.target.value);
-                            }}
-                            className={`w-full h-11 bg-white/[0.02] border ${formErrors.accessToken ? 'border-red-500/50 bg-red-500/5' : 'border-white/10'} rounded-xl px-4 pr-12 text-xs text-white focus:border-blue-500/50 transition-all outline-none font-mono`}
-                        />
-                        <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                            <Lock className="w-3.5 h-3.5 text-neutral-600" />
-                        </div>
-                    </div>
-                    {formErrors.accessToken && <p className="text-[8px] text-red-500 mt-1 font-bold italic pl-1">{formErrors.accessToken}</p>}
-                </div>
+                {/* Token removed per platform global config */}
             </div>
 
 

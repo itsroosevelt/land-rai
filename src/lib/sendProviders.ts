@@ -288,12 +288,17 @@ export async function sendWhatsAppMessage(
                 if (internalDoc.exists) data = internalDoc.data();
             }
 
-            if (data?.accessToken && data?.phoneNumberId) {
-                token = data.accessToken;
+            if (data?.phoneNumberId) {
                 phoneNumberId = data.phoneNumberId;
-                console.log(`[sendWhatsAppMessage] Using Config: PhoneID=${phoneNumberId?.substring(0, 4)}... Source=${configDoc.exists ? 'standard' : 'internal'}`);
+            }
+            if (data?.accessToken) {
+                token = data.accessToken;
+            }
+
+            if (phoneNumberId) {
+                console.log(`[sendWhatsAppMessage] Resolved Config: PhoneID=${phoneNumberId?.substring(0, 4)}... | CustomToken=${!!data?.accessToken}`);
             } else {
-                console.warn(`[sendWhatsAppMessage] No valid config found for entity ${options.entityId}`);
+                console.warn(`[sendWhatsAppMessage] No valid PhoneID found for entity ${options.entityId}`);
             }
         } catch (err) {
             console.error(`[sendWhatsAppMessage] Error resolving config:`, err);
