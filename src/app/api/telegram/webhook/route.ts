@@ -231,8 +231,9 @@ export async function POST(req: Request) {
 
         // 2. TRIGGER UNIVERSAL CHATBOT
         if (groupId && cardId) {
+            const realEntityId = finalEntityPath.split('/').pop() || entityId;
             processChatbotFlow({
-                userId, entityId, groupId, cardId, platform: 'telegram', from: telegramChatId, text: text
+                userId, entityId: realEntityId, groupId, cardId, platform: 'telegram', from: telegramChatId, text: text
             }).catch(error => {
                  console.error(`[Telegram Chatbot Error] ${error}`);
             });
