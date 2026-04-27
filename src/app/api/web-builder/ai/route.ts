@@ -3,7 +3,14 @@ import { VertexAI, HarmCategory, HarmBlockThreshold } from '@google-cloud/vertex
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as dotenv from 'dotenv';
 import { SYSTEM_PROMPT } from './prompt';
+import { db, admin } from '@/lib/firebase-admin';
+
+// Force load environment variables
+dotenv.config();
+
+console.log("[AI Route] 🚀 Booting AI Route. VertexAI SA:", !!process.env.VERTEX_AI_SERVICE_ACCOUNT, "| Firebase SA:", !!process.env.FIREBASE_SERVICE_ACCOUNT);
 
 // Design pass for visual excellence
 const REFINE_PROMPT = `
@@ -51,171 +58,76 @@ function logToFile(msg: string) {
 // Lazy Clients
 let vertexAI: any = null;
 
+function parseServiceAccountEnv(envValue: string): any | null {
+  if (!envValue) return null;
+  try {
+    let cleaned = envValue.trim();
+    // Strip wrapping single or double quotes
+    if ((cleaned.startsWith("'") && cleaned.endsWith("'")) ||
+        (cleaned.startsWith('"') && cleaned.endsWith('"'))) {
+      cleaned = cleaned.slice(1, -1);
+    }
+    
+    // If the string contains literal newlines, we need to escape them for JSON.parse
+    // but only if they are not already escaped. This is tricky.
+    // Usually, the issue is that \n in .env is read as \\n.
+    // If we have literal newlines, we should replace them with \\n.
+    cleaned = cleaned.replace(/\n/g, '\\n');
+
+    return JSON.parse(cleaned);
+  } catch (e: any) {
+    console.error(`[Vertex AI] Failed to parse Service Account JSON: ${e.message}`);
+    // Last ditch attempt: try to fix the private key specifically
+    try {
+        // If it failed, it might be because of the private key format.
+        // We'll try to find the private key and escape it manually.
+        return null; 
+    } catch { return null; }
+  }
+}
+
 function getVertexAI() {
   if (!vertexAI) {
-    // Use service account from ENV if available
+    console.log("[Vertex AI] Initializing client...");
     let keyOptions: any = {};
     let saProject = '';
-    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-      try {
-        const credentials = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+
+    const saEnv = process.env.VERTEX_AI_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT;
+    if (saEnv) {
+      const credentials = parseServiceAccountEnv(saEnv);
+      if (credentials) {
+        // Crucial: The private_key MUST have literal newlines (\n) for the SDK
+        if (credentials.private_key && typeof credentials.private_key === 'string') {
+          credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+        }
         keyOptions = { credentials };
         saProject = credentials.project_id;
-      } catch (e) { }
+        console.log(`[Vertex AI] Loaded Service Account for: ${credentials.client_email}`);
+      }
     }
 
-    const project = saProject || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'roosevelt-platform-1';
+    const project = saProject || process.env.GOOGLE_CLOUD_PROJECT || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'roosevelt-491004';
     const location = 'us-central1';
 
-    vertexAI = new VertexAI({
-      project,
-      location,
-      googleAuthOptions: {
-        credentials: keyOptions.credentials,
-        scopes: [
-          'https://www.googleapis.com/auth/cloud-platform',
-          'https://www.googleapis.com/auth/userinfo.email'
-        ]
-      }
-    });
-    logToFile(`[getVertexAI] Initialized for project: ${project}`);
+    try {
+      // Create the client with explicit credentials to avoid scope issues
+      vertexAI = new VertexAI({
+        project,
+        location,
+        googleAuthOptions: {
+          credentials: keyOptions.credentials,
+          scopes: ['https://www.googleapis.com/auth/cloud-platform']
+        }
+      });
+      console.log(`[Vertex AI] 🏆 Success: Initialized for project ${project}`);
+    } catch (err: any) {
+      console.error(`[Vertex AI] ❌ Initialization Error: ${err.message}`);
+    }
   }
   return vertexAI;
 }
 
-async function callVertex(modelName: string, messages: any[], fileContext: string): Promise<string> {
-  logToFile(`[callVertex] Model: ${modelName}, Context Length: ${fileContext.length}`);
-  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'roosevelt-platform-1';
 
-  // Vertex AI is permanently broken (403 Permission Denied) — skip directly to Gemini API
-  let lastError: any = new Error('Vertex AI skipped - going directly to Gemini API');
-  logToFile(`[callVertex] Skipping Vertex AI (known 403), going directly to Gemini API Fallback...`);
-
-  // Fallback logic
-  if (process.env.GEMINI_API_KEY) {
-    logToFile("[callVertex] Attempting Gemini API Fallback...");
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-    const tryModel = async (id: string, version: string = 'v1beta', maxRetries = 2) => {
-      let cleanId = id.toLowerCase().trim();
-      if (cleanId === 'gemini-pro') cleanId = 'gemini-1.5-pro';
-      if (cleanId === 'gemini-flash') cleanId = 'gemini-1.5-flash';
-      if (!cleanId.startsWith('gemini-')) cleanId = 'gemini-' + cleanId;
-      if (cleanId === 'gemini-1.0-pro') cleanId = 'gemini-1.5-flash';
-
-      const model = genAI.getGenerativeModel({
-        model: cleanId,
-        generationConfig: {
-          maxOutputTokens: 65536,
-          temperature: 0.8
-        }
-      }, { apiVersion: version });
-
-      const contents = messages.map(m => {
-        const parts: any[] = [{ text: m.content || "" }];
-        if (m.images) {
-          m.images.forEach((img: any) => {
-            parts.push({ inlineData: { data: img.data, mimeType: img.mimeType } });
-          });
-        }
-        return { role: m.role === 'ai' || m.role === 'model' ? 'model' : 'user', parts };
-      });
-
-      if (contents.length > 0) {
-        contents[0].parts.unshift({ text: SYSTEM_PROMPT });
-      }
-
-      const lastUserMsg = [...contents].reverse().find(c => c.role === 'user');
-      if (lastUserMsg) {
-        lastUserMsg.parts.push({ text: "\n\nContext:\n" + fileContext });
-      }
-
-      let delay = 500;
-      for (let i = 0; i <= maxRetries; i++) {
-        try {
-          logToFile(`[Gemini Fallback] Trying SDK: ${cleanId} (${version}) - Attempt ${i + 1}`);
-
-          // Add a deadline/timeout for the model generation
-          // 90s timeout — gemini-2.5-flash is a thinking model that needs more time
-          const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("Timeout: AI generation took too long")), 120000)
-          );
-
-          const resultPromise = model.generateContent({ contents });
-          const result: any = await Promise.race([resultPromise, timeoutPromise]);
-
-          const responseText = (await result.response).text();
-          if (!responseText) throw new Error("[TRANSIENT] Empty response from Gemini API");
-          return responseText;
-        } catch (e: any) {
-          logToFile(`[Gemini Fallback] SDK Error for ${cleanId}: ${e.message}`);
-
-          // Classify the error: 404/403 are permanent (model doesn't exist), skip immediately
-          const is404or403 = e.message?.includes('404') || e.message?.includes('403');
-          const isTransient = !is404or403 && (e.message?.includes('429') || e.message?.includes('500') || e.message?.includes('503') || e.message?.includes('Timeout') || e.message?.includes('[TRANSIENT]'));
-
-          if (isTransient && i < maxRetries) {
-            logToFile(`[Gemini Fallback] Transient error hit for ${cleanId}. Retrying in ${delay}ms...`);
-            await new Promise(r => setTimeout(r, delay));
-            delay *= 2;
-            continue;
-          }
-
-          // For 404/403, throw immediately to skip to the next model
-          if (is404or403) {
-            logToFile(`[Gemini Fallback] ${cleanId} (${version}) returned ${is404or403 ? '404/403' : 'error'}. Skipping model.`);
-            throw e;
-          }
-
-          throw e;
-        }
-      }
-      throw new Error("Target retries exhausted");
-    };
-
-    // DIAGNOSTIC: List available models once if we hit issues
-    if (!process.env.MODELS_LISTED) {
-      try {
-        const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${process.env.GEMINI_API_KEY}`);
-        const listData = await listRes.json();
-        logToFile(`[Gemini Diagnostic] Available Models: ${JSON.stringify((listData.models || []).map((m: any) => m.name))}`);
-        process.env.MODELS_LISTED = 'true';
-      } catch (e) { }
-    }
-
-    const modelsToTry = [
-      'gemini-2.5-flash',
-      'gemini-3-flash-preview',
-      'gemini-2.0-flash',
-      'gemini-2.5-pro',
-    ];
-
-    for (const id of modelsToTry) {
-      try {
-        // Try v1beta first as it has the newest models
-        return await tryModel(id, 'v1beta');
-      } catch (e: any) {
-        logToFile(`[Gemini Fallback] ${id} v1beta failed: ${e.message}`);
-
-        // If it's a 404, try v1 as a backup for that specific model
-        if (e.message?.includes('404')) {
-          try {
-            return await tryModel(id, 'v1');
-          } catch (v1Error: any) {
-            logToFile(`[Gemini Fallback] ${id} v1 also failed: ${v1Error.message}`);
-            lastError = v1Error;
-          }
-        } else {
-          // If it's a 429 after retries, we MOVE TO THE NEXT MODEL instead of stopping
-          // This is key because different models often have separate quotas
-          logToFile(`[Gemini Fallback] ${id} exhausted. Rotating to next model...`);
-          lastError = e;
-        }
-      }
-    }
-  }
-  throw lastError;
-}
 
 
 // ============================================================================
@@ -559,7 +471,7 @@ function extractJSON(responseText: string, currentFiles: Record<string, string> 
         }
 
         if (extractedFiles.length > 0) {
-          logToFile(`[extractJSON] ROBUST RESCUE: Extracted ${extractedFiles.length} files from broken JSON: ${extractedFiles.map(f => f.path).join(', ')}`);
+          logToFile(`[extractJSON] ROBUST RESCUE: Extracted ${extractedFiles.length} files from broken JSON.`);
           return {
             type: 'code_update',
             files: extractedFiles,
@@ -575,7 +487,158 @@ function extractJSON(responseText: string, currentFiles: Record<string, string> 
   }
 }
 
-async function agenticFlow(messages: any[], fileContext: string, currentFiles: Record<string, string>, modelName: string = "Gemini 1.5 Pro") {
+async function callVertex(modelName: string, messages: any[], fileContext: string, apiKey: string) {
+  logToFile(`[callVertex] Model: ${modelName}, Context Length: ${fileContext.length}`);
+
+  // STRATEGY A: Use Vertex AI SDK if Service Account is configured (PAID/PLATFORM)
+  let strategyAError = "";
+  if (process.env.VERTEX_AI_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT) {
+    try {
+      console.log(`[AI Architect] Using Strategy A: Vertex AI SDK (${modelName})`);
+      logToFile(`[callVertex] Strategy: Vertex AI SDK (Paid)`);
+      const vertex = getVertexAI();
+      
+      let canonicalModel = modelName.toLowerCase();
+      if (canonicalModel.includes("2.0 flash")) canonicalModel = "gemini-2.0-flash-exp";
+      else if (canonicalModel.includes("1.5 pro")) canonicalModel = "gemini-1.5-pro-002";
+      else canonicalModel = "gemini-1.5-flash-002"; // Default
+      
+      console.log(`[Vertex AI] 🔍 Probando conexión con modelo estable: ${canonicalModel}`);
+
+      const generativeModel = vertex.getGenerativeModel({
+        model: canonicalModel,
+        generationConfig: {
+          maxOutputTokens: 8192,
+          temperature: 0.7,
+          topP: 0.95,
+        },
+      });
+
+      // Prepare contents for Vertex
+      const vertexHistory = messages.slice(0, -1).map(m => {
+        const parts: any[] = [{ text: m.content || "" }];
+        if (m.images) {
+          m.images.forEach((img: any) => {
+            parts.push({ inlineData: { data: img.data, mimeType: img.mimeType } });
+          });
+        }
+        return {
+          role: m.role === 'ai' || m.role === 'model' ? 'model' : 'user',
+          parts
+        };
+      });
+
+      // Add SYSTEM PROMPT to first message
+      if (vertexHistory.length > 0) {
+        vertexHistory[0].parts.unshift({ text: SYSTEM_PROMPT });
+      }
+
+      const lastMsg = messages[messages.length - 1];
+      const lastParts: any[] = [{ text: (lastMsg.content || "") + "\n\nContext:\n" + fileContext }];
+      if (lastMsg.images) {
+        lastMsg.images.forEach((img: any) => {
+          lastParts.push({ inlineData: { data: img.data, mimeType: img.mimeType } });
+        });
+      }
+
+      const chat = generativeModel.startChat({ history: vertexHistory });
+      const result = await chat.sendMessage(lastParts);
+      const response = await result.response;
+      const text = response.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      
+      if (text) return text;
+    } catch (sdkErr: any) {
+      console.error(`[AI Architect] Strategy A FAILED: ${sdkErr.message}`);
+      logToFile(`[callVertex] Vertex SDK Failure: ${sdkErr.message}. Falling back to REST...`);
+      strategyAError = sdkErr.message; // Save the real error
+    }
+  }
+
+  // STRATEGY B: Use REST API with API Key (BYOK/FREE)
+  console.log(`[AI Architect] Using Strategy B: REST API (API Key: ${apiKey ? 'Present' : 'Missing'})`);
+  if (!apiKey || apiKey === "your_gemini_api_key") {
+    if (strategyAError) {
+      // If Strategy A failed AND there is no valid API key, show the real Vertex AI error to the user!
+      throw new Error(`[GCP Vertex AI Error]: ${strategyAError}. Verifica que el modelo esté habilitado en la consola de Google Cloud para tu región (us-central1).`);
+    }
+    throw new Error("API key not valid. Please pass a valid API key in project settings.");
+  }
+
+  const prepareContents = (msgs: any[]) => {
+    const contents = msgs.map(m => {
+      const parts: any[] = [{ text: m.content || "" }];
+      if (m.images) {
+        m.images.forEach((img: any) => {
+          parts.push({ inlineData: { data: img.data, mimeType: img.mimeType } });
+        });
+      }
+      return { role: m.role === 'ai' || m.role === 'model' ? 'model' : 'user', parts };
+    });
+
+    if (contents.length > 0) {
+      contents[0].parts.unshift({ text: SYSTEM_PROMPT });
+    }
+
+    const lastUserMsg = [...contents].reverse().find(c => c.role === 'user');
+    if (lastUserMsg) {
+      lastUserMsg.parts.push({ text: "\n\nContext:\n" + fileContext });
+    }
+    return contents;
+  };
+
+  const contents = prepareContents(messages);
+
+  const tryWithFetch = async (id: string, version: string = 'v1beta') => {
+    let cleanId = id.toLowerCase().trim();
+    if (cleanId.includes('2.0 flash')) cleanId = 'gemini-2.0-flash';
+    if (cleanId.includes('2.0 pro')) cleanId = 'gemini-2.0-pro-exp';
+    if (cleanId.includes('1.5 pro')) cleanId = 'gemini-1.5-pro';
+    if (cleanId.includes('1.5 flash')) cleanId = 'gemini-1.5-flash';
+    if (cleanId.includes('3.0')) cleanId = 'gemini-2.0-flash-thinking-exp';
+    if (!cleanId.startsWith('gemini-')) cleanId = 'gemini-' + cleanId;
+    if (id.includes('latest') && !cleanId.includes('latest')) cleanId += '-latest';
+
+    const url = `https://generativelanguage.googleapis.com/${version}/models/${cleanId}:generateContent?key=${apiKey}`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents,
+        generationConfig: {
+          maxOutputTokens: 65536,
+          temperature: 0.8
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  };
+
+  try {
+    return await tryWithFetch(modelName);
+  } catch (e: any) {
+    if (strategyAError) {
+      // If both strategies failed, prioritize showing the Google Cloud (Vertex) error
+      throw new Error(`[GCP Vertex AI Error]: ${strategyAError}`);
+    }
+    const fallbacks = ['gemini-1.5-flash-latest', 'gemini-1.5-pro-latest', 'gemini-1.5-flash'];
+    let lastError = e;
+    for (const fb of fallbacks) {
+      if (fb.toLowerCase().includes(modelName.toLowerCase())) continue;
+      try { return await tryWithFetch(fb); } catch (inner) { lastError = inner; }
+    }
+    throw lastError;
+  }
+}
+
+async function agenticFlow(messages: any[], fileContext: string, currentFiles: Record<string, string>, modelName: string = "Gemini 1.5 Pro", apiKey: string) {
   logToFile("[AgenticFlow] Starting Multi-Agent Pipeline...");
   const startTime = Date.now();
 
@@ -586,7 +649,7 @@ async function agenticFlow(messages: any[], fileContext: string, currentFiles: R
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       logToFile(`[AgenticFlow] Stage 1: Architecting with ${modelName}... (Attempt ${attempt}/${maxAttempts})`);
-      const rawResult = await callVertex(modelName, messages, fileContext);
+      const rawResult = await callVertex(modelName, messages, fileContext, apiKey);
       result = extractJSON(rawResult, currentFiles);
 
       // If we got actual code/data, we're done — break out of the retry loop
@@ -619,9 +682,62 @@ async function agenticFlow(messages: any[], fileContext: string, currentFiles: R
 }
 
 export async function POST(req: Request) {
+  console.log("--- 🤖 AI REQUEST RECEIVED 🤖 ---");
+  let activeKey = process.env.GEMINI_API_KEY || "";
+  
   try {
     const { messages, currentFiles, model, supabaseConfig, projectId, userId, entityId } = await req.json();
-    logToFile(`[POST] Request started. Model: ${model}, Messages: ${messages.length}`);
+    logToFile(`[POST] Request started. User: ${userId}, Model: ${model}`);
+
+    // --- CREDITS SYSTEM (Lovable Style) ---
+    if (userId) {
+      const userRef = db.collection('users').doc(userId);
+      const userDoc = await userRef.get();
+      const userData = userDoc.data();
+      const userEmail = userData?.email || "";
+
+      // ADMIN BYPASS: admluxorsys@gmail.com has unlimited credits
+      const isAdmin = userEmail === "admluxorsys@gmail.com";
+
+      if (!isAdmin) {
+        let credits = userDoc.exists ? (userData?.credits ?? -1) : -1;
+
+        // Initialize new users with 10 gift credits
+        if (credits === -1) {
+          credits = 10;
+          await userRef.set({ credits: 10 }, { merge: true });
+          logToFile(`[Credits] Initialized 10 gift credits for new user ${userId}`);
+        }
+
+        if (credits <= 0) {
+          logToFile(`[Credits] User ${userId} blocked: 0 credits.`);
+          return NextResponse.json({ 
+            type: "message", 
+            content: "⚠️ Te has quedado sin créditos. Por favor, recarga tu balance para continuar construyendo con IA." 
+          });
+        }
+      } else {
+        logToFile(`[Credits] Admin bypass for ${userEmail}`);
+      }
+    }
+    // ---------------------------------------
+
+    // --- BYOK: Fetch project-specific API Key from Firestore ---
+    if (projectId && userId && entityId) {
+      try {
+        const projectDoc = await db.collection('users').doc(userId).collection('entities').doc(entityId).collection('web-projects').doc(projectId).get();
+        if (projectDoc.exists) {
+          const projectData = projectDoc.data();
+          if (projectData?.geminiApiKey) {
+            logToFile(`[POST] Project-specific API Key found for ${projectId}. Overriding platform key.`);
+            activeKey = projectData.geminiApiKey;
+          }
+        }
+      } catch (e: any) {
+        logToFile(`[POST] Failed to fetch project key: ${e.message}`);
+      }
+    }
+    // ------------------------------------------------------------
 
     const fileEntries = Object.entries(currentFiles || {}) as [string, string][];
     const filteredFiles = fileEntries.filter(([path]) => {
@@ -644,73 +760,37 @@ Modify ONLY the files required for the new feature and KEEP ALL OTHER FILES INTA
 Returning an empty JSON or emitting destructive changes will instantly crash the project. NEVER do this.
 `;
     if (isFreshProject && !hasHomePage) {
-      // PHASE 1: Fresh project — generate only the foundation
+      // PHASE 1: Fresh project — generate professional foundation
       generationStrategy = `
-🎯 GENERATION STRATEGY: PHASE 1 — FOUNDATION FIRST 🎯
+🎯 GENERATION STRATEGY: PHASE 1 — PROFESSIONAL FOUNDATION 🎯
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-This is a BRAND NEW project. To ensure MAXIMUM QUALITY and prevent loading errors, follow this strategy:
+This is a BRAND NEW project. To ensure WORLD-CLASS quality (Lovable/V0 style), follow this strategy:
 
-1. GENERATE ONLY THESE FILES (no more):
-   - src/index.css — Complete design system with CSS variables (colors, fonts, spacing, shadows)
-   - src/App.tsx — HashRouter with routes DEFINED for future pages (Home, Menu/Services, About, Contact) but ONLY HomePage implemented. Import pages using NAMED imports: \`import { HomePage } from './pages/HomePage'\`. ⚡ CRITICAL: App.tsx MUST use \`export default App;\` at the bottom.
-   - src/features/Navbar/Navbar.tsx — Premium sticky navbar. Use NAMED EXPORT: \`export const Navbar = ...\`
-   - src/features/Footer/Footer.tsx — Rich footer with columns. Use NAMED EXPORT: \`export const Footer = ...\`
-   - src/pages/HomePage.tsx — THE MAIN PAGE. Use NAMED EXPORT: \`export const HomePage = ...\`
-   - src/pages/ComingSoonPage.tsx — A beautiful placeholder. Use NAMED EXPORT: \`export const ComingSoonPage = ...\`
+1. USE EXISTING UI COMPONENTS:
+   - You MUST use the pre-installed components in 'src/components/ui/' (Button, Card, Input, etc.).
+   - NEVER write raw HTML buttons or inputs if a UI component exists.
+   - Import them like this: \`import { Button } from "@/components/ui/button"\`.
 
-2. QUALITY FOCUS:
-   - Dedicate 80% of your output tokens to HomePage.tsx — it MUST be breathtaking
-   - Apply glassmorphism, gradients, framer-motion animations, bento grids
-   - HomePage MUST have at least 6 rich sections: Hero, Features, Gallery/Showcase, Testimonials, Stats, CTA
-   - The Navbar MUST show links to all planned pages (even if they route to ComingSoonPage for now)
-   - IMAGES: Use ONLY these VERIFIED working image URLs (pick the ones that match the theme):
-     COFFEE/CAFETERIA:
-       https://images.unsplash.com/photo-1447933601403-56dc94df4175?w=800&q=80
-       https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800&q=80
-       https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=800&q=80
-       https://images.unsplash.com/photo-1498804103079-a6351b050096?w=800&q=80
-       https://images.unsplash.com/photo-1442512595331-e89e73853f31?w=800&q=80
-       https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=800&q=80
-       https://images.unsplash.com/photo-1511920170033-f8396924c348?w=800&q=80
-       https://images.unsplash.com/photo-1504630083234-14187a9df0f5?w=800&q=80
-     FOOD/BAKERY:
-       https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=800&q=80
-       https://images.unsplash.com/photo-1476224203421-9ac39bcb3327?w=800&q=80
-       https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&q=80
-       https://images.unsplash.com/photo-1484723091739-30a097e8f929?w=800&q=80
-      BEAUTY/COSMETICS:
-        https://images.unsplash.com/photo-1596462502278-27bfdc4033c8?w=800&q=80
-        https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=800&q=80
-        https://images.unsplash.com/photo-1512496015851-a90fb38ba796?w=800&q=80
-        https://images.unsplash.com/photo-1571781926291-c477ecfd024b?w=800&q=80
-        https://images.unsplash.com/photo-1612817288484-6f916006741a?w=800&q=80
-        https://images.unsplash.com/photo-1515377905703-c4788e51af15?w=800&q=80
-      RESTAURANT/INTERIOR:
-       https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80
-       https://images.unsplash.com/photo-1552566626-98f62d27f5c9?w=800&q=80
-       https://images.unsplash.com/photo-1559329007-40d22fd2b3c8?w=800&q=80
-     PEOPLE/TEAM:
-       https://i.pravatar.cc/150?img=1 through https://i.pravatar.cc/150?img=70 (for avatars)
-     GENERIC/NATURE:
-       https://images.unsplash.com/photo-1416339306562-f3d12fefd36f?w=800&q=80
-       https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=800&q=80
-       https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800&q=80
-   - NEVER invent Unsplash photo IDs. ONLY use URLs from the list above or picsum.photos/800/600
-   - NEVER use local /assets/ paths
+2. MANDATORY DIRECTORY STRUCTURE:
+   - src/index.css — Complete design system with CSS variables.
+   - src/lib/utils.ts — Utility for class merging (cn).
+   - src/components/ui/ — (Existing) Base UI components.
+   - src/features/Layout/Navbar.tsx — Premium sticky navbar.
+   - src/features/Layout/Footer.tsx — Rich footer.
+   - src/pages/HomePage.tsx — THE MAIN PAGE (Rich, 6+ sections).
+   - src/App.tsx — HashRouter setup with proper routing.
 
-3. CRITICAL UTILS RULE:
-   - src/lib/utils.ts ONLY exports the function "cn()" for class merging. DO NOT import anything else from it.
-   - NEVER import generateUniqueId, generateId, uuid, or any other invented function. Use crypto.randomUUID() or Math.random() inline instead.
+3. QUALITY FOCUS:
+   - Dedicate 80% of tokens to HomePage.tsx. It MUST be breathtaking.
+   - Use 'framer-motion' for all entrances and hover effects.
+   - Implement Bento-grids, Glassmorphism, and Premium Gradients.
+   - IMAGES: Use ONLY the verified Unsplash URLs provided in the context.
 
 4. RESPONSE BREVITY:
-   - The "content" field in your JSON response MUST be 2-3 lines maximum.
-   - Example: "Página principal de cafetería creada con hero, menú, testimonios y CTA. Incluye navbar, footer y sistema de diseño."
-   - Do NOT list every file changed in the content — the file list is shown automatically in the UI.
-
-DO NOT generate Menu, About, Contact, or other pages yet. The user will ask for them next.
+   - The "content" field in JSON must be 2-3 lines max.
 `;
-      logToFile(`[POST] Progressive Gen: PHASE 1 — Foundation (${codeFiles.length} code files)`);
+      logToFile(`[POST] Progressive Gen: PHASE 1 — Professional Foundation (${codeFiles.length} code files)`);
     } else if (hasHomePage && hasPages) {
       // PHASE 2+: Project has pages — follow established design
       generationStrategy = `
@@ -791,7 +871,8 @@ If you need to use Firebase Firestore to store data (like web forms, leads), you
     }
 
     // ALL requests now use the Agentic Flow (Architect + Refiner) to ensure quality
-    let finalResult = await agenticFlow(messages, fileContext, currentFiles || {}, model || "Gemini 1.5 Flash");
+    // We pass the activeKey here
+    let finalResult = await agenticFlow(messages, fileContext, currentFiles || {}, model || "Gemini 1.5 Flash", activeKey);
 
     // SANITY CHECK: Block AI responses that attempt to wipe out the project by returning an empty files array
     // ONLY block if it's a code_update (plans and questions are fine)
@@ -800,12 +881,37 @@ If you need to use Firebase Firestore to store data (like web forms, leads), you
        return NextResponse.json({ type: "message", content: "Error de seguridad: La IA generó una respuesta inválida (sin código). Por favor, intenta de nuevo con instrucciones más detalladas." });
     }
 
+    // --- DEDUCT CREDIT ON SUCCESS ---
+    if (userId && finalResult) {
+      try {
+        const userRef = db.collection('users').doc(userId);
+        const userDoc = await userRef.get();
+        const userEmail = userDoc.data()?.email || "";
+        
+        if (userEmail !== "admluxorsys@gmail.com") {
+          await userRef.update({
+            credits: admin.firestore.FieldValue.increment(-1)
+          });
+          logToFile(`[Credits] Deducted 1 credit from ${userId}. Interaction complete.`);
+        } else {
+          logToFile(`[Credits] Admin ${userEmail} used AI - No deduction.`);
+        }
+      } catch (err: any) {
+        logToFile(`[Credits] Failed to deduct credit: ${err.message}`);
+      }
+    }
+    // --------------------------------
+
     logToFile(`[POST] Returning successful code update with ${finalResult?.files?.length ?? 'N/A'} files.`);
     return NextResponse.json(finalResult ?? { type: 'message', content: 'Error interno: respuesta vacía del modelo.' });
 
   } catch (e: any) {
     logToFile(`[Vertex API Error] ${e.message}`);
-    return NextResponse.json({ type: "message", content: "Error: " + e.message }, { status: 500 });
+    let userMsg = "Error: " + e.message;
+    if (e.message?.includes('API key not valid') || e.message?.includes('400')) {
+      userMsg = "🚨 Tu API Key de Gemini no es válida o ha expirado. Por favor, ve a 'Configuración' (botón de engranaje) y actualízala para este proyecto.";
+    }
+    return NextResponse.json({ type: "message", content: userMsg }, { status: 200 }); // Status 200 so the UI displays it as a message
   }
 }
 

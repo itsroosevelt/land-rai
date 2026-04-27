@@ -1,12 +1,12 @@
 import { admin, db } from './firebase-admin';
-import { sendMetaMessage, sendWhatsAppMessage, sendTelegramMessage, sendGmailMessage } from './sendProviders';
+import { sendMetaMessage, sendWhatsAppMessage, sendTelegramMessage, sendGmailMessage, sendTwitterMessage } from './sendProviders';
 
 export interface ChatbotContext {
     userId: string;
     entityId: string;
     groupId: string;
     cardId: string;
-    platform: 'whatsapp' | 'messenger' | 'instagram' | 'telegram' | 'gmail';
+    platform: 'whatsapp' | 'messenger' | 'instagram' | 'telegram' | 'gmail' | 'x_twitter';
     from: string;
     text: string;
     messageId?: string;
@@ -143,6 +143,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         if (platform === 'messenger' || platform === 'instagram') return await sendMetaMessage(from, content, { ...opts, provider: platform });
         if (platform === 'telegram') return await sendTelegramMessage(from, content, opts);
         if (platform === 'gmail') return await sendGmailMessage(from, content, opts);
+        if (platform === 'x_twitter') return await sendTwitterMessage(from, content, opts);
     };
 
     const normalizedInput = text.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");

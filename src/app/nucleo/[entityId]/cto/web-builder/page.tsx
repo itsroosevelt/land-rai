@@ -194,7 +194,9 @@ function WebBuilderContent() {
         approvePlan,
         deleteConversation,
         cancelGeneration,
-        statusMessage
+        statusMessage,
+        credits,
+        isAdmin
     } = useChatAI(
         activeProjectId, files, updateFiles, setActiveFile, setGeneratedTheme, showToast,
         selectedModel, reasoningLevel,
@@ -379,11 +381,42 @@ function WebBuilderContent() {
             }
         };
         window.addEventListener('message', handleGlobalMessage);
-        return () => window.removeEventListener('message', handleGlobalMessage);
+
+        // --- Custom Event Listeners for Chat UI ---
+        const onApprovePlan = (e: any) => approvePlan(e.detail.msgId);
+        const onRejectPlan = (e: any) => {
+            const { msgId } = e.detail;
+            // Optionally handle rejection logic here if needed
+        };
+        const onResendMessage = (e: any) => {
+            const { msgId } = e.detail;
+            const msgIdx = chatHistory.findIndex(m => m.id === msgId);
+            if (msgIdx !== -1) {
+                // Find the user message that corresponds to this AI message
+                // Usually it's the message right before or the last user message
+                const userMsg = chatHistory.slice(0, msgIdx).reverse().find(m => m.role === 'user');
+                if (userMsg) {
+                    showToast("Reintentando generación...", "info");
+                    handleGenerate(userMsg.content, []); // Re-send without re-uploading images if any
+                }
+            }
+        };
+
+        window.addEventListener('approve-plan', onApprovePlan);
+        window.addEventListener('reject-plan', onRejectPlan);
+        window.addEventListener('resend-message', onResendMessage);
+
+        return () => {
+            window.removeEventListener('message', handleGlobalMessage);
+            window.removeEventListener('approve-plan', onApprovePlan);
+            window.removeEventListener('reject-plan', onRejectPlan);
+            window.removeEventListener('resend-message', onResendMessage);
+        };
     }, [
         handleGenerate, showToast, setRefreshSignal, setPreviewPath,
         files, setActiveFile, activeFile, setShowCode, setSelection,
-        expandedFolders, setExpandedFolders, runtimeErrors
+        expandedFolders, setExpandedFolders, runtimeErrors,
+        approvePlan, chatHistory
     ]);
 
     // --- Auto-Fix Engine ---
@@ -657,6 +690,8 @@ function WebBuilderContent() {
                             deleteConversation={deleteConversation}
                             cancelGeneration={cancelGeneration}
                             onOpenSettings={() => setShowSettings(true)}
+                            credits={credits}
+                            isAdmin={isAdmin}
                         />
 
                         <div className="flex-1 overflow-hidden relative flex items-center justify-center bg-[#050505]">
@@ -836,6 +871,15 @@ function WebBuilderContent() {
                             databaseMode: 'manual'
                         });
                         showToast("Configuración de base de datos guardada", "success");
+                    }
+                }}
+                geminiApiKey={activeProject?.geminiApiKey}
+                onSaveAIConfig={async (config) => {
+                    if (activeProjectId) {
+                        await updateProject(activeProjectId, {
+                            geminiApiKey: config.geminiApiKey
+                        });
+                        showToast("Configuración de IA actualizada", "success");
                     }
                 }}
             />

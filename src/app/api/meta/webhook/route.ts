@@ -5,8 +5,14 @@ import { processChatbotFlow } from '@/lib/chatbotEngine';
 
 const DEBUG_FILE = '/tmp/meta_webhook.log';
 
+import fs from 'fs';
+
 function debugLog(msg: string) {
-    console.log(`[Meta Webhook Debug] ${msg}`);
+    const logStr = `\n[${new Date().toISOString()}] [Meta Webhook Debug] ${msg}`;
+    console.log(logStr);
+    try {
+        fs.appendFileSync('/tmp/meta_webhook_debug.log', logStr);
+    } catch (e) {}
 }
 
 function isGenericProfileName(value: any) {
@@ -148,6 +154,7 @@ export async function POST(req: Request) {
         const userId = pathParts[uIdx + 1];
         const entityId = pathParts[eIdx + 1];
         const entityPath = `users/${userId}/entities/${entityId}`;
+        debugLog(`[POST] Identified EntityPath: ${entityPath}`);
 
         debugLog(`[POST] Tenant Discovery Success: User=${userId}, Entity=${entityId}, Provider=${provider}`);
 
@@ -277,6 +284,7 @@ export async function POST(req: Request) {
         }
 
         // 5. SAFETY CHECK: Re-verify card existence JUST before creation (Universal Deduplication)
+        debugLog(`[POST] Phase 5: Anti-Duplicate DB Checks...`);
         if (!targetCardDoc) {
              const finalSafetySnap = await db.collectionGroup('cards')
                 .where('metaSenderId', '==', senderId)
@@ -380,12 +388,14 @@ export async function POST(req: Request) {
             } else if (!groupsSnapshot.empty) {
                 destinationGroupId = groupsSnapshot.docs[0].id;
             } else {
+                debugLog(`[POST] Inbox missing, generating default_inbox`);
                 destinationGroupId = 'default_inbox';
                 await groupsRef.doc('default_inbox').set({
                     name: 'Inbox', order: 0, color: '#3B82F6', createdAt: admin.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
             }
 
+            debugLog(`[POST] Preparing to newCardRef.set() to group ${destinationGroupId}`);
             const newCardRef = db.collection(`${entityPath}/kanban-groups/${destinationGroupId}/cards`).doc();
             const contactIdToUse = existingContactId || `c_${Date.now().toString().slice(-8)}`;
 
@@ -397,9 +407,12 @@ export async function POST(req: Request) {
                 timestamp: Date.now()
             };
 
+            debugLog(`[POST] Writing payload to db! contactName: ${finalResolvedName}`);
             await newCardRef.set({
                 id: newCardRef.id,
                 crmId: contactIdToUse,
+// ... ignoring some lines because replace multiple chunks must exactly match 
+// wait, I will just match a smaller chunk.
                 contactId: contactIdToUse,
                 contactName: finalResolvedName,
                 contactNumber: senderId,
@@ -466,8 +479,10 @@ export async function POST(req: Request) {
             }
         }
 
+        debugLog(`[POST] 🚀 Successfully finished webhook control flow!`);
         return NextResponse.json({ success: true });
     } catch (error: any) {
+        debugLog(`[POST CRITICAL EXCEPTION] 💥 ${error.message}\n${error.stack}`);
         return NextResponse.json({
             success: false,
             error: 'Webhook Crash: ' + (error.message || 'Unknown'),
