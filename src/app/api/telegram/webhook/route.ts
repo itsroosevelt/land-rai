@@ -133,16 +133,22 @@ export async function POST(req: Request) {
 
         let finalEntityPath = entityPath;
 
-        // AUTO-RECOVERY: If the default path doesn't have groups, find one that does
+        // AUTO-RECOVERY: Find the entity that actually has the user's groups
         const initialGroupsCheck = await db.collection(`${entityPath}/kanban-groups`).limit(1).get();
         if (initialGroupsCheck.empty) {
-            console.log(`[Telegram] Path ${entityPath} seems empty. Searching other entities for user ${userId}...`);
+            console.log(`[Telegram] Default path ${entityPath} is empty. Searching for the 'real' active entity...`);
             const allEntities = await db.collection(`users/${userId}/entities`).get();
             for (const entDoc of allEntities.docs) {
-                const check = await db.collection(`users/${userId}/entities/${entDoc.id}/kanban-groups`).limit(1).get();
-                if (!check.empty) {
+                const groupsSnap = await db.collection(`users/${userId}/entities/${entDoc.id}/kanban-groups`).get();
+                // If this entity has "WhatsApp" or "Messenger" groups, it's probably the one in the user's screenshot
+                const hasActiveGroups = groupsSnap.docs.some(g => {
+                    const name = (g.data().name || '').toLowerCase();
+                    return name.includes('whatsapp') || name.includes('messenger') || name.includes('instagram');
+                });
+                
+                if (hasActiveGroups) {
                     finalEntityPath = `users/${userId}/entities/${entDoc.id}`;
-                    console.log(`[Telegram] Auto-recovered correct entity path: ${finalEntityPath}`);
+                    console.log(`[Telegram] FOUND ACTIVE ENTITY: ${finalEntityPath}`);
                     break;
                 }
             }
