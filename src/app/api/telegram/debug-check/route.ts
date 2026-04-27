@@ -30,6 +30,21 @@ export async function GET(req: Request) {
         // Search for our test message
         const testCard = allCards.find(c => c.contactName === 'SOPORTE ANTIGRAVITY');
 
+        // Fetch recent webhook logs
+        let webhookLogs: any[] = [];
+        try {
+            const logsSnap = await db.collection('system_logs')
+                .where('type', '==', 'telegram_webhook_raw')
+                .orderBy('timestamp', 'desc')
+                .limit(10)
+                .get();
+            logsSnap.forEach(doc => {
+                webhookLogs.push({ id: doc.id, ...doc.data() });
+            });
+        } catch (e) {
+            console.error("Error fetching logs", e);
+        }
+
         return NextResponse.json({
             status: 'Diagnostic Report',
             entityPath: path,
@@ -37,7 +52,8 @@ export async function GET(req: Request) {
             totalCards: allCards.length,
             testCardFound: !!testCard,
             allTelegramCards: allCards.filter(c => (c.source === 'TELEGRAM' || c.channel === 'telegram')),
-            recentCards: allCards.sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0)).slice(0, 5)
+            recentCards: allCards.sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0)).slice(0, 5),
+            recentWebhookLogs: webhookLogs
         });
     } catch (e: any) {
         return NextResponse.json({ error: e.message });
