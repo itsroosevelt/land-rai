@@ -131,12 +131,29 @@ export async function POST(req: Request) {
             timestamp: Date.now()
         };
 
+        let finalEntityPath = entityPath;
+
+        // AUTO-RECOVERY: If the default path doesn't have groups, find one that does
+        const initialGroupsCheck = await db.collection(`${entityPath}/kanban-groups`).limit(1).get();
+        if (initialGroupsCheck.empty) {
+            console.log(`[Telegram] Path ${entityPath} seems empty. Searching other entities for user ${userId}...`);
+            const allEntities = await db.collection(`users/${userId}/entities`).get();
+            for (const entDoc of allEntities.docs) {
+                const check = await db.collection(`users/${userId}/entities/${entDoc.id}/kanban-groups`).limit(1).get();
+                if (!check.empty) {
+                    finalEntityPath = `users/${userId}/entities/${entDoc.id}`;
+                    console.log(`[Telegram] Auto-recovered correct entity path: ${finalEntityPath}`);
+                    break;
+                }
+            }
+        }
+
         if (targetCardDoc && groupId) {
             console.log(`[Telegram] Updating existing card: ${cardId} in group: ${groupId}`);
             const cardRef = targetCardDoc.ref;
             await cardRef.update({
                 lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
-                updatedAt: admin.firestore.Timestamp.now(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 unreadCount: admin.firestore.FieldValue.increment(1),
                 messages: admin.firestore.FieldValue.arrayUnion(newMessage),
                 'botState.messageQueue': admin.firestore.FieldValue.arrayUnion(queueItem),
@@ -147,18 +164,21 @@ export async function POST(req: Request) {
             });
 
             if (contactId) {
-                await db.collection(`${entityPath}/contacts`).doc(contactId).update({
+                await db.collection(`${finalEntityPath}/contacts`).doc(contactId).update({
                     source: 'TELEGRAM',
                     telegramChatId: telegramChatId,
-                    updatedAt: admin.firestore.Timestamp.now()
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
                 });
             }
         } else {
             // FALLBACK: Ensure we have a valid destination group
-            const groupsSnapshot = await db.collection(`${entityPath}/kanban-groups`).orderBy('order', 'asc').get();
+            const groupsSnapshot = await db.collection(`${finalEntityPath}/kanban-groups`).orderBy('order', 'asc').get();
             
-            // Priority: 1. Group with 'inbox' in name, 2. First available group, 3. Create new
-            const targetGroupDoc = groupsSnapshot.docs.find(g => (g.data().name || '').toLowerCase().includes('inbox')) || groupsSnapshot.docs[0];
+            // Priority: 1. Group with 'inbox' or 'telegram' in name, 2. First available group
+            const targetGroupDoc = groupsSnapshot.docs.find(g => {
+                const name = (g.data().name || '').toLowerCase();
+                return name.includes('inbox') || name.includes('telegram');
+            }) || groupsSnapshot.docs[0];
             
             let destinationGroupId = '';
             if (targetGroupDoc) {
@@ -167,7 +187,7 @@ export async function POST(req: Request) {
             } else {
                 destinationGroupId = 'inbox_telegram';
                 console.log(`[Telegram] Creating new fallback group: ${destinationGroupId}`);
-                await db.collection(`${entityPath}/kanban-groups`).doc(destinationGroupId).set({
+                await db.collection(`${finalEntityPath}/kanban-groups`).doc(destinationGroupId).set({
                     name: 'Inbox Telegram',
                     order: 0,
                     color: '#26A5E4',
@@ -177,9 +197,9 @@ export async function POST(req: Request) {
 
             // Create/Update Contact
             const finalContactId = contactId || `tg_${telegramChatId}`;
-            console.log(`[Telegram] Creating new card for contact: ${finalContactId}`);
+            console.log(`[Telegram] Creating new card for contact: ${finalContactId} in path: ${finalEntityPath}`);
 
-            await db.collection(`${entityPath}/contacts`).doc(finalContactId).set({
+            await db.collection(`${finalEntityPath}/contacts`).doc(finalContactId).set({
                 name: contactName,
                 telegramChatId,
                 source: 'TELEGRAM',
@@ -190,13 +210,13 @@ export async function POST(req: Request) {
             }, { merge: true });
 
             // Create the Card
-            await db.collection(`${entityPath}/kanban-groups/${destinationGroupId}/cards`).doc(finalContactId).set({
+            await db.collection(`${finalEntityPath}/kanban-groups/${destinationGroupId}/cards`).doc(finalContactId).set({
                 contactId: finalContactId,
                 contactName: contactName,
                 telegramChatId: telegramChatId,
                 lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
-                updatedAt: admin.firestore.Timestamp.now(),
-                createdAt: admin.firestore.Timestamp.now(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 messages: [newMessage],
                 'botState.messageQueue': [queueItem],
                 unreadCount: 1,
