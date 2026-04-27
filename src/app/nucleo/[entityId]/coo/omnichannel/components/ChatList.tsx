@@ -82,10 +82,11 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
         // If multiple cards exist for the same contact, we only show the one with the latest update
         const uniqueMap = new Map<string, any>();
         filtered.forEach(c => {
-            // Robust key: Use normalized phone for WhatsApp, or external_id/id for others
+            // Robust key: Platform + (Phone or ID) to keep channels separated (Rule: Platform Isolation)
             const phone = c.contactNumber || c.contactNumberClean;
-            const sourceKey = (c.source || '').toLowerCase();
-            const key = phone ? phone.replace(/\D/g, '') : (c.platform_ids?.[sourceKey] || c.platform_ids?.messenger || c.external_id || c.id);
+            const sourceKey = (c.source || c.channel || c.primary_channel || 'unknown').toLowerCase();
+            const idKey = phone ? phone.replace(/\D/g, '') : (c.platform_ids?.[sourceKey] || c.platform_ids?.messenger || c.external_id || c.id);
+            const key = `${sourceKey}_${idKey}`;
             
             const existing = uniqueMap.get(key);
             

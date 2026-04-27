@@ -171,25 +171,18 @@ export async function POST(req: Request) {
                 });
             }
         } else {
-            // FALLBACK: Ensure we have a valid destination group
-            const groupsSnapshot = await db.collection(`${finalEntityPath}/kanban-groups`).orderBy('order', 'asc').get();
-            
-            // Priority: 1. Group with 'inbox' or 'telegram' in name, 2. First available group
-            const targetGroupDoc = groupsSnapshot.docs.find(g => {
-                const name = (g.data().name || '').toLowerCase();
-                return name.includes('inbox') || name.includes('telegram');
-            }) || groupsSnapshot.docs[0];
+            // ENSURE TELEGRAM GROUP (Strict Isolation)
+            const groupsSnapshot = await db.collection(`${finalEntityPath}/kanban-groups`).get();
+            const telegramGroup = groupsSnapshot.docs.find(g => (g.data().name || '').toLowerCase().includes('telegram'));
             
             let destinationGroupId = '';
-            if (targetGroupDoc) {
-                destinationGroupId = targetGroupDoc.id;
-                console.log(`[Telegram] Using existing group: ${destinationGroupId} (${targetGroupDoc.data().name})`);
+            if (telegramGroup) {
+                destinationGroupId = telegramGroup.id;
             } else {
                 destinationGroupId = 'inbox_telegram';
-                console.log(`[Telegram] Creating new fallback group: ${destinationGroupId}`);
                 await db.collection(`${finalEntityPath}/kanban-groups`).doc(destinationGroupId).set({
-                    name: 'Inbox Telegram',
-                    order: 0,
+                    name: 'Telegram Inbox',
+                    order: 5, // After WhatsApp
                     color: '#26A5E4',
                     createdAt: admin.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
@@ -197,7 +190,7 @@ export async function POST(req: Request) {
 
             // Create/Update Contact
             const finalContactId = contactId || `tg_${telegramChatId}`;
-            console.log(`[Telegram] Creating new card for contact: ${finalContactId} in path: ${finalEntityPath}`);
+            console.log(`[Telegram] Creating isolated card for contact: ${finalContactId}`);
 
             await db.collection(`${finalEntityPath}/contacts`).doc(finalContactId).set({
                 name: contactName,
@@ -209,7 +202,7 @@ export async function POST(req: Request) {
                 kanbanCardId: finalContactId
             }, { merge: true });
 
-            // Create the Card
+            // Create the Card (Strictly in Telegram Group)
             await db.collection(`${finalEntityPath}/kanban-groups/${destinationGroupId}/cards`).doc(finalContactId).set({
                 contactId: finalContactId,
                 contactName: contactName,
