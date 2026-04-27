@@ -18,19 +18,30 @@ export async function POST(req: Request) {
     try {
         const body = await req.json();
         
+        // DEBUG: Save raw body for inspection (Rule: Agnostic Search)
+        await db.collection('system_logs').add({
+            type: 'telegram_webhook_raw',
+            body,
+            userId,
+            entityId,
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+
         // 1. Extract message or callback
         const message = body.message;
         const callbackQuery = body.callback_query;
         
         if (!message && !callbackQuery) {
-            return NextResponse.json({ success: true, ignored: 'no_processable_content' });
+            return NextResponse.json({ success: true, message: 'Not a message or callback' });
         }
 
         const telegramChatId = String(message?.chat?.id || callbackQuery?.message?.chat?.id);
         const text = callbackQuery?.data || message?.text || '';
-        const firstName = (message?.from || callbackQuery?.from)?.first_name || 'Usuario';
-        const lastName = (message?.from || callbackQuery?.from)?.last_name || '';
-        const fullName = `${firstName} ${lastName}`.trim() || 'Usuario Telegram';
+        const firstName = message?.from?.first_name || callbackQuery?.from?.first_name || 'Usuario';
+        const lastName = message?.from?.last_name || callbackQuery?.from?.last_name || 'Telegram';
+        const contactName = `${firstName} ${lastName}`.trim();
+
+        console.log(`[Telegram] Processing message from ${contactName} (${telegramChatId})`);
 
         if (!text && !message?.attachments) {
              return NextResponse.json({ success: true, ignored: 'empty_content' });
@@ -138,41 +149,42 @@ export async function POST(req: Request) {
                 });
             }
         } else {
-            // Create New Contact & Card
-            const finalContactId = contactId || String(Date.now()).slice(-10);
-            const groupsRef = db.collection(`${entityPath}/kanban-groups`);
-            const groupsSnapshot = await groupsRef.get();
+            // Get or Create Inbox Group
+            const groupsSnapshot = await db.collection(`${entityPath}/kanban-groups`).orderBy('order', 'asc').get();
+            let destinationGroupId = '';
             
-            const fallbackGroup = groupsSnapshot.docs.find(g => (g.data().name || '').toLowerCase().includes('inbox')) || groupsSnapshot.docs[0];
-            const destinationGroupId = fallbackGroup ? fallbackGroup.id : 'default_inbox';
-
-            if (destinationGroupId === 'default_inbox' && !fallbackGroup) {
-                await db.collection(`${entityPath}/kanban-groups`).doc('default_inbox').set({
-                    name: 'Inbox', order: 0, color: '#3B82F6', createdAt: admin.firestore.FieldValue.serverTimestamp()
+            const inboxGroup = groupsSnapshot.docs.find(g => (g.data().name || '').toLowerCase().includes('inbox'));
+            
+            if (inboxGroup) {
+                destinationGroupId = inboxGroup.id;
+            } else {
+                // Create Default Inbox if none exists
+                const newGroupRef = db.collection(`${entityPath}/kanban-groups`).doc('inbox_telegram');
+                await newGroupRef.set({
+                    name: 'Inbox Telegram',
+                    order: 0,
+                    color: '#26A5E4',
+                    createdAt: admin.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
+                destinationGroupId = 'inbox_telegram';
             }
 
-            const newCardRef = db.collection(`${entityPath}/kanban-groups/${destinationGroupId}/cards`).doc();
+            // Create New Contact & Card
+            const finalContactId = contactId || `tg_${telegramChatId}`;
             
-            const newMessage = {
-                sender: 'user',
-                text: text,
-                timestamp: admin.firestore.Timestamp.now(),
-                messageId: message?.message_id ? `tg_${message.message_id}` : `tg_cb_${Date.now()}`,
-                platform: 'telegram'
-            };
+            await db.collection(`${entityPath}/contacts`).doc(finalContactId).set({
+                name: contactName,
+                telegramChatId,
+                source: 'TELEGRAM',
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                kanbanGroupId: destinationGroupId,
+                kanbanCardId: finalContactId
+            }, { merge: true });
 
-            const queueItem = {
-                text: text || '',
-                messageId: message?.message_id ? `tg_${message.message_id}` : `tg_cb_${Date.now()}`,
-                platform: 'telegram',
-                from: telegramChatId,
-                timestamp: Date.now()
-            };
-
-            await newCardRef.set({
-                crmId: finalContactId,
-                contactName: fullName,
+            await db.collection(`${entityPath}/kanban-groups/${destinationGroupId}/cards`).doc(finalContactId).set({
+                contactId: finalContactId,
+                contactName: contactName,
                 contactNumber: telegramChatId,
                 telegramChatId: telegramChatId,
                 lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
@@ -187,18 +199,7 @@ export async function POST(req: Request) {
                 platform_ids: { telegram: telegramChatId }
             });
 
-            await db.collection(`${entityPath}/contacts`).doc(finalContactId).set({
-                crmId: finalContactId,
-                name: fullName,
-                telegramChatId: telegramChatId,
-                kanbanGroupId: destinationGroupId,
-                kanbanCardId: newCardRef.id,
-                source: 'TELEGRAM',
-                updatedAt: admin.firestore.Timestamp.now(),
-                createdAt: admin.firestore.Timestamp.now()
-            }, { merge: true });
-
-            cardId = newCardRef.id;
+            cardId = finalContactId;
             groupId = destinationGroupId;
         }
 
