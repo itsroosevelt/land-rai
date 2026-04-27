@@ -9,12 +9,12 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: false, error: `Missing context: u=${userId}, e=${entityId}, t=${!!botToken}` }, { status: 400 });
         }
 
-        // Construct the webhook URL with multi-tenant context (Agnostic Rule 4)
+        // Construct and ENCODE the webhook URL (Crucial for multi-tenant params)
         const webhookUrl = `https://${domain}/api/telegram/webhook?u=${userId}&e=${entityId}`;
 
         console.log(`[Telegram Setup] Registering webhook: ${webhookUrl}`);
 
-        const response = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook?url=${webhookUrl}`);
+        const response = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook?url=${encodeURIComponent(webhookUrl)}`);
         const data = await response.json();
 
         if (data.ok) {
