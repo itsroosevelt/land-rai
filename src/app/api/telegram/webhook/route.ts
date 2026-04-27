@@ -79,31 +79,35 @@ export async function POST(req: Request) {
         // FALLBACK SEARCH: Scan all groups like WhatsApp/Meta do
         if (!targetCardDoc) {
              console.log(`[Telegram] No card found via contact. Deep searching all groups...`);
-             const allMatches: any[] = [];
-             const groupsRef = db.collection(`${entityPath}/kanban-groups`);
-             const groupsSnapshot = await groupsRef.get();
+             try {
+                 const allMatches: any[] = [];
+                 const groupsRef = db.collection(`${entityPath}/kanban-groups`);
+                 const groupsSnapshot = await groupsRef.get();
 
-             for (const groupDoc of groupsSnapshot.docs) {
-                 const cardsSnapshot = await groupDoc.ref.collection('cards')
-                     .where('telegramChatId', '==', telegramChatId)
-                     .orderBy('updatedAt', 'desc')
-                     .limit(1)
-                     .get();
+                 for (const groupDoc of groupsSnapshot.docs) {
+                     // Use only single-field equality filter to avoid composite index requirement
+                     const cardsSnapshot = await groupDoc.ref.collection('cards')
+                         .where('telegramChatId', '==', telegramChatId)
+                         .limit(1)
+                         .get();
 
-                 cardsSnapshot.forEach(doc => {
-                     allMatches.push({ doc, groupId: groupDoc.id });
-                 });
-             }
+                     cardsSnapshot.forEach(doc => {
+                         allMatches.push({ doc, groupId: groupDoc.id });
+                     });
+                 }
 
-             if (allMatches.length > 0) {
-                 allMatches.sort((a, b) => {
-                     const tA = (a.doc.data().updatedAt?.toDate?.() || new Date(0)).getTime();
-                     const tB = (b.doc.data().updatedAt?.toDate?.() || new Date(0)).getTime();
-                     return tB - tA;
-                 });
-                 targetCardDoc = allMatches[0].doc;
-                 targetGroupId = allMatches[0].groupId;
-                 console.log(`[Telegram] Found existing card via Deep Search: ${targetCardDoc.id}`);
+                 if (allMatches.length > 0) {
+                     allMatches.sort((a, b) => {
+                         const tA = (a.doc.data().updatedAt?.toDate?.() || new Date(0)).getTime();
+                         const tB = (b.doc.data().updatedAt?.toDate?.() || new Date(0)).getTime();
+                         return tB - tA;
+                     });
+                     targetCardDoc = allMatches[0].doc;
+                     targetGroupId = allMatches[0].groupId;
+                     console.log(`[Telegram] Found existing card via Deep Search: ${targetCardDoc.id}`);
+                 }
+             } catch (fallbackError: any) {
+                 console.error(`[Telegram] Fallback search failed, will create new card:`, fallbackError.message);
              }
         }
 
@@ -128,6 +132,7 @@ export async function POST(req: Request) {
         };
 
         if (targetCardDoc && groupId) {
+            console.log(`[Telegram] Updating existing card: ${cardId} in group: ${groupId}`);
             const cardRef = targetCardDoc.ref;
             await cardRef.update({
                 lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
@@ -137,10 +142,10 @@ export async function POST(req: Request) {
                 'botState.messageQueue': admin.firestore.FieldValue.arrayUnion(queueItem),
                 status: 'open',
                 source: 'TELEGRAM',
+                channel: 'telegram',
                 [`platform_ids.telegram`]: telegramChatId
             });
 
-            // Sync contact source
             if (contactId) {
                 await db.collection(`${entityPath}/contacts`).doc(contactId).update({
                     source: 'TELEGRAM',
@@ -149,29 +154,31 @@ export async function POST(req: Request) {
                 });
             }
         } else {
-            // Get or Create Inbox Group
+            // FALLBACK: Ensure we have a valid destination group
             const groupsSnapshot = await db.collection(`${entityPath}/kanban-groups`).orderBy('order', 'asc').get();
+            
+            // Priority: 1. Group with 'inbox' in name, 2. First available group, 3. Create new
+            const targetGroupDoc = groupsSnapshot.docs.find(g => (g.data().name || '').toLowerCase().includes('inbox')) || groupsSnapshot.docs[0];
+            
             let destinationGroupId = '';
-            
-            const inboxGroup = groupsSnapshot.docs.find(g => (g.data().name || '').toLowerCase().includes('inbox'));
-            
-            if (inboxGroup) {
-                destinationGroupId = inboxGroup.id;
+            if (targetGroupDoc) {
+                destinationGroupId = targetGroupDoc.id;
+                console.log(`[Telegram] Using existing group: ${destinationGroupId} (${targetGroupDoc.data().name})`);
             } else {
-                // Create Default Inbox if none exists
-                const newGroupRef = db.collection(`${entityPath}/kanban-groups`).doc('inbox_telegram');
-                await newGroupRef.set({
+                destinationGroupId = 'inbox_telegram';
+                console.log(`[Telegram] Creating new fallback group: ${destinationGroupId}`);
+                await db.collection(`${entityPath}/kanban-groups`).doc(destinationGroupId).set({
                     name: 'Inbox Telegram',
                     order: 0,
                     color: '#26A5E4',
                     createdAt: admin.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
-                destinationGroupId = 'inbox_telegram';
             }
 
-            // Create New Contact & Card
+            // Create/Update Contact
             const finalContactId = contactId || `tg_${telegramChatId}`;
-            
+            console.log(`[Telegram] Creating new card for contact: ${finalContactId}`);
+
             await db.collection(`${entityPath}/contacts`).doc(finalContactId).set({
                 name: contactName,
                 telegramChatId,
@@ -182,10 +189,10 @@ export async function POST(req: Request) {
                 kanbanCardId: finalContactId
             }, { merge: true });
 
+            // Create the Card
             await db.collection(`${entityPath}/kanban-groups/${destinationGroupId}/cards`).doc(finalContactId).set({
                 contactId: finalContactId,
                 contactName: contactName,
-                contactNumber: telegramChatId,
                 telegramChatId: telegramChatId,
                 lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
                 updatedAt: admin.firestore.Timestamp.now(),
@@ -195,9 +202,9 @@ export async function POST(req: Request) {
                 unreadCount: 1,
                 status: 'open',
                 source: 'TELEGRAM',
-                primary_channel: 'telegram',
+                channel: 'telegram',
                 platform_ids: { telegram: telegramChatId }
-            });
+            }, { merge: true });
 
             cardId = finalContactId;
             groupId = destinationGroupId;
