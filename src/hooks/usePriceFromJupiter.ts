@@ -1,0 +1,81 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+
+interface PriceDataV3 {
+  usdPrice: number;
+  blockId: number;
+  decimals: number;
+  priceChange24h: number;
+}
+
+export function usePriceFromJupiter(tokenAddresses: string[], cacheDurationMs = 60000) {
+  const [prices, setPrices] = useState<{ [key: string]: number | null }>({});
+  const [loading, setLoading] = useState(true);
+  const [secondsRemaining, setSecondsRemaining] = useState(0);
+  const cacheRef = useRef<{ [key: string]: number | null }>({});
+  const cacheTimeRef = useRef<number>(0);
+
+  useEffect(() => {
+    const fetchPrices = async () => {
+      const now = Date.now();
+      const isCached = cacheTimeRef.current && (now - cacheTimeRef.current) < cacheDurationMs;
+
+      if (isCached) {
+        setPrices(cacheRef.current);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const params = tokenAddresses.join(',');
+        const response = await fetch(`https://api.jup.ag/price/v3?ids=${params}`);
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        // V3 response is directly { mint: { usdPrice, ... }, ... }
+        const data: { [key: string]: PriceDataV3 } = await response.json();
+
+        const newPrices: { [key: string]: number | null } = {};
+        for (const address of tokenAddresses) {
+          newPrices[address] = data[address]?.usdPrice || null;
+        }
+        cacheRef.current = newPrices;
+        cacheTimeRef.current = now;
+        setPrices(newPrices);
+      } catch (error) {
+        console.error('Error fetching prices from Jupiter:', error);
+        setPrices(tokenAddresses.reduce((acc, addr) => ({ ...acc, [addr]: null }), {}));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPrices();
+
+    // Timer para mostrar segundos restantes
+    const timerInterval = setInterval(() => {
+      const elapsed = Date.now() - cacheTimeRef.current;
+      const remaining = Math.max(0, cacheDurationMs - elapsed);
+      setSecondsRemaining(Math.ceil(remaining / 1000));
+
+      // Refetch cuando expire
+      if (remaining <= 0) {
+        fetchPrices();
+      }
+    }, 1000);
+
+    // Refetch periodically
+    const fetchInterval = setInterval(fetchPrices, cacheDurationMs);
+
+    return () => {
+      clearInterval(timerInterval);
+      clearInterval(fetchInterval);
+    };
+  }, [tokenAddresses.join(','), cacheDurationMs]);
+
+  return { prices, loading, secondsRemaining };
+}
