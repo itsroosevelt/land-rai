@@ -61,7 +61,12 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             return true;
         });
 
-        if (!canExecute) return;
+        if (!canExecute) {
+            console.log(`[ChatbotEngine] ⏹️ Execution blocked for card ${cardId} (Dedup or Lock)`);
+            return;
+        }
+
+        console.log(`[ChatbotEngine] ✅ Transaction committed for ${cardId}. Starting consumer loop...`);
 
         // --- 2. THE CONSUMER LOOP ---
         let queueHasItems = true;
@@ -69,7 +74,15 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             const snap = await cardRef.get();
             const cardData = snap.data() || {};
             const bState = cardData.botState || {};
-            const queue = bState.messageQueue || [];
+            const flatQueue = cardData['botState.messageQueue'] || [];
+            let queue = bState.messageQueue || [];
+
+            if (flatQueue.length > 0) {
+                console.log(`[ChatbotEngine] 🛠️ Found ${flatQueue.length} items in flat queue. Merging for processing.`);
+                queue = [...queue, ...flatQueue].filter((v, i, a) => a.findIndex(t => t.messageId === v.messageId) === i);
+            }
+
+            console.log(`[ChatbotEngine] 🔍 Loop check for ${cardId}. Effective Size: ${queue.length}`);
 
             if (queue.length === 0) {
                 queueHasItems = false;
@@ -96,13 +109,28 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                     'botState.lastErrorAt': admin.firestore.FieldValue.serverTimestamp()
                 });
             } finally {
-                // --- 4. ATOMIC QUEUE DRAIN (MUST happen even on failure to avoid blocking) ---
+                // --- 4. ATOMIC QUEUE DRAIN (SINGLE write per transaction to avoid Firestore error) ---
                 await db.runTransaction(async (transaction) => {
                     transaction.update(cardRef, {
                         'botState.messageQueue': admin.firestore.FieldValue.arrayRemove(currentMsg),
-                        botLock: admin.firestore.FieldValue.serverTimestamp() // Refresh lock
+                        'botState.lastProcessedMessageId': msgId,
+                        botLock: admin.firestore.FieldValue.serverTimestamp()
                     });
                 });
+
+                // Cleanup legacy flat-key field AFTER transaction (cannot do 2 writes to same doc in one transaction)
+                try {
+                    const latestSnap = await cardRef.get();
+                    if (latestSnap.data()?.['botState.messageQueue']) {
+                        await cardRef.update(
+                            new admin.firestore.FieldPath('botState.messageQueue'),
+                            admin.firestore.FieldValue.delete()
+                        );
+                        console.log(`[ChatbotEngine] 🧹 Cleaned legacy flat key for ${cardId}`);
+                    }
+                } catch (cleanupErr: any) {
+                    console.warn(`[ChatbotEngine] ⚠️ Flat key cleanup skipped (non-critical): ${cleanupErr.message}`);
+                }
             }
         }
     } catch (err: any) {
@@ -230,14 +258,16 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     const botsSnapshot = await botsRef.where('isActive', 'in', [true, 'true']).get();
     const allActiveBots = botsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
 
+    console.log(`[ChatbotEngine] 🔍 Bot Discovery | Entity: ${entityId} | Bots Found: ${allActiveBots.length}`);
     if (allActiveBots.length === 0) {
-        console.log(`[ChatbotEngine] ⚠️ No active bots found for entity ${entityId}`);
+        console.log(`[ChatbotEngine] ⚠️ No active bots found in ${entityPath}/chatbots`);
         return;
     }
 
     // Filter and score bots by platform relevance
     const platformBots = allActiveBots.map(bot => {
-        const targets = (bot.targetPlatforms || []).map((t: string) => t.toLowerCase().trim());
+        const targets = (bot.targetPlatforms || []).map((t: string) => String(t).toLowerCase().trim());
+        console.log(`   - Bot: ${bot.id} | Name: ${bot.name} | Platforms: ${JSON.stringify(targets)}`);
         let score = 0;
         
         // Match platform case-insensitive and trimmed
@@ -312,6 +342,8 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 const validationRegex = node.data?.validationRegex;
                 const errorMessage = node.data?.errorMessage || 'Formato inválido. Por favor intenta de nuevo.';
                 
+                console.log(`[ChatbotEngine] 📥 Capture [${varName}] | Text: "${text}" | Type: ${inputType}`);
+
                 // 1. ROBUST TYPE DETECTION
                 let extracted = text.trim();
                 const isEmail = inputType === 'email' || /email|mail|correo|direcc/i.test(varName);

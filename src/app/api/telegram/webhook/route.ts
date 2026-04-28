@@ -15,15 +15,15 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: false, error: 'Missing tenant context' }, { status: 400 });
     }
 
+    const entityPath = `users/${userId}/entities/${entityId}`;
+
     try {
         const body = await req.json();
         
-        // DEBUG: Save raw body for inspection (Rule: Agnostic Search)
-        await db.collection('system_logs').add({
+        // DEBUG: Save raw body for inspection (Rule 7: Tenant-specific logs)
+        await db.collection(`${entityPath}/internal_logs`).add({
             type: 'telegram_webhook_raw',
             body,
-            userId,
-            entityId,
             timestamp: admin.firestore.FieldValue.serverTimestamp()
         });
 
@@ -36,18 +36,59 @@ export async function POST(req: Request) {
         }
 
         const telegramChatId = String(message?.chat?.id || callbackQuery?.message?.chat?.id);
-        const text = callbackQuery?.data || message?.text || '';
+        const text = callbackQuery?.data || message?.text || message?.caption || '';
         const firstName = message?.from?.first_name || callbackQuery?.from?.first_name || 'Usuario';
         const lastName = message?.from?.last_name || callbackQuery?.from?.last_name || 'Telegram';
         const contactName = `${firstName} ${lastName}`.trim();
 
         console.log(`[Telegram] Processing message from ${contactName} (${telegramChatId})`);
 
-        if (!text && !message?.attachments) {
-             return NextResponse.json({ success: true, ignored: 'empty_content' });
+        // ATTACHMENT PROCESSING
+        let fileUrl: string | null = null;
+        let fileType: string | null = null;
+        let fileName: string | null = null;
+
+        // Fetch Bot Token from integration to get file URLs
+        const integrationSnap = await db.doc(`${entityPath}/integrations/telegram`).get();
+        const botToken = integrationSnap.exists ? integrationSnap.data()?.botToken : null;
+
+        if (botToken) {
+            let fileId = null;
+            if (message?.photo) {
+                const photo = message.photo[message.photo.length - 1];
+                fileId = photo.file_id;
+                fileType = 'image/jpeg';
+                fileName = 'photo.jpg';
+            } else if (message?.document) {
+                fileId = message.document.file_id;
+                fileType = message.document.mime_type || 'application/octet-stream';
+                fileName = message.document.file_name || 'document';
+            } else if (message?.voice) {
+                fileId = message.voice.file_id;
+                fileType = message.voice.mime_type || 'audio/ogg';
+                fileName = 'voice_note.ogg';
+            } else if (message?.video) {
+                fileId = message.video.file_id;
+                fileType = message.video.mime_type || 'video/mp4';
+                fileName = 'video.mp4';
+            }
+
+            if (fileId) {
+                try {
+                    const fileRes = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
+                    const fileData = await fileRes.json();
+                    if (fileData.ok) {
+                        fileUrl = `https://api.telegram.org/file/bot${botToken}/${fileData.result.file_path}`;
+                    }
+                } catch (e) {
+                    console.error('[Telegram] Error fetching file URL:', e);
+                }
+            }
         }
 
-        const entityPath = `users/${userId}/entities/${entityId}`;
+        if (!text && !fileUrl && !callbackQuery) {
+             return NextResponse.json({ success: true, ignored: 'empty_content' });
+        }
 
         // OMNICHANNEL INGESTION
         let targetCardDoc: any = null;
@@ -76,7 +117,7 @@ export async function POST(req: Request) {
             }
         }
 
-        // FALLBACK SEARCH: Scan all groups like WhatsApp/Meta do
+        // FALLBACK SEARCH: Scan all groups
         if (!targetCardDoc) {
              console.log(`[Telegram] No card found via contact. Deep searching all groups...`);
              try {
@@ -85,7 +126,6 @@ export async function POST(req: Request) {
                  const groupsSnapshot = await groupsRef.get();
 
                  for (const groupDoc of groupsSnapshot.docs) {
-                     // Use only single-field equality filter to avoid composite index requirement
                      const cardsSnapshot = await groupDoc.ref.collection('cards')
                          .where('telegramChatId', '==', telegramChatId)
                          .limit(1)
@@ -104,10 +144,9 @@ export async function POST(req: Request) {
                      });
                      targetCardDoc = allMatches[0].doc;
                      targetGroupId = allMatches[0].groupId;
-                     console.log(`[Telegram] Found existing card via Deep Search: ${targetCardDoc.id}`);
                  }
              } catch (fallbackError: any) {
-                 console.error(`[Telegram] Fallback search failed, will create new card:`, fallbackError.message);
+                 console.error(`[Telegram] Fallback search failed:`, fallbackError.message);
              }
         }
 
@@ -120,11 +159,21 @@ export async function POST(req: Request) {
             text: text,
             timestamp: admin.firestore.Timestamp.now(),
             messageId: message?.message_id ? `tg_${message.message_id}` : `tg_cb_${Date.now()}`,
-            platform: 'telegram'
+            platform: 'telegram',
+            fileUrl,
+            fileType,
+            fileName,
+            metadata: {
+                platform: 'telegram',
+                fileUrl,
+                fileType,
+                fileName,
+                telegramChatId
+            }
         };
 
         const queueItem = {
-            text: text || '',
+            text: text || (fileUrl ? '[Archivo]' : ''),
             messageId: message?.message_id ? `tg_${message.message_id}` : `tg_cb_${Date.now()}`,
             platform: 'telegram',
             from: telegramChatId,
@@ -133,32 +182,11 @@ export async function POST(req: Request) {
 
         let finalEntityPath = entityPath;
 
-        // AUTO-RECOVERY: Find the entity that actually has the user's groups
-        const initialGroupsCheck = await db.collection(`${entityPath}/kanban-groups`).limit(1).get();
-        if (initialGroupsCheck.empty) {
-            console.log(`[Telegram] Default path ${entityPath} is empty. Searching for the 'real' active entity...`);
-            const allEntities = await db.collection(`users/${userId}/entities`).get();
-            for (const entDoc of allEntities.docs) {
-                const groupsSnap = await db.collection(`users/${userId}/entities/${entDoc.id}/kanban-groups`).get();
-                // If this entity has "WhatsApp" or "Messenger" groups, it's probably the one in the user's screenshot
-                const hasActiveGroups = groupsSnap.docs.some(g => {
-                    const name = (g.data().name || '').toLowerCase();
-                    return name.includes('whatsapp') || name.includes('messenger') || name.includes('instagram');
-                });
-                
-                if (hasActiveGroups) {
-                    finalEntityPath = `users/${userId}/entities/${entDoc.id}`;
-                    console.log(`[Telegram] FOUND ACTIVE ENTITY: ${finalEntityPath}`);
-                    break;
-                }
-            }
-        }
-
         if (targetCardDoc && groupId) {
             console.log(`[Telegram] Updating existing card: ${cardId} in group: ${groupId}`);
             const cardRef = targetCardDoc.ref;
             await cardRef.update({
-                lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
+                lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : (text || (fileUrl ? 'Archivo adjunto' : 'Nuevo mensaje')),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 unreadCount: admin.firestore.FieldValue.increment(1),
                 messages: admin.firestore.FieldValue.arrayUnion(newMessage),
@@ -177,7 +205,7 @@ export async function POST(req: Request) {
                 });
             }
         } else {
-            // ENSURE TELEGRAM GROUP (Strict Isolation)
+            // ENSURE TELEGRAM GROUP
             const groupsSnapshot = await db.collection(`${finalEntityPath}/kanban-groups`).get();
             const telegramGroup = groupsSnapshot.docs.find(g => (g.data().name || '').toLowerCase().includes('telegram'));
             
@@ -188,16 +216,14 @@ export async function POST(req: Request) {
                 destinationGroupId = 'inbox_telegram';
                 await db.collection(`${finalEntityPath}/kanban-groups`).doc(destinationGroupId).set({
                     name: 'Telegram Inbox',
-                    order: 5, // After WhatsApp
+                    order: 5,
                     color: '#26A5E4',
                     createdAt: admin.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
             }
 
-            // Create/Update Contact
             const finalContactId = contactId || `tg_${telegramChatId}`;
-            console.log(`[Telegram] Creating isolated card for contact: ${finalContactId}`);
-
+            
             await db.collection(`${finalEntityPath}/contacts`).doc(finalContactId).set({
                 name: contactName,
                 telegramChatId,
@@ -208,16 +234,19 @@ export async function POST(req: Request) {
                 kanbanCardId: finalContactId
             }, { merge: true });
 
-            // Create the Card (Strictly in Telegram Group)
             await db.collection(`${finalEntityPath}/kanban-groups/${destinationGroupId}/cards`).doc(finalContactId).set({
                 contactId: finalContactId,
                 contactName: contactName,
                 telegramChatId: telegramChatId,
-                lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
+                lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : (text || (fileUrl ? 'Archivo adjunto' : 'Nuevo mensaje')),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 messages: [newMessage],
-                'botState.messageQueue': [queueItem],
+                botState: {
+                    messageQueue: [queueItem],
+                    status: 'active',
+                    waitingForInput: false
+                },
                 unreadCount: 1,
                 status: 'open',
                 source: 'TELEGRAM',
@@ -231,11 +260,15 @@ export async function POST(req: Request) {
 
         // 2. TRIGGER UNIVERSAL CHATBOT
         if (groupId && cardId) {
-            const realEntityId = finalEntityPath.split('/').pop() || entityId;
-            processChatbotFlow({
-                userId, entityId: realEntityId, groupId, cardId, platform: 'telegram', from: telegramChatId, text: text
-            }).catch(error => {
-                 console.error(`[Telegram Chatbot Error] ${error}`);
+            await processChatbotFlow({
+                userId,
+                entityId,
+                groupId,
+                cardId,
+                platform: 'telegram',
+                from: telegramChatId,
+                text: text || (fileUrl ? '[Archivo]' : ''),
+                messageId: newMessage.messageId
             });
         }
 
