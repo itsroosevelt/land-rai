@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Script from "next/script";
-import { Montserrat } from "next/font/google"; // Font updated to Montserrat
+import { Montserrat } from "next/font/google"; // Font restored to Montserrat
 
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -29,10 +29,10 @@ Impact Areas: Web3 Ecosystems, Business Direction, and Time Optimization.
 It is the bridge between the founder's vision and operational execution, evolving with your business.`,
   icons: {
     icon: [
-      { url: "/assets/circle-roosevelt.png", sizes: "32x32", type: "image/png" },
-      { url: "/assets/circle-roosevelt.png", sizes: "192x192", type: "image/png" },
+      { url: "/assets/newlogo.png", sizes: "32x32", type: "image/png" },
+      { url: "/assets/newlogo.png", sizes: "192x192", type: "image/png" },
     ],
-    apple: { url: "/assets/circle-roosevelt.png", sizes: "180x180", type: "image/png" },
+    apple: { url: "/assets/newlogo.png", sizes: "180x180", type: "image/png" },
   }
 };
 
@@ -60,8 +60,51 @@ export default function RootLayout({
           </AuthProvider>
         </ThemeProvider>
         <Script src="https://terminal.jup.ag/main-v3.js" strategy="lazyOnload" />
+        <Script id="meta-sdk-core" strategy="afterInteractive">
+          {`
+            window.fbAsyncInit = function() {
+              const appId = '${process.env.NEXT_PUBLIC_META_APP_ID}';
+              
+              if (!appId || appId === 'undefined') {
+                console.warn('🚀 [ROOSEVELT META SDK]: NEXT_PUBLIC_META_APP_ID no configurado.');
+                return;
+              }
+
+              FB.init({
+                appId: appId,
+                cookie: true,
+                xfbml: true,
+                version: 'v21.0'
+              });
+              
+              // Meta (Facebook) obliga estrictamente a usar HTTPS para getLoginStatus
+              // Localhost ya no es suficiente sin SSL
+              const isHttps = window.location.protocol === 'https:';
+              
+              if (isHttps && typeof FB !== 'undefined' && FB.getLoginStatus) {
+                try {
+                  FB.getLoginStatus(function() {
+                    window.FB_READY = true;
+                    console.log('🚀 [ROOSEVELT META SDK]: Inicializado.');
+                  });
+                } catch (e) {
+                  window.FB_READY = true;
+                }
+              } else {
+                window.FB_READY = true;
+                console.log('🚀 [ROOSEVELT META SDK]: Inicializado en modo HTTP (Funciones de sesión limitadas).');
+              }
+            };
+            (function(d, s, id) {
+              var js, fjs = d.getElementsByTagName(s)[0];
+              if (d.getElementById(id)) return;
+              js = d.createElement(s); js.id = id;
+              js.src = "https://connect.facebook.net/en_US/sdk.js";
+              fjs.parentNode.insertBefore(js, fjs);
+            }(document, 'script', 'facebook-jssdk'));
+          `}
+        </Script>
       </body>
     </html>
   );
 }
-
