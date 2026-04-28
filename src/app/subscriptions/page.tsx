@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, Mail, CheckCircle, ArrowRight } from 'lucide-react';
+import { Check, Mail, CheckCircle, ArrowRight, LogOut } from 'lucide-react';
+import { signOut } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -277,6 +279,25 @@ export default function SubscriptionsPage() {
               entityId={entityId}
             />
           )}
+
+          {/* Log Out - Bottom Left */}
+          <div className="fixed bottom-8 left-8 md:bottom-12 md:left-12 z-[50]">
+            <button
+              onClick={async () => {
+                try {
+                  await signOut(auth);
+                  router.push('/login');
+                } catch (error) {
+                  console.error('Error logging out:', error);
+                  toast.error('Error al cerrar sesión');
+                }
+              }}
+              className="group flex items-center gap-2 text-white/40 hover:text-white transition-all duration-300"
+            >
+              <LogOut className="w-4 h-4 transition-transform duration-300 group-hover:-translate-x-1" strokeWidth={1.5} />
+              <span className="text-sm font-medium tracking-wide">Log out</span>
+            </button>
+          </div>
 
           {/* Go to Nucleo - Bottom Right */}
           <div className="fixed bottom-8 right-8 md:bottom-12 md:right-12 z-[50]">

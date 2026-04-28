@@ -42,7 +42,7 @@ export const LandingNavbar = () => {
             : 'bg-transparent py-6'
         )}
       >
-        <div className="w-full flex items-center justify-between">
+        <div className="w-full flex items-center justify-between relative">
           {/* Logo */}
           <Link href="/" className="flex items-center group">
             <span className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent leading-none tracking-tight">
@@ -51,7 +51,7 @@ export const LandingNavbar = () => {
           </Link>
 
           {/* Desktop Links */}
-          <div className="hidden xl:flex items-center gap-10">
+          <div className="hidden xl:flex items-center gap-10 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
             {navLinks.map((link) => (
               <Link 
                 key={link.name} 
