@@ -111,7 +111,7 @@ export default function LandingPage() {
 
       {/* Content Container - Hero Text on the left */}
       <div className="relative z-[10] w-full px-10 md:px-28 flex flex-col justify-end min-h-screen pb-20">
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, x: -50 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
@@ -126,7 +126,7 @@ export default function LandingPage() {
             with <span className="bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent font-bold">Roosevelt</span>
           </h1>
           <p className="text-[11px] md:text-sm text-white/40 font-medium leading-relaxed max-w-xl">
-            Responsive Artificial Intelligence that doesn't just suggest, it acts, unlocking your full potential. 
+            Responsive Artificial Intelligence that doesn't just suggest, it acts, unlocking your full potential.
             Delegate the complexity of your business and personal activities to a system that never sleeps.
           </p>
         </motion.div>
@@ -142,13 +142,13 @@ export default function LandingPage() {
         <div className="relative z-10 flex flex-col items-center gap-8 text-center">
           <div className="flex flex-col items-center gap-6">
             <p className="text-[11px] text-blue-400 font-bold tracking-widest uppercase">Special Offer</p>
-            
-            <img 
-              src="https://firebasestorage.googleapis.com/v0/b/roosevelt-491004.firebasestorage.app/o/Logo%20Tienda%20Ecol%C3%B3gica%20Minimalista%20Beige%20(1).png?alt=media&token=c3d4ea4a-d7ce-40f3-8e44-239d79a7ecc7" 
-              alt="Token Promo" 
+
+            <img
+              src="https://firebasestorage.googleapis.com/v0/b/roosevelt-491004.firebasestorage.app/o/Logo%20Tienda%20Ecol%C3%B3gica%20Minimalista%20Beige%20(1).png?alt=media&token=c3d4ea4a-d7ce-40f3-8e44-239d79a7ecc7"
+              alt="Token Promo"
               className="w-28 h-28 object-contain"
             />
-            
+
             <div className="space-y-4">
               <div className="text-[11px] text-white/80 leading-relaxed uppercase tracking-wider">
                 Use our token and get a <span className="text-white font-bold mx-1">25% discount</span> on all our subscriptions.
@@ -156,7 +156,7 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <Button 
+          <Button
             onClick={handleClaim}
             className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-xl h-14 font-semibold transition-all hover:scale-[1.02] active:scale-95 text-lg"
           >
