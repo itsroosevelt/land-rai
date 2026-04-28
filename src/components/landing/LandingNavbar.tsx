@@ -51,7 +51,7 @@ export const LandingNavbar = () => {
           </Link>
 
           {/* Desktop Links */}
-          <div className="hidden lg:flex items-center gap-10">
+          <div className="hidden xl:flex items-center gap-10">
             {navLinks.map((link) => (
               <Link 
                 key={link.name} 
@@ -65,7 +65,7 @@ export const LandingNavbar = () => {
           </div>
 
           {/* Actions */}
-          <div className="hidden md:flex items-center gap-6">
+          <div className="hidden xl:flex items-center gap-6">
             <Link href="/login?mode=login">
               <Button 
                 variant="ghost" 
@@ -85,7 +85,7 @@ export const LandingNavbar = () => {
 
           {/* Mobile Menu Toggle */}
           <button 
-            className="lg:hidden p-2 text-white/70 hover:text-white transition-colors"
+            className="xl:hidden p-2 text-white/70 hover:text-white transition-colors"
             onClick={() => setIsMobileMenuOpen(true)}
           >
             <Menu className="w-6 h-6" />
@@ -100,7 +100,7 @@ export const LandingNavbar = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-2xl lg:hidden flex flex-col p-8"
+            className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-2xl xl:hidden flex flex-col p-8"
           >
             <div className="flex justify-between items-center mb-16">
                <div className="flex items-center">
