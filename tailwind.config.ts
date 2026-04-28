@@ -21,6 +21,9 @@ const config = {
       },
     },
     extend: {
+      fontWeight: {
+        bold: '600',
+      },
       fontFamily: {
         playfair: ['var(--font-montserrat)', 'sans-serif'], // Replaced with Montserrat for global consistency
         sans: ['var(--font-montserrat)', ...fontFamily.sans],
