@@ -132,6 +132,14 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
         }
     } catch (err: any) {
         console.error(`[ChatbotEngine] 💥 Runner Crash:`, err.message);
+        // Log to Firestore for remote debugging
+        await db.collection(`${entityPath}/internal_logs`).add({
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            type: 'ENGINE_RUNNER_CRASH',
+            error: err?.message || 'Unknown Error',
+            cardId,
+            stack: err?.stack || null
+        });
     } finally {
         // --- 5. FINAL RELEASE ---
         try {

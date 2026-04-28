@@ -327,7 +327,17 @@ export async function POST(req: Request) {
                 from: telegramChatId,
                 text: text || (fileUrl ? '[Archivo]' : ''),
                 messageId: newMessage.messageId
-            }).catch((err: any) => console.error('[Telegram Webhook] Engine error:', err?.message));
+            }).catch(async (err: any) => {
+                console.error('[Telegram Webhook] Engine error:', err?.message);
+                // Log to Firestore for remote debugging
+                await db.collection(`users/${userId}/entities/${entityId}/internal_logs`).add({
+                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                    type: 'ENGINE_TRIGGER_ERROR',
+                    error: err?.message || 'Unknown Error',
+                    cardId,
+                    messageId: newMessage.messageId
+                });
+            });
         }
 
         return NextResponse.json({ success: true });
