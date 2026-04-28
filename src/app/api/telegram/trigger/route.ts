@@ -97,6 +97,13 @@ export async function POST(req: Request) {
 
         console.log(`[Trigger] Firing engine for card ${cardId} | msg: "${triggerMsg.text}" [${triggerMsg.messageId}]`);
 
+        // CRITICAL: Add the message to the Firestore queue first (engine only reads from queue)
+        await cardRef.update({
+            'botState.messageQueue': admin.firestore.FieldValue.arrayUnion(triggerMsg),
+            lastMessage: (triggerMsg.text || '').substring(0, 50),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
         // Fire async (don't await so the response returns quickly)
         processChatbotFlow({
             userId,

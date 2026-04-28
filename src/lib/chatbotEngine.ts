@@ -232,23 +232,9 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         cardData.customFields = {};
         cardData.contactName = 'Usuario';
         
-        if (isReset) {
-            const resetText = "🔄 Reinicio completado. Por favor, envíanos un mensaje para empezar de nuevo.";
-            await dispatchMessage(resetText);
-            await appendAgentMessage({ text: resetText, type: 'text', messageId: `bot_sys_${Date.now()}` });
-            
-            // Detenemos la ejecución aquí para que el bot ESPERE un nuevo mensaje
-            // antes de iniciar el flujo principal nuevamente.
-            return;
-        }
-
-        if (isMenu || (isReset && !isStartTrigger)) {
-            // If it's a menu or a reset (without a specific greeting like 'hola'), 
-            // we ensure the engine restarts by setting shouldRestart to true below.
-        } else if (!isStartTrigger && !isReset) {
-            // If it's not a restart trigger, we might want to stop here (e.g. for simple commands)
-            // But for Roosevelt, we usually want the flow to start.
-        }
+        // After reset: fall through to execute the flow from the start immediately.
+        // This avoids forcing the user to send an extra message after a reset.
+        // The flow starts at the startNode on the next section below.
     }
 
     let bState = cardData.botState || {};
