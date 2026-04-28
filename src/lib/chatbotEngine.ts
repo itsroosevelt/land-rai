@@ -92,30 +92,22 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             // Consume first item (FIFO)
             const currentMsg = queue[0];
             const msgId = currentMsg.messageId;
-            const msgText = String(currentMsg.text || '').trim();
-            const msgPlatform = currentMsg.platform || platform;
-            const msgFrom = currentMsg.from || from;
-
-            console.log(`[ChatbotEngine] 🧵 Processing Queue Item [${msgId}]: "${msgText.substring(0, 30)}"`);
 
             try {
                 // --- 3. INNER ENGINE CORE ---
                 await runEngineCycle(cardRef, cardData, currentMsg, entityPath, entityId, userId);
             } catch (cycleErr: any) {
                 console.error(`[ChatbotEngine] ❌ Cycle Error [${msgId}]:`, cycleErr.message);
-                // Log error to card but DON'T stop the whole runner
                 await cardRef.update({
                     'botState.lastError': cycleErr.message || 'Unknown Cycle Error',
                     'botState.lastErrorAt': admin.firestore.FieldValue.serverTimestamp()
                 });
             } finally {
-                // --- 4. ATOMIC QUEUE DRAIN (SINGLE write per transaction to avoid Firestore error) ---
+                // --- 4. ATOMIC QUEUE DRAIN ---
                 await db.runTransaction(async (transaction) => {
                     const freshSnap = await transaction.get(cardRef as admin.firestore.DocumentReference);
                     const freshData = freshSnap.data() || {};
                     const currentQueue = freshData.botState?.messageQueue || [];
-                    
-                    // Filter out the processed message by its ID
                     const updatedQueue = currentQueue.filter((m: any) => m.messageId !== msgId);
                     
                     transaction.update(cardRef, {
@@ -125,7 +117,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                     });
                 });
 
-                // Cleanup legacy flat-key field AFTER transaction (cannot do 2 writes to same doc in one transaction)
+                // Cleanup legacy flat-key field
                 try {
                     const latestSnap = await cardRef.get();
                     if (latestSnap.data()?.['botState.messageQueue']) {
@@ -133,26 +125,22 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                             new admin.firestore.FieldPath('botState.messageQueue'),
                             admin.firestore.FieldValue.delete()
                         );
-                        console.log(`[ChatbotEngine] 🧹 Cleaned legacy flat key for ${cardId}`);
                     }
-                } catch (cleanupErr: any) {
-                    console.warn(`[ChatbotEngine] ⚠️ Flat key cleanup skipped (non-critical): ${cleanupErr.message}`);
-                }
+                } catch (cleanupErr: any) {}
             }
         }
     } catch (err: any) {
         console.error(`[ChatbotEngine] 💥 Runner Crash:`, err.message);
+    } finally {
         // --- 5. FINAL RELEASE ---
         try {
             await cardRef.update({ botLock: admin.firestore.FieldValue.delete() });
             console.log(`[ChatbotEngine] 🏁 RUNNER FINISHED for ${cardId}`);
 
-            // Safety Check: if something was added while we were releasing the lock, re-trigger
+            // Safety Check: re-trigger if needed
             const finalSnap = await cardRef.get();
             const finalQueue = finalSnap.data()?.botState?.messageQueue || [];
             if (finalQueue.length > 0) {
-                console.log(`[ChatbotEngine] 🔄 Self-healing: detected items in queue after release. Re-triggering...`);
-                // We don't await this, just fire and forget to start a new worker
                 processChatbotFlow(ctx).catch(() => {});
             }
         } catch (e) {}
@@ -198,6 +186,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     const isStartTrigger = /^(hola|hi|buenas|inicio|start|buen(as)?\s*(dias|tardes|noches)|que\s*tal|saludos)/i.test(normalizedInput);
     
     const isCommand = isReset || isMenu || isStop;
+    let justRestarted = isReset || isStartTrigger;
 
     const sessionVars = {
         nombre: (isStartTrigger || isReset) ? 'Usuario' : (cardData.contactName || 'Usuario'),
@@ -332,8 +321,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     // Handle incoming input for current node
     if (waitingForInput && currentNodeId) {
         // AGNOSTIC RULE: Do not allow the same message that triggered the start/reset to be captured as an input
-        // This prevents capturing "Reiniciar" or "Hola" as answers to questions.
-        if (isReset || isStartTrigger || (shouldRestart && !waitingForInput)) {
+        if (justRestarted) {
             console.log(`[ChatbotEngine] 🛡️ Trigger message [${isReset?'RESET':'START'}] blocked from captureInputNode to prevent auto-fill.`);
         } else {
             const node = flow.nodes.find((n: any) => n.id === currentNodeId);
