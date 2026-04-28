@@ -3,15 +3,17 @@
 import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { AlertCircle } from 'lucide-react';
 
 export interface BillingData {
-  fullName: string;
   email: string;
+  phonePrefix: string;
   phone: string;
+  fullName: string;
   country: string;
-  address: string;
+  addressLine1: string;
+  addressLine2: string;
   city: string;
+  state: string;
   zipCode: string;
 }
 
@@ -26,7 +28,7 @@ const COUNTRIES = [
   'Argentina', 'Bolivia', 'Brasil', 'Chile', 'Colombia', 'Costa Rica',
   'Cuba', 'República Dominicana', 'Ecuador', 'El Salvador', 'Guatemala',
   'Honduras', 'México', 'Nicaragua', 'Panamá', 'Paraguay', 'Perú',
-  'Puerto Rico', 'Uruguay', 'Venezuela', 'España', 'Otros'
+  'Puerto Rico', 'Uruguay', 'Venezuela', 'España', 'Estados Unidos', 'Otros'
 ];
 
 export default function BillingForm({
@@ -35,181 +37,174 @@ export default function BillingForm({
   onValidChange,
 }: BillingFormProps) {
   const [data, setData] = useState<BillingData>({
-    fullName: '',
     email: initialEmail,
+    phonePrefix: '+1',
     phone: '',
-    country: '',
-    address: '',
+    fullName: '',
+    country: 'Estados Unidos',
+    addressLine1: '',
+    addressLine2: '',
     city: '',
+    state: '',
     zipCode: '',
   });
 
-  const [errors, setErrors] = useState<Partial<BillingData>>({});
-
-  const requiredFields: (keyof BillingData)[] = ['fullName', 'email', 'phone', 'country', 'address', 'city'];
-
-  const validateField = (field: keyof BillingData, value: string) => {
-    let error = '';
-
-    if (requiredFields.includes(field) && !value.trim()) {
-      error = 'Este campo es requerido';
-    } else if (field === 'email' && value && !value.includes('@')) {
-      error = 'Email inválido';
-    } else if (field === 'phone' && value && value.length < 10) {
-      error = 'Teléfono debe tener al menos 10 dígitos';
-    }
-
-    return error;
-  };
+  const requiredFields: (keyof BillingData)[] = ['email', 'phone', 'fullName', 'country', 'addressLine1', 'city', 'state', 'zipCode'];
 
   const handleChange = (field: keyof BillingData, value: string) => {
     const newData = { ...data, [field]: value };
     setData(newData);
 
-    const error = validateField(field, value);
-    setErrors({ ...errors, [field]: error });
-
     const isValid = requiredFields.every(f => {
       const val = f === field ? value : data[f];
       return val.trim() !== '';
     });
+    
+    // Check basic email structure
+    const isEmailValid = newData.email.includes('@');
 
-    onValidChange(isValid && Object.values(errors).filter(e => e).length === 0);
+    onValidChange(isValid && isEmailValid);
     onDataChange(newData);
   };
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center gap-2 pb-3 border-b border-white/10">
-        <h3 className="text-sm font-medium text-white">Datos de Facturación</h3>
+    <div className="space-y-4">
+      {/* Name */}
+      <div>
+        <Label htmlFor="fullName" className="text-xs font-medium text-white/80 mb-1.5 block">
+          Full name
+        </Label>
+        <Input
+          id="fullName"
+          placeholder="John Doe"
+          value={data.fullName}
+          onChange={(e) => handleChange('fullName', e.target.value)}
+          className="bg-white/5 border-white/10 h-9 text-xs text-white placeholder:text-white/40 rounded-lg focus-visible:ring-1 focus-visible:ring-blue-500"
+        />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="col-span-2 sm:col-span-1">
-          <Label htmlFor="fullName" className="text-xs uppercase tracking-wide text-white/60 mb-2 block">
-            Nombre Completo
-          </Label>
-          <Input
-            id="fullName"
-            placeholder="Juan Pérez"
-            value={data.fullName}
-            onChange={(e) => handleChange('fullName', e.target.value)}
-            className={`bg-white/5 border ${errors.fullName ? 'border-red-500/50' : 'border-white/10'} rounded-lg h-9 text-sm`}
-          />
-          {errors.fullName && (
-            <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" /> {errors.fullName}
-            </p>
-          )}
-        </div>
+      {/* Email */}
+      <div>
+        <Label htmlFor="email" className="text-xs font-medium text-white/80 mb-1.5 block">
+          Email address
+        </Label>
+        <Input
+          id="email"
+          type="email"
+          placeholder="email@example.com"
+          value={data.email}
+          onChange={(e) => handleChange('email', e.target.value)}
+          className="bg-white/5 border-white/10 h-9 text-xs text-white placeholder:text-white/40 rounded-lg focus-visible:ring-1 focus-visible:ring-blue-500"
+        />
+      </div>
 
-        <div className="col-span-2 sm:col-span-1">
-          <Label htmlFor="email" className="text-xs uppercase tracking-wide text-white/60 mb-2 block">
-            Email
-          </Label>
-          <Input
-            id="email"
-            type="email"
-            placeholder="correo@ejemplo.com"
-            value={data.email}
-            onChange={(e) => handleChange('email', e.target.value)}
-            className={`bg-white/5 border ${errors.email ? 'border-red-500/50' : 'border-white/10'} rounded-lg h-9 text-sm`}
-          />
-          {errors.email && (
-            <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" /> {errors.email}
-            </p>
-          )}
-        </div>
-
-        <div className="col-span-2 sm:col-span-1">
-          <Label htmlFor="phone" className="text-xs uppercase tracking-wide text-white/60 mb-2 block">
-            Teléfono
-          </Label>
+      {/* Phone */}
+      <div>
+        <Label htmlFor="phone" className="text-xs font-medium text-white/80 mb-1.5 block">
+          Phone number
+        </Label>
+        <div className="flex bg-white/5 border border-white/10 rounded-lg focus-within:ring-1 focus-within:ring-blue-500 overflow-hidden h-9">
+          <select 
+            value={data.phonePrefix}
+            onChange={(e) => handleChange('phonePrefix', e.target.value)}
+            className="bg-transparent border-r border-white/10 text-xs text-white/80 px-2 focus:outline-none appearance-none cursor-pointer"
+          >
+            <option value="+1" className="bg-[#111]">🇺🇸 +1</option>
+            <option value="+34" className="bg-[#111]">🇪🇸 +34</option>
+            <option value="+52" className="bg-[#111]">🇲🇽 +52</option>
+            <option value="+54" className="bg-[#111]">🇦🇷 +54</option>
+            <option value="+57" className="bg-[#111]">🇨🇴 +57</option>
+            <option value="+51" className="bg-[#111]">🇵🇪 +51</option>
+            <option value="+56" className="bg-[#111]">🇨🇱 +56</option>
+            <option value="+58" className="bg-[#111]">🇻🇪 +58</option>
+            <option value="+593" className="bg-[#111]">🇪🇨 +593</option>
+            <option value="+507" className="bg-[#111]">🇵🇦 +507</option>
+            <option value="+506" className="bg-[#111]">🇨🇷 +506</option>
+            <option value="+502" className="bg-[#111]">🇬🇹 +502</option>
+            <option value="+503" className="bg-[#111]">🇸🇻 +503</option>
+            <option value="+504" className="bg-[#111]">🇭🇳 +504</option>
+            <option value="+505" className="bg-[#111]">🇳🇮 +505</option>
+            <option value="+591" className="bg-[#111]">🇧🇴 +591</option>
+            <option value="+595" className="bg-[#111]">🇵🇾 +595</option>
+            <option value="+598" className="bg-[#111]">🇺🇾 +598</option>
+            <option value="+1" className="bg-[#111]">🇵🇷 +1</option>
+            <option value="+53" className="bg-[#111]">🇨🇺 +53</option>
+          </select>
           <Input
             id="phone"
-            placeholder="+1 (555) 123-4567"
+            type="tel"
+            placeholder="555 123 4567"
             value={data.phone}
             onChange={(e) => handleChange('phone', e.target.value)}
-            className={`bg-white/5 border ${errors.phone ? 'border-red-500/50' : 'border-white/10'} rounded-lg h-9 text-sm`}
+            className="flex-1 border-none bg-transparent h-9 text-xs text-white placeholder:text-white/40 focus-visible:ring-0 rounded-none shadow-none px-3"
           />
-          {errors.phone && (
-            <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" /> {errors.phone}
-            </p>
-          )}
         </div>
+      </div>
 
-        <div className="col-span-2 sm:col-span-1">
-          <Label htmlFor="country" className="text-xs uppercase tracking-wide text-white/60 mb-2 block">
-            País
-          </Label>
+      {/* Billing Address Group */}
+      <div>
+        <Label className="text-xs font-medium text-white/80 mb-1.5 block">
+          Billing address
+        </Label>
+        <div className="flex flex-col border border-white/10 rounded-lg overflow-hidden bg-white/5 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
+          
+          {/* Country */}
           <select
-            id="country"
             value={data.country}
             onChange={(e) => handleChange('country', e.target.value)}
-            className={`w-full bg-white/5 border ${errors.country ? 'border-red-500/50' : 'border-white/10'} rounded-lg h-9 px-3 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500`}
+            className="w-full h-9 bg-transparent px-3 text-xs text-white focus:outline-none border-b border-white/10 appearance-none cursor-pointer"
           >
-            <option value="" className="bg-black">Seleccionar país</option>
+            <option value="" disabled className="bg-[#111]">Select country</option>
             {COUNTRIES.map((country) => (
-              <option key={country} value={country} className="bg-black">
+              <option key={country} value={country} className="bg-[#111]">
                 {country}
               </option>
             ))}
           </select>
-          {errors.country && (
-            <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" /> {errors.country}
-            </p>
-          )}
-        </div>
 
-        <div className="col-span-2">
-          <Label htmlFor="address" className="text-xs uppercase tracking-wide text-white/60 mb-2 block">
-            Dirección
-          </Label>
-          <Input
-            id="address"
-            placeholder="Calle principal 123, Apt 4B"
-            value={data.address}
-            onChange={(e) => handleChange('address', e.target.value)}
-            className={`bg-white/5 border ${errors.address ? 'border-red-500/50' : 'border-white/10'} rounded-lg h-9 text-sm`}
+          {/* Address Line 1 */}
+          <input
+            type="text"
+            placeholder="Address line 1"
+            value={data.addressLine1}
+            onChange={(e) => handleChange('addressLine1', e.target.value)}
+            className="w-full h-9 bg-transparent px-3 text-xs text-white placeholder:text-white/40 border-b border-white/10 focus:outline-none"
           />
-          {errors.address && (
-            <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" /> {errors.address}
-            </p>
-          )}
-        </div>
 
-        <div className="col-span-2 sm:col-span-1">
-          <Label htmlFor="city" className="text-xs uppercase tracking-wide text-white/60 mb-2 block">
-            Ciudad
-          </Label>
-          <Input
-            id="city"
-            placeholder="Buenos Aires"
-            value={data.city}
-            onChange={(e) => handleChange('city', e.target.value)}
-            className={`bg-white/5 border ${errors.city ? 'border-red-500/50' : 'border-white/10'} rounded-lg h-9 text-sm`}
+          {/* Address Line 2 */}
+          <input
+            type="text"
+            placeholder="Address line 2"
+            value={data.addressLine2}
+            onChange={(e) => handleChange('addressLine2', e.target.value)}
+            className="w-full h-9 bg-transparent px-3 text-xs text-white placeholder:text-white/40 border-b border-white/10 focus:outline-none"
           />
-          {errors.city && (
-            <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" /> {errors.city}
-            </p>
-          )}
-        </div>
 
-        <div className="col-span-2 sm:col-span-1">
-          <Label htmlFor="zipCode" className="text-xs uppercase tracking-wide text-white/60 mb-2 block">
-            Código Postal
-          </Label>
-          <Input
-            id="zipCode"
-            placeholder="1234"
-            value={data.zipCode}
-            onChange={(e) => handleChange('zipCode', e.target.value)}
-            className="bg-white/5 border border-white/10 rounded-lg h-9 text-sm"
+          {/* City and Zip Split */}
+          <div className="flex border-b border-white/10">
+            <input
+              type="text"
+              placeholder="City"
+              value={data.city}
+              onChange={(e) => handleChange('city', e.target.value)}
+              className="w-1/2 h-9 bg-transparent px-3 text-xs text-white placeholder:text-white/40 border-r border-white/10 focus:outline-none"
+            />
+            <input
+              type="text"
+              placeholder="ZIP code"
+              value={data.zipCode}
+              onChange={(e) => handleChange('zipCode', e.target.value)}
+              className="w-1/2 h-9 bg-transparent px-3 text-xs text-white placeholder:text-white/40 focus:outline-none"
+            />
+          </div>
+
+          {/* State */}
+          <input
+            type="text"
+            placeholder="State"
+            value={data.state}
+            onChange={(e) => handleChange('state', e.target.value)}
+            className="w-full h-9 bg-transparent px-3 text-xs text-white placeholder:text-white/40 focus:outline-none"
           />
         </div>
       </div>
