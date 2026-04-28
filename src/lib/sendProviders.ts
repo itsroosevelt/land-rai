@@ -440,12 +440,19 @@ export async function sendWhatsAppMessage(
 
 // --- Telegram Bot API ---
 
+function escapeTelegramHtml(str: string): string {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 export async function sendTelegramMessage(
     chatId: string,
     text: string,
-    options: { userId?: string; entityId?: string; botToken?: string } = {}
+    options: { userId?: string; entityId?: string; botToken?: string; type?: string; url?: string; filename?: string; sections?: any[]; button?: string; buttons?: any[] } = {}
 ): Promise<any> {
-    if (!text) return;
+    const optAny = options as any;
+    const isMedia = ['image', 'video', 'audio', 'document', 'media', 'multimedia'].includes(options.type || '');
+    if (!text && !isMedia) return;
+
     let token = options.botToken;
 
     if (options.userId && options.entityId && !token) {
@@ -464,26 +471,68 @@ export async function sendTelegramMessage(
         throw new Error('Telegram Bot Token is not configured for this entity.');
     }
 
-    const url = `https://api.telegram.org/bot${token}/sendMessage`;
+    const base = `https://api.telegram.org/bot${token}`;
+
+    // --- MEDIA ---
+    if (isMedia && options.url && options.url.startsWith('http')) {
+        const mediaType = options.type || 'image';
+        let endpoint = `${base}/sendPhoto`;
+        let mediaKey = 'photo';
+
+        if (['video', 'multimedia'].includes(mediaType)) { endpoint = `${base}/sendVideo`; mediaKey = 'video'; }
+        else if (mediaType === 'audio') { endpoint = `${base}/sendAudio`; mediaKey = 'audio'; }
+        else if (mediaType === 'document') { endpoint = `${base}/sendDocument`; mediaKey = 'document'; }
+
+        const mediaPayload: any = {
+            chat_id: chatId,
+            [mediaKey]: options.url,
+            ...(text ? { caption: escapeTelegramHtml(text), parse_mode: 'HTML' } : {})
+        };
+        if (mediaType === 'document' && options.filename) {
+            mediaPayload.filename = options.filename;
+        }
+        try {
+            const response = await axios.post(endpoint, mediaPayload);
+            return { ...response.data, message_id: response.data.result?.message_id, sentTo: chatId };
+        } catch (error: any) {
+            const errorData = error.response?.data || error.message;
+            console.error('Telegram Media API Error:', JSON.stringify(errorData, null, 2));
+            throw new Error(`Telegram API Error: ${JSON.stringify(errorData)}`);
+        }
+    }
+
+    // --- TEXT (with optional inline keyboard) ---
     const payload: any = {
         chat_id: chatId,
-        text: text,
+        text: escapeTelegramHtml(text || ''),
         parse_mode: 'HTML'
     };
 
-    // Support for buttons (Quick Replies / Inline Keyboard)
-    const optAny = options as any;
-    if (optAny.type === 'quick_reply' && Array.isArray(optAny.buttons)) {
+    // Quick reply buttons
+    if (optAny.type === 'quick_reply' && Array.isArray(optAny.buttons) && optAny.buttons.length > 0) {
         payload.reply_markup = {
             inline_keyboard: optAny.buttons.map((btn: any) => {
                 const b = btn.reply || btn;
-                return [{ text: b.title, callback_data: b.id || b.title }];
+                return [{ text: b.title, callback_data: (b.id || b.title).substring(0, 64) }];
             })
         };
     }
 
+    // List message → inline keyboard rows
+    if (optAny.type === 'list' && Array.isArray(optAny.sections)) {
+        const rows: any[][] = [];
+        for (const section of optAny.sections) {
+            for (const row of (section.rows || [])) {
+                rows.push([{ text: row.title, callback_data: (row.id || row.title).substring(0, 64) }]);
+            }
+        }
+        if (rows.length > 0) {
+            payload.reply_markup = { inline_keyboard: rows };
+        }
+    }
+
     try {
-        const response = await axios.post(url, payload);
+        const response = await axios.post(`${base}/sendMessage`, payload);
         return {
             ...response.data,
             message_id: response.data.result?.message_id,

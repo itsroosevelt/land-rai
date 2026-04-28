@@ -20,12 +20,12 @@ export async function POST(req: Request) {
     try {
         const body = await req.json();
         
-        // DEBUG: Save raw body for inspection (Rule 7: Tenant-specific logs)
-        await db.collection(`${entityPath}/internal_logs`).add({
+        // Save raw body for inspection (fire-and-forget to not block response)
+        db.collection(`${entityPath}/internal_logs`).add({
             type: 'telegram_webhook_raw',
             body,
             timestamp: admin.firestore.FieldValue.serverTimestamp()
-        });
+        }).catch(() => {});
 
         // 1. Extract message or callback
         const message = body.message;
@@ -154,11 +154,21 @@ export async function POST(req: Request) {
         let groupId: string | null = targetGroupId || null;
         let contactId: string | null = existingContactId || null;
 
+        // Use Telegram's own message.date (seconds) for a stable timestamp across retries.
+        // This prevents duplicate entries when Telegram retries a timed-out webhook.
+        const stableTs = message?.date
+            ? admin.firestore.Timestamp.fromMillis(message.date * 1000)
+            : admin.firestore.Timestamp.now();
+        const stableTsMs = message?.date ? message.date * 1000
+            : (callbackQuery?.message?.date ? callbackQuery.message.date * 1000 : Date.now());
+        const stableMsgId = message?.message_id ? `tg_${message.message_id}`
+            : callbackQuery?.id ? `tg_cb_${callbackQuery.id}` : `tg_cb_${stableTsMs}`;
+
         const newMessage = {
             sender: 'user',
             text: text,
-            timestamp: admin.firestore.Timestamp.now(),
-            messageId: message?.message_id ? `tg_${message.message_id}` : `tg_cb_${Date.now()}`,
+            timestamp: stableTs,
+            messageId: stableMsgId,
             platform: 'telegram',
             fileUrl,
             fileType,
@@ -174,10 +184,10 @@ export async function POST(req: Request) {
 
         const queueItem = {
             text: text || (fileUrl ? '[Archivo]' : ''),
-            messageId: message?.message_id ? `tg_${message.message_id}` : `tg_cb_${Date.now()}`,
+            messageId: stableMsgId,
             platform: 'telegram',
             from: telegramChatId,
-            timestamp: Date.now()
+            timestamp: stableTsMs  // stable across retries so arrayUnion can dedup correctly
         };
 
         let finalEntityPath = entityPath;
@@ -185,44 +195,92 @@ export async function POST(req: Request) {
         if (targetCardDoc && groupId) {
             console.log(`[Telegram] Updating existing card: ${cardId} in group: ${groupId}`);
             const cardRef = targetCardDoc.ref;
-            await cardRef.update({
-                lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : (text || (fileUrl ? 'Archivo adjunto' : 'Nuevo mensaje')),
-                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                unreadCount: admin.firestore.FieldValue.increment(1),
-                messages: admin.firestore.FieldValue.arrayUnion(newMessage),
-                'botState.messageQueue': admin.firestore.FieldValue.arrayUnion(queueItem),
-                status: 'open',
-                source: 'TELEGRAM',
-                channel: 'telegram',
-                [`platform_ids.telegram`]: telegramChatId
+
+            // Update contact reference if it was pointing to the wrong group
+            if (contactId && targetGroupId && targetGroupId !== groupId) {
+                console.log(`[Telegram] Syncing contact ${contactId} to correct group ${targetGroupId}`);
+                db.collection(`${finalEntityPath}/contacts`).doc(contactId).update({
+                    kanbanGroupId: targetGroupId,
+                    kanbanCardId: cardId,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                }).catch(() => {});
+            }
+
+            // Use a transaction so we can: (a) dedup by messageId, (b) cap messages array
+            await db.runTransaction(async (transaction) => {
+                const freshSnap = await transaction.get(cardRef as admin.firestore.DocumentReference);
+                const freshData = (freshSnap as admin.firestore.DocumentSnapshot).data() || {};
+
+                // --- Dedup: skip if this exact messageId is already recorded ---
+                const existingMsgs: any[] = freshData.messages || [];
+                const msgExists = existingMsgs.some((m: any) => m.messageId === newMessage.messageId);
+                let updatedMsgs = msgExists ? existingMsgs : [...existingMsgs, newMessage];
+                
+                if (updatedMsgs.length > 200) updatedMsgs = updatedMsgs.slice(-200);
+
+                // --- Dedup queue item by messageId ---
+                const existingQueue: any[] = freshData.botState?.messageQueue || [];
+                const queueExists = existingQueue.some((q: any) => q.messageId === queueItem.messageId);
+                const queueUpdate = queueExists
+                    ? {}
+                    : { 'botState.messageQueue': admin.firestore.FieldValue.arrayUnion(queueItem) };
+
+                const lastMsg = text.length > 50 ? text.substring(0, 47) + '...' : (text || (fileUrl ? 'Archivo adjunto' : 'Nuevo mensaje'));
+                
+                transaction.update(cardRef, {
+                    lastMessage: lastMsg,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    unreadCount: admin.firestore.FieldValue.increment(1),
+                    messages: updatedMsgs,
+                    status: 'open',
+                    source: 'TELEGRAM',
+                    channel: 'telegram',
+                    [`platform_ids.telegram`]: telegramChatId,
+                    ...queueUpdate
+                });
             });
 
             if (contactId) {
-                await db.collection(`${finalEntityPath}/contacts`).doc(contactId).update({
+                db.collection(`${finalEntityPath}/contacts`).doc(contactId).update({
                     source: 'TELEGRAM',
                     telegramChatId: telegramChatId,
                     updatedAt: admin.firestore.FieldValue.serverTimestamp()
-                });
+                }).catch(() => {});
             }
         } else {
-            // ENSURE TELEGRAM GROUP
+            // ENSURE TARGET GROUP (Unified Inbox)
             const groupsSnapshot = await db.collection(`${finalEntityPath}/kanban-groups`).get();
-            const telegramGroup = groupsSnapshot.docs.find(g => (g.data().name || '').toLowerCase().includes('telegram'));
+            // Try to find a group named 'Inbox' or 'Bandeja de Entrada' (case insensitive)
+            const mainGroup = groupsSnapshot.docs.find(g => {
+                const name = (g.data().name || '').toLowerCase();
+                return name === 'inbox' || name.includes('entrada') || name === 'nuevos' || name.includes('recepcion');
+            });
             
             let destinationGroupId = '';
-            if (telegramGroup) {
-                destinationGroupId = telegramGroup.id;
+            if (mainGroup) {
+                destinationGroupId = mainGroup.id;
             } else {
-                destinationGroupId = 'inbox_telegram';
-                await db.collection(`${finalEntityPath}/kanban-groups`).doc(destinationGroupId).set({
-                    name: 'Telegram Inbox',
-                    order: 5,
-                    color: '#26A5E4',
-                    createdAt: admin.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });
+                // Fallback: use the first group that is NOT a telegram-specific group
+                const fallbackGroup = groupsSnapshot.docs.find(g => {
+                    const name = (g.data().name || '').toLowerCase();
+                    return !name.includes('telegram');
+                });
+                
+                if (fallbackGroup) {
+                    destinationGroupId = fallbackGroup.id;
+                } else {
+                    destinationGroupId = 'default_inbox';
+                    await db.collection(`${finalEntityPath}/kanban-groups`).doc(destinationGroupId).set({
+                        name: 'Bandeja de Entrada',
+                        order: 0,
+                        color: '#3B82F6',
+                        createdAt: admin.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                }
             }
 
             const finalContactId = contactId || `tg_${telegramChatId}`;
+            console.log(`[Telegram] Creating new card ${finalContactId} in group ${destinationGroupId}`);
             
             await db.collection(`${finalEntityPath}/contacts`).doc(finalContactId).set({
                 name: contactName,
@@ -251,16 +309,16 @@ export async function POST(req: Request) {
                 status: 'open',
                 source: 'TELEGRAM',
                 channel: 'telegram',
-                platform_ids: { telegram: telegramChatId }
+                platform_ids: { telegram: telegramChatId },
+                groupId: destinationGroupId
             }, { merge: true });
 
             cardId = finalContactId;
             groupId = destinationGroupId;
         }
 
-        // 2. TRIGGER UNIVERSAL CHATBOT
         if (groupId && cardId) {
-            await processChatbotFlow({
+            processChatbotFlow({
                 userId,
                 entityId,
                 groupId,
@@ -269,12 +327,12 @@ export async function POST(req: Request) {
                 from: telegramChatId,
                 text: text || (fileUrl ? '[Archivo]' : ''),
                 messageId: newMessage.messageId
-            });
+            }).catch((err: any) => console.error('[Telegram Webhook] Engine error:', err?.message));
         }
 
         return NextResponse.json({ success: true });
     } catch (error: any) {
         console.error('[Telegram Webhook Error]', error);
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        return NextResponse.json({ success: false, error: error.message, stack: error.stack }, { status: 500 });
     }
 }
