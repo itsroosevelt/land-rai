@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Script from "next/script";
-import { Outfit } from "next/font/google"; // Font updated to Outfit
+import { Montserrat } from "next/font/google"; // Font restored to Montserrat
 
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -9,9 +9,9 @@ import { Toaster } from "sonner";
 import { AuthProvider } from "@/contexts/AuthContext";
 import AppWalletProvider from "@/components/solana/AppWalletProvider";
 
-const outfit = Outfit({
+const montserrat = Montserrat({
   subsets: ["latin"],
-  variable: "--font-outfit",
+  variable: "--font-montserrat",
   display: "swap",
 });
 
@@ -43,7 +43,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" suppressHydrationWarning>
-      <body className={`${outfit.variable} font-sans`}>
+      <body className={`${montserrat.variable} font-sans`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
