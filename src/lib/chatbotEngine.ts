@@ -111,8 +111,15 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             } finally {
                 // --- 4. ATOMIC QUEUE DRAIN (SINGLE write per transaction to avoid Firestore error) ---
                 await db.runTransaction(async (transaction) => {
+                    const freshSnap = await transaction.get(cardRef as admin.firestore.DocumentReference);
+                    const freshData = freshSnap.data() || {};
+                    const currentQueue = freshData.botState?.messageQueue || [];
+                    
+                    // Filter out the processed message by its ID
+                    const updatedQueue = currentQueue.filter((m: any) => m.messageId !== msgId);
+                    
                     transaction.update(cardRef, {
-                        'botState.messageQueue': admin.firestore.FieldValue.arrayRemove(currentMsg),
+                        'botState.messageQueue': updatedQueue,
                         'botState.lastProcessedMessageId': msgId,
                         botLock: admin.firestore.FieldValue.serverTimestamp()
                     });
@@ -135,11 +142,19 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
         }
     } catch (err: any) {
         console.error(`[ChatbotEngine] 💥 Runner Crash:`, err.message);
-    } finally {
         // --- 5. FINAL RELEASE ---
         try {
             await cardRef.update({ botLock: admin.firestore.FieldValue.delete() });
             console.log(`[ChatbotEngine] 🏁 RUNNER FINISHED for ${cardId}`);
+
+            // Safety Check: if something was added while we were releasing the lock, re-trigger
+            const finalSnap = await cardRef.get();
+            const finalQueue = finalSnap.data()?.botState?.messageQueue || [];
+            if (finalQueue.length > 0) {
+                console.log(`[ChatbotEngine] 🔄 Self-healing: detected items in queue after release. Re-triggering...`);
+                // We don't await this, just fire and forget to start a new worker
+                processChatbotFlow(ctx).catch(() => {});
+            }
         } catch (e) {}
     }
 }
