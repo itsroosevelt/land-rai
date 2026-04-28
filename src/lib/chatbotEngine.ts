@@ -23,11 +23,12 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
     const entityPath = `users/${userId}/entities/${entityId}`;
     const cardRef = db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`);
 
-    console.log(`[ChatbotEngine] 🚀 RUNNER START | Platform: ${platform} | From: ${from}`);
-
+    console.log(`[ChatbotEngine] 🚀 RUNNER START | Card: ${cardId} | Msg: ${messageId}`);
+    
     try {
-        // --- 1. ATOMIC LOCK ACQUISITION ---
+        console.log(`[ChatbotEngine] 🔐 Attempting transaction for ${cardId}...`);
         const canExecute = await db.runTransaction(async (transaction) => {
+            console.log(`[ChatbotEngine] 📨 Inside transaction for ${cardId}`);
             const snap = await transaction.get(cardRef);
             if (!snap.exists) return false;
             const data = snap.data() || {};
@@ -141,7 +142,8 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             const finalSnap = await cardRef.get();
             const finalQueue = finalSnap.data()?.botState?.messageQueue || [];
             if (finalQueue.length > 0) {
-                processChatbotFlow(ctx).catch(() => {});
+                console.log(`[ChatbotEngine] 🔄 Self-healing: ${finalQueue.length} items left. Re-triggering...`);
+                processChatbotFlow({ ...ctx, messageId: undefined }).catch(() => {});
             }
         } catch (e) {}
     }
