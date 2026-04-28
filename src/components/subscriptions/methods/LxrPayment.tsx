@@ -134,37 +134,37 @@ export default function LxrPayment({
       <div className="bg-green-600/10 border border-green-600/30 rounded-lg p-3 flex items-center gap-2">
         <Zap className="w-4 h-4 text-green-400" />
         <p className="text-sm text-green-300">
-          💎 ¡Ahorra {discount}% usando LXR!
+          💎 Save {discount}% using LXR!
         </p>
       </div>
 
       {loadingPrice ? (
         <div className="flex items-center justify-center py-8">
           <Loader2 className="w-5 h-5 animate-spin text-blue-500 mr-2" />
-          <span className="text-sm text-white/60">Obteniendo precio de LXR...</span>
+          <span className="text-sm text-white/60">Fetching LXR price...</span>
         </div>
       ) : lxrAmount && lxrPrice ? (
         <>
           <div className="bg-blue-600/10 border border-blue-600/20 rounded-lg p-3 flex items-center gap-2">
             <Clock className="w-4 h-4 text-blue-400" />
             <p className="text-xs text-blue-300">
-              Precio garantizado por {secondsRemaining}s
+              Price guaranteed for {secondsRemaining}s
             </p>
           </div>
 
           <div className="bg-white/5 border border-white/10 rounded-lg p-4 space-y-3">
             <div className="flex justify-between items-center">
-              <span className="text-white/60">Monto con descuento</span>
+              <span className="text-white/60">Discounted Amount</span>
               <span className="text-lg font-medium text-green-400">${priceUSD.toFixed(2)}</span>
             </div>
             <div className="h-px bg-white/10" />
             <div className="flex justify-between items-center">
-              <span className="text-white/60">Precio LXR</span>
+              <span className="text-white/60">LXR Price</span>
               <span className="text-sm text-white">${lxrPrice.toFixed(6)}</span>
             </div>
             <div className="h-px bg-white/10" />
             <div className="flex justify-between items-center">
-              <span className="text-white/60 font-medium">Pagarás</span>
+              <span className="text-white/60 font-medium">You will pay</span>
               <span className="text-2xl font-light text-white">
                 {lxrAmount.toFixed(0)} LXR
               </span>
@@ -174,7 +174,7 @@ export default function LxrPayment({
           <Button
             onClick={handlePayment}
             disabled={isProcessing || !publicKey || !isBillingValid}
-            className="w-full h-12 rounded-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+            className="w-full h-12 rounded-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 text-base font-semibold"
           >
             {isProcessing ? (
               <>
@@ -182,29 +182,29 @@ export default function LxrPayment({
                 Procesando...
               </>
             ) : (
-              'Pagar con LXR'
+              'Pay with LXR'
             )}
           </Button>
 
           {!isBillingValid && (
             <div className="flex items-center gap-2 p-3 bg-yellow-600/10 border border-yellow-600/30 rounded-lg">
               <AlertCircle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
-              <p className="text-xs text-yellow-300">Completa los datos de facturación para continuar</p>
+              <p className="text-xs text-yellow-300">Complete billing details to continue</p>
             </div>
           )}
 
           {!publicKey && isBillingValid && (
             <p className="text-xs text-yellow-400/70 text-center">
-              Conecta tu wallet de Phantom para continuar
+              Connect your Phantom wallet to continue
             </p>
           )}
 
           <p className="text-xs text-white/40 text-center">
-            Nota: LXR debe estar en tu wallet de Phantom
+            Note: You must have LXR in your Phantom wallet
           </p>
         </>
       ) : (
-        <p className="text-center text-red-400 py-4">Error cargando precio de LXR</p>
+        <p className="text-center text-red-400 py-4">Error loading LXR price</p>
       )}
     </div>
   );
