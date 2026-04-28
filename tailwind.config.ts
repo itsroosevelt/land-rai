@@ -25,6 +25,7 @@ const config = {
         playfair: ['var(--font-montserrat)', 'sans-serif'], // Replaced with Montserrat for global consistency
         sans: ['var(--font-montserrat)', ...fontFamily.sans],
         'open-sans': ['var(--font-montserrat)', ...fontFamily.sans],
+        outfit: ['var(--font-outfit)', ...fontFamily.sans],
       },
       colors: {
         border: 'hsl(var(--border))',
