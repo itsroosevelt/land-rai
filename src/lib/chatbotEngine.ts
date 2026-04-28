@@ -215,8 +215,8 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             'botState.status': 'active',
             'botState.waitingForInput': false,
             'botState.currentNodeId': null,
-            customFields: {},
-            contactName: 'Usuario'
+            customFields: {}
+            // RULE: chatbot NEVER modifies contactName or any contact-level field
         };
 
         // If it's a hard reset, we clear the queue to prevent "echoes" of previous flow messages
@@ -227,10 +227,10 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
 
         await cardRef.update(resetPayload);
         
-        // Sync local cardData for current cycle execution
+        // Sync local cardData for current cycle execution — read-only for contact fields
         cardData.botState = { ...(cardData.botState || {}), status: 'active', waitingForInput: false, currentNodeId: null };
         cardData.customFields = {};
-        cardData.contactName = 'Usuario';
+        // RULE: do NOT reset cardData.contactName — the real contact name is immutable from the bot
         
         // After reset: fall through to execute the flow from the start immediately.
         // This avoids forcing the user to send an extra message after a reset.
@@ -375,16 +375,20 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                     return;
                 }
 
-                // 3. SUCCESS HANDLING
+                // 3. SUCCESS HANDLING — store ONLY in customFields (flow-scoped)
+                // RULE: chatbot NEVER modifies contactName, contactEmail, or any root contact field.
                 console.log(`[ChatbotEngine] ✅ Captured & Validated ${varName}: ${extracted}`);
                 const updatePayload: any = { [`customFields.${varName}`]: extracted, 'botState.waitingForInput': false };
-                
+
+                // Update in-memory sessionVars so {{variable}} templates work for the rest of this cycle
+                sessionVars[varName] = extracted;
                 if (isName) {
-                    updatePayload.contactName = extracted;
+                    // Update session-only variables for template interpolation
                     sessionVars.nombre = extracted;
                     sessionVars.name = extracted;
+                    sessionVars.first_name = extracted.split(' ')[0];
+                    // Note: contactName on the Firestore card is NOT touched — bot has no write access to contact records
                 }
-                sessionVars[varName] = extracted;
                 await cardRef.update(updatePayload);
 
                 // Find next node (Universal Connector)
