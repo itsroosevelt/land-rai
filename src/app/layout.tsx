@@ -29,10 +29,10 @@ Impact Areas: Web3 Ecosystems, Business Direction, and Time Optimization.
 It is the bridge between the founder's vision and operational execution, evolving with your business.`,
   icons: {
     icon: [
-      { url: "/assets/newlogo.png", sizes: "32x32", type: "image/png" },
-      { url: "/assets/newlogo.png", sizes: "192x192", type: "image/png" },
+      { url: "/assets/circle-roosevelt.png", sizes: "32x32", type: "image/png" },
+      { url: "/assets/circle-roosevelt.png", sizes: "192x192", type: "image/png" },
     ],
-    apple: { url: "/assets/newlogo.png", sizes: "180x180", type: "image/png" },
+    apple: { url: "/assets/circle-roosevelt.png", sizes: "180x180", type: "image/png" },
   }
 };
 
