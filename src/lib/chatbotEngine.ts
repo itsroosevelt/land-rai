@@ -67,7 +67,7 @@ export async function processChatbotFlow({ userId, entityId, groupId, cardId, pl
 
         for (const currentMsg of queue) {
             try {
-                const res = await runEngineCycle(currentCardState, currentMsg, entityPath, entityId, userId, flow);
+                const res = await runEngineCycle(currentCardState, currentMsg, entityPath, entityId, userId, flow, platform);
                 
                 // Update Local State for next message
                 let newVariables = { ...(currentCardState.variables || {}), ...res.newVariables };
@@ -110,9 +110,9 @@ export async function processChatbotFlow({ userId, entityId, groupId, cardId, pl
     }
 }
 
-async function runEngineCycle(cardData: any, msg: any, entityPath: string, entityId: string, userId: string, flow: any) {
+async function runEngineCycle(cardData: any, msg: any, entityPath: string, entityId: string, userId: string, flow: any, forcedPlatform?: string) {
     let cycleText = (msg.text || '').trim();
-    const platform = (cardData.channel || cardData.source || cardData.primary_channel || 'telegram').toLowerCase();
+    const platform = (forcedPlatform || cardData.channel || cardData.source || cardData.primary_channel || 'telegram').toLowerCase();
     
     const msgTextLower = cycleText.toLowerCase().replace(/[?¿!¡.]/g, '').trim();
     const restartKeywords = ['clear', 'reiniciar', 'reinicia', 'reincio', 'reinicio', 'reset', 'hola', 'inicio', 'comenzar', 'start'];
