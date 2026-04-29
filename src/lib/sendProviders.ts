@@ -276,30 +276,22 @@ export async function sendWhatsAppMessage(
     // 1. Multi-Tenant Token Resolution
     if (options.userId && options.entityId) {
         try {
-            // First try standard paths for the specific user
-            const configPath = `users/${options.userId}/entities/${options.entityId}/integrations/whatsapp`;
-            const internalPath = `users/${options.userId}/entities/${options.entityId}/integrations/whatsapp_internal`;
-
-            const configDoc = await db.doc(configPath).get();
-            let data = configDoc.data();
-
-            if (!data?.accessToken || !data?.phoneNumberId) {
-                const internalDoc = await db.doc(internalPath).get();
-                if (internalDoc.exists) data = internalDoc.data();
+            // Scan ALL integration docs and collect token + phoneId independently
+            // This fixes the case where token is in one doc and phoneNumberId in another
+            const intSnap = await db.collection(`users/${options.userId}/entities/${options.entityId}/integrations`).get();
+            
+            for (const doc of intSnap.docs) {
+                const d = doc.data();
+                if (!token && (d?.accessToken || d?.token || d?.access_token)) {
+                    token = d.accessToken || d.token || d.access_token;
+                }
+                if (!phoneNumberId && (d?.phoneNumberId || d?.phone_number_id)) {
+                    phoneNumberId = d.phoneNumberId || d.phone_number_id;
+                }
+                if (token && phoneNumberId) break;
             }
 
-            if (data?.phoneNumberId) {
-                phoneNumberId = data.phoneNumberId;
-            }
-            if (data?.accessToken) {
-                token = data.accessToken;
-            }
-
-            if (phoneNumberId) {
-                console.log(`[sendWhatsAppMessage] Resolved Config: PhoneID=${phoneNumberId?.substring(0, 4)}... | CustomToken=${!!data?.accessToken}`);
-            } else {
-                console.warn(`[sendWhatsAppMessage] No valid PhoneID found for entity ${options.entityId}`);
-            }
+            console.log(`[sendWhatsAppMessage] Resolved: hasToken=${!!token}, hasPhoneId=${!!phoneNumberId} | docs=${intSnap.size}`);
         } catch (err) {
             console.error(`[sendWhatsAppMessage] Error resolving config:`, err);
         }
