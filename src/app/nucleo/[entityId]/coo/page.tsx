@@ -29,7 +29,7 @@ export default function COODashboard() {
             name: 'Compliance & SOPs',
             description: 'Standard Operating Procedures and regulatory document storage.',
             icon: FileText,
-            path: '#',
+            path: `/nucleo/${entityId}/coo/quality`,
             color: 'bg-slate-500/10 text-slate-400 border-slate-500/20'
         }
     ];
@@ -75,4 +75,5 @@ export default function COODashboard() {
         </div>
     );
 }
+
 
