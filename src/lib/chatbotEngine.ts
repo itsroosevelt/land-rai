@@ -6,7 +6,7 @@ export interface ChatbotContext {
     entityId: string;
     groupId: string;
     cardId: string;
-    platform: 'whatsapp' | 'messenger' | 'instagram' | 'telegram' | 'gmail';
+    platform: 'whatsapp' | 'messenger' | 'instagram' | 'telegram' | 'gmail' | 'x_twitter' | 'x';
     from: string;
     text: string;
     messageId?: string;
