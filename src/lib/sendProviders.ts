@@ -276,22 +276,43 @@ export async function sendWhatsAppMessage(
     // 1. Multi-Tenant Token Resolution
     if (options.userId && options.entityId) {
         try {
-            // Scan ALL integration docs and collect token + phoneId independently
-            // This fixes the case where token is in one doc and phoneNumberId in another
-            const intSnap = await db.collection(`users/${options.userId}/entities/${options.entityId}/integrations`).get();
-            
+            const integrationsPath = `users/${options.userId}/entities/${options.entityId}/integrations`;
+            const intSnap = await db.collection(integrationsPath).get();
+
+            // Recolectar todas las credenciales posibles de todos los documentos
+            let foundToken = null;
+            let foundPhone = null;
+
             for (const doc of intSnap.docs) {
                 const d = doc.data();
-                if (!token && (d?.accessToken || d?.token || d?.access_token)) {
-                    token = d.accessToken || d.token || d.access_token;
-                }
-                if (!phoneNumberId && (d?.phoneNumberId || d?.phone_number_id)) {
-                    phoneNumberId = d.phoneNumberId || d.phone_number_id;
-                }
-                if (token && phoneNumberId) break;
+                const t = d?.accessToken || d?.token || d?.access_token || d?.pageAccessToken;
+                const p = d?.phoneNumberId || d?.phone_number_id || d?.phoneId;
+                
+                if (t && !foundToken) foundToken = t;
+                if (p && !foundPhone) foundPhone = p;
+                
+                if (foundToken && foundPhone) break;
             }
 
-            console.log(`[sendWhatsAppMessage] Resolved: hasToken=${!!token}, hasPhoneId=${!!phoneNumberId} | docs=${intSnap.size}`);
+            if (foundToken) token = foundToken;
+            if (foundPhone) phoneNumberId = foundPhone;
+
+            console.log(`[WhatsApp] 🎯 Resolved from ${intSnap.size} docs: hasToken=${!!token}, hasPhoneId=${!!phoneNumberId}`);
+
+            // 🆘 ULTIMO RECURSO: Búsqueda por Casing (g02 vs gO2)
+            if (!token || !phoneNumberId) {
+                const allUsers = await db.collection('users').get();
+                const match = allUsers.docs.find(u => u.id.toLowerCase() === options.userId!.toLowerCase());
+                if (match && match.id !== options.userId) {
+                    const altPath = `users/${match.id}/entities/${options.entityId}/integrations`;
+                    const altSnap = await db.collection(altPath).get();
+                    for (const doc of altSnap.docs) {
+                        const d = doc.data();
+                        if (!token) token = d?.accessToken || d?.token || d?.access_token;
+                        if (!phoneNumberId) phoneNumberId = d?.phoneNumberId || d?.phone_number_id;
+                    }
+                }
+            }
         } catch (err) {
             console.error(`[sendWhatsAppMessage] Error resolving config:`, err);
         }
