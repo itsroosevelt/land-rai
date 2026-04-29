@@ -112,7 +112,7 @@ export async function processChatbotFlow({ userId, entityId, groupId, cardId, pl
 
 async function runEngineCycle(cardData: any, msg: any, entityPath: string, entityId: string, userId: string, flow: any) {
     let cycleText = (msg.text || '').trim();
-    const platform = cardData.channel || 'telegram';
+    const platform = (cardData.channel || cardData.source || cardData.primary_channel || 'telegram').toLowerCase();
     
     const msgTextLower = cycleText.toLowerCase().replace(/[?¿!¡.]/g, '').trim();
     const restartKeywords = ['clear', 'reiniciar', 'reincio', 'reinicio', 'reset', 'hola', 'inicio', 'comenzar', 'start'];
@@ -131,10 +131,19 @@ async function runEngineCycle(cardData: any, msg: any, entityPath: string, entit
 
     const dispatchMessage = async (content: string, options: any = {}) => {
         const providers = require('./sendProviders');
-        if (platform === 'telegram') {
+        const cleanPlatform = platform.toLowerCase();
+        
+        if (cleanPlatform === 'telegram') {
             await providers.sendTelegramMessage(userId, entityId, cardData.telegramChatId, content, options);
-        } else if (platform === 'whatsapp') {
-            await providers.sendWhatsAppMessage(userId, entityId, cardData.phone, content, options);
+        } else if (cleanPlatform === 'whatsapp') {
+            await providers.sendWhatsAppMessage(msg.from, content, { ...options, userId, entityId });
+        } else if (cleanPlatform === 'instagram' || cleanPlatform === 'messenger') {
+            await providers.sendMetaMessage(msg.from, content, { 
+                ...options, 
+                userId, 
+                entityId, 
+                provider: cleanPlatform as 'instagram' | 'messenger' 
+            });
         }
     };
 
