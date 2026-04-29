@@ -115,8 +115,8 @@ async function runEngineCycle(cardData: any, msg: any, entityPath: string, entit
     const platform = (cardData.channel || cardData.source || cardData.primary_channel || 'telegram').toLowerCase();
     
     const msgTextLower = cycleText.toLowerCase().replace(/[?¿!¡.]/g, '').trim();
-    const restartKeywords = ['clear', 'reiniciar', 'reincio', 'reinicio', 'reset', 'hola', 'inicio', 'comenzar', 'start'];
-    const isRestart = msgTextLower.startsWith('/') || restartKeywords.some(kw => msgTextLower === kw);
+    const restartKeywords = ['clear', 'reiniciar', 'reinicia', 'reincio', 'reinicio', 'reset', 'hola', 'inicio', 'comenzar', 'start'];
+    const isRestart = msgTextLower.startsWith('/') || restartKeywords.some(kw => msgTextLower.includes(kw));
 
     const accumulated: any = {
         nextState: {
