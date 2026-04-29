@@ -276,10 +276,24 @@ export async function sendWhatsAppMessage(
     // 1. Multi-Tenant Token Resolution
     if (options.userId && options.entityId) {
         try {
+            // 🔑 CORRECCIÓN DE CASING: Verificar si el userId existe con el casing correcto
+            let resolvedUserId = options.userId;
+            const directUserRef = db.collection('users').doc(options.userId);
+            const directUserSnap = await directUserRef.get();
+            if (!directUserSnap.exists) {
+                console.log(`[WhatsApp] ⚠️ User ${options.userId} not found directly. Searching case-insensitive...`);
+                const allUsers = await db.collection('users').get();
+                const match = allUsers.docs.find(u => u.id.toLowerCase() === options.userId!.toLowerCase());
+                if (match) {
+                    resolvedUserId = match.id;
+                    console.log(`[WhatsApp] ✅ Resolved userId: ${options.userId} -> ${resolvedUserId}`);
+                }
+            }
+
             const configPaths = [
-                `users/${options.userId}/entities/${options.entityId}/integrations/whatsapp`,
-                `users/${options.userId}/entities/${options.entityId}/integrations/whatsapp_internal`,
-                `users/${options.userId}/entities/${options.entityId}/integrations/meta`
+                `users/${resolvedUserId}/entities/${options.entityId}/integrations/whatsapp`,
+                `users/${resolvedUserId}/entities/${options.entityId}/integrations/whatsapp_internal`,
+                `users/${resolvedUserId}/entities/${options.entityId}/integrations/meta`
             ];
 
             for (const path of configPaths) {
@@ -293,7 +307,7 @@ export async function sendWhatsAppMessage(
                 }
             }
 
-            // 🆘 FALLBACK DE EMERGENCIA: Si no se encontró por ruta, buscar por phoneNumberId en toda la DB
+            // 🆘 FALLBACK DE EMERGENCIA: Si no se encontró por ruta, buscar en toda la DB
             if (!token) {
                 console.log(`[WhatsApp] 🆘 Path lookup failed. Starting Emergency Global Scan...`);
                 const allIntegrations = await db.collectionGroup('integrations').where('provider', '==', 'whatsapp').get();
