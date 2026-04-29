@@ -23,22 +23,28 @@ async function getWhatsAppCredentials(ctx?: { userId?: string, entityId?: string
     if (ctx?.userId && ctx?.entityId) {
         try {
             const db = admin.firestore();
-            const paths = [
-                `users/${ctx.userId}/entities/${ctx.entityId}/integrations/whatsapp`,
-                `users/${ctx.userId}/entities/${ctx.entityId}/integrations/whatsapp_internal`
-            ];
+            const integrationsPath = `users/${ctx.userId}/entities/${ctx.entityId}/integrations`;
+            const intSnap = await db.collection(integrationsPath).get();
 
-            for (const configPath of paths) {
-                const snapshot = await db.doc(configPath).get();
-                if (snapshot.exists) {
-                    const configData = snapshot.data();
-                    if (configData?.accessToken && configData?.phoneNumberId) {
-                        apiToken = configData.accessToken;
-                        phoneId = configData.phoneNumberId;
-                        break;
-                    }
+            let foundToken: string | null = null;
+            let foundPhone: string | null = null;
+
+            for (const doc of intSnap.docs) {
+                const d = doc.data();
+                const t = d?.accessToken || d?.token || d?.access_token || d?.pageAccessToken;
+                const p = d?.phoneNumberId || d?.phone_number_id || d?.phoneId;
+                
+                // Prioritize Meta tokens (EAA) and ignore others like Gmail (ya29)
+                if (t && typeof t === 'string' && t.startsWith('EAA')) {
+                    if (!foundToken) foundToken = t;
                 }
+                
+                if (p && !foundPhone) foundPhone = p;
             }
+
+            if (foundToken) apiToken = foundToken;
+            if (foundPhone) phoneId = foundPhone;
+            
         } catch (e) {
             functions.logger.error("[WhatsApp API] Failed to fetch custom credentials", e);
         }
