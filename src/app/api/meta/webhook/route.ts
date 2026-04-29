@@ -119,8 +119,8 @@ export async function POST(req: Request) {
         const integrationSnap = await db.collectionGroup('integrations').get();
         
         for (const doc of integrationSnap.docs) {
-            // Ensure we are in a valid entity path before even checking IDs
-            if (!doc.ref.path.includes('/users/') || !doc.ref.path.includes('/entities/')) continue;
+            // Ensure we are in a valid entity path before even checking IDs (Rule 7)
+            if (!doc.ref.path.includes('users/') || !doc.ref.path.includes('/entities/')) continue;
 
             const data = doc.data();
             const matchesPage = data.pageId === targetId || String(data.pageId) === String(targetId) || data.pageId === numericId;
