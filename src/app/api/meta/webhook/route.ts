@@ -131,6 +131,12 @@ export async function POST(req: Request) {
                 tenantData = data;
                 if (matchesInsta) provider = 'instagram';
                 else if (matchesPage) provider = 'messenger';
+                
+                // DIAGNOSTIC LOG (Rule 5 & 7 compliant)
+                const pParts = doc.ref.path.split('/');
+                const uId = pParts[1];
+                const eId = pParts[3];
+                debugLog(`[Meta Webhook] ✅ MATCH FOUND: Message for ${targetId} routed to User: ${uId}, Entity: ${eId}`);
                 break;
             }
         }
