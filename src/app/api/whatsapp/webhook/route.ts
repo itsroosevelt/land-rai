@@ -112,6 +112,8 @@ export async function POST(req: Request) {
                     raw: JSON.stringify(body).substring(0, 1500)
                 });
             } catch (e) {}
+        }
+
         if (!userId || !entityId) {
             debugLog(`[POST] ❌ ABORT: Could not resolve tenant for Phone ID ${recipientPhoneNumberId}.`);
             return NextResponse.json({ success: false, error: 'Tenant not mapped' });
