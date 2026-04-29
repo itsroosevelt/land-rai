@@ -59,8 +59,8 @@ export default function TelegramModal({ isOpen, onClose, activeEntity, currentUs
         const toastId = toast.loading("Activando Protocolo Telegram...");
 
         try {
-            // 1. Check if used by another tenant
-            const queryRef = query(collectionGroup(db, 'integrations'), where('botToken', '==', botToken));
+            // 1. REVERSIÓN: Buscar en la colección raíz 'telegram-integrations'
+            const queryRef = query(collectionGroup(db, 'telegram-integrations'), where('botToken', '==', botToken));
             const snap = await getDocs(queryRef);
             
             const isUsedByAnotherTenant = !snap.empty && !snap.docs.every((d: any) => d.ref.path.includes(activeEntity));
@@ -88,15 +88,25 @@ export default function TelegramModal({ isOpen, onClose, activeEntity, currentUs
                 throw new Error(setupData.error || 'Error en el registro del webhook');
             }
 
-            // 3. Save Configuration
+            // 3. REVERSIÓN: Guardar tanto en la entidad como en la raíz 'telegram-integrations'
             const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/telegram`);
-            await setDoc(configRef, {
+            const rootRef = doc(db, `telegram-integrations/${botToken.split(':')[0]}`);
+
+            const telegramConfig = {
                 botToken,
+                chatId: setupData.chatId || '',
                 botName: setupData.botName || 'Telegram Bot',
                 status: 'Connected',
                 provider: 'telegram',
+                userId: currentUser?.uid,
+                entityId: activeEntity,
                 updatedAt: new Date(),
-            }, { merge: true });
+            };
+
+            await Promise.all([
+                setDoc(configRef, telegramConfig, { merge: true }),
+                setDoc(rootRef, telegramConfig, { merge: true })
+            ]);
 
             setBotName(setupData.botName || 'Telegram Bot');
             toast.success("¡Protocolo Telegram Activado!", { id: toastId });

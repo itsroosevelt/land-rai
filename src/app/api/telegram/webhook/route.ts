@@ -1,151 +1,89 @@
-import { NextRequest, NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
+import { NextResponse } from 'next/server';
+import { db, admin } from '@/lib/firebase-admin';
 import { processChatbotFlow } from '@/lib/chatbotEngine';
 
-const db = admin.firestore();
-
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
     try {
         const body = await req.json();
-        const updateId = String(body.update_id || '');
+        if (!body.message) return NextResponse.json({ ok: true });
+
+        const { chat, text, from, message_id } = body.message;
+        const chatId = String(chat.id);
+
+        // REVERSIÓN: Volver a buscar en la colección raíz 'telegram-integrations'
+        const integrationSnap = await db.collectionGroup('telegram-integrations')
+            .where('chatId', '==', chatId)
+            .get();
+
+        if (integrationSnap.empty) {
+            console.log(`[Telegram] No integration found for chatId: ${chatId}`);
+            return NextResponse.json({ ok: true });
+        }
+
+        const integrationDoc = integrationSnap.docs[0];
+        const integrationData = integrationDoc.data();
         
-        // --- ⚡️ ULTRA-FAST RESPONSE (Stop Telegram Retries IMMEDIATELY) ---
-        const response = NextResponse.json({ ok: true });
+        // Resolver userId y entityId del path de la integración
+        const pathParts = integrationDoc.ref.path.split('/');
+        const uIdx = pathParts.indexOf('users');
+        const eIdx = pathParts.indexOf('entities');
         
-        if (!updateId) return response;
+        const userId = uIdx !== -1 ? pathParts[uIdx + 1] : integrationData.userId;
+        const entityId = eIdx !== -1 ? pathParts[eIdx + 1] : integrationData.entityId;
 
-        // Background Processing (Don't await anything before this)
-        (async () => {
-            try {
-                // 1. Transactional Deduplication
-                const dedupRef = db.collection('telegram_webhooks').doc(updateId);
-                const isNew = await db.runTransaction(async (t) => {
-                    const snap = await t.get(dedupRef);
-                    if (snap.exists) return false;
-                    t.set(dedupRef, { processedAt: admin.firestore.FieldValue.serverTimestamp() });
-                    return true;
-                });
+        if (!userId || !entityId) {
+             return NextResponse.json({ ok: true });
+        }
 
-                if (!isNew) {
-                    console.log(`[Telegram Webhook] 🛡️ Duplicate update ${updateId} ignored.`);
-                    return;
-                }
+        const entityPath = `users/${userId}/entities/${entityId}`;
 
-                const { message, callback_query: callbackQuery } = body;
-                if (!message && !callbackQuery) return;
+        // 1. Guardar mensaje en la tarjeta correspondiente
+        const contactSnap = await db.collection(`${entityPath}/contacts`)
+            .where('telegramChatId', '==', chatId)
+            .get();
 
-                const telegramChatId = String(message?.chat?.id || callbackQuery?.message?.chat?.id || '');
-                const text = String(callbackQuery?.data || message?.text || message?.caption || '');
-                const firstName = message?.from?.first_name || callbackQuery?.from?.first_name || 'Usuario';
-                const lastName = message?.from?.last_name || callbackQuery?.from?.last_name || 'Telegram';
-                const contactName = `${firstName} ${lastName}`.trim();
+        let cardId = '';
+        let groupId = '';
 
-                // 2. Identify Entity (Rule 4: Isolated Data)
-                const entitiesSnap = await db.collectionGroup('integrations')
-                    .where('provider', '==', 'telegram')
-                    .get();
+        if (!contactSnap.empty) {
+            const contactData = contactSnap.docs[0].data();
+            cardId = contactData.kanbanCardId;
+            groupId = contactData.kanbanGroupId;
 
-                let entityId: string | null = null;
-                let userId: string | null = null;
-
-                for (const doc of entitiesSnap.docs) {
-                    const data = doc.data();
-                    // Align with modal status and check bot token if available in payload
-                    if (data.status === 'Connected') {
-                        const pathParts = doc.ref.path.split('/');
-                        const uIdx = pathParts.indexOf('users');
-                        const eIdx = pathParts.indexOf('entities');
-                        
-                        if (uIdx !== -1 && eIdx !== -1) {
-                            userId = pathParts[uIdx + 1];
-                            entityId = pathParts[eIdx + 1];
-                            break; 
-                        }
-                    }
-                }
-
-                if (!entityId || !userId) {
-                    console.log(`[Telegram Webhook] ❌ Could not resolve entity for bot.`);
-                    return;
-                }
-
-                const entityPath = `users/${userId}/entities/${entityId}`;
-
-                // 3. Resolve Contact & Card
-                const contactsRef = db.collection(`${entityPath}/contacts`);
-                const contactSnap = await contactsRef.where('telegramChatId', '==', telegramChatId).limit(1).get();
-                
-                let contactId: string | null = null;
-                if (contactSnap.empty) {
-                    const newContact = await contactsRef.add({
-                        name: contactName,
-                        telegramChatId,
-                        platform: 'telegram',
-                        createdAt: admin.firestore.FieldValue.serverTimestamp()
-                    });
-                    contactId = newContact.id;
-                } else {
-                    contactId = contactSnap.docs[0].id;
-                }
-
-                const groupsSnap = await db.collection(`${entityPath}/kanban-groups`).get();
-                let targetCard: any = null;
-                let groupId: string | null = null;
-
-                for (const groupDoc of groupsSnap.docs) {
-                    const cardsSnap = await db.collection(`${entityPath}/kanban-groups/${groupDoc.id}/cards`)
-                        .where('telegramChatId', '==', telegramChatId)
-                        .limit(1)
-                        .get();
-                    
-                    if (!cardsSnap.empty) {
-                        targetCard = cardsSnap.docs[0];
-                        groupId = groupDoc.id;
-                        break;
-                    }
-                }
-
-                if (!targetCard) {
-                    const inboxGroup = groupsSnap.docs.find(g => g.data().name?.toLowerCase().includes('inbox')) || groupsSnap.docs[0];
-                    if (inboxGroup) {
-                        groupId = inboxGroup.id;
-                        const newCard = await db.collection(`${entityPath}/kanban-groups/${groupId}/cards`).add({
-                            title: contactName,
-                            telegramChatId,
-                            contactId,
-                            channel: 'telegram',
-                            status: 'open',
-                            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                            botState: { status: 'inactive', currentNodeId: '1' }
-                        });
-                        targetCard = await newCard.get();
-                    }
-                }
-
-                if (!targetCard || !groupId) return;
-
-                // 4. Dispatch to Engine
-                const stableMsgId = message?.message_id ? `tg_${message.message_id}` : `tg_cb_${Date.now()}`;
-                
-                await processChatbotFlow({
-                    userId,
-                    entityId,
-                    groupId,
-                    cardId: targetCard.id,
+            if (cardId && groupId) {
+                const newMessage = {
+                    sender: 'user',
+                    text: text || '[Mensaje de Telegram]',
+                    timestamp: new Date(),
                     platform: 'telegram',
-                    from: telegramChatId,
-                    text,
-                    messageId: stableMsgId
+                    messageId: String(message_id)
+                };
+
+                await db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`).update({
+                    messages: admin.firestore.FieldValue.arrayUnion(newMessage),
+                    updatedAt: new Date(),
+                    lastMessage: text || '[Telegram]',
+                    unreadCount: admin.firestore.FieldValue.increment(1),
+                    'botState.messageQueue': admin.firestore.FieldValue.arrayUnion({
+                        text: text || '',
+                        from: chatId,
+                        platform: 'telegram',
+                        timestamp: Date.now()
+                    })
                 });
-
-            } catch (bgErr: any) {
-                console.error(`[Telegram Webhook BG] ❌ Error:`, bgErr);
             }
-        })();
+        }
 
-        return response;
+        // 2. Disparar Chatbot
+        if (cardId && groupId) {
+            processChatbotFlow({
+                userId, entityId, groupId, cardId, platform: 'telegram', from: chatId, text: text || ''
+            }).catch(console.error);
+        }
 
-    } catch (err: any) {
-        return NextResponse.json({ ok: false }, { status: 200 }); // Always 200 to stop retries
+        return NextResponse.json({ ok: true });
+    } catch (error: any) {
+        console.error('[Telegram Webhook Error]', error);
+        return NextResponse.json({ ok: true });
     }
 }
