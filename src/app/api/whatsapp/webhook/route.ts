@@ -112,20 +112,11 @@ export async function POST(req: Request) {
                     raw: JSON.stringify(body).substring(0, 1500)
                 });
             } catch (e) {}
-        } else {
-            // BACKUP SEARCH: try a legacy system mapping if it exists
-            const mappingRef = db.doc(`system_mappings/whatsapp_numbers/numbers/${recipientPhoneNumberId}`);
-            const mappingDoc = await mappingRef.get();
-            if (mappingDoc.exists) {
-                const legacy = mappingDoc.data() as { userId: string, entityId: string };
-                userId = legacy.userId;
-                entityId = legacy.entityId;
-                debugLog(`[POST] Found via legacy mapping: User=${userId}, Entity=${entityId}`);
-            } else {
-                debugLog(`[POST] ❌ ABORT: Could not resolve tenant for Phone ID ${recipientPhoneNumberId} (No mapping and no URL params).`);
-                return NextResponse.json({ success: false, error: 'Tenant not mapped' });
-            }
+        if (!userId || !entityId) {
+            debugLog(`[POST] ❌ ABORT: Could not resolve tenant for Phone ID ${recipientPhoneNumberId}.`);
+            return NextResponse.json({ success: false, error: 'Tenant not mapped' });
         }
+
 
         // Base path for this specific tenant's entity
         const entityPath = `users/${userId}/entities/${entityId}`;

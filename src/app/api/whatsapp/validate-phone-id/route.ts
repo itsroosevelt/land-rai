@@ -9,26 +9,43 @@ export async function POST(req: Request) {
             return NextResponse.json({ valid: false, message: 'Falta el Phone ID.' });
         }
 
-        // Rule 4: Isolated Data Vault - Using collectionGroup to find duplicates across tenants
-        // without violating Rule 7: No Global Mapping Roots
-        const integrationsSnap = await db.collectionGroup('integrations')
-            .where('phoneNumberId', '==', String(phoneNumberId))
-            .get();
+        // Rule 4 & 7: Paranoid search across all possible integration collection groups
+        const collectionsToCheck = ['integrations', 'whatsapp_internal', 'whatsapp-integrations'];
+        const fieldsToCheck = ['phoneNumberId', 'phone_number_id', 'id', 'wabaId'];
+        
+        const numericId = Number(phoneNumberId);
+        const stringId = String(phoneNumberId);
 
-        if (!integrationsSnap.empty) {
-            // Check if any of the found docs belong to a DIFFERENT tenant/entity
-            for (const doc of integrationsSnap.docs) {
-                const pathParts = doc.ref.path.split('/');
-                // Path pattern: users/{uid}/entities/{eid}/integrations/{integrationId}
-                const docUserId = pathParts[1];
-                const docEntityId = pathParts[3];
+        for (const collName of collectionsToCheck) {
+            for (const fieldName of fieldsToCheck) {
+                // Check for both String and Number types to avoid Firestore type-mismatch misses
+                const queries = [
+                    db.collectionGroup(collName).where(fieldName, '==', stringId).get()
+                ];
+                
+                if (!isNaN(numericId)) {
+                    queries.push(db.collectionGroup(collName).where(fieldName, '==', numericId).get());
+                }
 
-                if (docUserId !== userId || docEntityId !== entityId) {
-                    console.log(`[Validation] ❌ Duplicate Phone ID ${phoneNumberId} found in ${doc.ref.path}`);
-                    return NextResponse.json({ 
-                        valid: false, 
-                        message: 'Este Phone ID ya está vinculado a otra cuenta de Roosevelt. Por favor usa una App de Meta diferente o contacta a soporte.' 
-                    });
+                const results = await Promise.all(queries);
+
+                for (const snap of results) {
+                    if (!snap.empty) {
+                        for (const doc of snap.docs) {
+                            const pathParts = doc.ref.path.split('/');
+                            const uIdx = pathParts.indexOf('users');
+                            const eIdx = pathParts.indexOf('entities');
+                            
+                            // BLOCK if it's a different tenant OR if it's in a root collection (Rule 7 violation)
+                            if (uIdx === -1 || eIdx === -1 || pathParts[uIdx + 1] !== userId || pathParts[eIdx + 1] !== entityId) {
+                                console.log(`[Validation] ❌ CRITICAL: Duplicate found in ${doc.ref.path} (Field: ${fieldName})`);
+                                return NextResponse.json({ 
+                                    valid: false, 
+                                    message: `ERROR CRÍTICO: Este número ya está en uso por otra empresa (${pathParts[uIdx + 1] || 'Sistema Global'}). No se permite la vinculación duplicada.` 
+                                });
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -40,24 +40,34 @@ export async function POST(req: NextRequest) {
                 const lastName = message?.from?.last_name || callbackQuery?.from?.last_name || 'Telegram';
                 const contactName = `${firstName} ${lastName}`.trim();
 
-                // 2. Identify Entity
-                const entitiesSnap = await db.collectionGroup('telegram-integrations')
-                    .where('isActive', 'in', [true, 'true'])
+                // 2. Identify Entity (Rule 4: Isolated Data)
+                const entitiesSnap = await db.collectionGroup('integrations')
+                    .where('provider', '==', 'telegram')
                     .get();
 
                 let entityId: string | null = null;
                 let userId: string | null = null;
 
                 for (const doc of entitiesSnap.docs) {
-                    const pathParts = doc.ref.path.split('/');
-                    if (pathParts.length >= 4) {
-                        userId = pathParts[1];
-                        entityId = pathParts[3];
-                        break; 
+                    const data = doc.data();
+                    // Align with modal status and check bot token if available in payload
+                    if (data.status === 'Connected') {
+                        const pathParts = doc.ref.path.split('/');
+                        const uIdx = pathParts.indexOf('users');
+                        const eIdx = pathParts.indexOf('entities');
+                        
+                        if (uIdx !== -1 && eIdx !== -1) {
+                            userId = pathParts[uIdx + 1];
+                            entityId = pathParts[eIdx + 1];
+                            break; 
+                        }
                     }
                 }
 
-                if (!entityId || !userId) return;
+                if (!entityId || !userId) {
+                    console.log(`[Telegram Webhook] ❌ Could not resolve entity for bot.`);
+                    return;
+                }
 
                 const entityPath = `users/${userId}/entities/${entityId}`;
 

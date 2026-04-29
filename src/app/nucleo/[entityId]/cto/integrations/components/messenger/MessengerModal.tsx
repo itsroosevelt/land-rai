@@ -125,13 +125,7 @@ const MessengerModal: React.FC<MessengerModalProps> = ({ isOpen, onClose, active
             };
 
             await setDoc(doc(db, `users/${userId}/entities/${entityId}/integrations/messenger`), messengerConfig);
-            await setDoc(doc(db, `integrations/messenger/pages/${page.id}`), {
-                entityId,
-                userId,
-                pageName: page.name,
-                accessToken: permanentToken,
-                updatedAt: serverTimestamp()
-            });
+
 
             setConfig(messengerConfig);
             setIsConnected(true);
@@ -148,9 +142,7 @@ const MessengerModal: React.FC<MessengerModalProps> = ({ isOpen, onClose, active
         const toastId = toast.loading("Desconectando...");
         try {
             await deleteDoc(doc(db, `users/${userId}/entities/${entityId}/integrations/messenger`));
-            if (config?.pageId) {
-                await deleteDoc(doc(db, `integrations/messenger/pages/${config.pageId}`));
-            }
+
             toast.success("Desconectado correctamente.", { id: toastId });
         } catch (error) {
             toast.error("Error al desconectar.");

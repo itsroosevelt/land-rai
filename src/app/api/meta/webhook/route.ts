@@ -119,6 +119,9 @@ export async function POST(req: Request) {
         const integrationSnap = await db.collectionGroup('integrations').get();
         
         for (const doc of integrationSnap.docs) {
+            // Ensure we are in a valid entity path before even checking IDs
+            if (!doc.ref.path.includes('/users/') || !doc.ref.path.includes('/entities/')) continue;
+
             const data = doc.data();
             const matchesPage = data.pageId === targetId || String(data.pageId) === String(targetId) || data.pageId === numericId;
             const matchesInsta = data.instagramId === targetId || String(data.instagramId) === String(targetId) || data.instagramId === numericId;
@@ -126,7 +129,6 @@ export async function POST(req: Request) {
             if (matchesPage || matchesInsta) {
                 tenantRef = doc.ref;
                 tenantData = data;
-                // Override provider based on what matched or what Meta says
                 if (matchesInsta) provider = 'instagram';
                 else if (matchesPage) provider = 'messenger';
                 break;
