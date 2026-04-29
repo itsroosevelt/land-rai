@@ -276,27 +276,38 @@ export async function sendWhatsAppMessage(
     // 1. Multi-Tenant Token Resolution
     if (options.userId && options.entityId) {
         try {
-            // First try standard paths for the specific user
-            const configPath = `users/${options.userId}/entities/${options.entityId}/integrations/whatsapp`;
-            const internalPath = `users/${options.userId}/entities/${options.entityId}/integrations/whatsapp_internal`;
+            const configPaths = [
+                `users/${options.userId}/entities/${options.entityId}/integrations/whatsapp`,
+                `users/${options.userId}/entities/${options.entityId}/integrations/whatsapp_internal`,
+                `users/${options.userId}/entities/${options.entityId}/integrations/meta`
+            ];
 
-            const configDoc = await db.doc(configPath).get();
-            let data = configDoc.data();
-
-            if (!data?.accessToken || !data?.phoneNumberId) {
-                const internalDoc = await db.doc(internalPath).get();
-                if (internalDoc.exists) data = internalDoc.data();
+            for (const path of configPaths) {
+                const doc = await db.doc(path).get();
+                const d = doc.data();
+                if (doc.exists && d?.accessToken) {
+                    token = d.accessToken;
+                    phoneNumberId = d.phoneNumberId;
+                    console.log(`[WhatsApp] 🎯 Token found at: ${path}`);
+                    break;
+                }
             }
 
-            if (data?.phoneNumberId) {
-                phoneNumberId = data.phoneNumberId;
-            }
-            if (data?.accessToken) {
-                token = data.accessToken;
+            // 🆘 FALLBACK DE EMERGENCIA: Si no se encontró por ruta, buscar por phoneNumberId en toda la DB
+            if (!token) {
+                console.log(`[WhatsApp] 🆘 Path lookup failed. Starting Emergency Global Scan...`);
+                const allIntegrations = await db.collectionGroup('integrations').where('provider', '==', 'whatsapp').get();
+                const match = allIntegrations.docs.find(d => d.data().accessToken && (d.data().phoneNumberId || d.id === 'whatsapp'));
+                if (match) {
+                    const d = match.data();
+                    token = d.accessToken;
+                    phoneNumberId = d.phoneNumberId;
+                    console.log(`[WhatsApp] 🆘 Emergency Match Found at: ${match.ref.path}`);
+                }
             }
 
             if (phoneNumberId) {
-                console.log(`[sendWhatsAppMessage] Resolved Config: PhoneID=${phoneNumberId?.substring(0, 4)}... | CustomToken=${!!data?.accessToken}`);
+                console.log(`[WhatsApp] Using Phone ID: ${phoneNumberId}`);
             } else {
                 console.warn(`[sendWhatsAppMessage] No valid PhoneID found for entity ${options.entityId}`);
             }

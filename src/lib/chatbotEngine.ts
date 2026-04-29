@@ -1,5 +1,5 @@
-import * as admin from 'firebase-admin';
-import { db } from './firebase-admin';
+import { db, admin } from './firebase-admin';
+import * as providers from './sendProviders';
 
 export interface ChatbotContext {
     userId: string;
@@ -14,7 +14,21 @@ export interface ChatbotContext {
 
 export async function processChatbotFlow({ userId, entityId, groupId, cardId, platform, from, text, messageId }: ChatbotContext) {
     console.log(`[ChatbotEngine] ⚡️ ENGINE ACTIVATED | Card: ${cardId} | Platform: ${platform}`);
-    const entityPath = `users/${userId}/entities/${entityId}`;
+    
+    // 🔍 RE-CALIBRACIÓN DE IDENTIDAD: Corregir casing del userId si es necesario
+    let finalUserId = userId;
+    const userRef = db.collection('users').doc(userId);
+    const userSnap = await userRef.get();
+    if (!userSnap.exists) {
+        const allUsers = await db.collection('users').get();
+        const match = allUsers.docs.find(u => u.id.toLowerCase() === userId.toLowerCase());
+        if (match) {
+            finalUserId = match.id;
+            console.log(`[ChatbotEngine] 🎯 ID Corrected for Engine: ${userId} -> ${finalUserId}`);
+        }
+    }
+    
+    const entityPath = `users/${finalUserId}/entities/${entityId}`;
     const cardRef = db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`);
     
     try {
@@ -50,17 +64,54 @@ export async function processChatbotFlow({ userId, entityId, groupId, cardId, pl
         });
 
         if (!startData || (startData as any).skip) return;
-        const queue = (startData as any).messageQueue || [];
+        
+        // 🎯 FIX CRÍTICO: Si la cola está vacía (race condition), usar el mensaje actual como fallback
+        let queue = (startData as any).messageQueue || [];
+        if (queue.length === 0 && text) {
+            console.log(`[ChatbotEngine] ⚠️ Queue was empty. Injecting current message as fallback.`);
+            queue = [{ text, from, platform, messageId, timestamp: Date.now() }];
+        }
+        
+        if (queue.length === 0) {
+            console.log(`[ChatbotEngine] ⚠️ No messages to process. Exiting.`);
+            return;
+        }
 
         // 2. Flow Discovery
-        const botsSnap = await db.collection(`${entityPath}/chatbots`)
-            .where('isActive', 'in', [true, 'true'])
-            .get();
-        
-        if (botsSnap.empty) return;
-        const botData = botsSnap.docs[0].data();
+        // 🤖 BÚSQUEDA DUAL: Soportar 'chatbots' (plural) y 'chatbot' (singular)
+        console.log(`[ChatbotEngine] 🔍 Searching for active bot in ${entityPath}`);
+        let botsSnap = await db.collection(`${entityPath}/chatbots`).where('isActive', 'in', [true, 'true']).get();
+        if (botsSnap.empty) {
+            botsSnap = await db.collection(`${entityPath}/chatbot`).where('isActive', 'in', [true, 'true']).get();
+        }
+
+        if (botsSnap.empty) {
+            console.log(`[ChatbotEngine] ❌ No active bot found in ${entityPath}/chatbots or /chatbot`);
+            await db.collection(`${entityPath}/internal_logs`).add({
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                type: 'engine_error',
+                reason: 'No active bot found (isActive=true)',
+                path: entityPath
+            }).catch(() => {});
+            return;
+        }
+
+        const botDoc = botsSnap.docs[0];
+        const botData = botDoc.data();
         const flow = botData.flow;
-        if (!flow) return;
+
+        if (!flow || !flow.nodes || flow.nodes.length === 0) {
+            console.log(`[ChatbotEngine] ❌ Bot found (${botDoc.id}) but flow is empty or invalid.`);
+            await db.collection(`${entityPath}/internal_logs`).add({
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                type: 'engine_error',
+                reason: 'Empty or invalid flow',
+                botId: botDoc.id
+            }).catch(() => {});
+            return;
+        }
+
+        console.log(`[ChatbotEngine] ✅ Active bot: ${botDoc.id}. Flow nodes: ${flow.nodes.length}`);
 
         // 3. Sequential Execution
         let currentCardState = startData;
@@ -130,7 +181,6 @@ async function runEngineCycle(cardData: any, msg: any, entityPath: string, entit
     };
 
     const dispatchMessage = async (content: string, options: any = {}) => {
-        const providers = require('./sendProviders');
         const cleanPlatform = platform.toLowerCase();
         
         // Destinatario: Usamos el ID del remitente original del mensaje en la cola
@@ -141,17 +191,34 @@ async function runEngineCycle(cardData: any, msg: any, entityPath: string, entit
             return;
         }
 
-        if (cleanPlatform === 'telegram') {
-            await providers.sendTelegramMessage(userId, entityId, recipientId, content, options);
-        } else if (cleanPlatform === 'whatsapp') {
-            await providers.sendWhatsAppMessage(recipientId, content, { ...options, userId, entityId });
-        } else if (cleanPlatform === 'instagram' || cleanPlatform === 'messenger') {
-            await providers.sendMetaMessage(recipientId, content, { 
-                ...options, 
-                userId, 
-                entityId, 
-                provider: cleanPlatform as 'instagram' | 'messenger' 
-            });
+        try {
+            // 🎯 TELEMETRÍA ACTUALIZADA: Registrar intento en internal_logs
+            await db.collection(`${entityPath}/internal_logs`).add({
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                type: 'chatbot_dispatch_attempt',
+                platform: cleanPlatform,
+                recipient: recipientId,
+                content: content.substring(0, 100)
+            }).catch(() => {});
+
+            if (cleanPlatform === 'whatsapp') {
+                await providers.sendWhatsAppMessage(recipientId, content, { ...options, userId, entityId });
+            } else if (cleanPlatform === 'instagram' || cleanPlatform === 'messenger') {
+                await providers.sendMetaMessage(recipientId, content, { 
+                    ...options, 
+                    userId, 
+                    entityId, 
+                    provider: cleanPlatform as 'instagram' | 'messenger' 
+                });
+            }
+        } catch (dispatchError: any) {
+            const errMsg = dispatchError.message || String(dispatchError);
+            console.error(`[ChatbotEngine] ❌ Delivery Failed (${cleanPlatform}):`, errMsg);
+            // PERSIST ERROR TO CARD FOR UI DIAGNOSIS
+            await db.doc(`${entityPath}/kanban-groups/${cardData.kanbanGroupId || 'unknown'}/cards/${cardData.id}`).update({
+                'botState.lastError': `Error de envío (${cleanPlatform}): ${errMsg}`,
+                'botState.lastErrorAt': admin.firestore.FieldValue.serverTimestamp()
+            }).catch(() => {});
         }
     };
 

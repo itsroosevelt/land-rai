@@ -127,8 +127,9 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
         const cardId = card?.id;
         const uid = currentUser?.uid;
         const entity = activeEntity;
+        const unreadCount = logic.liveCardData?.unreadCount || card?.unreadCount || 0;
 
-        if (!cardId || !groupId || !uid || !entity) return;
+        if (!cardId || !groupId || !uid || !entity || unreadCount === 0) return;
 
         const cardRef = doc(db, `users/${uid}/entities/${entity}/kanban-groups/${groupId}/cards/${cardId}`);
         updateDoc(cardRef, { unreadCount: 0, lastReadAt: Timestamp.now() }).catch((err: any) => {
@@ -136,7 +137,7 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
                 console.error("[ChatArea] Error clearing unread count:", err);
             }
         });
-    }, [card?.id, card?.groupId, logic.liveCardData?.groupId, currentUser?.uid, activeEntity]);
+    }, [card?.id, card?.groupId, logic.liveCardData?.groupId, logic.liveCardData?.unreadCount, currentUser?.uid, activeEntity]);
 
     const [integrationStatus, setIntegrationStatus] = useState<string | null>(null);
 

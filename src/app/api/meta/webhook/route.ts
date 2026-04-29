@@ -168,7 +168,7 @@ export async function POST(req: Request) {
 
         // ENTERPRISE LOGGING (Status visibility in CRM)
         try {
-            await db.collection(`${entityPath}/system_logs`).add({
+            await db.collection(`${entityPath}/internal_logs`).add({
                 timestamp: admin.firestore.FieldValue.serverTimestamp(),
                 type: `${provider}_webhook_nextjs`,
                 senderId: senderId,
@@ -353,9 +353,11 @@ export async function POST(req: Request) {
                 timestamp: Date.now()
             };
 
-            // UPDATING EXISTING CARD
-            await targetCardDoc.ref.update({
-                contactName: finalResolvedName,
+            // 🛡️ PROTECCIÓN DE IDENTIDAD: Solo actualizar nombre si es genérico o está vacío
+            const currentName = targetCardDoc.data()?.contactName || '';
+            const shouldUpdateName = !currentName || isGenericProfileName(currentName);
+
+            const cardUpdate: any = {
                 lastMessage: text.length > 40 ? text.substring(0, 37) + '...' : text,
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 unreadCount: admin.firestore.FieldValue.increment(1),
@@ -368,38 +370,48 @@ export async function POST(req: Request) {
                 contactId: existingContactId || targetCardDoc.data()?.contactId || null,
                 crmId: existingContactId || targetCardDoc.data()?.crmId || null,
                 [`platform_ids.${provider.toLowerCase()}`]: senderId
-            });
+            };
 
-            // Sincronizar metaSenderId, source y nombre con el contacto existente
+            if (shouldUpdateName) {
+                cardUpdate.contactName = finalResolvedName;
+            }
+
+            await targetCardDoc.ref.update(cardUpdate);
+
+            // Sincronizar contacto solo si el nombre debe actualizarse
             if (existingContactId) {
-                await db.collection(`${entityPath}/contacts`).doc(existingContactId).update({
-                    name: finalResolvedName,
+                const contactUpdate: any = {
                     metaSenderId: senderId,
                     kanbanGroupId: targetGroupId,
                     kanbanCardId: targetCardDoc.id,
                     source: provider.toUpperCase(),
                     updatedAt: admin.firestore.Timestamp.now(),
                     [`platform_ids.${provider.toLowerCase()}`]: senderId
-                });
+                };
+                if (shouldUpdateName) contactUpdate.name = finalResolvedName;
+                await db.collection(`${entityPath}/contacts`).doc(existingContactId).update(contactUpdate);
             }
         } else {
-            // Create NEW card in Inbox
+            // 🎯 CLASIFICACIÓN POR BANDEJAS (Rule 1 & 5)
             let destinationGroupId = '';
+            const channelKey = (provider || 'messenger').toLowerCase();
+            const channelLabel = channelKey === 'instagram' ? 'Instagram' : 'Messenger';
             
-            const inboxGroup = groupsSnapshot.docs.find(g => {
-                const gName = (g.data().name || '').toLowerCase();
-                return gName === 'inbox' || gName.includes('entrada') || gName === 'nuevos' || gName.includes('instagram');
-            });
-
-            if (inboxGroup) {
-                destinationGroupId = inboxGroup.id;
-            } else if (!groupsSnapshot.empty) {
-                destinationGroupId = groupsSnapshot.docs[0].id;
-            } else {
-                debugLog(`[POST] Inbox missing, generating default_inbox`);
-                destinationGroupId = 'default_inbox';
-                await groupsRef.doc('default_inbox').set({
-                    name: 'Inbox', order: 0, color: '#3B82F6', createdAt: admin.firestore.FieldValue.serverTimestamp()
+            destinationGroupId = `group_${channelKey}`;
+            
+            const groupRef = db.collection(`${entityPath}/kanban-groups`).doc(destinationGroupId);
+            const groupSnap = await groupRef.get();
+            
+            if (!groupSnap.exists) {
+                debugLog(`[Kanban] 📦 Creating dedicated tray for: ${channelLabel}`);
+                await groupRef.set({
+                    id: destinationGroupId,
+                    name: channelLabel,
+                    type: channelKey,
+                    order: channelKey === 'instagram' ? 3 : 4,
+                    color: channelKey === 'instagram' ? '#E1306C' : '#006AFF',
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
             }
 
@@ -465,9 +477,9 @@ export async function POST(req: Request) {
         if (groupId && cardId) {
             console.log(`[Meta Webhook] 🤖 Triggering chatbot for ${provider} | User: ${userId} | Entity: ${entityId}`);
             
-            // TELEMETRY: Mark ingestion as successful in system logs
+            // TELEMETRY: Mark ingestion as successful in internal logs
             try {
-                await db.collection(`${entityPath}/system_logs`).add({
+                await db.collection(`${entityPath}/internal_logs`).add({
                     timestamp: admin.firestore.FieldValue.serverTimestamp(),
                     type: `webhook_ingested_${provider}`,
                     text: text.substring(0, 50),

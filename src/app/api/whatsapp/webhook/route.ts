@@ -74,6 +74,13 @@ export async function POST(req: Request) {
         const metadata = value?.metadata;
         const recipientPhoneNumberId = metadata?.phone_number_id;
 
+        // 🚨 CAJA NEGRA: Log de emergencia para rastrear el fallo
+        await db.collection('DEBUG_WEBHOOK').add({
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            phoneId: recipientPhoneNumberId,
+            body: JSON.stringify(body).substring(0, 500)
+        }).catch(() => {});
+
         // 1. TENANT IDENTIFICATION (Optimized O(1) Indexed Lookup)
         debugLog(`[POST] Searching tenant for Phone ID: ${recipientPhoneNumberId}`);
 
@@ -81,30 +88,51 @@ export async function POST(req: Request) {
         let entityId = searchParams.get('e');
 
         if (!userId || !entityId) {
-            // Rule 4: Isolated Data Vault - Search across all entity integrations
-            const tenantSnap = await db.collectionGroup('integrations')
-                .where('phoneNumberId', '==', recipientPhoneNumberId)
-                .limit(1)
-                .get();
-            
-            if (!tenantSnap.empty) {
-                const pathParts = tenantSnap.docs[0].ref.path.split('/');
-                // Dynamic path resolution: users/{uid}/entities/{eid}/integrations/whatsapp
-                const uIdx = pathParts.indexOf('users');
-                const eIdx = pathParts.indexOf('entities');
-                if (uIdx !== -1 && eIdx !== -1) {
-                    userId = pathParts[uIdx + 1];
-                    entityId = pathParts[eIdx + 1];
+            try {
+                // Rule 4: Isolated Data Vault - Search across all entity integrations
+                const tenantSnap = await db.collectionGroup('integrations')
+                    .where('phoneNumberId', '==', recipientPhoneNumberId)
+                    .limit(1)
+                    .get();
+                
+                if (!tenantSnap.empty) {
+                    const doc = tenantSnap.docs[0];
+                    const pathParts = doc.ref.path.split('/');
+                    const uIdx = pathParts.indexOf('users');
+                    const eIdx = pathParts.indexOf('entities');
+                    
+                    if (uIdx !== -1 && eIdx !== -1) {
+                        // Priority: Always use the ACTUAL folder names from the path (UID/EntityID)
+                        userId = pathParts[uIdx + 1];
+                        entityId = pathParts[eIdx + 1];
+                        console.log(`[Discovery] 🎯 Resolved Tenant from Path: ${userId}/${entityId}`);
+                    }
                 }
+            } catch (indexError) {
+                console.error(`[Discovery] ⚠️ Index Fail: ${indexError}`);
             }
         }
 
         if (userId && entityId) {
+            // 🔍 VALIDACIÓN DE CASING: Asegurar que el userId existe con el casing correcto
+            const userRef = db.collection('users').doc(userId);
+            const userSnap = await userRef.get();
+            
+            if (!userSnap.exists) {
+                console.log(`[Discovery] ⚠️ Casing Mismatch: ${userId} not found. Searching for correct casing...`);
+                const allUsers = await db.collection('users').get();
+                const match = allUsers.docs.find(u => u.id.toLowerCase() === userId?.toLowerCase());
+                if (match) {
+                    console.log(`[Discovery] ✅ Casing Corrected: ${userId} -> ${match.id}`);
+                    userId = match.id;
+                }
+            }
+            
             debugLog(`[POST] Tenant Discovery Success: User=${userId}, Entity=${entityId}`);
             
-            // EMERGENCY LOG TO ENTITY BÓVEDA (Rule 5 & 7)
+            // EMERGENCY LOG TO ENTITY BÓVEDA
             try {
-                await db.collection(`users/${userId}/entities/${entityId}/system_logs`).add({
+                await db.collection(`users/${userId}/entities/${entityId}/internal_logs`).add({
                     timestamp: admin.firestore.FieldValue.serverTimestamp(),
                     type: 'whatsapp_webhook',
                     phoneId: recipientPhoneNumberId || 'unknown',
@@ -204,6 +232,8 @@ export async function POST(req: Request) {
                 let targetGroupId: string | null = null;
                 let existingContactId: string | null = null;
                 let existingContactName: string | null = null;
+                let cardId: string | null = null;
+                let groupId: string | null = null;
 
                 const contactSnap = await db.collection(`${entityPath}/contacts`)
                     .where('phone', '==', `+${cleanFrom}`)
@@ -223,6 +253,16 @@ export async function POST(req: Request) {
                         const cardGet = await cardRef.get();
                         if (cardGet.exists) {
                             targetCardDoc = cardGet;
+                            cardId = contactCardId; // 🎯 FIX: Asignar ID para el Chatbot
+                            groupId = targetGroupId; // 🎯 FIX: Asignar ID para el Chatbot
+                        } else {
+                            // 👻 LIMPIEZA DE FANTASMAS: Si la tarjeta fue borrada, permitimos crear una nueva
+                            console.log(`[WhatsApp Webhook] 👻 Ghost card ${contactCardId} detected. Clearing reference to allow re-creation.`);
+                            await db.doc(`${entityPath}/contacts/${existingContactId}`).update({
+                                kanbanCardId: admin.firestore.FieldValue.delete(),
+                                kanbanGroupId: admin.firestore.FieldValue.delete()
+                            }).catch(() => {});
+                            targetGroupId = null;
                         }
                     }
                 }
@@ -254,6 +294,8 @@ export async function POST(req: Request) {
                         });
                         targetCardDoc = allMatches[0].doc;
                         targetGroupId = allMatches[0].groupId;
+                        cardId = targetCardDoc.id;
+                        groupId = targetGroupId;
                     }
                 }
 
@@ -269,9 +311,6 @@ export async function POST(req: Request) {
                     platform: 'whatsapp'
                 };
 
-                let cardId = targetCardDoc?.id;
-                let groupId = targetGroupId;
-
                 const queueItem = {
                     text: text || '',
                     messageId: messageId || `wa_${Date.now()}`,
@@ -281,33 +320,73 @@ export async function POST(req: Request) {
                 };
 
                 if (targetCardDoc && targetGroupId) {
-                    await targetCardDoc.ref.update({
-                        lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
-                        updatedAt: new Date(),
+                    // 🛡️ PROTECCIÓN DE IDENTIDAD: No sobrescribir nombres manuales
+                    const isGenericName = (val: string) => {
+                        const n = (val || '').toLowerCase().trim();
+                        return !n || n === 'undefined' || n === 'whatsapp user' || n.includes('ec +') || n.includes('user');
+                    };
+
+                    const currentName = targetCardDoc.data()?.contactName || '';
+                    const shouldUpdateName = !currentName || isGenericName(currentName);
+
+                    const cardUpdate: any = {
+                        lastMessage: text.length > 40 ? text.substring(0, 37) + '...' : text,
+                        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                         unreadCount: admin.firestore.FieldValue.increment(1),
                         messages: admin.firestore.FieldValue.arrayUnion(newMessage),
                         'botState.messageQueue': admin.firestore.FieldValue.arrayUnion(queueItem),
-                        status: 'open'
-                    });
+                        status: 'open',
+                        source: 'WHATSAPP',
+                        primary_channel: 'whatsapp',
+                        channel: 'whatsapp'
+                    };
+
+                    if (shouldUpdateName) {
+                        const profileName = value?.contacts?.[0]?.profile?.name || '';
+                        cardUpdate.contactName = profileName || 'WhatsApp User';
+                    }
+
+                    await targetCardDoc.ref.update(cardUpdate);
+
+                    // Sincronizar contacto
+                    if (existingContactId) {
+                        const contactUpdate: any = {
+                            updatedAt: admin.firestore.Timestamp.now(),
+                            kanbanGroupId: groupId,
+                            kanbanCardId: cardId
+                        };
+                        if (shouldUpdateName) {
+                            const profileName = value?.contacts?.[0]?.profile?.name || '';
+                            contactUpdate.name = profileName || 'WhatsApp User';
+                        }
+                        await db.collection(`${entityPath}/contacts`).doc(existingContactId).update(contactUpdate);
+                    }
                 } else {
                     // Create NEW card
+                    // 🎯 CLASIFICACIÓN POR BANDEJAS (Rule 1 & 5)
                     let destinationGroupId = targetGroupId;
                     
-                    // SAFEGUARD: Ensure a group exists to receive the card
                     if (!destinationGroupId) {
-                        const fallbackGroup = groupsSnapshot.docs.find(g => (g.data().name || '').toLowerCase().includes('inbox')) || groupsSnapshot.docs[0];
-                        if (fallbackGroup) {
-                            destinationGroupId = fallbackGroup.id;
-                        } else {
-                            // Rule 5: Failsafe group creation if entity is empty
-                            const newGroupRef = db.collection(`${entityPath}/kanban-groups`).doc('default_inbox');
-                            await newGroupRef.set({
-                                name: 'Inbox',
-                                order: 0,
-                                color: '#3B82F6',
-                                createdAt: admin.firestore.FieldValue.serverTimestamp()
+                        const channelKey = (message.platform || 'whatsapp').toLowerCase();
+                        const channelLabel = channelKey.charAt(0).toUpperCase() + channelKey.slice(1);
+                        
+                        // Use channel-specific group ID
+                        destinationGroupId = `group_${channelKey}`;
+                        
+                        const groupRef = db.collection(`${entityPath}/kanban-groups`).doc(destinationGroupId);
+                        const groupSnap = await groupRef.get();
+                        
+                        if (!groupSnap.exists) {
+                            console.log(`[Kanban] 📦 Creating dedicated tray for: ${channelLabel}`);
+                            await groupRef.set({
+                                id: destinationGroupId,
+                                name: channelLabel,
+                                type: channelKey,
+                                order: channelKey === 'whatsapp' ? 1 : 2,
+                                color: channelKey === 'whatsapp' ? '#25D366' : '#E1306C',
+                                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                                updatedAt: admin.firestore.FieldValue.serverTimestamp()
                             }, { merge: true });
-                            destinationGroupId = 'default_inbox';
                         }
                     }
 
@@ -381,13 +460,53 @@ export async function POST(req: Request) {
                 }
 
                 // 4. TRIGGER UNIVERSAL CHATBOT
-                if (groupId && cardId) {
-                    debugLog(`[POST] Triggering universal chatbot for whatsapp in tenant ${entityId}...`);
+                const chatbotGroupId = groupId || targetGroupId || targetCardDoc?.ref.parent.parent?.id;
+                const chatbotCardId = cardId || targetCardDoc?.id;
+
+                console.log(`[Webhook] 🎯 PRE-BOT STATE: userId=${userId} entityId=${entityId} groupId=${chatbotGroupId} cardId=${chatbotCardId} text="${text}"`);
+
+                if (chatbotGroupId && chatbotCardId) {
+                    // Log diagnóstico en Firestore
+                    db.collection('DEBUG_WEBHOOK').add({
+                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                        type: 'chatbot_trigger',
+                        cardId: chatbotCardId,
+                        groupId: chatbotGroupId,
+                        userId,
+                        entityId,
+                        text
+                    }).catch(() => {});
+
                     processChatbotFlow({
-                        userId, entityId, groupId, cardId, platform: 'whatsapp', from: from, text: text
+                        userId,
+                        entityId,
+                        groupId: chatbotGroupId,
+                        cardId: chatbotCardId,
+                        platform: 'whatsapp',
+                        from,
+                        text
                     }).catch(botError => {
-                        debugLog(`[POST] Chatbot Async Error: ${botError?.message || String(botError)}`);
+                        console.error(`[Chatbot FATAL]`, botError?.message || botError);
+                        // Log error en Firestore
+                        db.collection('DEBUG_WEBHOOK').add({
+                            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                            type: 'chatbot_error',
+                            error: botError?.message || String(botError),
+                            cardId: chatbotCardId,
+                            userId
+                        }).catch(() => {});
                     });
+                } else {
+                    console.error(`[Webhook] ❌ ABORT BOT: groupId=${chatbotGroupId} cardId=${chatbotCardId}`);
+                    db.collection('DEBUG_WEBHOOK').add({
+                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                        type: 'chatbot_abort',
+                        reason: 'missing_ids',
+                        chatbotGroupId,
+                        chatbotCardId,
+                        userId,
+                        entityId
+                    }).catch(() => {});
                 }
 
             }
