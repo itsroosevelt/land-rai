@@ -531,8 +531,10 @@ export async function sendTelegramMessage(
         }
     }
 
+    console.log(`[sendTelegramMessage] 📤 Sending to ${chatId}: "${text?.substring(0, 50)}..."`);
     try {
-        const response = await axios.post(`${base}/sendMessage`, payload);
+        const response = await axios.post(`${base}/sendMessage`, payload, { timeout: 30000 });
+        console.log(`[sendTelegramMessage] ✅ API Success | Chat: ${chatId} | MsgId: ${response.data.result?.message_id}`);
         return {
             ...response.data,
             message_id: response.data.result?.message_id,
@@ -540,7 +542,7 @@ export async function sendTelegramMessage(
         };
     } catch (error: any) {
         const errorData = error.response?.data || error.message;
-        console.error('Telegram API Error:', JSON.stringify(errorData, null, 2));
+        console.error('[sendTelegramMessage] ❌ API Error:', JSON.stringify(errorData, null, 2));
         throw new Error(`Telegram API Error: ${JSON.stringify(errorData)}`);
     }
 }

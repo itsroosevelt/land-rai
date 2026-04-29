@@ -43,6 +43,7 @@
     "whatsapp-service",
     "diag.ts",
     "test_frontend_bot.js",
+    "artifacts",
     ".gemini/**",
     ".next/**"
   ]

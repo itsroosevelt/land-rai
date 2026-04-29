@@ -1,648 +1,286 @@
-import { admin, db } from './firebase-admin';
-import { sendMetaMessage, sendWhatsAppMessage, sendTelegramMessage, sendGmailMessage, sendTwitterMessage } from './sendProviders';
+import * as admin from 'firebase-admin';
+import { db } from './firebase-admin';
 
 export interface ChatbotContext {
     userId: string;
     entityId: string;
     groupId: string;
     cardId: string;
-    platform: 'whatsapp' | 'messenger' | 'instagram' | 'telegram' | 'gmail' | 'x_twitter';
+    platform: string;
     from: string;
     text: string;
     messageId?: string;
 }
 
-const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
-
-/**
- * Sequential Chatbot Engine Runner
- * Implements a FIFO queue consumer pattern to prevent race conditions and duplicate responses.
- */
-export async function processChatbotFlow(ctx: ChatbotContext) {
-    const { userId, entityId, groupId, cardId, platform, from, text, messageId } = ctx;
+export async function processChatbotFlow({ userId, entityId, groupId, cardId, platform, from, text, messageId }: ChatbotContext) {
+    console.log(`[ChatbotEngine] ⚡️ ENGINE ACTIVATED | Card: ${cardId} | Platform: ${platform}`);
     const entityPath = `users/${userId}/entities/${entityId}`;
     const cardRef = db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`);
-
-    console.log(`[ChatbotEngine] 🚀 RUNNER START | Card: ${cardId} | Msg: ${messageId}`);
     
     try {
-        console.log(`[ChatbotEngine] 🔐 Attempting transaction for ${cardId}...`);
-        const canExecute = await db.runTransaction(async (transaction) => {
-            console.log(`[ChatbotEngine] 📨 Inside transaction for ${cardId}`);
+        // 1. Acquire Lock & Steal Queue Atomically
+        const startData = await db.runTransaction(async (transaction: any) => {
             const snap = await transaction.get(cardRef);
-            if (!snap.exists) return false;
+            if (!snap.exists) return null;
             const data = snap.data() || {};
             const bState = data.botState || {};
 
-            const normInput = (text || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            const isPriorityCommand = /^(reinicia|reinicio|reset|clear|limpiar|menu|opciones|ayuda|help|inicio|start)/i.test(normInput);
-
-            if (isPriorityCommand && data.botLock) {
-                console.log(`[ChatbotEngine] 🔓 Priority command breaking existing lock for ${cardId}`);
+            // DEDUP
+            if (messageId && bState.lastProcessedMessageId === messageId) {
+                 return { skip: true };
             }
 
-            // DEDUP: If this exact message ID was just processed, skip queueing
-            if (messageId && bState.lastProcessedMessageId === messageId) return false;
-
-            // LOCK CHECK: If still locked (not a priority command), check timeout
-            if (data.botLock && !isPriorityCommand) {
+            // LOCK check
+            if (data.botLock) {
                 const lockTime = data.botLock.toDate?.() || new Date(data.botLock);
                 const diff = (Date.now() - lockTime.getTime()) / 1000;
-                if (diff < 30) {
-                    console.log(`[ChatbotEngine] 🔒 Card ${cardId} is actively locked (${diff}s). Skipping parallel execution.`);
-                    return false;
-                }
+                if (diff < 15) return null; 
             }
 
-            // Acquire lock and mark start
-            transaction.update(cardRef, { 
+            const updates: any = { 
                 botLock: admin.firestore.FieldValue.serverTimestamp(),
-                'botState.lastProcessedMessageId': messageId || null
-            });
-            return true;
+                'botState.status': 'active',
+                'botState.messageQueue': [] // CLEAR QUEUE ATOMICALLY
+            };
+            if (messageId) updates['botState.lastProcessedMessageId'] = messageId;
+            
+            transaction.update(cardRef, updates);
+
+            return { ...data, id: cardId, messageQueue: bState.messageQueue || [] };
         });
 
-        if (!canExecute) {
-            console.log(`[ChatbotEngine] ⏹️ Execution blocked for card ${cardId} (Dedup or Lock)`);
-            return;
-        }
+        if (!startData || (startData as any).skip) return;
+        const queue = (startData as any).messageQueue || [];
 
-        console.log(`[ChatbotEngine] ✅ Transaction committed for ${cardId}. Starting consumer loop...`);
+        // 2. Flow Discovery
+        const botsSnap = await db.collection(`${entityPath}/chatbots`)
+            .where('isActive', 'in', [true, 'true'])
+            .get();
+        
+        if (botsSnap.empty) return;
+        const botData = botsSnap.docs[0].data();
+        const flow = botData.flow;
+        if (!flow) return;
 
-        // --- 2. THE CONSUMER LOOP ---
-        let queueHasItems = true;
-        while (queueHasItems) {
-            const snap = await cardRef.get();
-            const cardData = snap.data() || {};
-            const bState = cardData.botState || {};
-            const flatQueue = cardData['botState.messageQueue'] || [];
-            let queue = bState.messageQueue || [];
+        // 3. Sequential Execution
+        let currentCardState = startData;
 
-            if (flatQueue.length > 0) {
-                console.log(`[ChatbotEngine] 🛠️ Found ${flatQueue.length} items in flat queue. Merging for processing.`);
-                queue = [...queue, ...flatQueue].filter((v, i, a) => a.findIndex(t => t.messageId === v.messageId) === i);
-            }
+        for (const currentMsg of queue) {
+            try {
+                const res = await runEngineCycle(currentCardState, currentMsg, entityPath, entityId, userId, flow);
+                
+                // Update Local State for next message
+                let newVariables = { ...(currentCardState.variables || {}), ...res.newVariables };
+                if (res.newVariables.__RESTART__) {
+                    newVariables = {};
+                }
 
-            console.log(`[ChatbotEngine] 🔍 Loop check for ${cardId}. Effective Size: ${queue.length}`);
+                currentCardState = {
+                    ...currentCardState,
+                    variables: newVariables,
+                    botState: {
+                        ...currentCardState.botState,
+                        ...res.nextState
+                    }
+                };
 
-            if (queue.length === 0) {
-                queueHasItems = false;
+                // Persist Progress
+                await cardRef.update({
+                    'botState.currentNodeId': res.nextState.currentNodeId,
+                    'botState.waitingForInput': res.nextState.waitingForInput,
+                    'botState.variableName': res.nextState.variableName,
+                    'botState.justRestarted': res.nextState.justRestarted,
+                    'variables': newVariables
+                });
+
+                if (res.nextState.waitingForInput) break; 
+
+            } catch (err: any) {
+                console.error(`[ChatbotEngine] ❌ Cycle Failure:`, err.message);
                 break;
             }
-
-            // Consume first item (FIFO)
-            const currentMsg = queue[0];
-            const msgId = currentMsg.messageId;
-
-            try {
-                // --- 3. INNER ENGINE CORE ---
-                await runEngineCycle(cardRef, cardData, currentMsg, entityPath, entityId, userId);
-            } catch (cycleErr: any) {
-                console.error(`[ChatbotEngine] ❌ Cycle Error [${msgId}]:`, cycleErr.message);
-                await cardRef.update({
-                    'botState.lastError': cycleErr.message || 'Unknown Cycle Error',
-                    'botState.lastErrorAt': admin.firestore.FieldValue.serverTimestamp()
-                });
-            } finally {
-                // --- 4. ATOMIC QUEUE DRAIN ---
-                await db.runTransaction(async (transaction) => {
-                    const freshSnap = await transaction.get(cardRef as admin.firestore.DocumentReference);
-                    const freshData = freshSnap.data() || {};
-                    const currentQueue = freshData.botState?.messageQueue || [];
-                    const updatedQueue = currentQueue.filter((m: any) => m.messageId !== msgId);
-                    
-                    transaction.update(cardRef, {
-                        'botState.messageQueue': updatedQueue,
-                        'botState.lastProcessedMessageId': msgId,
-                        botLock: admin.firestore.FieldValue.serverTimestamp()
-                    });
-                });
-
-                // Cleanup legacy flat-key field
-                try {
-                    const latestSnap = await cardRef.get();
-                    if (latestSnap.data()?.['botState.messageQueue']) {
-                        await cardRef.update(
-                            new admin.firestore.FieldPath('botState.messageQueue'),
-                            admin.firestore.FieldValue.delete()
-                        );
-                    }
-                } catch (cleanupErr: any) {}
-            }
         }
+
     } catch (err: any) {
-        console.error(`[ChatbotEngine] 💥 Runner Crash:`, err.message);
-        // Log to Firestore for remote debugging
-        await db.collection(`${entityPath}/internal_logs`).add({
-            timestamp: admin.firestore.FieldValue.serverTimestamp(),
-            type: 'ENGINE_RUNNER_CRASH',
-            error: err?.message || 'Unknown Error',
-            cardId,
-            stack: err?.stack || null
-        });
+        console.error(`[ChatbotEngine] ❌ Fatal Error:`, err.message);
     } finally {
-        // --- 5. FINAL RELEASE ---
         try {
             await cardRef.update({ botLock: admin.firestore.FieldValue.delete() });
-            console.log(`[ChatbotEngine] 🏁 RUNNER FINISHED for ${cardId}`);
-
-            // Safety Check: re-trigger if needed
-            const finalSnap = await cardRef.get();
-            const finalQueue = finalSnap.data()?.botState?.messageQueue || [];
-            if (finalQueue.length > 0) {
-                console.log(`[ChatbotEngine] 🔄 Self-healing: ${finalQueue.length} items left. Re-triggering...`);
-                processChatbotFlow({ ...ctx, messageId: undefined }).catch(() => {});
-            }
         } catch (e) {}
     }
 }
 
-/**
- * Single Engine Cycle: Processes ONE message through the flow.
- */
-async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath: string, entityId: string, userId: string) {
-    const text = msg.text || '';
-    const platform = msg.platform;
-    const from = msg.from;
-    const messageId = msg.messageId;
+async function runEngineCycle(cardData: any, msg: any, entityPath: string, entityId: string, userId: string, flow: any) {
+    let cycleText = (msg.text || '').trim();
+    const platform = cardData.channel || 'telegram';
+    
+    const msgTextLower = cycleText.toLowerCase().replace(/[?¿!¡.]/g, '').trim();
+    const restartKeywords = ['clear', 'reiniciar', 'reincio', 'reinicio', 'reset', 'hola', 'inicio', 'comenzar', 'start'];
+    const isRestart = msgTextLower.startsWith('/') || restartKeywords.some(kw => msgTextLower === kw);
 
-    const appendAgentMessage = async (message: any) => {
-        await cardRef.update({
-            messages: admin.firestore.FieldValue.arrayUnion({
-                sender: 'agent',
-                platform,
-                timestamp: new Date(),
-                ...message
-            })
-        });
+    const accumulated: any = {
+        nextState: {
+            currentNodeId: cardData.botState?.currentNodeId || '1',
+            waitingForInput: cardData.botState?.waitingForInput || false,
+            variableName: cardData.botState?.variableName || null,
+            justRestarted: cardData.botState?.justRestarted || false
+        },
+        newMessages: [],
+        newVariables: {}
     };
 
-    // --- A. HELPERS (Essentials) ---
     const dispatchMessage = async (content: string, options: any = {}) => {
-        const opts = { userId, entityId, ...options };
-        if (platform === 'whatsapp') return await sendWhatsAppMessage(from, content, opts);
-        if (platform === 'messenger' || platform === 'instagram') return await sendMetaMessage(from, content, { ...opts, provider: platform });
-        if (platform === 'telegram') return await sendTelegramMessage(from, content, opts);
-        if (platform === 'gmail') return await sendGmailMessage(from, content, opts);
-        if (platform === 'x_twitter') return await sendTwitterMessage(from, content, opts);
+        const providers = require('./sendProviders');
+        if (platform === 'telegram') {
+            await providers.sendTelegramMessage(userId, entityId, cardData.telegramChatId, content, options);
+        } else if (platform === 'whatsapp') {
+            await providers.sendWhatsAppMessage(userId, entityId, cardData.phone, content, options);
+        }
     };
 
-    const normalizedInput = text.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    
-    // Command categorization (Master Engine Sync)
-    const isReset = /^(reinicia(r| todo ahora)?|reinicio|reset|clear|limpiar)/i.test(normalizedInput);
-    const isMenu = /^(menu|opciones|ayuda|help)/i.test(normalizedInput);
-    const isStop = /^(detener|stop|salir|chau|adios)/i.test(normalizedInput);
-    const isStartTrigger = /^(hola|hi|buenas|inicio|start|buen(as)?\s*(dias|tardes|noches)|que\s*tal|saludos)/i.test(normalizedInput);
-    
-    const isCommand = isReset || isMenu || isStop;
-    let justRestarted = isReset || isStartTrigger;
-
-    const sessionVars = {
-        nombre: (isStartTrigger || isReset) ? 'Usuario' : (cardData.contactName || 'Usuario'),
-        name: (isStartTrigger || isReset) ? 'Usuario' : (cardData.contactName || 'Usuario'),
-        first_name: ((isStartTrigger || isReset) ? 'Usuario' : (cardData.contactName || 'Usuario')).split(' ')[0],
-        ...(cardData.customFields || {}),
-        ...(cardData.variables || {})
-    };
-
-    const cleanInput = (raw: string, varName: string): string => {
-        const val = raw.trim();
-        if (varName.toLowerCase().includes('mail') || varName.toLowerCase().includes('correo')) {
-            const matches = val.match(/[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*/g);
-            return matches ? matches[0] : val;
-        }
-        if (/nombre|name|cli/i.test(varName)) {
-            let cleaned = val;
-            [/me llamo /i, /mi nombre es /i, /soy /i, /mucho gusto/i, /hola/i].forEach(p => cleaned = cleaned.replace(p, ''));
-            return cleaned.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ').trim();
-        }
-        return val;
-    };
-
-    // --- B. MASTER BYPASS (Reset/Trigger Override) ---
-    if (isReset || isMenu || isStartTrigger) {
-        console.log(`[ChatbotEngine] 🧹 Master Bypass [${isReset ? 'RESET' : isMenu ? 'MENU' : 'START'}] for card ${cardRef.id}`);
-        
-        // Atomic wipe + Status reset (Rule 4: Root Isolation)
-        const resetPayload: any = {
-            'botState.status': 'active',
-            'botState.waitingForInput': false,
-            'botState.currentNodeId': null,
-            customFields: {}
-            // RULE: chatbot NEVER modifies contactName or any contact-level field
-        };
-
-        // If it's a hard reset, we clear the queue to prevent "echoes" of previous flow messages
-        if (isReset) {
-            resetPayload['botState.messageQueue'] = [];
-            resetPayload['botState.lastProcessedMessageId'] = null; // Allow re-processing if needed
-        }
-
-        await cardRef.update(resetPayload);
-        
-        // Sync local cardData for current cycle execution — read-only for contact fields
-        cardData.botState = { ...(cardData.botState || {}), status: 'active', waitingForInput: false, currentNodeId: null };
-        cardData.customFields = {};
-        // RULE: do NOT reset cardData.contactName — the real contact name is immutable from the bot
-        
-        // After reset: fall through to execute the flow from the start immediately.
-        // This avoids forcing the user to send an extra message after a reset.
-        // The flow starts at the startNode on the next section below.
-    }
-
-    let bState = cardData.botState || {};
-
-    // --- C. FLOW RESOLUTION (Rule 4: Root Isolation) ---
-    const botsRef = db.collection(`${entityPath}/chatbots`);
-    const botsSnapshot = await botsRef.where('isActive', 'in', [true, 'true']).get();
-    const allActiveBots = botsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-
-    console.log(`[ChatbotEngine] 🔍 Bot Discovery | Entity: ${entityId} | Bots Found: ${allActiveBots.length}`);
-    if (allActiveBots.length === 0) {
-        console.log(`[ChatbotEngine] ⚠️ No active bots found in ${entityPath}/chatbots`);
-        return;
-    }
-
-    // Filter and score bots by platform relevance
-    const platformBots = allActiveBots.map(bot => {
-        const targets = (bot.targetPlatforms || []).map((t: string) => String(t).toLowerCase().trim());
-        console.log(`   - Bot: ${bot.id} | Name: ${bot.name} | Platforms: ${JSON.stringify(targets)}`);
-        let score = 0;
-        
-        // Match platform case-insensitive and trimmed
-        const currentPlatform = platform.toLowerCase().trim();
-        const simplifiedPlatform = currentPlatform === 'messenger' ? 'facebook' : currentPlatform;
-
-        const hasMatch = targets.some((t: string) => 
-            t === currentPlatform || 
-            t === simplifiedPlatform ||
-            (currentPlatform === 'facebook' && t === 'messenger')
-        );
-
-        if (hasMatch) {
-            score = 10; // Explicit match (High Priority)
-        } else if (currentPlatform === 'gmail') {
-            score = 0; // STRIC MATCH REQUIRED
-        } else if (targets.length === 0 || targets.includes('*') || targets.includes('all')) {
-            score = 5;  // Global Match (Medium Priority)
-        } else {
-            score = 1;
-        }
-        
-        return { ...bot, _score: score };
-    }).filter(bot => bot._score > 0);
-
-    if (platformBots.length === 0) {
-        console.warn(`[ChatbotEngine] ⚠️ No matching bots found for platform ${platform} (simplified: ${platform === 'messenger' ? 'facebook' : platform}) on entity ${entityId}`);
-        await cardRef.update({ 
-            'botState.lastError': `Plataforma ${platform} no asignada a ningún bot activo.`,
-            'botState.status': 'inactive' 
+    const replaceVars = (str: string) => {
+        let out = str;
+        const vars = { ...(cardData.variables || {}), ...accumulated.newVariables };
+        Object.entries(vars).forEach(([k, v]) => {
+            out = out.replace(new RegExp(`{{${k}}}`, 'g'), String(v));
         });
-        return;
-    }
-
-    // Sort by: 1. Score (Specificity) | 2. Recency
-    platformBots.sort((a, b) => {
-        if (b._score !== a._score) return b._score - a._score;
-        return (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0);
-    });
-
-    const botData = platformBots[0];
-    console.log(`[ChatbotEngine] 🤖 Selected Bot: "${botData.name}" (Score: ${botData._score}) for ${platform}`);
-    const flow = botData.flow || { nodes: [], edges: [] };
-
-    const replaceVars = (val: string, overlay: any = {}) => {
-        if (!val) return '';
-        const context: any = { ...sessionVars, ...overlay };
-        return val.replace(/\{\{?(\w+)\}?}/g, (match, key) => {
-            return context[key] !== undefined ? String(context[key]) : match;
-        });
+        return out;
     };
 
-    // --- INNER EXECUTION LOOP ---
-    let currentNodeId: string | null = bState.currentNodeId || null;
-    let waitingForInput = bState.waitingForInput || false;
+    if (isRestart) {
+        accumulated.nextState.currentNodeId = '1';
+        accumulated.nextState.waitingForInput = false;
+        accumulated.nextState.justRestarted = true;
+        accumulated.newVariables = { __RESTART__: true };
+        cycleText = ''; 
+    }
 
-    // FIX: If status is 'active' but we have no node (stuck) or it's 'completed', we should try to restart
-    // Enhanced restart check for new cards (status undefined)
-    const shouldRestart = isStartTrigger || !currentNodeId || !bState.status || bState.status === 'completed' || bState.status === 'inactive';
+    let currentNodeId = accumulated.nextState.currentNodeId;
+    let iterations = 0;
 
-    // Handle incoming input for current node
-    if (waitingForInput && currentNodeId) {
-        // AGNOSTIC RULE: Do not allow the same message that triggered the start/reset to be captured as an input
-        if (justRestarted) {
-            console.log(`[ChatbotEngine] 🛡️ Trigger message [${isReset?'RESET':'START'}] blocked from captureInputNode to prevent auto-fill.`);
-        } else {
-            const node = flow.nodes.find((n: any) => n.id === currentNodeId);
-            if (node?.type === 'captureInputNode') {
-                const varName = node.data?.variableName || 'input';
-                const inputType = node.data?.inputType || 'text';
-                const validationRegex = node.data?.validationRegex;
-                const errorMessage = node.data?.errorMessage || 'Formato inválido. Por favor intenta de nuevo.';
-                
-                console.log(`[ChatbotEngine] 📥 Capture [${varName}] | Text: "${text}" | Type: ${inputType}`);
+    while (currentNodeId && iterations < 20) {
+        iterations++;
+        const node = flow.nodes.find((n: any) => n.id === currentNodeId);
+        if (!node) break;
 
-                // 1. ROBUST TYPE DETECTION
-                let extracted = text.trim();
-                const isEmail = inputType === 'email' || /email|mail|correo|direcc/i.test(varName);
-                const isName = (inputType === 'text' || !inputType) && /nombre|name|cli/i.test(varName);
+        if (node.type === 'startNode') {
+            const edge = flow.edges.find((e: any) => e.source === node.id);
+            currentNodeId = edge ? edge.target : null;
+            continue;
+        }
 
-                if (isEmail) {
-                    extracted = cleanInput(text, 'email');
-                } else if (isName) {
-                    extracted = cleanInput(text, 'nombre');
-                }
+        if (node.type === 'textMessageNode') {
+            const content = replaceVars(node.data?.content || node.data?.text || 'Hola');
+            await dispatchMessage(content);
+            const edge = flow.edges.find((e: any) => e.source === node.id);
+            currentNodeId = edge ? edge.target : null;
+            accumulated.nextState.justRestarted = false;
+            continue;
+        }
 
-                // 2. VALIDATION (Omnichannel Robust)
-                let isValid = !!extracted;
+        if (node.type === 'conditionNode') {
+            const { variableName, operator, value } = node.data;
+            const currentVal = String((cardData.variables || {})[variableName] || accumulated.newVariables[variableName] || '');
+            const targetVal = String(value || '');
+            
+            let result = false;
+            if (operator === 'equals') result = currentVal === targetVal;
+            else if (operator === 'contains') result = currentVal.includes(targetVal);
+            else if (operator === 'greater') result = Number(currentVal) > Number(targetVal);
+            else if (operator === 'less') result = Number(currentVal) < Number(targetVal);
 
-                // SPECIAL RULE: If it's an email type, ensure it looks like an email at minimum
-                if (isEmail && isValid) {
-                    const basicEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                    if (!basicEmailRegex.test(extracted)) {
-                        console.log(`[ChatbotEngine] ⚠️ Basic Email validation failed for: ${extracted}`);
-                        isValid = false;
+            const edge = flow.edges.find((e: any) => e.source === node.id && String(e.sourceHandle) === String(result));
+            currentNodeId = edge ? edge.target : null;
+            continue;
+        }
+
+        if (node.type === 'assignVariableNode') {
+            const { variableName, value } = node.data;
+            accumulated.newVariables[variableName] = replaceVars(value);
+            const edge = flow.edges.find((e: any) => e.source === node.id);
+            currentNodeId = edge ? edge.target : null;
+            continue;
+        }
+
+        if (node.type === 'delayNode') {
+            const seconds = Number(node.data?.seconds || 1);
+            await new Promise(resolve => setTimeout(resolve, seconds * 1000));
+            const edge = flow.edges.find((e: any) => e.source === node.id);
+            currentNodeId = edge ? edge.target : null;
+            continue;
+        }
+
+        if (node.type === 'captureInputNode' || node.type === 'quickReplyNode') {
+            const varName = node.data?.variableName || 'last_input';
+            const inputType = node.data?.inputType || 'text';
+            const regexStr = node.data?.validationRegex;
+            const errorMsg = node.data?.errorMessage || "Formato inválido. Por favor intenta de nuevo.";
+            const buttons = node.data?.buttons || [];
+            
+            if (cycleText && !isRestart) {
+                let isValid = true;
+                let matchedHandle = null;
+
+                if (node.type === 'quickReplyNode') {
+                    const match = buttons.find((b: any) => {
+                        const label = (typeof b === 'object' ? (b.title || b.reply?.title) : b)?.toLowerCase().trim();
+                        const id = (typeof b === 'object' ? (b.id || b.payload || b.title || b.reply?.id) : b)?.toLowerCase().trim();
+                        return cycleText.toLowerCase().trim() === label || cycleText.toLowerCase().trim() === id;
+                    });
+                    if (match) {
+                        matchedHandle = typeof match === 'object' ? (match.id || match.payload || match.title || match.reply?.id) : match;
+                        cycleText = typeof match === 'object' ? (match.title || match.reply?.title) : match;
                     }
                 }
 
-                // RULE: Regex Validation (if defined in node)
-                if (isValid && validationRegex) {
-                    try {
-                        const regex = new RegExp(validationRegex, 'i');
-                        isValid = regex.test(extracted);
-                    } catch (e) {
-                        console.error(`[ChatbotEngine] ❌ Invalid Regex in node ${node.id}:`, validationRegex);
+                if (isValid) {
+                    if (inputType === 'email') isValid = cycleText.includes('@') && cycleText.includes('.');
+                    else if (inputType === 'phone') isValid = /^\+?[1-9]\d{7,14}$/.test(cycleText.replace(/[\s-]/g, ''));
+                    else if (inputType === 'number') isValid = !isNaN(Number(cycleText));
+                    else if (regexStr) {
+                        try { isValid = new RegExp(regexStr).test(cycleText); } catch (e) {}
                     }
                 }
 
                 if (!isValid) {
-                    console.log(`[ChatbotEngine] ⚠️ Validation failed for ${varName}: "${extracted}"`);
-                    const errorContent = replaceVars(errorMessage);
-                    await dispatchMessage(errorContent);
-                    await appendAgentMessage({
-                        text: errorContent,
-                        type: 'text',
-                        messageId: `bot_validation_${Date.now()}`
-                    });
-                    return;
+                    await dispatchMessage(errorMsg);
+                    accumulated.nextState.waitingForInput = true;
+                    accumulated.nextState.currentNodeId = node.id;
+                    return accumulated;
                 }
 
-                // 3. SUCCESS HANDLING — store ONLY in customFields (flow-scoped)
-                // RULE: chatbot NEVER modifies contactName, contactEmail, or any root contact field.
-                console.log(`[ChatbotEngine] ✅ Captured & Validated ${varName}: ${extracted}`);
-                const updatePayload: any = { [`customFields.${varName}`]: extracted, 'botState.waitingForInput': false };
+                accumulated.newVariables[varName] = cycleText;
+                let edge = matchedHandle ? flow.edges.find((e: any) => e.source === node.id && String(e.sourceHandle) === String(matchedHandle)) : null;
+                if (!edge) edge = flow.edges.find((e: any) => e.source === node.id);
 
-                // Update in-memory sessionVars so {{variable}} templates work for the rest of this cycle
-                sessionVars[varName] = extracted;
-                if (isName) {
-                    // Update session-only variables for template interpolation
-                    sessionVars.nombre = extracted;
-                    sessionVars.name = extracted;
-                    sessionVars.first_name = extracted.split(' ')[0];
-                    // Note: contactName on the Firestore card is NOT touched — bot has no write access to contact records
-                }
-                await cardRef.update(updatePayload);
-
-                // Find next node (Universal Connector)
-                const edges = flow.edges.filter((e: any) => e.source === node.id);
-                const next = edges.find((e: any) => e.sourceHandle === 'success') 
-                          || edges.find((e: any) => !e.sourceHandle || !e.sourceHandle.toLowerCase().includes('fail'))
-                          || edges[0];
-                
-                if (next) {
-                    currentNodeId = next.target;
-                } else {
-                    currentNodeId = null;
-                }
-            } else {
-                // QuickReply or List Selection - HYBRID MATCHING
-                const edge = flow.edges.find((e: any) => {
-                    const handle = String(e.sourceHandle || '').trim().toLowerCase();
-                    // Match by technical ID (handle) OR formatted text
-                    return e.source === node?.id && (handle === normalizedInput || handle === text.trim().toLowerCase());
-                }) || flow.edges.find((e: any) => e.source === node?.id); // Fallback to first exit
-                
                 currentNodeId = edge ? edge.target : null;
-                await cardRef.update({ 'botState.waitingForInput': false });
-            }
-        }
-    } else {
-        // Start from beginning if not active or if stuck
-        if (shouldRestart) {
-             const start = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
-             currentNodeId = start ? start.id : null;
-             console.log(`[ChatbotEngine] 🆕 Starting/Restarting flow at node ${currentNodeId}`);
-        }
-    }
-
-    // Node-by-Node Forward Execution
-    let executionCount = 0;
-    while (currentNodeId && executionCount < 15) {
-        executionCount++;
-        const node = flow.nodes.find((n: any) => n.id === currentNodeId);
-        if (!node) {
-            console.log(`[ChatbotEngine] 🛑 Node not found: ${currentNodeId}`);
-            break;
-        }
-
-        console.log(`[ChatbotEngine] ⚙️ Executing Node Type: ${node.type} (${node.id})`);
-        
-        // Skip start nodes in the middle of execution
-        if (node.type === 'start' || node.type === 'startNode') {
-            const edge = flow.edges.find((e: any) => e.source === node.id);
-            currentNodeId = edge ? edge.target : null;
-            continue;
-        }
-
-        await cardRef.update({ 'botState.currentNodeId': node.id, 'botState.lastStep': `${node.type}` });
-
-        if (node.type === 'start' || node.type === 'startNode') {
-            const edge = flow.edges.find((e: any) => e.source === node.id);
-            currentNodeId = edge ? edge.target : null;
-            continue;
-        }
-
-        // 1. TEXT MESSAGE
-        if (node.type === 'textMessageNode') {
-            const content = replaceVars(node.data?.content || node.data?.text || 'Hola');
-            await dispatchMessage(content);
-            if (content.trim()) {
-                await appendAgentMessage({
-                    text: content,
-                    type: 'text',
-                    messageId: `bot_${Date.now()}`
-                });
-            }
-            const edge = flow.edges.find((e: any) => e.source === node.id);
-            currentNodeId = edge ? edge.target : null;
-            continue;
-        }
-
-        // 2. MEDIA MESSAGE
-        console.log(`[ChatbotEngine] 🎯 Checking Node: ${node.id} | Type: ${node.type}`);
-        if (node.type === 'mediaMessageNode' || (node.type as string) === 'multimedia') {
-            const rawUrl = node.data?.url || node.data?.attachment || node.data?.link || node.data?.content || '';
-            const url = replaceVars(rawUrl);
-            
-            // For caption, try caption, then body, then text, then content (only if content wasn't the URL)
-            let rawCaption = node.data?.caption || node.data?.body || node.data?.text || '';
-            if (!rawCaption && node.data?.content && node.data?.content !== rawUrl) {
-                rawCaption = node.data.content;
-            }
-            const caption = replaceVars(rawCaption);
-
-            console.log(`[ChatbotEngine] 🖼️ Media Node Detected: URL=${url.substring(0, 30)}... Caption=${caption.substring(0, 20)}`);
-            
-            if (url && url.startsWith('http')) {
-                // Determine type based on extension if possible, default to image
-                const type = url.match(/\.(mp4|mov|avi|webm)$/i) ? 'video' : (url.match(/\.(mp3|ogg|wav|m4a|opus)$/i) ? 'audio' : 'image');
-                
-                const sendResult = await dispatchMessage(caption, { 
-                    type, 
-                    url: url, 
-                    filename: node.data?.filename 
-                });
-                console.log(`[ChatbotEngine] 📦 Dispatch Result:`, JSON.stringify(sendResult));
-
-                await appendAgentMessage({
-                    text: caption || '',
-                    messageId: `bot_media_${Date.now()}`,
-                    type: 'media',
-                    fileUrl: url,
-                    fileType: type === 'image' ? 'image/*' : type === 'video' ? 'video/*' : type === 'audio' ? 'audio/*' : 'application/octet-stream',
-                    fileName: node.data?.filename || null,
-                    metadata: {
-                        url,
-                        filename: node.data?.filename || null
-                    }
-                });
-
-                // Crucial delay to allow media to be ingested before next node
-                await sleep(2000);
-            } else if (caption) {
-                // FALLBACK: If URL is missing or invalid but we have text, send text so the flow doesn't look dead
-                console.warn(`[ChatbotEngine] ⚠️ Media URL missing or invalid "${url}". Sending caption as text fallback.`);
-                await dispatchMessage(caption);
-                await appendAgentMessage({
-                    text: caption,
-                    type: 'text',
-                    messageId: `bot_fallback_${Date.now()}`
-                });
-            }
-
-            const edge = flow.edges.find((e: any) => e.source === node.id);
-            currentNodeId = edge ? edge.target : null;
-            continue;
-        }
-
-        // 3. LIST MESSAGE
-        if (node.type === 'listMessageNode') {
-            const body = replaceVars(node.data?.body || node.data?.text || 'Selecciona una opción:');
-            const sections = (node.data?.sections || []).map((s: any) => ({
-                title: s.title || 'Opciones',
-                rows: (s.rows || []).map((r: any) => ({
-                    id: (r.id || r.title).substring(0, 50),
-                    title: r.title.substring(0, 24),
-                    description: r.description?.substring(0, 72)
-                }))
-            }));
-
-            await dispatchMessage(body, { type: 'list', button: node.data?.buttonText || 'Ver opciones', sections });
-            
-            await cardRef.update({
-                'botState.status': 'active',
-                'botState.waitingForInput': true,
-                'botState.currentNodeId': node.id,
-                messages: admin.firestore.FieldValue.arrayUnion({
-                    sender: 'agent',
-                    text: body,
-                    platform,
-                    timestamp: new Date(),
-                    messageId: `bot_list_${Date.now()}`,
-                    type: 'list',
-                    metadata: {
-                        buttonText: node.data?.buttonText || 'Ver opciones',
-                        sections
-                    }
-                })
-            });
-            return;
-        }
-
-        // 4. CAPTURE / QUICK REPLY (Wait nodes)
-        if (node.type === 'captureInputNode' || node.type === 'quickReplyNode') {
-            const content = replaceVars(node.data?.content || node.data?.text || node.data?.bodyText || '');
-            const buttons = (node.data?.buttons || []).map((b: any) => ({
-                type: 'reply', reply: { id: (b.id || b.title || b).substring(0, 20), title: (b.title || b).substring(0, 20) }
-            })).slice(0, 3);
-
-            if (content.trim()) {
-                await dispatchMessage(content, node.type === 'quickReplyNode' ? { type: 'quick_reply', buttons } : {});
-            }
-            
-            const updatePayload: any = {
-                'botState.status': 'active',
-                'botState.waitingForInput': true,
-                'botState.currentNodeId': node.id,
-                'botState.variableName': node.data?.variableName || 'input'
-            };
-            
-            if (content.trim()) {
-                updatePayload.messages = admin.firestore.FieldValue.arrayUnion({
-                    sender: 'agent', 
-                    text: content, 
-                    platform, 
-                    timestamp: new Date(), 
-                    messageId: `bot_wait_${Date.now()}`,
-                    type: node.type === 'quickReplyNode' ? 'buttons' : 'text',
-                    ...(node.type === 'quickReplyNode' ? {
-                        metadata: {
-                            buttons: buttons.map((button: any) => ({
-                                text: button.reply?.title || '',
-                                id: button.reply?.id || ''
-                            }))
-                        }
-                    } : {})
-                });
-            }
-            
-            await cardRef.update(updatePayload);
-            return; // EXIT loop, wait for user
-        }
-
-        // 4. LOGIC NODES (Set Variable, Webhook, etc.) - DEFAULT SKIP & ADVANCE
-        if (node.type === 'conditionNode') {
-            const snap = await cardRef.get();
-            const fresh = snap.data() || {};
-            const val = String(fresh.customFields?.[node.data?.variableName] || '').trim().toLowerCase();
-            let target = null;
-            for (const r of node.data?.routes || []) {
-                if (val === String(r.value || '').trim().toLowerCase()) {
-                    target = flow.edges.find((e: any) => e.source === node.id && e.sourceHandle === r.id)?.target;
-                    break;
+                accumulated.nextState.waitingForInput = false;
+                accumulated.nextState.justRestarted = false;
+                cycleText = ''; 
+                continue;
+            } else {
+                const prompt = replaceVars(node.data?.content || node.data?.bodyText || node.data?.text || '');
+                const opts: any = {};
+                if (node.type === 'quickReplyNode' && buttons.length > 0) {
+                    opts.type = 'quick_reply';
+                    opts.buttons = buttons.map((b: any) => {
+                        const isObj = typeof b === 'object' && b !== null;
+                        const title = isObj ? (b.title || b.reply?.title) : b;
+                        const id = isObj ? (b.id || b.payload || b.title || b.reply?.id) : b;
+                        return { type: 'reply', reply: { id, title } };
+                    });
                 }
+                if (prompt || opts.buttons) await dispatchMessage(prompt, opts);
+                accumulated.nextState.waitingForInput = true;
+                accumulated.nextState.currentNodeId = node.id;
+                return accumulated;
             }
-            currentNodeId = target || flow.edges.find((e: any) => e.source === node.id && e.sourceHandle === 'else')?.target;
-            continue;
         }
-
-        if (node.type === 'setVariableNode') {
-            await cardRef.update({ [`customFields.${node.data?.variableName}`]: node.data?.value });
-            const edge = flow.edges.find((e: any) => e.source === node.id);
-            currentNodeId = edge ? edge.target : null;
-            continue;
-        }
-
-        if (node.type === 'endNode') {
-            await cardRef.update({ 'botState.status': 'completed', 'botState.waitingForInput': false });
-            return;
-        }
-
-        // DEFAULT: Just follow the edge if node is unhandled
-        console.log(`[ChatbotEngine] ⏩ Skipping logic/unknown node type: ${node.type}`);
+        
+        // Default jump
         const edge = flow.edges.find((e: any) => e.source === node.id);
         currentNodeId = edge ? edge.target : null;
-        if (!edge) break; // End of flow if no way forward
     }
+
+    return accumulated;
 }
