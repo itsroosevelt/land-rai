@@ -133,12 +133,20 @@ async function runEngineCycle(cardData: any, msg: any, entityPath: string, entit
         const providers = require('./sendProviders');
         const cleanPlatform = platform.toLowerCase();
         
+        // Destinatario: Usamos el ID del remitente original del mensaje en la cola
+        const recipientId = msg.from || cardData.contactNumber || cardData.phone || cardData.telegramChatId || cardData.instagramId || cardData.pageId;
+
+        if (!recipientId) {
+            console.error(`[ChatbotEngine] ❌ No recipient ID found for platform ${cleanPlatform}`);
+            return;
+        }
+
         if (cleanPlatform === 'telegram') {
-            await providers.sendTelegramMessage(userId, entityId, cardData.telegramChatId, content, options);
+            await providers.sendTelegramMessage(userId, entityId, recipientId, content, options);
         } else if (cleanPlatform === 'whatsapp') {
-            await providers.sendWhatsAppMessage(msg.from, content, { ...options, userId, entityId });
+            await providers.sendWhatsAppMessage(recipientId, content, { ...options, userId, entityId });
         } else if (cleanPlatform === 'instagram' || cleanPlatform === 'messenger') {
-            await providers.sendMetaMessage(msg.from, content, { 
+            await providers.sendMetaMessage(recipientId, content, { 
                 ...options, 
                 userId, 
                 entityId, 
