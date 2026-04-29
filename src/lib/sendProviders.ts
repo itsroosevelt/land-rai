@@ -276,55 +276,86 @@ export async function sendWhatsAppMessage(
     // 1. Multi-Tenant Token Resolution
     if (options.userId && options.entityId) {
         try {
-            // 🔑 CORRECCIÓN DE CASING: Verificar si el userId existe con el casing correcto
-            let resolvedUserId = options.userId;
-            const directUserRef = db.collection('users').doc(options.userId);
-            const directUserSnap = await directUserRef.get();
-            if (!directUserSnap.exists) {
-                console.log(`[WhatsApp] ⚠️ User ${options.userId} not found directly. Searching case-insensitive...`);
-                const allUsers = await db.collection('users').get();
-                const match = allUsers.docs.find(u => u.id.toLowerCase() === options.userId!.toLowerCase());
-                if (match) {
-                    resolvedUserId = match.id;
-                    console.log(`[WhatsApp] ✅ Resolved userId: ${options.userId} -> ${resolvedUserId}`);
-                }
-            }
-
-            const configPaths = [
-                `users/${resolvedUserId}/entities/${options.entityId}/integrations/whatsapp`,
-                `users/${resolvedUserId}/entities/${options.entityId}/integrations/whatsapp_internal`,
-                `users/${resolvedUserId}/entities/${options.entityId}/integrations/meta`
+            // 🔑 BÚSQUEDA EXHAUSTIVA: Probar todas las rutas posibles y todos los nombres de campo
+            const basePaths = [
+                `users/${options.userId}/entities/${options.entityId}/integrations/whatsapp`,
+                `users/${options.userId}/entities/${options.entityId}/integrations/whatsapp_internal`,
+                `users/${options.userId}/entities/${options.entityId}/integrations/meta`,
             ];
 
-            for (const path of configPaths) {
+            // Extraer token de un documento sin importar el nombre del campo
+            const extractCreds = (data: any) => {
+                const t = data?.accessToken || data?.token || data?.access_token || data?.pageAccessToken;
+                const p = data?.phoneNumberId || data?.phone_number_id || data?.phoneId;
+                return { token: t, phoneNumberId: p };
+            };
+
+            // Intento 1: Rutas directas conocidas
+            for (const path of basePaths) {
                 const doc = await db.doc(path).get();
-                const d = doc.data();
-                if (doc.exists && d?.accessToken) {
-                    token = d.accessToken;
-                    phoneNumberId = d.phoneNumberId;
-                    console.log(`[WhatsApp] 🎯 Token found at: ${path}`);
-                    break;
+                if (doc.exists) {
+                    const creds = extractCreds(doc.data());
+                    if (creds.token) {
+                        token = creds.token;
+                        phoneNumberId = creds.phoneNumberId;
+                        console.log(`[WhatsApp] ✅ Token found at: ${path}`);
+                        break;
+                    }
                 }
             }
 
-            // 🆘 FALLBACK DE EMERGENCIA: Si no se encontró por ruta, buscar en toda la DB
+            // Intento 2: Escanear TODA la colección de integrations del entity
             if (!token) {
-                console.log(`[WhatsApp] 🆘 Path lookup failed. Starting Emergency Global Scan...`);
-                const allIntegrations = await db.collectionGroup('integrations').where('provider', '==', 'whatsapp').get();
-                const match = allIntegrations.docs.find(d => d.data().accessToken && (d.data().phoneNumberId || d.id === 'whatsapp'));
-                if (match) {
-                    const d = match.data();
-                    token = d.accessToken;
-                    phoneNumberId = d.phoneNumberId;
-                    console.log(`[WhatsApp] 🆘 Emergency Match Found at: ${match.ref.path}`);
+                console.log(`[WhatsApp] 🔍 Direct paths failed. Scanning all integrations for entity ${options.entityId}...`);
+                const intSnap = await db.collection(`users/${options.userId}/entities/${options.entityId}/integrations`).get();
+                for (const doc of intSnap.docs) {
+                    const creds = extractCreds(doc.data());
+                    if (creds.token && creds.phoneNumberId) {
+                        token = creds.token;
+                        phoneNumberId = creds.phoneNumberId;
+                        console.log(`[WhatsApp] ✅ Token found via entity scan at: ${doc.ref.path}`);
+                        break;
+                    }
                 }
             }
 
-            if (phoneNumberId) {
-                console.log(`[WhatsApp] Using Phone ID: ${phoneNumberId}`);
-            } else {
-                console.warn(`[sendWhatsAppMessage] No valid PhoneID found for entity ${options.entityId}`);
+            // Intento 3: Corrección de casing del userId + re-escaneo
+            if (!token) {
+                console.log(`[WhatsApp] ⚠️ Trying userId casing correction...`);
+                const allUsers = await db.collection('users').get();
+                const match = allUsers.docs.find(u => u.id.toLowerCase() === options.userId!.toLowerCase() && u.id !== options.userId);
+                if (match) {
+                    const correctedId = match.id;
+                    console.log(`[WhatsApp] 🎯 Corrected userId: ${options.userId} -> ${correctedId}`);
+                    const intSnap = await db.collection(`users/${correctedId}/entities/${options.entityId}/integrations`).get();
+                    for (const doc of intSnap.docs) {
+                        const creds = extractCreds(doc.data());
+                        if (creds.token && creds.phoneNumberId) {
+                            token = creds.token;
+                            phoneNumberId = creds.phoneNumberId;
+                            console.log(`[WhatsApp] ✅ Token found with corrected userId at: ${doc.ref.path}`);
+                            break;
+                        }
+                    }
+                }
             }
+
+            // Intento 4: Escaneo global (último recurso)
+            if (!token) {
+                console.log(`[WhatsApp] 🆘 GLOBAL SCAN - Last resort...`);
+                const globalSnap = await db.collectionGroup('integrations').get();
+                for (const doc of globalSnap.docs) {
+                    const creds = extractCreds(doc.data());
+                    if (creds.token && creds.phoneNumberId) {
+                        token = creds.token;
+                        phoneNumberId = creds.phoneNumberId;
+                        console.log(`[WhatsApp] 🆘 Token found globally at: ${doc.ref.path}`);
+                        break;
+                    }
+                }
+            }
+
+            console.log(`[WhatsApp] Final check: hasToken=${!!token}, hasPhoneId=${!!phoneNumberId}`);
         } catch (err) {
             console.error(`[sendWhatsAppMessage] Error resolving config:`, err);
         }
