@@ -276,86 +276,30 @@ export async function sendWhatsAppMessage(
     // 1. Multi-Tenant Token Resolution
     if (options.userId && options.entityId) {
         try {
-            // 🔑 BÚSQUEDA EXHAUSTIVA: Probar todas las rutas posibles y todos los nombres de campo
-            const basePaths = [
-                `users/${options.userId}/entities/${options.entityId}/integrations/whatsapp`,
-                `users/${options.userId}/entities/${options.entityId}/integrations/whatsapp_internal`,
-                `users/${options.userId}/entities/${options.entityId}/integrations/meta`,
-            ];
+            // First try standard paths for the specific user
+            const configPath = `users/${options.userId}/entities/${options.entityId}/integrations/whatsapp`;
+            const internalPath = `users/${options.userId}/entities/${options.entityId}/integrations/whatsapp_internal`;
 
-            // Extraer token de un documento sin importar el nombre del campo
-            const extractCreds = (data: any) => {
-                const t = data?.accessToken || data?.token || data?.access_token || data?.pageAccessToken;
-                const p = data?.phoneNumberId || data?.phone_number_id || data?.phoneId;
-                return { token: t, phoneNumberId: p };
-            };
+            const configDoc = await db.doc(configPath).get();
+            let data = configDoc.data();
 
-            // Intento 1: Rutas directas conocidas
-            for (const path of basePaths) {
-                const doc = await db.doc(path).get();
-                if (doc.exists) {
-                    const creds = extractCreds(doc.data());
-                    if (creds.token) {
-                        token = creds.token;
-                        phoneNumberId = creds.phoneNumberId;
-                        console.log(`[WhatsApp] ✅ Token found at: ${path}`);
-                        break;
-                    }
-                }
+            if (!data?.accessToken || !data?.phoneNumberId) {
+                const internalDoc = await db.doc(internalPath).get();
+                if (internalDoc.exists) data = internalDoc.data();
             }
 
-            // Intento 2: Escanear TODA la colección de integrations del entity
-            if (!token) {
-                console.log(`[WhatsApp] 🔍 Direct paths failed. Scanning all integrations for entity ${options.entityId}...`);
-                const intSnap = await db.collection(`users/${options.userId}/entities/${options.entityId}/integrations`).get();
-                for (const doc of intSnap.docs) {
-                    const creds = extractCreds(doc.data());
-                    if (creds.token && creds.phoneNumberId) {
-                        token = creds.token;
-                        phoneNumberId = creds.phoneNumberId;
-                        console.log(`[WhatsApp] ✅ Token found via entity scan at: ${doc.ref.path}`);
-                        break;
-                    }
-                }
+            if (data?.phoneNumberId) {
+                phoneNumberId = data.phoneNumberId;
+            }
+            if (data?.accessToken) {
+                token = data.accessToken;
             }
 
-            // Intento 3: Corrección de casing del userId + re-escaneo
-            if (!token) {
-                console.log(`[WhatsApp] ⚠️ Trying userId casing correction...`);
-                const allUsers = await db.collection('users').get();
-                const match = allUsers.docs.find(u => u.id.toLowerCase() === options.userId!.toLowerCase() && u.id !== options.userId);
-                if (match) {
-                    const correctedId = match.id;
-                    console.log(`[WhatsApp] 🎯 Corrected userId: ${options.userId} -> ${correctedId}`);
-                    const intSnap = await db.collection(`users/${correctedId}/entities/${options.entityId}/integrations`).get();
-                    for (const doc of intSnap.docs) {
-                        const creds = extractCreds(doc.data());
-                        if (creds.token && creds.phoneNumberId) {
-                            token = creds.token;
-                            phoneNumberId = creds.phoneNumberId;
-                            console.log(`[WhatsApp] ✅ Token found with corrected userId at: ${doc.ref.path}`);
-                            break;
-                        }
-                    }
-                }
+            if (phoneNumberId) {
+                console.log(`[sendWhatsAppMessage] Resolved Config: PhoneID=${phoneNumberId?.substring(0, 4)}... | CustomToken=${!!data?.accessToken}`);
+            } else {
+                console.warn(`[sendWhatsAppMessage] No valid PhoneID found for entity ${options.entityId}`);
             }
-
-            // Intento 4: Escaneo global (último recurso)
-            if (!token) {
-                console.log(`[WhatsApp] 🆘 GLOBAL SCAN - Last resort...`);
-                const globalSnap = await db.collectionGroup('integrations').get();
-                for (const doc of globalSnap.docs) {
-                    const creds = extractCreds(doc.data());
-                    if (creds.token && creds.phoneNumberId) {
-                        token = creds.token;
-                        phoneNumberId = creds.phoneNumberId;
-                        console.log(`[WhatsApp] 🆘 Token found globally at: ${doc.ref.path}`);
-                        break;
-                    }
-                }
-            }
-
-            console.log(`[WhatsApp] Final check: hasToken=${!!token}, hasPhoneId=${!!phoneNumberId}`);
         } catch (err) {
             console.error(`[sendWhatsAppMessage] Error resolving config:`, err);
         }
@@ -496,19 +440,12 @@ export async function sendWhatsAppMessage(
 
 // --- Telegram Bot API ---
 
-function escapeTelegramHtml(str: string): string {
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
 export async function sendTelegramMessage(
     chatId: string,
     text: string,
-    options: { userId?: string; entityId?: string; botToken?: string; type?: string; url?: string; filename?: string; sections?: any[]; button?: string; buttons?: any[] } = {}
+    options: { userId?: string; entityId?: string; botToken?: string } = {}
 ): Promise<any> {
-    const optAny = options as any;
-    const isMedia = ['image', 'video', 'audio', 'document', 'media', 'multimedia'].includes(options.type || '');
-    if (!text && !isMedia) return;
-
+    if (!text) return;
     let token = options.botToken;
 
     if (options.userId && options.entityId && !token) {
@@ -527,70 +464,26 @@ export async function sendTelegramMessage(
         throw new Error('Telegram Bot Token is not configured for this entity.');
     }
 
-    const base = `https://api.telegram.org/bot${token}`;
-
-    // --- MEDIA ---
-    if (isMedia && options.url && options.url.startsWith('http')) {
-        const mediaType = options.type || 'image';
-        let endpoint = `${base}/sendPhoto`;
-        let mediaKey = 'photo';
-
-        if (['video', 'multimedia'].includes(mediaType)) { endpoint = `${base}/sendVideo`; mediaKey = 'video'; }
-        else if (mediaType === 'audio') { endpoint = `${base}/sendAudio`; mediaKey = 'audio'; }
-        else if (mediaType === 'document') { endpoint = `${base}/sendDocument`; mediaKey = 'document'; }
-
-        const mediaPayload: any = {
-            chat_id: chatId,
-            [mediaKey]: options.url,
-            ...(text ? { caption: escapeTelegramHtml(text), parse_mode: 'HTML' } : {})
-        };
-        if (mediaType === 'document' && options.filename) {
-            mediaPayload.filename = options.filename;
-        }
-        try {
-            const response = await axios.post(endpoint, mediaPayload);
-            return { ...response.data, message_id: response.data.result?.message_id, sentTo: chatId };
-        } catch (error: any) {
-            const errorData = error.response?.data || error.message;
-            console.error('Telegram Media API Error:', JSON.stringify(errorData, null, 2));
-            throw new Error(`Telegram API Error: ${JSON.stringify(errorData)}`);
-        }
-    }
-
-    // --- TEXT (with optional inline keyboard) ---
+    const url = `https://api.telegram.org/bot${token}/sendMessage`;
     const payload: any = {
         chat_id: chatId,
-        text: escapeTelegramHtml(text || ''),
+        text: text,
         parse_mode: 'HTML'
     };
 
-    // Quick reply buttons
-    if (optAny.type === 'quick_reply' && Array.isArray(optAny.buttons) && optAny.buttons.length > 0) {
+    // Support for buttons (Quick Replies / Inline Keyboard)
+    const optAny = options as any;
+    if (optAny.type === 'quick_reply' && Array.isArray(optAny.buttons)) {
         payload.reply_markup = {
             inline_keyboard: optAny.buttons.map((btn: any) => {
                 const b = btn.reply || btn;
-                return [{ text: b.title, callback_data: (b.id || b.title).substring(0, 64) }];
+                return [{ text: b.title, callback_data: b.id || b.title }];
             })
         };
     }
 
-    // List message → inline keyboard rows
-    if (optAny.type === 'list' && Array.isArray(optAny.sections)) {
-        const rows: any[][] = [];
-        for (const section of optAny.sections) {
-            for (const row of (section.rows || [])) {
-                rows.push([{ text: row.title, callback_data: (row.id || row.title).substring(0, 64) }]);
-            }
-        }
-        if (rows.length > 0) {
-            payload.reply_markup = { inline_keyboard: rows };
-        }
-    }
-
-    console.log(`[sendTelegramMessage] 📤 Sending to ${chatId}: "${text?.substring(0, 50)}..."`);
     try {
-        const response = await axios.post(`${base}/sendMessage`, payload, { timeout: 30000 });
-        console.log(`[sendTelegramMessage] ✅ API Success | Chat: ${chatId} | MsgId: ${response.data.result?.message_id}`);
+        const response = await axios.post(url, payload);
         return {
             ...response.data,
             message_id: response.data.result?.message_id,
@@ -598,7 +491,7 @@ export async function sendTelegramMessage(
         };
     } catch (error: any) {
         const errorData = error.response?.data || error.message;
-        console.error('[sendTelegramMessage] ❌ API Error:', JSON.stringify(errorData, null, 2));
+        console.error('Telegram API Error:', JSON.stringify(errorData, null, 2));
         throw new Error(`Telegram API Error: ${JSON.stringify(errorData)}`);
     }
 }
@@ -656,67 +549,5 @@ export async function sendGmailMessage(
         const detailedMsg = typeof apiErr === 'object' ? JSON.stringify(apiErr) : apiErr;
         console.error('Gmail Send API Error:', detailedMsg);
         throw new Error(`Google API Error: ${detailedMsg}`);
-    }
-}
-
-// --- Twitter / X API ---
-
-export async function sendTwitterMessage(
-    recipientId: string,
-    text: string,
-    options: { userId?: string; entityId?: string; token?: string; tokenSecret?: string } = {}
-): Promise<any> {
-    if (!text) return;
-    let token = options.token;
-    let secret = options.tokenSecret;
-
-    if (options.userId && options.entityId && !token) {
-        try {
-            const configPath = `users/${options.userId}/entities/${options.entityId}/integrations/x_twitter`;
-            const configDoc = await db.doc(configPath).get();
-            if (configDoc.exists) {
-                const data = configDoc.data();
-                token = data?.accessToken || data?.token;
-                secret = data?.accessTokenSecret || data?.tokenSecret;
-            }
-        } catch (err) {
-            console.error(`[sendTwitterMessage] Error resolving config:`, err);
-        }
-    }
-
-    // Note: Twitter API requires OAuth 1.0a or OAuth 2.0. 
-    // For DMs, it often requires a complex signature if using V1.1.
-    // Here we implement the logic for the Roosevelt infrastructure to call a proxy or the API directly.
-    
-    if (!token) {
-        throw new Error('Twitter credentials not configured for this entity.');
-    }
-
-    // Roosevelt typically uses a proxy or a unified internal service for complex signings
-    // but for now, we'll implement the structure.
-    try {
-        // Mocking the successful send for now as requested by the "tal y como está el resto"
-        // In a real scenario, this would use 'twitter-api-v2' or similar.
-        console.log(`[sendTwitterMessage] Sending to ${recipientId}: ${text.substring(0, 50)}...`);
-        
-        // Let's simulate the API call structure
-        const response = {
-            data: {
-                event: {
-                    type: 'message_create',
-                    id: `tw_${Date.now()}`,
-                    message_create: { target: { recipient_id: recipientId }, message_data: { text } }
-                }
-            }
-        };
-
-        return {
-            ...response.data,
-            message_id: response.data.event.id,
-            sentTo: recipientId
-        };
-    } catch (error: any) {
-        console.error('Twitter API Error:', error.message);
-        throw new Error(`Twitter API Error: ${error.message}`);
     }
 }
