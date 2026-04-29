@@ -792,42 +792,9 @@ export async function executeBotFlow(
                     break;
 
                 case 'captureInputNode':
-                    functions.logger.info(`[Bot Engine] Reached CaptureInputNode ${nextNodeId}. Checking if current message can be used.`);
+                    functions.logger.info(`[Bot Engine] Reached CaptureInputNode ${nextNodeId}. Sending prompt and waiting for user input.`);
 
-                    // --- MEJORA: CAPTURA INMEDIATA ---
-                    // Si el mensaje actual no está vacío (y no fue un comando de reinicio/recuperación),
-                    // intentamos validarlo inmediatamente antes de suspender el bot.
-                    if (currentMsg && currentMsg.trim() !== '') {
-                        const validation = validateInput(currentMsg, nextNode.data || {}, metadata);
-                        if (validation.isValid) {
-                            functions.logger.info(`[Bot Engine] Immediate valid capture for ${to} at ${nextNodeId}: "${currentMsg}"`);
-
-                            let valueToSave = currentMsg.trim();
-                            const varName = nextNode.data?.variableName || `captured_${nextNodeId}`;
-
-                            if (['nombre', 'name', 'firstname', 'user'].includes(varName.toLowerCase())) {
-                                valueToSave = extractName(valueToSave);
-                            }
-
-                            await saveVariable(to, varName, valueToSave, cardData.id, cardData.groupId, cardRef);
-
-                            if (!cardData.customFields) cardData.customFields = {};
-                            cardData.customFields[varName] = valueToSave;
-
-                            // Update local contactName for immediate use in following nodes
-                            if (['nombre', 'name', 'firstname', 'user'].includes(varName.toLowerCase()) && valueToSave !== 'Amigo') {
-                                cardData.contactName = valueToSave;
-                            }
-
-                            // Continuar al siguiente nodo sin detenerse
-                            currentNodeId = nextNodeId;
-                            nextNodeId = getNextNodeId(bot, nextNodeId);
-                            currentMsg = ""; // Consumir el mensaje para que no se use de nuevo
-                            continue;
-                        }
-                    }
-
-                    // Si no fue válido o no había mensaje, enviar el prompt y esperar
+                    // Enviar el prompt y esperar
                     const prompt = replaceVariables(nextNode.data?.content || nextNode.data?.text || '', cardData);
                     if (prompt) {
                         await delay(calculateTypingDelay(prompt));
@@ -907,7 +874,16 @@ export async function executeBotFlow(
                     } else {
                         await adapter.sendMessage(to, listBody);
                         await logBotMessage(to, listBody, cardData.id, cardData.groupId, cardRef, 'text');
-                        nextNodeId = getNextNodeId(bot, nextNodeId);
+                        
+                        // FIX: Even if there are no sections configured (user typed options as plain text),
+                        // we must STILL wait for their reply before continuing.
+                        await updateBotState(to, {
+                            status: 'active',
+                            currentNodeId: nextNodeId,
+                            lastInteraction: admin.firestore.Timestamp.now()
+                        }, cardData.id, cardData.groupId, cardRef);
+
+                        shouldContinue = false;
                     }
                     break;
 
