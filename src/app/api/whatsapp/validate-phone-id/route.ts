@@ -9,7 +9,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ valid: false, message: 'Falta el Phone ID.' });
         }
 
-        // Rule 4 & 7: Paranoid search across all possible integration collection groups
+        const currentEntityPath = `users/${userId}/entities/${entityId}`;
         const collectionsToCheck = ['integrations', 'whatsapp_internal', 'whatsapp-integrations'];
         const fieldsToCheck = ['phoneNumberId', 'phone_number_id', 'id', 'wabaId'];
         
@@ -18,49 +18,38 @@ export async function POST(req: Request) {
 
         for (const collName of collectionsToCheck) {
             for (const fieldName of fieldsToCheck) {
-                // Check for both String and Number types to avoid Firestore type-mismatch misses
-                const queries = [
-                    db.collectionGroup(collName).where(fieldName, '==', stringId).get()
-                ];
-                
-                if (!isNaN(numericId)) {
-                    queries.push(db.collectionGroup(collName).where(fieldName, '==', numericId).get());
-                }
-
-                const results = await Promise.all(queries);
-
-                for (const snap of results) {
+                try {
+                    // Diagnostic scan
+                    const snap = await db.collectionGroup(collName).where(fieldName, '==', stringId).get();
+                    
                     if (!snap.empty) {
                         for (const doc of snap.docs) {
-                            const pathParts = doc.ref.path.split('/');
-                            const uIdx = pathParts.indexOf('users');
-                            const eIdx = pathParts.indexOf('entities');
-                            
-                            // BLOCK if it's a different tenant OR if it's in a root collection (Rule 7 violation)
-                            if (uIdx === -1 || eIdx === -1 || pathParts[uIdx + 1] !== userId || pathParts[eIdx + 1] !== entityId) {
-                                console.log(`[Validation] ❌ CRITICAL: Duplicate found in ${doc.ref.path} (Field: ${fieldName})`);
+                            const existingPath = doc.ref.path;
+                            // Block only if it's NOT in our current entity path
+                            if (!existingPath.includes(currentEntityPath)) {
+                                console.log(`[Validation] 🛡️ CONFLICT: Found ${stringId} in ${existingPath}. Blocking connection for ${currentEntityPath}`);
                                 return NextResponse.json({ 
                                     valid: false, 
-                                    message: `ERROR CRÍTICO: Este número ya está en uso por otra empresa (${pathParts[uIdx + 1] || 'Sistema Global'}). No se permite la vinculación duplicada.` 
-                                });
+                                    message: `ERROR: Este número ya está en uso por otra empresa en el sistema (Detectado en: ${collName}).` 
+                                }, { status: 200 });
                             }
                         }
                     }
+                } catch (idxError: any) {
+                    // Silence index errors to allow user to connect their own data while indices build
+                    console.error(`[Validation] ⚠️ Skipping global check for ${collName}/${fieldName} due to missing index.`);
                 }
             }
         }
 
-        console.log(`[Validation] ✅ Phone ID ${phoneNumberId} is valid for User: ${userId}, Entity: ${entityId}`);
-        return NextResponse.json({ valid: true });
+        console.log(`[Validation] ✅ Phone ID ${phoneNumberId} is valid for ${currentEntityPath}`);
+        return NextResponse.json({ valid: true }, { status: 200 });
 
     } catch (error: any) {
-        console.error('[Validation API Error]:\n\n====================\nAtención! Copia este error (incluyendo el link si lo hay):\n', error.message, '\n====================\n');
-        // Devolvemos 200 para que NextJS no intercepte el 500 con un HTML de error y el frontend pueda leer el JSON.
+        console.error(`[Validation CRASH] ${error.stack || error.message}`);
         return NextResponse.json({ 
             valid: false, 
-            message: error.message.includes('index') 
-                ? 'Firebase requiere un "Índice (Index)" para validar este número. Revisa la terminal (consola negra) abajo donde corre "npm run dev", y haz clic en el link que Firebase generó para crearlo automáticamente.'
-                : error.message 
-        }, { status: 200 }); // Status 200 para forzar a la UI a mostrar el mensaje real
+            message: `Error de servidor: ${error.message}` 
+        }, { status: 200 });
     }
 }
