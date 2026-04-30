@@ -88,6 +88,12 @@ export async function POST(req: Request) {
              return NextResponse.json({ success: true, ignored: 'no_sender' });
         }
 
+        // Anti-echo fallback: If the sender is the Instagram Account / Page itself, ignore it.
+        if (senderId === targetId || senderId === entry.id) {
+             debugLog(`[POST] 🛡️ Ignoring self-echo message from ${senderId}`);
+             return NextResponse.json({ success: true, ignored: 'self_echo' });
+        }
+
         const rawAttachments = messaging?.message?.attachments || [];
         const firstAttachment = rawAttachments[0];
         const quickReplyPayload = messaging?.message?.quick_reply?.payload || '';
@@ -177,19 +183,23 @@ export async function POST(req: Request) {
             });
         } catch (e) { }
 
-        // 0. MESSAGE DEDUPLICATION (Antispam)
+        // 0. MESSAGE DEDUPLICATION (Antispam & Race-Condition Safe)
         const messageId = messaging?.message?.mid || changes?.message_id || `temp_${Date.now()}_${senderId}`;
         const dedupRef = db.doc(`${entityPath}/processed_messages/${messageId}`);
         try {
-            const dedupSnap = await dedupRef.get();
-            if (dedupSnap.exists) {
-                const data = dedupSnap.data();
-                if (data && Date.now() - data.timestamp < 300000) {
-                    debugLog(`[POST] 🛡️ Duplicate message detected (${messageId}). Skipping.`);
-                    return NextResponse.json({ success: true, duplicate: true });
+            const isDuplicate = await db.runTransaction(async (t) => {
+                const snap = await t.get(dedupRef);
+                if (snap.exists) {
+                    const data = snap.data();
+                    if (data && Date.now() - data.timestamp < 300000) return true;
                 }
+                t.set(dedupRef, { timestamp: Date.now(), senderId: senderId, type: 'meta_ingestion' });
+                return false;
+            });
+            if (isDuplicate) {
+                debugLog(`[POST] 🛡️ Duplicate message detected (${messageId}). Skipping.`);
+                return NextResponse.json({ success: true, duplicate: true });
             }
-            await dedupRef.set({ timestamp: Date.now(), senderId: senderId, type: 'meta_ingestion' });
         } catch (e) { console.error("[Dedup] Error:", e); }
 
         // 0.B GLOBAL SENDER LOCK (Strict prevention of double card creation)

@@ -448,7 +448,7 @@ export async function executeBotFlow(
         // Acquire lock to prevent duplicate processing
         // COMMAND OVERRIDE: Reset/Menu commands don't wait for locks
         const normInputForLock = (rawUserMessage || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        const isPriorityCommand = /^(reinicia|reinicio|reset|clear|limpiar|menu|opciones|ayuda|help|inicio|start)/i.test(normInputForLock);
+        const isPriorityCommand = /^(reinici[ao]r?|reinici|reinci(ar)?|restart|reset|clear|limpiar|menu|opciones|ayuda|help|inicio|start)/i.test(normInputForLock);
 
         if (!isPriorityCommand) {
             lockAcquired = await acquireBotLock(cardRef);
@@ -462,7 +462,8 @@ export async function executeBotFlow(
 
         // --- RESTART / MENU COMMAND ---
         const normInput = (rawUserMessage || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        const isReset = /^(reinicia(r| todo ahora)?|reinicio|reset|clear|limpiar)/i.test(normInput);
+        // Regex expanded to catch typos like 'reinciar', 'reiniciar', 'restart'
+        const isReset = /^(reinici[ao]r?|reinici|reinci(ar)?|restart|reset|clear|limpiar|borrar)/i.test(normInput);
         const isMenu = /^(menu|opciones|ayuda|ajustes|config|settings)/i.test(normInput);
 
         let botState = cardData.botState || cardData.chatbotState || { status: 'none' };
@@ -638,11 +639,6 @@ export async function executeBotFlow(
 
                     if (!cardData.customFields) cardData.customFields = {};
                     cardData.customFields[varName] = valueToSave;
-
-                    // Update local contactName for immediate use in following nodes
-                    if (isNameVar && valueToSave !== 'Amigo') {
-                        cardData.contactName = valueToSave;
-                    }
                 }
             }
 
@@ -1255,8 +1251,8 @@ async function saveVariable(contactNumber: string, variable: string, value: stri
         const isNameVariable = varLower === 'nombre' || varLower === 'name' || varLower === 'firstname';
 
         if (isNameVariable && value && value !== 'Amigo') {
-            updateData.contactName = value;
-            functions.logger.info(`[saveVariable] Auto-updating contactName for ${contactNumber} to ${value}`);
+            // updateData.contactName = value; // Disabled per user request
+            functions.logger.info(`[saveVariable] Captured name ${value}, but NOT updating contactName per user request.`);
         }
 
         await docRef.update({
