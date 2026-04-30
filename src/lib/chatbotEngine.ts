@@ -34,7 +34,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             const bState = data.botState || {};
 
             const normInput = (text || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            const isPriorityCommand = /^(reinicia|reinicio|reset|clear|limpiar|menu|opciones|ayuda|help|inicio|start)/i.test(normInput);
+            const isPriorityCommand = /^(reinici[ao]r?|reinici|reinci(ar)?|restart|reset|clear|limpiar|borrar|menu|opciones|ayuda|help|inicio|start)/i.test(normInput);
 
             if (isPriorityCommand && data.botLock) {
                 console.log(`[ChatbotEngine] 🔓 Priority command breaking existing lock for ${cardId}`);
