@@ -350,8 +350,8 @@ export async function tryTriggerBot(
     const input = (messageText || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     
     // Command categories (Refined: Removed common greetings from Menu)
-    const isReset = /^(reinicia(r| todo ahora)?|reinicio|reset|clear|limpiar)/i.test(input);
-    const isMenu = /^(menu|opciones|ayuda|ajustes|config|settings)/i.test(input);
+    const isReset = /^(reinici[ao]r?|reinici|reinci(ar)?|restart|reset|clear|limpiar|borrar)/i.test(input);
+    const isMenu = /^(menu|opciones|ayuda|ajustes|config|settings|inicio|start)/i.test(input);
     const isStop = /^(detener|stop|salir|chau|adios|exit)/i.test(input);
     
     // Combined command flag
