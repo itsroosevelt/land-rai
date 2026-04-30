@@ -25,13 +25,16 @@ interface ChatSidebarProps {
     cancelGeneration?: () => void;
     approvePlan?: (msgId: string) => void;
     onOpenSettings?: () => void;
+    credits?: number | null;
+    isAdmin?: boolean;
 }
 
 export const ChatSidebar = ({
     messages, isGenerating, handleGenerate, projectOpen,
     selectedModel, setSelectedModel, reasoningLevel, setReasoningLevel,
     conversations, activeConversationId, setActiveConversationId, handleNewConversation, deleteConversation,
-    cancelGeneration, statusMessage, onOpenSettings, approvePlan
+    cancelGeneration, statusMessage, onOpenSettings, approvePlan,
+    credits, isAdmin
 }: ChatSidebarProps) => {
     const [input, setInput] = useState("");
     const [selectedImages, setSelectedImages] = useState<{ id: string, url: string, file?: File }[]>([]);
@@ -80,6 +83,14 @@ export const ChatSidebar = ({
                     <span className="text-[10px] font-black text-white/90 uppercase tracking-[0.2em] flex items-center gap-2">
                         AI Architect
                     </span>
+                    {(credits !== null || isAdmin) && (
+                        <div className={`px-2 py-0.5 rounded-full flex items-center gap-1 animate-in fade-in zoom-in duration-500 ${isAdmin ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-blue-500/10 border border-blue-500/20'}`}>
+                            <Sparkles className={`w-2.5 h-2.5 ${isAdmin ? 'text-amber-400' : 'text-blue-400'}`} />
+                            <span className={`text-[9px] font-bold ${isAdmin ? 'text-amber-400' : 'text-blue-400'}`}>
+                                {isAdmin ? '∞' : credits}
+                            </span>
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-0.5">

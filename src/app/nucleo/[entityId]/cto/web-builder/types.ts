@@ -58,6 +58,8 @@ export interface WebProject {
     supabaseUrl?: string;
     supabaseAnonKey?: string;
     databaseMode?: 'none' | 'manual' | 'automatic';
+    // AI Configuration (BYOK)
+    geminiApiKey?: string;
 }
 
 export interface GitHubUser {

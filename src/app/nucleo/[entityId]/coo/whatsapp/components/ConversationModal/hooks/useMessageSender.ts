@@ -64,6 +64,15 @@ export const useMessageSender = ({
             return recipientId;
         }
 
+        if (platform === 'telegram') {
+            const chatId = cardData?.telegramChatId || cardData?.platform_ids?.telegram || cardData?.contactNumber;
+            if (!chatId) {
+                toast.error('No se puede enviar: no se encontró el Telegram Chat ID del contacto.');
+                return null;
+            }
+            return String(chatId);
+        }
+
         const rawPhone = liveCardData?.contactNumber || card?.contactNumber;
         const recipientId = normalizePhoneNumber(rawPhone || '');
 

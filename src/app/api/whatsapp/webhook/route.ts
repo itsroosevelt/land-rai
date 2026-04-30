@@ -230,6 +230,14 @@ export async function POST(req: Request) {
                         const cardGet = await cardRef.get();
                         if (cardGet.exists) {
                             targetCardDoc = cardGet;
+                        } else {
+                            // 👻 TARJETA FANTASMA: Borrar referencia para permitir re-creación
+                            console.log(`[Webhook] 👻 Ghost card detected (${contactCardId}). Clearing reference.`);
+                            await db.doc(`${entityPath}/contacts/${existingContactId}`).update({
+                                kanbanCardId: admin.firestore.FieldValue.delete(),
+                                kanbanGroupId: admin.firestore.FieldValue.delete()
+                            }).catch(() => {});
+                            targetGroupId = null;
                         }
                     }
                 }
@@ -367,8 +375,15 @@ export async function POST(req: Request) {
                             primary_channel: 'whatsapp'
                         });
 
-                        // 2. Update/Create the Contact in the CRM Database
-                        if (numericId && (finalContactName.trim() || cleanFrom.length >= 5)) {
+                        // 3. Update or Create Contact Reference
+                        if (existingContactId) {
+                            await db.collection(`${entityPath}/contacts`).doc(existingContactId).update({
+                                kanbanGroupId: destinationGroupId,
+                                kanbanCardId: newCardRef.id,
+                                updatedAt: new Date().toISOString()
+                            });
+                        } else {
+                            const numericId = Date.now().toString() + Math.floor(Math.random() * 1000).toString();
                             await db.collection(`${entityPath}/contacts`).doc(numericId).set({
                                 crmId: numericId,
                                 name: finalContactName || cleanFrom,
@@ -378,8 +393,8 @@ export async function POST(req: Request) {
                                 kanbanGroupId: destinationGroupId,
                                 kanbanCardId: newCardRef.id,
                                 updatedAt: new Date().toISOString(),
-                                ...(existingContactId ? {} : { createdAt: new Date().toISOString() })
-                            }, { merge: true });
+                                createdAt: new Date().toISOString()
+                            });
                         }
 
                         cardId = newCardRef.id;

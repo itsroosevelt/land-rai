@@ -44,9 +44,9 @@ export default function InboxSidebar({ selectedFolder, setSelectedFolder, cards 
     };
 
     const counts = {
-        all: cards.length,
-        mine: cards.filter(c => c.assignedTo === 'Mío').length,
-        unassigned: cards.filter(c => !c.assignedTo || c.assignedTo === 'Unassigned').length,
+        all: cards.reduce((acc, c) => acc + (c.unreadCount || 0), 0),
+        mine: cards.filter(c => c.assignedTo === 'Mío').reduce((acc, c) => acc + (c.unreadCount || 0), 0),
+        unassigned: cards.filter(c => !c.assignedTo || c.assignedTo === 'Unassigned').reduce((acc, c) => acc + (c.unreadCount || 0), 0),
     };
 
     const folders = [
@@ -59,7 +59,6 @@ export default function InboxSidebar({ selectedFolder, setSelectedFolder, cards 
         { id: 'whatsapp1', label: 'WhatsApp Main', type: 'whatsapp' },
         { id: 'ig1', label: 'Instagram CS', type: 'instagram' },
         { id: 'messenger', label: 'Messenger', type: 'messenger' },
-        { id: 'telegram', label: 'Telegram', type: 'telegram' },
         { id: 'twitter', label: 'X (Twitter)', type: 'twitter' },
         { id: 'gmail', label: 'Gmail', type: 'gmail' },
     ];

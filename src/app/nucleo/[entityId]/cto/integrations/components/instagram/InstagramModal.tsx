@@ -128,13 +128,7 @@ const InstagramModal: React.FC<InstagramModalProps> = ({ isOpen, onClose, active
             };
 
             await setDoc(doc(db, `users/${userId}/entities/${entityId}/integrations/instagram`), instagramConfig);
-            await setDoc(doc(db, `integrations/instagram/accounts/${page.instagram_business_account.id}`), {
-                entityId,
-                userId,
-                username: page.instagram_business_account.username,
-                accessToken: permanentToken,
-                updatedAt: serverTimestamp()
-            });
+
 
             setConfig(instagramConfig);
             setIsConnected(true);
@@ -151,9 +145,7 @@ const InstagramModal: React.FC<InstagramModalProps> = ({ isOpen, onClose, active
         const toastId = toast.loading("Desconectando...");
         try {
             await deleteDoc(doc(db, `users/${userId}/entities/${entityId}/integrations/instagram`));
-            if (config?.instagramId) {
-                await deleteDoc(doc(db, `integrations/instagram/accounts/${config.instagramId}`));
-            }
+
             toast.success("Desconectado correctamente.", { id: toastId });
         } catch (error) {
             toast.error("Error al desconectar.");

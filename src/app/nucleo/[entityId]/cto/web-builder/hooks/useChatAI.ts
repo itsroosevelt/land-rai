@@ -585,6 +585,31 @@ export const useChatAI = (
         }
     }, [activeProjectId, activeConversationId, handleGenerate, currentUser, activeEntity]);
 
+    const [credits, setCredits] = useState<number | null>(null);
+    const [isAdmin, setIsAdmin] = useState(false);
+
+    // Fetch User Credits
+    useEffect(() => {
+        if (!currentUser) {
+            setCredits(null);
+            setIsAdmin(false);
+            return;
+        }
+
+        setIsAdmin(currentUser.email === "admluxorsys@gmail.com");
+
+        const userRef = doc(db, "users", currentUser.uid);
+        const unsubscribe = onSnapshot(userRef, (snapshot) => {
+            if (snapshot.exists()) {
+                setCredits(snapshot.data().credits ?? 0);
+            } else {
+                setCredits(0);
+            }
+        });
+
+        return () => unsubscribe();
+    }, [currentUser]);
+
     return {
         isGenerating,
         statusMessage,
@@ -596,7 +621,9 @@ export const useChatAI = (
         handleNewConversation,
         approvePlan,
         deleteConversation,
-        cancelGeneration
+        cancelGeneration,
+        credits,
+        isAdmin
     };
 }
 

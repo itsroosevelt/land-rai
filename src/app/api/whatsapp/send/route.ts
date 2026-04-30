@@ -53,11 +53,16 @@ export async function POST(req: Request) {
                     subject: bodyValue.subject || 'Re: Respuesta de soporte',
                     threadId: bodyValue.threadId
                 });
-                messageId = responseData?.id; 
+                messageId = responseData?.id;
                 if (responseData?.threadId) {
-                    // Update bodyValue with resolved threadId for logger
                     bodyValue.threadId = responseData.threadId;
-                }            } else {
+                }
+            } else if (targetPlatform === 'telegram') {
+                console.log(`[Omnichannel API] Sending to Telegram (chatId: ${toNumber}) for tenant ${entityId}`);
+                const { sendTelegramMessage } = await import('@/lib/sendProviders');
+                responseData = await sendTelegramMessage(toNumber, message, { userId, entityId });
+                messageId = responseData?.message_id ? `tg_${responseData.message_id}` : undefined;
+            } else {
                 const { sendWhatsAppMessage } = await import('@/lib/sendProviders');
                 console.log(`[Omnichannel API] Attempting to send WhatsApp message to ${toNumber}...`);
                 responseData = await sendWhatsAppMessage(toNumber, message, { type, template, url, filename, userId, entityId });

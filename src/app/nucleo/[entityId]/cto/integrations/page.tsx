@@ -11,8 +11,6 @@ import { toast } from 'sonner';
 
 import { Category, Integration, INTEGRATIONS, CATEGORIES } from './config';
 import { WhatsAppCloudAPIModal } from './components/whatsapp_cloud_api/WhatsAppCloudAPIModal';
-import { WhatsAppQRBusinessModal } from './components/whatsapp_qr_business/WhatsAppQRBusinessModal';
-import { WhatsAppQRPersonalModal } from './components/whatsapp_qr_personal/WhatsAppQRPersonalModal';
 import MessengerModal from './components/messenger/MessengerModal';
 import InstagramModal from './components/instagram/InstagramModal';
 import TelegramModal from './components/telegram/TelegramModal';
@@ -65,7 +63,7 @@ export default function IntegrationsPage() {
     }, [currentUser, activeEntity]);
 
     const handleConnect = async (integration: Integration) => {
-        if (!['whatsapp', 'whatsapp_qr_business', 'whatsapp_qr_personal', 'messenger', 'instagram', 'telegram', 'x_twitter', 'gmail'].includes(integration.id)) {
+        if (!['whatsapp', 'messenger', 'instagram', 'telegram', 'x_twitter', 'gmail'].includes(integration.id)) {
             toast.info(`${integration.name}: Esta integración estará disponible próximamente en Roosevelt.`);
             return;
         }
@@ -154,22 +152,6 @@ export default function IntegrationsPage() {
                     isOpen={isModalOpen} 
                     onClose={() => setIsModalOpen(false)} 
                     activeIntegration={activeIntegration} 
-                />
-            )}
-            {activeIntegration?.id === 'whatsapp_qr_business' && (
-                <WhatsAppQRBusinessModal 
-                    isOpen={isModalOpen} 
-                    onClose={() => setIsModalOpen(false)} 
-                    activeIntegration={activeIntegration} 
-                />
-            )}
-            {activeIntegration?.id === 'whatsapp_qr_personal' && (
-                <WhatsAppQRPersonalModal 
-                    isOpen={isModalOpen} 
-                    onClose={() => setIsModalOpen(false)} 
-                    activeIntegration={activeIntegration} 
-                    // @ts-ignore
-                    integrationData={activeIntegration ? connectedIntegrations[activeIntegration.id] : null}
                 />
             )}
             {activeIntegration?.id === 'messenger' && (

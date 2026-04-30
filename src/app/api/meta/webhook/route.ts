@@ -5,14 +5,33 @@ import { processChatbotFlow } from '@/lib/chatbotEngine';
 
 const DEBUG_FILE = '/tmp/meta_webhook.log';
 
+import fs from 'fs';
+
 function debugLog(msg: string) {
-    console.log(`[Meta Webhook Debug] ${msg}`);
+    const logStr = `\n[${new Date().toISOString()}] [Meta Webhook Debug] ${msg}`;
+    console.log(logStr);
+    try {
+        fs.appendFileSync('/tmp/meta_webhook_debug.log', logStr);
+    } catch (e) {}
 }
 
 function isGenericProfileName(value: any) {
     const normalized = String(value || '').trim().toLowerCase();
-    if (!normalized) return true;
-    return normalized.includes('usuario meta') || normalized.includes('usuario') || normalized.includes('meta') || normalized === 'instagram user';
+    if (!normalized || normalized === 'undefined' || normalized === 'null') return true;
+    
+    // Check for common generic keywords
+    const isGenericKeyword = normalized.includes('usuario meta') || 
+                             normalized.includes('usuario') || 
+                             normalized.includes('meta') || 
+                             normalized === 'instagram user' ||
+                             normalized === 'messenger user';
+
+    // Check for system fallbacks like "Instagram 123456" or "Messenger 123456"
+    const isSystemFallback = /^instagram [a-f0-9]{6}$/i.test(normalized) || 
+                             /^messenger [a-f0-9]{6}$/i.test(normalized) ||
+                             /^[a-z]+ [0-9]+$/i.test(normalized);
+
+    return isGenericKeyword || isSystemFallback;
 }
 
 function buildMetaFallbackName(provider: 'messenger' | 'instagram', senderId: string) {
@@ -69,6 +88,12 @@ export async function POST(req: Request) {
              return NextResponse.json({ success: true, ignored: 'no_sender' });
         }
 
+        // Anti-echo fallback: If the sender is the Instagram Account / Page itself, ignore it.
+        if (senderId === targetId || senderId === entry.id) {
+             debugLog(`[POST] 🛡️ Ignoring self-echo message from ${senderId}`);
+             return NextResponse.json({ success: true, ignored: 'self_echo' });
+        }
+
         const rawAttachments = messaging?.message?.attachments || [];
         const firstAttachment = rawAttachments[0];
         const quickReplyPayload = messaging?.message?.quick_reply?.payload || '';
@@ -100,6 +125,9 @@ export async function POST(req: Request) {
         const integrationSnap = await db.collectionGroup('integrations').get();
         
         for (const doc of integrationSnap.docs) {
+            // Ensure we are in a valid entity path before even checking IDs (Rule 7)
+            if (!doc.ref.path.includes('users/') || !doc.ref.path.includes('/entities/')) continue;
+
             const data = doc.data();
             const matchesPage = data.pageId === targetId || String(data.pageId) === String(targetId) || data.pageId === numericId;
             const matchesInsta = data.instagramId === targetId || String(data.instagramId) === String(targetId) || data.instagramId === numericId;
@@ -107,9 +135,14 @@ export async function POST(req: Request) {
             if (matchesPage || matchesInsta) {
                 tenantRef = doc.ref;
                 tenantData = data;
-                // Override provider based on what matched or what Meta says
                 if (matchesInsta) provider = 'instagram';
                 else if (matchesPage) provider = 'messenger';
+                
+                // DIAGNOSTIC LOG (Rule 5 & 7 compliant)
+                const pParts = doc.ref.path.split('/');
+                const uId = pParts[1];
+                const eId = pParts[3];
+                debugLog(`[Meta Webhook] ✅ MATCH FOUND: Message for ${targetId} routed to User: ${uId}, Entity: ${eId}`);
                 break;
             }
         }
@@ -135,18 +168,54 @@ export async function POST(req: Request) {
         const userId = pathParts[uIdx + 1];
         const entityId = pathParts[eIdx + 1];
         const entityPath = `users/${userId}/entities/${entityId}`;
+        debugLog(`[POST] Identified EntityPath: ${entityPath}`);
 
         debugLog(`[POST] Tenant Discovery Success: User=${userId}, Entity=${entityId}, Provider=${provider}`);
 
         // ENTERPRISE LOGGING (Status visibility in CRM)
         try {
-            await db.collection(`${entityPath}/system_logs`).add({
+            await db.collection(`${entityPath}/internal_logs`).add({
                 timestamp: admin.firestore.FieldValue.serverTimestamp(),
                 type: `${provider}_webhook_nextjs`,
                 senderId: senderId,
                 payload_type: messaging.message ? 'message' : 'postback',
                 raw: JSON.stringify(body).substring(0, 1500)
             });
+        } catch (e) { }
+
+        // 0. MESSAGE DEDUPLICATION (Antispam & Race-Condition Safe)
+        const messageId = messaging?.message?.mid || changes?.message_id || `temp_${Date.now()}_${senderId}`;
+        const dedupRef = db.doc(`${entityPath}/processed_messages/${messageId}`);
+        try {
+            const isDuplicate = await db.runTransaction(async (t) => {
+                const snap = await t.get(dedupRef);
+                if (snap.exists) {
+                    const data = snap.data();
+                    if (data && Date.now() - data.timestamp < 300000) return true;
+                }
+                t.set(dedupRef, { timestamp: Date.now(), senderId: senderId, type: 'meta_ingestion' });
+                return false;
+            });
+            if (isDuplicate) {
+                debugLog(`[POST] 🛡️ Duplicate message detected (${messageId}). Skipping.`);
+                return NextResponse.json({ success: true, duplicate: true });
+            }
+        } catch (e) { console.error("[Dedup] Error:", e); }
+
+        // 0.B GLOBAL SENDER LOCK (Strict prevention of double card creation)
+        const lockRef = db.doc(`${entityPath}/locks_ingestion/${senderId}`);
+        try {
+            const lockSnap = await lockRef.get();
+            if (lockSnap.exists) {
+                const lockData = lockSnap.data();
+                if (lockData && (Date.now() - lockData.timestamp < 3000)) {
+                    // If locked less than 3s ago, wait a bit and check for card again
+                    debugLog(`[Webhook] 🛡️ Race-Condition Lock active for ${senderId}. Waiting 1s...`);
+                    await new Promise(r => setTimeout(r, 1000));
+                    // Re-run contact search later
+                }
+            }
+            await lockRef.set({ timestamp: Date.now() }, { merge: true });
         } catch (e) { }
 
         // OMNICHANNEL INGESTION TO KANBAN
@@ -166,11 +235,11 @@ export async function POST(req: Request) {
                 const bData = b.data();
                 const aScore =
                     ((aData.source || '').toLowerCase().includes(provider) ? 10 : 0) +
-                    (aData.name && !String(aData.name).toLowerCase().includes('usuario meta') ? 3 : 0) +
+                    (aData.name && !isGenericProfileName(aData.name) ? 3 : 0) +
                     (aData.kanbanCardId ? 2 : 0);
                 const bScore =
                     ((bData.source || '').toLowerCase().includes(provider) ? 10 : 0) +
-                    (bData.name && !String(bData.name).toLowerCase().includes('usuario meta') ? 3 : 0) +
+                    (bData.name && !isGenericProfileName(bData.name) ? 3 : 0) +
                     (bData.kanbanCardId ? 2 : 0);
                 if (bScore !== aScore) return bScore - aScore;
                 const aTime = aData.updatedAt?.toMillis?.() || aData.updatedAt?.seconds * 1000 || 0;
@@ -189,166 +258,80 @@ export async function POST(req: Request) {
                 const cardGet = await cardRef.get();
                 if (cardGet.exists) {
                     targetCardDoc = cardGet;
+                } else {
+                    // CRITICAL: Cleanup ghost reference in contact to allow re-creation
+                    debugLog(`[Webhook] 👻 GHOST CARD DETECTED: ${contactCardId}. Clearing reference from contact ${existingContactId}`);
+                    await contactDoc.ref.update({
+                        kanbanCardId: admin.firestore.FieldValue.delete(),
+                        kanbanGroupId: admin.firestore.FieldValue.delete()
+                    }).catch(() => {});
+                    targetGroupId = null;
                 }
             }
         }
 
         // 4. CAPTURE REAL PROFILE NAME FROM META (Critical for identity & fusion)
-        // Priority: payload name > existing stored name > Graph API call > fallback
         let resolvedName = senderNameFromPayload || existingContactName;
         const isGenericName = isGenericProfileName(resolvedName) || resolvedName === senderId;
 
         if (isGenericName) {
             try {
-                // Try multiple token fields — integrations may save under different keys
                 const token = tenantData?.accessToken || tenantData?.pageAccessToken || tenantData?.token;
                 if (token) {
-                    // Request broad fields and fall back gracefully
+                    // Try multiple fields to bypass permission gaps
                     const fields = provider === 'instagram'
-                        ? 'name,username,biography'
-                        : 'name,first_name,last_name';
+                        ? 'name,username,profile_pic,first_name,last_name'
+                        : 'name,first_name,last_name,profile_pic';
 
                     const profileUrl = `https://graph.facebook.com/v21.0/${senderId}?fields=${fields}&access_token=${token}`;
                     const profileRes = await fetch(profileUrl);
                     const profileData = await profileRes.json();
 
-                    if (profileData?.error) {
-                        // Log the full error so we can diagnose permission issues
-                        debugLog(`[Profile Fetch] Meta API Error: ${JSON.stringify(profileData.error)}`);
-                    } else if (profileData) {
-                        if (provider === 'instagram') {
-                            resolvedName = profileData.username || profileData.name || resolvedName;
-                        } else {
-                            // Prefer full 'name' field; fallback to first+last
-                            const fullName = profileData.name ||
-                                `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim();
-                            if (fullName) resolvedName = fullName;
-                        }
-                        debugLog(`[Profile Fetch] Resolved name: "${resolvedName}" for senderId: ${senderId}`);
-                    }
-                } else {
-                    debugLog(`[Profile Fetch] No access token available in tenantData. Keys: ${Object.keys(tenantData || {}).join(', ')}`);
-                }
-            } catch (err) {
-                debugLog(`[Profile Fetch] Exception: ${err}`);
-            }
-        }
-
-
-        // 5. SAFE FUSION: If no contact found by metaSenderId, try searching by name
-        if (!existingContactId && resolvedName) {
-            const nameMatchSnap = await db.collection(`${entityPath}/contacts`)
-                .where('name', '==', resolvedName)
-                .get();
-            
-            // ARCHITECT RULE: Only merge if exactly ONE found and it doesn't have a conflicting platform ID
-            if (nameMatchSnap.size === 1) {
-                const potentialContact = nameMatchSnap.docs[0];
-                const pData = potentialContact.data();
-                if (!pData.metaSenderId || pData.metaSenderId === senderId) {
-                    existingContactId = potentialContact.id;
-                    existingContactName = resolvedName;
-                    targetGroupId = pData.kanbanGroupId;
-                    const contactCardId = pData.kanbanCardId;
-
-                    if (targetGroupId && contactCardId) {
-                        const cardRef = db.doc(`${entityPath}/kanban-groups/${targetGroupId}/cards/${contactCardId}`);
-                        const cardGet = await cardRef.get();
-                        if (cardGet.exists) {
-                            targetCardDoc = cardGet;
-                            debugLog(`[Safe Fusion] Link successful with contact ${existingContactId} (${resolvedName})`);
+                    if (profileData && !profileData.error) {
+                        const fullName = profileData.name || 
+                                       `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim() ||
+                                       profileData.username;
+                        
+                        if (fullName && !isGenericProfileName(fullName)) {
+                            resolvedName = fullName;
+                            debugLog(`[Profile Fetch] ✅ Resolved: "${resolvedName}"`);
                         }
                     }
                 }
-            }
+            } catch (err) { }
         }
 
-        // 6. FALLBACK SEARCH: collectionGroup query (COLLECTION_GROUP index, avoids per-group loop)
+        // 5. SAFETY CHECK: Re-verify card existence JUST before creation (Universal Deduplication)
+        debugLog(`[POST] Phase 5: Anti-Duplicate DB Checks...`);
         if (!targetCardDoc) {
-            debugLog(`[POST] No card found via contact. Searching collectionGroup for platform_ids.${provider} == ${senderId}...`);
-            const allCardsSnap = await db.collectionGroup('cards')
-                .where(`platform_ids.${provider}`, '==', senderId)
+             const finalSafetySnap = await db.collectionGroup('cards')
+                .where('metaSenderId', '==', senderId)
                 .get();
-
-            const tenantCards = allCardsSnap.docs
-                .filter(d => d.ref.path.startsWith(entityPath + '/'))
-                .sort((a, b) => {
-                    const tA = (a.data().updatedAt?.toDate?.() || new Date(0)).getTime();
-                    const tB = (b.data().updatedAt?.toDate?.() || new Date(0)).getTime();
-                    return tB - tA;
-                });
-
-            if (tenantCards.length > 0) {
-                targetCardDoc = tenantCards[0];
-                const pathParts = tenantCards[0].ref.path.split('/');
-                const gIdx = pathParts.indexOf('kanban-groups');
-                targetGroupId = gIdx !== -1 ? pathParts[gIdx + 1] : null;
-                debugLog(`[POST] Found existing card via collectionGroup: ${targetCardDoc.id} in group ${targetGroupId}`);
-            }
-        }
-
-        if (targetCardDoc && isGenericProfileName(resolvedName)) {
-            const cardData = targetCardDoc.data();
-            if (!isGenericProfileName(cardData?.contactName)) {
-                resolvedName = cardData.contactName;
-            }
-        }
-
-        if (!targetCardDoc && existingContactId) {
-            debugLog(`[POST] No card found yet. Searching collectionGroup for contactId/crmId == ${existingContactId}...`);
-            const [byContactIdSnap, byCrmIdSnap] = await Promise.all([
-                db.collectionGroup('cards').where('contactId', '==', existingContactId).get(),
-                db.collectionGroup('cards').where('crmId', '==', existingContactId).get()
-            ]);
-
-            const tenantCards = [...byContactIdSnap.docs, ...byCrmIdSnap.docs]
-                .filter((doc, idx, arr) => arr.findIndex(d => d.ref.path === doc.ref.path) === idx)
-                .filter(d => d.ref.path.startsWith(entityPath + '/'))
-                .sort((a, b) => {
-                    const tA = (a.data().updatedAt?.toDate?.() || new Date(0)).getTime();
-                    const tB = (b.data().updatedAt?.toDate?.() || new Date(0)).getTime();
-                    return tB - tA;
-                });
-
-            if (tenantCards.length > 0) {
-                targetCardDoc = tenantCards[0];
-                const pathParts = tenantCards[0].ref.path.split('/');
-                const gIdx = pathParts.indexOf('kanban-groups');
-                targetGroupId = gIdx !== -1 ? pathParts[gIdx + 1] : null;
-                debugLog(`[POST] Found existing card via contactId/crmId: ${targetCardDoc.id} in group ${targetGroupId}`);
-            }
-        }
-
-        if (targetCardDoc && !existingContactId) {
-            const cardData = targetCardDoc.data();
-            const linkedContactId = cardData?.contactId || cardData?.crmId || null;
-            if (linkedContactId) {
-                const linkedContactRef = db.collection(`${entityPath}/contacts`).doc(linkedContactId);
-                const linkedContactSnap = await linkedContactRef.get();
-                if (linkedContactSnap.exists) {
-                    const linkedContactData = linkedContactSnap.data() || {};
-                    existingContactId = linkedContactSnap.id;
-                    existingContactName = linkedContactData.name || existingContactName;
-                    if (isGenericProfileName(resolvedName) && !isGenericProfileName(existingContactName)) {
-                        resolvedName = existingContactName;
-                    }
-                }
-            }
+             const entityCards = finalSafetySnap.docs.filter(d => d.ref.path.startsWith(entityPath + '/'));
+             if (entityCards.length > 0) {
+                 targetCardDoc = entityCards.sort((a,b) => (b.data().updatedAt?.seconds || 0) - (a.data().updatedAt?.seconds || 0))[0];
+                 const pathParts = targetCardDoc.ref.path.split('/');
+                 const gIdx = pathParts.indexOf('kanban-groups');
+                 targetGroupId = gIdx !== -1 ? pathParts[gIdx + 1] : null;
+                 debugLog(`[Webhook] 🛡️ Final Safety: Blocked double creation for ${senderId}`);
+             }
         }
 
         const groupsRef = db.collection(`${entityPath}/kanban-groups`);
         const groupsSnapshot = await groupsRef.get();
         const finalResolvedName = !isGenericProfileName(resolvedName)
             ? resolvedName
-            : !isGenericProfileName(existingContactName)
-                ? existingContactName
-                : buildMetaFallbackName(provider, senderId);
+            : !isGenericProfileName(senderNameFromPayload)
+                ? senderNameFromPayload
+                : !isGenericProfileName(existingContactName)
+                    ? existingContactName
+                    : buildMetaFallbackName(provider, senderId);
 
         const newMessage = {
             sender: 'user',
             text: text,
             timestamp: admin.firestore.Timestamp.now(),
-            messageId: messaging.message?.mid || `mid_${Date.now()}`,
+            messageId: messaging?.message?.mid || `mid_${Date.now()}`,
             platform: provider,
             ...(firstAttachment ? {
                 fileUrl: firstAttachment?.payload?.url || null,
@@ -374,15 +357,17 @@ export async function POST(req: Request) {
         if (targetCardDoc && targetGroupId) {
             const queueItem = {
                 text: botInputText || text || '',
-                messageId: messaging.message?.mid || `mid_${Date.now()}`,
+                messageId: messaging?.message?.mid || `mid_${Date.now()}`,
                 platform: provider,
                 from: senderId,
                 timestamp: Date.now()
             };
 
-            // UPDATING EXISTING CARD
-            await targetCardDoc.ref.update({
-                contactName: finalResolvedName,
+            // 🛡️ PROTECCIÓN DE IDENTIDAD: Solo actualizar nombre si es genérico o está vacío
+            const currentName = targetCardDoc.data()?.contactName || '';
+            const shouldUpdateName = !currentName || isGenericProfileName(currentName);
+
+            const cardUpdate: any = {
                 lastMessage: text.length > 40 ? text.substring(0, 37) + '...' : text,
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 unreadCount: admin.firestore.FieldValue.increment(1),
@@ -391,38 +376,58 @@ export async function POST(req: Request) {
                 status: 'open',
                 source: provider.toUpperCase(),
                 primary_channel: provider.toLowerCase(),
+                channel: provider.toLowerCase(),
                 contactId: existingContactId || targetCardDoc.data()?.contactId || null,
                 crmId: existingContactId || targetCardDoc.data()?.crmId || null,
                 [`platform_ids.${provider.toLowerCase()}`]: senderId
-            });
+            };
 
-            // Sincronizar metaSenderId, source y nombre con el contacto existente
+            if (shouldUpdateName) {
+                cardUpdate.contactName = finalResolvedName;
+            }
+
+            await targetCardDoc.ref.update(cardUpdate);
+
+            // Sincronizar contacto solo si el nombre debe actualizarse
             if (existingContactId) {
-                await db.collection(`${entityPath}/contacts`).doc(existingContactId).update({
-                    name: finalResolvedName,
+                const contactUpdate: any = {
                     metaSenderId: senderId,
                     kanbanGroupId: targetGroupId,
                     kanbanCardId: targetCardDoc.id,
                     source: provider.toUpperCase(),
-                    updatedAt: admin.firestore.Timestamp.now()
-                });
+                    updatedAt: admin.firestore.Timestamp.now(),
+                    [`platform_ids.${provider.toLowerCase()}`]: senderId
+                };
+                if (shouldUpdateName) contactUpdate.name = finalResolvedName;
+                await db.collection(`${entityPath}/contacts`).doc(existingContactId).update(contactUpdate);
             }
         } else {
-            // Create NEW card in Inbox
-            let destinationGroupId = targetGroupId;
-            if (!destinationGroupId) {
-                const fallbackGroup = groupsSnapshot.docs.find(g => (g.data().name || '').toLowerCase().includes('inbox')) || groupsSnapshot.docs[0];
-                destinationGroupId = fallbackGroup ? fallbackGroup.id : 'default_inbox';
-
-                if (destinationGroupId === 'default_inbox') {
-                    await db.collection(`${entityPath}/kanban-groups`).doc('default_inbox').set({
-                        name: 'Inbox', order: 0, color: '#3B82F6', createdAt: admin.firestore.FieldValue.serverTimestamp()
-                    }, { merge: true });
-                }
+            // 🎯 CLASIFICACIÓN POR BANDEJAS (Rule 1 & 5)
+            let destinationGroupId = '';
+            const channelKey = (provider || 'messenger').toLowerCase();
+            const channelLabel = channelKey === 'instagram' ? 'Instagram' : 'Messenger';
+            
+            destinationGroupId = `group_${channelKey}`;
+            
+            const groupRef = db.collection(`${entityPath}/kanban-groups`).doc(destinationGroupId);
+            const groupSnap = await groupRef.get();
+            
+            if (!groupSnap.exists) {
+                debugLog(`[Kanban] 📦 Creating dedicated tray for: ${channelLabel}`);
+                await groupRef.set({
+                    id: destinationGroupId,
+                    name: channelLabel,
+                    type: channelKey,
+                    order: channelKey === 'instagram' ? 3 : 4,
+                    color: channelKey === 'instagram' ? '#E1306C' : '#006AFF',
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
             }
 
+            debugLog(`[POST] Preparing to newCardRef.set() to group ${destinationGroupId}`);
             const newCardRef = db.collection(`${entityPath}/kanban-groups/${destinationGroupId}/cards`).doc();
-            const contactIdToUse = existingContactId || String(Date.now()).slice(-10);
+            const contactIdToUse = existingContactId || `c_${Date.now().toString().slice(-8)}`;
 
             const queueItem = {
                 text: botInputText || text || '',
@@ -432,21 +437,27 @@ export async function POST(req: Request) {
                 timestamp: Date.now()
             };
 
+            debugLog(`[POST] Writing payload to db! contactName: ${finalResolvedName}`);
             await newCardRef.set({
+                id: newCardRef.id,
                 crmId: contactIdToUse,
+// ... ignoring some lines because replace multiple chunks must exactly match 
+// wait, I will just match a smaller chunk.
                 contactId: contactIdToUse,
                 contactName: finalResolvedName,
                 contactNumber: senderId,
                 metaSenderId: senderId,
-                lastMessage: text.length > 1024 ? text.substring(0, 1021) + '...' : text,
+                lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
                 updatedAt: admin.firestore.Timestamp.now(),
                 createdAt: admin.firestore.Timestamp.now(),
                 messages: [newMessage],
                 'botState.messageQueue': [queueItem],
+                'botState.status': 'active',
                 unreadCount: 1,
                 status: 'open',
                 source: provider.toUpperCase(),
                 primary_channel: provider.toLowerCase(),
+                channel: provider.toLowerCase(),
                 platform_ids: { [provider.toLowerCase()]: senderId }
             });
 
@@ -458,6 +469,7 @@ export async function POST(req: Request) {
                 kanbanCardId: newCardRef.id,
                 source: provider.toUpperCase(),
                 updatedAt: admin.firestore.Timestamp.now(),
+                [`platform_ids.${provider.toLowerCase()}`]: senderId
             };
 
             if (!existingContactId) {
@@ -468,15 +480,16 @@ export async function POST(req: Request) {
 
             cardId = newCardRef.id;
             groupId = destinationGroupId;
+            debugLog(`[Webhook] ✨ NEW CARD CREATED: ${cardId} in group ${groupId}`);
         }
 
         // 4. TRIGGER UNIVERSAL CHATBOT
         if (groupId && cardId) {
             console.log(`[Meta Webhook] 🤖 Triggering chatbot for ${provider} | User: ${userId} | Entity: ${entityId}`);
             
-            // TELEMETRY: Mark ingestion as successful in system logs
+            // TELEMETRY: Mark ingestion as successful in internal logs
             try {
-                await db.collection(`${entityPath}/system_logs`).add({
+                await db.collection(`${entityPath}/internal_logs`).add({
                     timestamp: admin.firestore.FieldValue.serverTimestamp(),
                     type: `webhook_ingested_${provider}`,
                     text: text.substring(0, 50),
@@ -487,7 +500,7 @@ export async function POST(req: Request) {
             try {
                 await processChatbotFlow({
                     userId, entityId, groupId, cardId, platform: provider, from: senderId, text: botInputText || text,
-                    messageId: messaging.message?.mid || `mid_${Date.now()}`
+                    messageId: messaging?.message?.mid || `mid_${Date.now()}`
                 });
                 console.log(`[Meta Webhook] ✅ Chatbot process completed for ${senderId}`);
             } catch (botError: any) {
@@ -496,8 +509,10 @@ export async function POST(req: Request) {
             }
         }
 
+        debugLog(`[POST] 🚀 Successfully finished webhook control flow!`);
         return NextResponse.json({ success: true });
     } catch (error: any) {
+        debugLog(`[POST CRITICAL EXCEPTION] 💥 ${error.message}\n${error.stack}`);
         return NextResponse.json({
             success: false,
             error: 'Webhook Crash: ' + (error.message || 'Unknown'),
@@ -505,5 +520,3 @@ export async function POST(req: Request) {
         }, { status: 500 });
     }
 }
-
-// Triggering deployment with verified identity

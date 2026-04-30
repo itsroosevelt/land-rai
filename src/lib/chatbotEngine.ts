@@ -6,7 +6,7 @@ export interface ChatbotContext {
     entityId: string;
     groupId: string;
     cardId: string;
-    platform: 'whatsapp' | 'messenger' | 'instagram' | 'telegram' | 'gmail';
+    platform: 'whatsapp' | 'messenger' | 'instagram' | 'telegram' | 'gmail' | 'x_twitter' | 'x';
     from: string;
     text: string;
     messageId?: string;
@@ -148,7 +148,8 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     const normalizedInput = text.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     
     // Command categorization (Master Engine Sync)
-    const isReset = /^(reinicia(r| todo ahora)?|reinicio|reset|clear|limpiar)/i.test(normalizedInput);
+    // Regex expanded to catch typos like 'reinciar', 'reiniciar', 'restart', etc.
+    const isReset = /^(reinici[ao]r?|reinici|reinci(ar)?|reset|restart|clear|limpiar|borrar)/i.test(normalizedInput);
     const isMenu = /^(menu|opciones|ayuda|help)/i.test(normalizedInput);
     const isStop = /^(detener|stop|salir|chau|adios)/i.test(normalizedInput);
     const isStartTrigger = /^(hola|hi|buenas|inicio|start|buen(as)?\s*(dias|tardes|noches)|que\s*tal|saludos)/i.test(normalizedInput);
@@ -186,8 +187,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             'botState.status': 'active',
             'botState.waitingForInput': false,
             'botState.currentNodeId': null,
-            customFields: {},
-            contactName: 'Usuario'
+            customFields: {}
         };
 
         // If it's a hard reset, we clear the queue to prevent "echoes" of previous flow messages
@@ -201,7 +201,6 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         // Sync local cardData for current cycle execution
         cardData.botState = { ...(cardData.botState || {}), status: 'active', waitingForInput: false, currentNodeId: null };
         cardData.customFields = {};
-        cardData.contactName = 'Usuario';
         
         if (isReset) {
             const resetText = "🔄 Reinicio completado. Por favor, envíanos un mensaje para empezar de nuevo.";
@@ -222,7 +221,8 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         }
     }
 
-    let bState = cardData.botState || {};
+    // cardData.botState is the live source of truth (updated by Master Bypass above if needed)
+
 
     // --- C. FLOW RESOLUTION (Rule 4: Root Isolation) ---
     const botsRef = db.collection(`${entityPath}/chatbots`);
@@ -282,11 +282,17 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     };
 
     // --- INNER EXECUTION LOOP ---
-    let currentNodeId: string | null = bState.currentNodeId || null;
-    let waitingForInput = bState.waitingForInput || false;
+    // CRITICAL: Read bState AFTER Master Bypass updates cardData.botState in memory
+    // so that waitingForInput reflects the current state of this execution cycle.
+    let currentNodeId: string | null = cardData.botState?.currentNodeId || null;
+    let waitingForInput = cardData.botState?.waitingForInput || false;
 
-    // FIX: If status is 'active' but we have no node (stuck) or it's 'completed', we should try to restart
-    const shouldRestart = isStartTrigger || !currentNodeId || bState.status === 'completed' || bState.status === 'inactive';
+    // FIX: Only restart if NOT explicitly waiting for user input.
+    // isStartTrigger alone should NOT override an active waitingForInput state — 
+    // only isReset/isMenu hard commands should force a restart.
+    const shouldRestart = (isReset || isMenu)
+        ? true
+        : (!waitingForInput && (!currentNodeId || cardData.botState?.status === 'completed' || cardData.botState?.status === 'inactive' || !cardData.botState?.status));
 
     // Handle incoming input for current node
     if (waitingForInput && currentNodeId) {
@@ -352,7 +358,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 const updatePayload: any = { [`customFields.${varName}`]: extracted, 'botState.waitingForInput': false };
                 
                 if (isName) {
-                    updatePayload.contactName = extracted;
+                    // We NO LONGER modify contactName here per user request. The name assigned in Kanban is permanent.
                     sessionVars.nombre = extracted;
                     sessionVars.name = extracted;
                 }

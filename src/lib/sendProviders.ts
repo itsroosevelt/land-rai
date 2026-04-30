@@ -276,29 +276,50 @@ export async function sendWhatsAppMessage(
     // 1. Multi-Tenant Token Resolution
     if (options.userId && options.entityId) {
         try {
-            // First try standard paths for the specific user
-            const configPath = `users/${options.userId}/entities/${options.entityId}/integrations/whatsapp`;
-            const internalPath = `users/${options.userId}/entities/${options.entityId}/integrations/whatsapp_internal`;
+            const integrationsPath = `users/${options.userId}/entities/${options.entityId}/integrations`;
+            const intSnap = await db.collection(integrationsPath).get();
 
-            const configDoc = await db.doc(configPath).get();
-            let data = configDoc.data();
+            let foundToken: string | null = null;
+            let foundPhone: string | null = null;
 
-            if (!data?.accessToken || !data?.phoneNumberId) {
-                const internalDoc = await db.doc(internalPath).get();
-                if (internalDoc.exists) data = internalDoc.data();
+            for (const doc of intSnap.docs) {
+                const d = doc.data();
+                const t = d?.accessToken || d?.token || d?.access_token || d?.pageAccessToken;
+                const p = d?.phoneNumberId || d?.phone_number_id || d?.phoneId;
+                
+                // 🛡️ FILTRO CRÍTICO: Asegurar que el token sea de Meta (Empieza con EAA)
+                // Evitar usar tokens de Gmail (que empiezan con ya29) para WhatsApp
+                if (t && typeof t === 'string' && t.startsWith('EAA')) {
+                    if (!foundToken) {
+                        foundToken = t;
+                        console.log(`[WhatsApp] 🛡️ Meta Token found in document: ${doc.id}`);
+                    }
+                }
+                
+                if (p && !foundPhone) {
+                    foundPhone = p;
+                    console.log(`[WhatsApp] 📱 PhoneID found in document: ${doc.id}`);
+                }
             }
 
-            if (data?.phoneNumberId) {
-                phoneNumberId = data.phoneNumberId;
-            }
-            if (data?.accessToken) {
-                token = data.accessToken;
-            }
+            if (foundToken) token = foundToken;
+            if (foundPhone) phoneNumberId = foundPhone;
 
-            if (phoneNumberId) {
-                console.log(`[sendWhatsAppMessage] Resolved Config: PhoneID=${phoneNumberId?.substring(0, 4)}... | CustomToken=${!!data?.accessToken}`);
-            } else {
-                console.warn(`[sendWhatsAppMessage] No valid PhoneID found for entity ${options.entityId}`);
+            console.log(`[WhatsApp] 🎯 Final Resolution: hasToken=${!!token}, hasPhoneId=${!!phoneNumberId}`);
+
+            // Fallback de Casing si aún falta algo
+            if (!token || !phoneNumberId) {
+                const allUsers = await db.collection('users').get();
+                const match = allUsers.docs.find(u => u.id.toLowerCase() === options.userId!.toLowerCase());
+                if (match && match.id !== options.userId) {
+                    const altSnap = await db.collection(`users/${match.id}/entities/${options.entityId}/integrations`).get();
+                    for (const doc of altSnap.docs) {
+                        const d = doc.data();
+                        const t = d?.accessToken || d?.token || d?.access_token;
+                        if (t && typeof t === 'string' && t.startsWith('EAA')) token = t;
+                        if (!phoneNumberId) phoneNumberId = d?.phoneNumberId || d?.phone_number_id;
+                    }
+                }
             }
         } catch (err) {
             console.error(`[sendWhatsAppMessage] Error resolving config:`, err);

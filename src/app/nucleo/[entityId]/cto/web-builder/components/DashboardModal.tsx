@@ -1,6 +1,7 @@
 import React, { useState, useRef } from "react";
-import { X, LayoutGrid, Clock, Trash2, Globe, ExternalLink, Plus, Pencil, Check } from "lucide-react";
+import { X, LayoutGrid, Clock, Trash2, Globe, ExternalLink, Plus, Pencil, Check, Sparkles, Search, Layers, Rocket, Monitor, Box, Filter } from "lucide-react";
 import { WebProject } from "../types";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface DashboardModalProps {
     show: boolean;
@@ -19,6 +20,7 @@ export const DashboardModal = ({
 }: DashboardModalProps) => {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editingName, setEditingName] = useState("");
+    const [searchTerm, setSearchTerm] = useState("");
     const inputRef = useRef<HTMLInputElement>(null);
 
     if (!show) return null;
@@ -44,130 +46,201 @@ export const DashboardModal = ({
         if (e.key === 'Escape') setEditingId(null);
     };
 
-    return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
-            <div className="w-full max-w-5xl bg-[#09090b] border border-[#222] rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    const filteredProjects = projects.filter(p => 
+        p.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
-                {/* Header */}
-                <div className="p-8 border-b border-[#1a1a1a] flex items-center justify-between bg-gradient-to-r from-[#09090b] to-[#111]">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20">
-                            <LayoutGrid className="w-6 h-6 text-white" />
+    return (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 md:p-12 bg-black/85 backdrop-blur-2xl animate-in fade-in duration-500">
+            {/* Background Orbs */}
+            <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none animate-pulse" />
+            <div className="absolute bottom-1/4 right-1/4 w-[300px] h-[300px] bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none animate-pulse duration-700" />
+
+            <motion.div 
+                initial={{ opacity: 0, scale: 0.98, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                className="w-full max-w-6xl bg-[#070708]/90 border border-white/10 rounded-[2.5rem] shadow-[0_32px_128px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col max-h-[85vh] relative backdrop-blur-3xl"
+            >
+                {/* Header Section */}
+                <div className="px-8 pt-8 pb-6 flex flex-col gap-6 relative border-b border-white/5">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <div className="relative group">
+                                <div className="absolute inset-0 bg-blue-500 blur-xl opacity-20 group-hover:opacity-40 transition-opacity" />
+                                <div className="relative w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[1rem] flex items-center justify-center shadow-2xl border border-white/10">
+                                    <Rocket className="w-6 h-6 text-white" />
+                                </div>
+                            </div>
+                            <div>
+                                <h2 className="text-3xl font-black tracking-tight text-white bg-gradient-to-r from-white via-white to-white/60 bg-clip-text text-transparent">
+                                    My Projects
+                                </h2>
+                                <p className="text-[9px] text-gray-500 font-bold uppercase tracking-[0.25em] mt-1 flex items-center gap-2">
+                                    <Sparkles className="w-2.5 h-2.5 text-blue-500" />
+                                    Manage your digital ecosystem
+                                </p>
+                            </div>
                         </div>
-                        <div>
-                            <h2 className="text-2xl font-black tracking-tighter text-white">Mis Proyectos</h2>
-                            <p className="text-xs text-gray-500 font-medium uppercase tracking-widest mt-1">Gestiona y edita tus sitios web</p>
+
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={handleNewProject}
+                                className="group relative px-6 py-3.5 bg-white text-black font-black rounded-xl hover:scale-105 active:scale-95 transition-all text-[10px] uppercase tracking-[0.15em] shadow-[0_15px_30px_rgba(255,255,255,0.08)] overflow-hidden"
+                            >
+                                <div className="absolute inset-0 bg-gradient-to-r from-blue-50 to-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                <span className="relative flex items-center gap-2.5">
+                                    <Plus className="w-3.5 h-3.5 stroke-[3]" /> New Project
+                                </span>
+                            </button>
+                            <button 
+                                onClick={() => setShow(false)} 
+                                className="w-10 h-10 flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all group"
+                            >
+                                <X className="w-5 h-5 text-gray-500 group-hover:text-white transition-colors" />
+                            </button>
                         </div>
                     </div>
+
+                    {/* Search Bar */}
                     <div className="flex items-center gap-3">
-                        <button
-                            onClick={handleNewProject}
-                            className="flex items-center gap-2 px-6 py-3 bg-white text-black font-bold rounded-xl hover:bg-gray-100 transition-all text-xs"
-                        >
-                            <Plus className="w-4 h-4" /> Nuevo Proyecto
-                        </button>
-                        <button onClick={() => setShow(false)} className="p-3 hover:bg-white/5 rounded-xl transition-colors">
-                            <X className="w-6 h-6 text-gray-500" />
-                        </button>
+                        <div className="flex-1 relative group">
+                            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                                <Search className="w-3.5 h-3.5 text-gray-600 group-focus-within:text-blue-500 transition-colors" />
+                            </div>
+                            <input 
+                                type="text"
+                                placeholder="Search by name..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full bg-white/[0.03] border border-white/5 rounded-xl py-3 pl-11 pr-5 text-xs text-white placeholder:text-gray-600 outline-none focus:border-blue-500/40 focus:bg-white/[0.06] transition-all"
+                            />
+                        </div>
+                        <div className="px-4 py-3 bg-white/[0.03] border border-white/5 rounded-xl flex items-center gap-2.5">
+                            <Filter className="w-3.5 h-3.5 text-gray-600" />
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                                {projects.length} {projects.length === 1 ? 'Project' : 'Projects'}
+                            </span>
+                        </div>
                     </div>
                 </div>
 
-                {/* Grid */}
-                <div className="flex-1 overflow-y-auto p-10 custom-scrollbar bg-[#0c0c0e]">
-                    {projects.length === 0 ? (
-                        <div className="py-16 flex flex-col items-center justify-center opacity-30">
-                            <Globe className="w-12 h-12 text-gray-600 mb-4" />
-                            <p className="text-xs font-bold text-white uppercase tracking-widest">No hay proyectos</p>
-                            <button onClick={handleNewProject} className="mt-3 text-xs text-blue-500 hover:underline">
-                                ¡Crea tu primer proyecto!
+                {/* Content Area */}
+                <div className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-black/10">
+                    {filteredProjects.length === 0 ? (
+                        <div className="py-20 flex flex-col items-center justify-center text-center">
+                            <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-5 border border-white/5">
+                                <Box className="w-8 h-8 text-gray-700" />
+                            </div>
+                            <h3 className="text-[11px] font-black text-white uppercase tracking-widest mb-1.5">No results found</h3>
+                            <p className="text-[10px] text-gray-600 max-w-[180px] leading-relaxed">Try different search terms or create a new site.</p>
+                            <button onClick={handleNewProject} className="mt-5 text-[10px] text-blue-500 font-bold hover:text-blue-400 transition-colors uppercase tracking-[0.2em]">
+                                Create Project →
                             </button>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                            {projects.map(proj => (
-                                <div
-                                    key={proj.id}
-                                    onClick={() => { if (editingId !== proj.id) { handleSwitchProject(proj.id); setShow(false); } }}
-                                    className={`group relative bg-[#111] border rounded-2xl p-4 flex flex-col gap-3 transition-all cursor-pointer overflow-hidden ${activeProjectId === proj.id
-                                        ? 'border-blue-500/50 shadow-xl shadow-blue-500/10'
-                                        : 'border-[#222] hover:border-[#333] hover:bg-[#141417]'
-                                        }`}
-                                >
-                                    {/* Top row: icon + actions */}
-                                    <div className="flex items-start justify-between">
-                                        <div className={`p-2 bg-[#18181b] border border-[#27272a] rounded-lg`}>
-                                            <Globe className={`w-4 h-4 ${activeProjectId === proj.id ? 'text-blue-500' : 'text-gray-500'}`} />
-                                        </div>
-                                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button
-                                                onClick={(e) => startEdit(e, proj)}
-                                                className="p-1.5 text-gray-600 hover:text-blue-400 transition-colors"
-                                                title="Renombrar"
-                                            >
-                                                <Pencil className="w-3.5 h-3.5" />
-                                            </button>
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); deleteProject(proj.id); }}
-                                                className="p-1.5 text-gray-600 hover:text-red-500 transition-colors"
-                                                title="Eliminar"
-                                            >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
-                                        </div>
-                                    </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                            <AnimatePresence mode="popLayout">
+                                {filteredProjects.map((proj, idx) => (
+                                    <motion.div
+                                        layout
+                                        initial={{ opacity: 0, y: 15 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, scale: 0.95 }}
+                                        transition={{ delay: idx * 0.04 }}
+                                        key={proj.id}
+                                        onClick={() => { if (editingId !== proj.id) { handleSwitchProject(proj.id); setShow(false); } }}
+                                        className={`group relative bg-[#0d0d0f]/60 border rounded-[1.75rem] p-5 flex flex-col gap-5 transition-all cursor-pointer hover:-translate-y-1.5 ${activeProjectId === proj.id
+                                            ? 'border-blue-500/40 shadow-[0_15px_40px_rgba(59,130,246,0.1)] ring-1 ring-blue-500/20'
+                                            : 'border-white/5 hover:border-white/10 hover:bg-[#121216] shadow-xl'
+                                            }`}
+                                    >
+                                        {/* Glow effect on hover */}
+                                        <div className="absolute inset-0 bg-blue-500/[0.03] opacity-0 group-hover:opacity-100 rounded-[1.75rem] transition-opacity pointer-events-none" />
 
-                                    {/* Name — editable or static */}
-                                    {editingId === proj.id ? (
-                                        <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
-                                            <input
-                                                ref={inputRef}
-                                                value={editingName}
-                                                onChange={e => setEditingName(e.target.value)}
-                                                onKeyDown={handleKeyDown}
-                                                className="flex-1 min-w-0 bg-[#1a1a1e] border border-blue-500/50 rounded-md px-2 py-1 text-xs text-white font-bold outline-none"
-                                                autoFocus
-                                            />
-                                            <button
-                                                onClick={confirmEdit}
-                                                className="p-1 bg-blue-600 rounded-md text-white hover:bg-blue-500 transition-colors"
-                                            >
-                                                <Check className="w-3 h-3" />
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <h3 className="text-xs font-black tracking-tight text-white truncate leading-relaxed">
-                                            {proj.name}
-                                        </h3>
-                                    )}
-
-                                    {/* Footer meta */}
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <div className="flex items-center gap-1 px-1.5 py-0.5 bg-white/5 rounded border border-white/5">
-                                            <Clock className="w-2.5 h-2.5 text-gray-600" />
-                                            <span className="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">
-                                                {new Date(proj.lastModified).toLocaleDateString('es-MX', { month: 'short', day: 'numeric' })}
-                                            </span>
-                                        </div>
-                                        {proj.previewUrl && (
-                                            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-green-500/10 rounded border border-green-500/10">
-                                                <ExternalLink className="w-2.5 h-2.5 text-green-500" />
-                                                <span className="text-[9px] font-bold text-green-500 uppercase tracking-tighter">Live</span>
+                                        {/* Card Header: Icon & Actions */}
+                                        <div className="flex items-center justify-between relative z-10">
+                                            <div className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-300 ${activeProjectId === proj.id 
+                                                ? 'bg-blue-600 shadow-[0_0_15px_rgba(59,130,246,0.35)]' 
+                                                : 'bg-white/5 group-hover:bg-white/10'}`}>
+                                                <Monitor className={`w-5 h-5 ${activeProjectId === proj.id ? 'text-white' : 'text-gray-500 group-hover:text-blue-400'} transition-colors duration-300`} />
                                             </div>
-                                        )}
-                                    </div>
-
-                                    {/* Active badge */}
-                                    {activeProjectId === proj.id && (
-                                        <div className="absolute top-3 right-3 bg-blue-600 text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full text-white">
-                                            Activo
+                                            
+                                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all translate-x-1.5 group-hover:translate-x-0">
+                                                <button
+                                                    onClick={(e) => startEdit(e, proj)}
+                                                    className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
+                                                    title="Rename"
+                                                >
+                                                    <Pencil className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); deleteProject(proj.id); }}
+                                                    className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            </div>
                                         </div>
-                                    )}
-                                </div>
-                            ))}
+
+                                        {/* Card Body: Title */}
+                                        <div className="flex-1 relative z-10">
+                                            {editingId === proj.id ? (
+                                                <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                                                    <input
+                                                        ref={inputRef}
+                                                        value={editingName}
+                                                        onChange={e => setEditingName(e.target.value)}
+                                                        onKeyDown={handleKeyDown}
+                                                        className="flex-1 min-w-0 bg-white/5 border border-blue-500/40 rounded-lg px-3 py-1.5 text-xs text-white font-bold outline-none"
+                                                        autoFocus
+                                                    />
+                                                    <button
+                                                        onClick={confirmEdit}
+                                                        className="w-8 h-8 flex items-center justify-center bg-blue-600 rounded-lg text-white hover:bg-blue-500 transition-all active:scale-90"
+                                                    >
+                                                        <Check className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-0.5">
+                                                    <h3 className="text-[13px] font-black tracking-tight text-white group-hover:text-blue-400 transition-colors truncate">
+                                                        {proj.name}
+                                                    </h3>
+                                                    <p className="text-[9px] text-gray-600 font-bold uppercase tracking-[0.15em]">
+                                                        {proj.repoName || "Local only"}
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Card Footer: Metadata */}
+                                        <div className="flex items-center justify-between border-t border-white/5 pt-4 relative z-10">
+                                            <div className="flex items-center gap-1.5 px-2 py-1 bg-white/[0.03] rounded-lg border border-white/5">
+                                                <Clock className="w-2.5 h-2.5 text-gray-600" />
+                                                <span className="text-[8px] font-bold text-gray-500 uppercase tracking-widest">
+                                                    {new Date(proj.lastModified).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                                </span>
+                                            </div>
+                                            
+                                            {activeProjectId === proj.id ? (
+                                                <span className="text-[9px] font-black text-blue-500 uppercase tracking-tight flex items-center gap-1">
+                                                    <div className="w-1 h-1 rounded-full bg-blue-500 animate-pulse" />
+                                                    Active
+                                                </span>
+                                            ) : (
+                                                <div className="w-7 h-7 flex items-center justify-center rounded-full bg-white/5 text-gray-600 group-hover:text-white group-hover:bg-blue-600 transition-all shadow-sm">
+                                                    <ExternalLink className="w-3.5 h-3.5" />
+                                                </div>
+                                            )}
+                                        </div>
+                                    </motion.div>
+                                ))}
+                            </AnimatePresence>
                         </div>
                     )}
                 </div>
-            </div>
+            </motion.div>
         </div>
     );
 };

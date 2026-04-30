@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "next dev -p 3000",
+    "dev:full": "next dev -p 3000",
     "build": "next build",
     "start": "next start",
     "lint": "next lint --dir src",
@@ -76,6 +77,7 @@
     "cmdk": "^1.1.1",
     "dagre": "^0.8.5",
     "date-fns": "^3.6.0",
+    "dotenv": "^17.4.2",
     "emoji-picker-react": "^4.16.1",
     "firebase": "^12.11.0",
     "firebase-admin": "^13.6.0",
