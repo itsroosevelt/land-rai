@@ -386,6 +386,10 @@ export async function POST(req: Request) {
                 cardUpdate.contactName = finalResolvedName;
             }
 
+            cardId = targetCardDoc.id;
+            groupId = targetGroupId;
+            debugLog(`[Webhook] ✨ EXISTING CARD FOUND: ${cardId} in group ${groupId}`);
+
             await targetCardDoc.ref.update(cardUpdate);
 
             // Sincronizar contacto solo si el nombre debe actualizarse

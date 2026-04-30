@@ -296,6 +296,9 @@ export async function POST(req: Request) {
                 };
 
                 if (targetCardDoc && targetGroupId) {
+                    cardId = targetCardDoc.id;
+                    groupId = targetGroupId;
+
                     await targetCardDoc.ref.update({
                         lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
                         updatedAt: new Date(),
