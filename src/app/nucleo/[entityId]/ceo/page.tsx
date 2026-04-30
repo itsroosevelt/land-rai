@@ -1,36 +1,38 @@
 'use client';
 
 import React from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { TrendingUp, Globe, Shield, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-const tools = [
-    {
-        name: 'Executive KPI Dashboard',
-        description: 'Real-time overview of company performance, revenue, and growth.',
-        icon: TrendingUp,
-        path: '#',
-        color: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
-    },
-    {
-        name: 'Strategic Roadmap',
-        description: 'Long-term vision planning and quarterly objectives (OKRs).',
-        icon: Globe,
-        path: '#',
-        color: 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-    },
-    {
-        name: 'Board Reporting',
-        description: 'Automated generation of reports for investors and board members.',
-        icon: Shield,
-        path: '#',
-        color: 'bg-slate-500/10 text-slate-400 border-slate-500/20'
-    }
-];
-
 export default function CEODashboard() {
     const router = useRouter();
+    const params = useParams();
+    const entityId = params.entityId as string;
+
+    const tools = [
+        {
+            name: 'Executive KPI Dashboard',
+            description: 'Real-time overview of company performance, revenue, and growth.',
+            icon: TrendingUp,
+            path: `/nucleo/${entityId}/ceo/kpis`,
+            color: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
+        },
+        {
+            name: 'Strategic Roadmap',
+            description: 'Long-term vision planning and quarterly objectives (OKRs).',
+            icon: Globe,
+            path: `/nucleo/${entityId}/ceo/strategy`,
+            color: 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+        },
+        {
+            name: 'Investor Relations',
+            description: 'Automated generation of reports for investors and board members.',
+            icon: Shield,
+            path: `/nucleo/${entityId}/ceo/investor-relations`,
+            color: 'bg-slate-500/10 text-slate-400 border-slate-500/20'
+        }
+    ];
 
     return (
         <div className="min-h-screen bg-[#050505] text-white p-8 pt-24">
@@ -73,4 +75,3 @@ export default function CEODashboard() {
         </div>
     );
 }
-

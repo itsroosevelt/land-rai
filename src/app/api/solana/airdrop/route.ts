@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     }
 
     const decimals = 6;
-    const requiredTokenAmount = 100; // airdrop initial tokens
+    const requiredTokenAmount = 150; // Welcome airdrop: 150 tokens
     const amountToTransfer = BigInt(requiredTokenAmount * (10 ** decimals));
 
     transaction.add(

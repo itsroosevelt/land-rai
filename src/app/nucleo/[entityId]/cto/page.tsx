@@ -29,7 +29,7 @@ export default function CTODashboard() {
             name: 'Blockchain Nodes',
             description: 'Monitor RPC node health and validator status in real-time.',
             icon: Cpu,
-            path: '#',
+            path: `/nucleo/${entityId}/cto/cloud`,
             color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
         }
     ];
