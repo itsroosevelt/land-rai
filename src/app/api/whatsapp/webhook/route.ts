@@ -368,11 +368,12 @@ export async function POST(req: Request) {
                             updatedAt: new Date(),
                             createdAt: new Date(),
                             messages: [newMessage],
-                            'botState.messageQueue': [queueItem],
+                            botState: { messageQueue: [queueItem], status: 'active' },
                             unreadCount: 1,
                             status: 'open',
-                            source: 'whatsapp',
-                            primary_channel: 'whatsapp'
+                            source: 'WHATSAPP',
+                            primary_channel: 'whatsapp',
+                            platform_ids: { whatsapp: from }
                         });
 
                         // 3. Update or Create Contact Reference
@@ -406,7 +407,8 @@ export async function POST(req: Request) {
                 if (groupId && cardId) {
                     debugLog(`[POST] Triggering universal chatbot for whatsapp in tenant ${entityId}...`);
                     processChatbotFlow({
-                        userId, entityId, groupId, cardId, platform: 'whatsapp', from: from, text: text
+                        userId, entityId, groupId, cardId, platform: 'whatsapp', from: from, text: text,
+                        messageId: messageId
                     }).catch(botError => {
                         debugLog(`[POST] Chatbot Async Error: ${botError?.message || String(botError)}`);
                     });
