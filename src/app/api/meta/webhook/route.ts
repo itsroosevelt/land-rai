@@ -451,8 +451,10 @@ export async function POST(req: Request) {
                 updatedAt: admin.firestore.Timestamp.now(),
                 createdAt: admin.firestore.Timestamp.now(),
                 messages: [newMessage],
-                'botState.messageQueue': [queueItem],
-                'botState.status': 'active',
+                botState: {
+                    messageQueue: [queueItem],
+                    status: 'active'
+                },
                 unreadCount: 1,
                 status: 'open',
                 source: provider.toUpperCase(),
