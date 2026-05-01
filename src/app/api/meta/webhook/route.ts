@@ -53,8 +53,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-    debugLog('INCOMING HIT');
-
+    let entityPathForError = '';
     try {
         const rawBody = await req.text();
         let body;
@@ -67,7 +66,7 @@ export async function POST(req: Request) {
         const entry = body.entry?.[0];
         if (!entry) return NextResponse.json({ success: true, ignored: 'no_entry' });
 
-        const objectType = body.object; // 'page' or 'instagram'
+        const objectType = body.object;
         const targetId = entry.id; 
         const messaging = entry.messaging?.[0];
         const changes = entry.changes?.[0];
@@ -77,13 +76,9 @@ export async function POST(req: Request) {
         }
 
         const senderId = messaging?.sender?.id || changes?.value?.from?.id;
-        if (!senderId) {
-             return NextResponse.json({ success: true, ignored: 'no_sender' });
-        }
+        if (!senderId) return NextResponse.json({ success: true, ignored: 'no_sender' });
 
-        // Anti-echo fallback
         if (senderId === targetId || senderId === entry.id) {
-             debugLog(`🛡️ Ignoring self-echo message from ${senderId}`);
              return NextResponse.json({ success: true, ignored: 'self_echo' });
         }
 
@@ -108,8 +103,6 @@ export async function POST(req: Request) {
 
         const senderNameFromPayload = messaging?.sender?.name || changes?.value?.from?.username || changes?.value?.from?.name || null;
 
-        debugLog(`Searching tenant for Object: ${objectType} | Target ID: ${targetId}`);
-
         let tenantRef: admin.firestore.DocumentReference | null = null;
         let provider: 'messenger' | 'instagram' = objectType === 'instagram' ? 'instagram' : 'messenger';
         let tenantData: any = null;
@@ -120,18 +113,11 @@ export async function POST(req: Request) {
 
         for (const doc of integrationSnap.docs) {
             if (!doc.ref.path.includes('users/') || !doc.ref.path.includes('/entities/')) continue;
-
             const data = doc.data();
             const matchesPage = data.pageId === targetId || String(data.pageId) === String(targetId) || data.pageId === numericId;
             const matchesInsta = data.instagramId === targetId || String(data.instagramId) === String(targetId) || data.instagramId === numericId;
-
             if (matchesPage || matchesInsta) {
-                matchedIntegrations.push({
-                    doc,
-                    data,
-                    provider: matchesInsta ? 'instagram' : 'messenger',
-                    updatedAt: data.updatedAt?.toMillis?.() || data.updatedAt?.seconds * 1000 || 0
-                });
+                matchedIntegrations.push({ doc, data, provider: matchesInsta ? 'instagram' : 'messenger', updatedAt: data.updatedAt?.toMillis?.() || data.updatedAt?.seconds * 1000 || 0 });
             }
         }
 
@@ -141,82 +127,66 @@ export async function POST(req: Request) {
             tenantRef = selectedMatch.doc.ref;
             tenantData = selectedMatch.data;
             provider = selectedMatch.provider as 'instagram' | 'messenger';
-
-            const pParts = tenantRef!.path.split('/');
-            debugLog(`✅ MATCH FOUND: Message for ${targetId} routed to User: ${pParts[1]}, Entity: ${pParts[3]}`);
         }
 
-        if (!tenantRef) {
-            debugLog(`❌ Critical: No match found for targetId ${targetId}. Ignoring message.`);
-            return NextResponse.json({ success: true, ignored: 'unmapped_tenant' });
-        }
+        if (!tenantRef) return NextResponse.json({ success: true, ignored: 'unmapped_tenant' });
 
         const pathParts = tenantRef!.path.split('/');
         const userId = pathParts[1];
         const entityId = pathParts[3];
         const entityPath = `users/${userId}/entities/${entityId}`;
+        entityPathForError = entityPath;
 
-        // ENTERPRISE LOGGING
-        try {
-            await db.collection(`${entityPath}/internal_logs`).add({
-                timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                type: `${provider}_webhook_nextjs`,
-                senderId: senderId,
-                payload_type: messaging ? (messaging.message ? 'message' : 'postback') : 'change',
-                raw: JSON.stringify(body).substring(0, 1500)
-            });
-        } catch (e) { }
+        // INICIALIZAR LOGS DE RASTREO
+        const logRef = await db.collection(`${entityPath}/internal_logs`).add({
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            type: `${provider}_webhook_hit`,
+            senderId,
+            step: 'init'
+        });
 
         // DEDUPLICATION
         const messageId = messaging?.message?.mid || changes?.message_id || `temp_${Date.now()}_${senderId}`;
         const dedupRef = db.doc(`${entityPath}/processed_messages/${messageId}`);
-        try {
-            const isDuplicate = await db.runTransaction(async (t) => {
-                const snap = await t.get(dedupRef);
-                if (snap.exists) {
-                    const data = snap.data();
-                    if (data && Date.now() - data.timestamp < 300000) return true;
-                }
-                t.set(dedupRef, { timestamp: Date.now(), senderId: senderId, type: 'meta_ingestion' });
-                return false;
-            });
-            if (isDuplicate) {
-                debugLog(`🛡️ Duplicate message detected (${messageId}). Skipping.`);
-                return NextResponse.json({ success: true, duplicate: true });
+        const isDuplicate = await db.runTransaction(async (t) => {
+            const snap = await t.get(dedupRef);
+            if (snap.exists) {
+                const data = snap.data();
+                if (data && Date.now() - data.timestamp < 300000) return true;
             }
-        } catch (e) { }
+            t.set(dedupRef, { timestamp: Date.now(), senderId: senderId, type: 'meta_ingestion' });
+            return false;
+        });
+
+        if (isDuplicate) {
+            await logRef.update({ step: 'duplicate_ignored' });
+            return NextResponse.json({ success: true, duplicate: true });
+        }
+
+        await logRef.update({ step: 'passed_dedup' });
 
         // SENDER LOCK
         const lockRef = db.doc(`${entityPath}/locks_ingestion/${senderId}`);
-        try {
-            const lockSnap = await lockRef.get();
-            if (lockSnap.exists) {
-                const lockData = lockSnap.data();
-                if (lockData && (Date.now() - lockData.timestamp < 3000)) {
-                    await new Promise(r => setTimeout(r, 1000));
-                }
+        const lockSnap = await lockRef.get();
+        if (lockSnap.exists) {
+            const lockData = lockSnap.data();
+            if (lockData && (Date.now() - lockData.timestamp < 3000)) {
+                await new Promise(r => setTimeout(r, 1000));
             }
-            await lockRef.set({ timestamp: Date.now() }, { merge: true });
-        } catch (e) { }
+        }
+        await lockRef.set({ timestamp: Date.now() }, { merge: true });
+
+        await logRef.update({ step: 'passed_lock' });
 
         let targetCardDoc: any = null;
         let targetGroupId: string | null = null;
         let existingContactId: string | null = null;
         let existingContactName: string | null = null;
 
-        const contactSnap = await db.collection(`${entityPath}/contacts`)
-            .where('metaSenderId', '==', senderId)
-            .get();
+        const contactSnap = await db.collection(`${entityPath}/contacts`).where('metaSenderId', '==', senderId).get();
 
         if (!contactSnap.empty) {
-            const rankedContacts = contactSnap.docs.sort((a, b) => {
-                const aData = a.data();
-                const bData = b.data();
-                const aScore = ((aData.source || '').toLowerCase().includes(provider) ? 10 : 0) + (aData.name && !isGenericProfileName(aData.name) ? 3 : 0) + (aData.kanbanCardId ? 2 : 0);
-                const bScore = ((bData.source || '').toLowerCase().includes(provider) ? 10 : 0) + (bData.name && !isGenericProfileName(bData.name) ? 3 : 0) + (bData.kanbanCardId ? 2 : 0);
-                if (bScore !== aScore) return bScore - aScore;
-                return (bData.updatedAt?.toMillis?.() || 0) - (aData.updatedAt?.toMillis?.() || 0);
-            });
+            const rankedContacts = contactSnap.docs.sort((a, b) => (b.data().updatedAt?.toMillis?.() || 0) - (a.data().updatedAt?.toMillis?.() || 0));
             const contactDoc = rankedContacts[0];
             existingContactId = contactDoc.id;
             existingContactName = contactDoc.data().name || null;
@@ -229,6 +199,8 @@ export async function POST(req: Request) {
                 if (cardGet.exists) targetCardDoc = cardGet;
             }
         }
+
+        await logRef.update({ step: 'search_complete', foundCard: !!targetCardDoc });
 
         let resolvedName = senderNameFromPayload || existingContactName;
         if (isGenericProfileName(resolvedName)) {
@@ -268,9 +240,6 @@ export async function POST(req: Request) {
 
         if (targetCardDoc && targetGroupId) {
             const queueItem = { text: botInputText || text || '', messageId, platform: provider, from: senderId, timestamp: Date.now() };
-            const currentName = targetCardDoc.data()?.contactName || '';
-            const shouldUpdateName = !currentName || isGenericProfileName(currentName);
-
             const cardUpdate: any = {
                 lastMessage: text.length > 40 ? text.substring(0, 37) + '...' : text,
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -280,23 +249,19 @@ export async function POST(req: Request) {
                 status: 'open',
                 [`platform_ids.${provider.toLowerCase()}`]: senderId
             };
-            if (shouldUpdateName) cardUpdate.contactName = finalResolvedName;
+            if (!targetCardDoc.data()?.contactName || isGenericProfileName(targetCardDoc.data()?.contactName)) cardUpdate.contactName = finalResolvedName;
 
             await targetCardDoc.ref.update(cardUpdate);
             if (existingContactId) {
-                const contactUpdate: any = { updatedAt: admin.firestore.Timestamp.now(), [`platform_ids.${provider.toLowerCase()}`]: senderId };
-                if (shouldUpdateName) contactUpdate.name = finalResolvedName;
-                await db.collection(`${entityPath}/contacts`).doc(existingContactId).update(contactUpdate);
+                await db.collection(`${entityPath}/contacts`).doc(existingContactId).update({ updatedAt: admin.firestore.Timestamp.now(), [`platform_ids.${provider.toLowerCase()}`]: senderId });
             }
+            await logRef.update({ step: 'existing_card_updated' });
         } else {
             const groupsSnapshot = await db.collection(`${entityPath}/kanban-groups`).get();
             let destinationGroupId = groupsSnapshot.docs.find(g => (g.data().name || '').toLowerCase().includes('inbox') || (g.data().name || '').toLowerCase().includes('entrada'))?.id;
-
             if (!destinationGroupId) {
                 destinationGroupId = groupsSnapshot.empty ? 'inbox' : groupsSnapshot.docs[0].id;
-                if (groupsSnapshot.empty) {
-                    await db.collection(`${entityPath}/kanban-groups`).doc('inbox').set({ id: 'inbox', name: 'Bandeja de Entrada', order: 1, createdAt: admin.firestore.FieldValue.serverTimestamp() });
-                }
+                if (groupsSnapshot.empty) await db.collection(`${entityPath}/kanban-groups`).doc('inbox').set({ id: 'inbox', name: 'Bandeja de Entrada', order: 1, createdAt: admin.firestore.FieldValue.serverTimestamp() });
             }
 
             const newCardRef = db.collection(`${entityPath}/kanban-groups/${destinationGroupId}/cards`).doc();
@@ -335,17 +300,32 @@ export async function POST(req: Request) {
 
             cardId = newCardRef.id;
             groupId = destinationGroupId;
+            await logRef.update({ step: 'new_card_created', cardId });
         }
 
         if (groupId && cardId) {
             try {
                 await processChatbotFlow({ userId, entityId, groupId, cardId, platform: provider, from: senderId, text: botInputText || text, messageId });
-            } catch (botError) { }
+                await logRef.update({ step: 'chatbot_triggered' });
+            } catch (botError: any) {
+                await logRef.update({ step: 'chatbot_error', error: botError.message });
+            }
         }
 
+        await logRef.update({ step: 'finished_successfully' });
         return NextResponse.json({ success: true });
     } catch (error: any) {
         debugLog(`💥 CRITICAL EXCEPTION: ${error.message}`);
+        if (entityPathForError) {
+            try {
+                await db.collection(`${entityPathForError}/internal_logs`).add({
+                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                    type: `webhook_crash`,
+                    error: error.message,
+                    stack: error.stack?.substring(0, 500)
+                });
+            } catch (e) {}
+        }
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }
