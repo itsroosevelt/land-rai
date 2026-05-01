@@ -198,6 +198,14 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             cleaned = cleaned.replace(/^[,.\s]+/, '').replace(/[,.\s]+$/, '');
             return cleaned.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ').trim();
         }
+        if (varName === '_sys_phone') {
+            const digits = val.replace(/\D/g, '');
+            return digits ? (val.includes('+') ? '+' : '') + digits : '';
+        }
+        if (varName === '_sys_number') {
+            const digits = val.replace(/\D/g, '');
+            return digits || '';
+        }
         return val;
     };
 
@@ -349,12 +357,18 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 // 1. ROBUST TYPE DETECTION
                 let extracted = text.trim();
                 const isEmail = inputType === 'email' || /email|mail|correo|direcc/i.test(varName);
-                const isName = (inputType === 'text' || !inputType) && /nombre|name|cli/i.test(varName);
+                const isName = (inputType === 'text' || !inputType) && /nombre|name|cli|apell/i.test(varName);
+                const isPhone = inputType === 'phone' || /telefono|celular|phone|whatsapp|movil|contacto/i.test(varName);
+                const isNumber = inputType === 'number' || /cedula|dni|id|identificaci|documento|numero/i.test(varName);
 
                 if (isEmail) {
                     extracted = cleanInput(text, 'email');
                 } else if (isName) {
                     extracted = cleanInput(text, 'nombre');
+                } else if (isPhone) {
+                    extracted = cleanInput(text, '_sys_phone');
+                } else if (isNumber) {
+                    extracted = cleanInput(text, '_sys_number');
                 }
 
                 // 2. VALIDATION (Omnichannel Robust)
