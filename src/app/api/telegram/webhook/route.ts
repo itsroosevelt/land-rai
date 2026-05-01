@@ -46,13 +46,31 @@ export async function POST(req: Request) {
 
         let cardId = '';
         let groupId = '';
+        let contactDocRef: any = null;
         const user = body.callback_query?.from || body.message?.from || {};
         const contactName = user.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : `Telegram User ${chatId.slice(-4)}`;
 
         if (!contactSnap.empty) {
-            const contactData = contactSnap.docs[0].data();
+            const contactDoc = contactSnap.docs[0];
+            const contactData = contactDoc.data();
             cardId = contactData.kanbanCardId;
             groupId = contactData.kanbanGroupId;
+            contactDocRef = contactDoc.ref;
+            
+            // AMNESIA CHECK: Verify the card still exists in Kanban
+            if (cardId && groupId) {
+                const cardRef = db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`);
+                const cardGet = await cardRef.get();
+                if (!cardGet.exists) {
+                    console.log(`[Telegram] 👻 GHOST CARD DETECTED: ${cardId}. Clearing reference from contact.`);
+                    await contactDocRef.update({
+                        kanbanCardId: admin.firestore.FieldValue.delete(),
+                        kanbanGroupId: admin.firestore.FieldValue.delete()
+                    }).catch(() => {});
+                    cardId = '';
+                    groupId = '';
+                }
+            }
         }
 
         const newMessage = {
