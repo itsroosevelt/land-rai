@@ -273,37 +273,29 @@ export async function sendWhatsAppMessage(
     let token = process.env.WHATSAPP_ACCESS_TOKEN;
     let phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
-    // 1. Multi-Tenant Token Resolution
+    // 1. Multi-Tenant Token Resolution (Surgical Separation)
     if (options.userId && options.entityId) {
         try {
-            const integrationsPath = `users/${options.userId}/entities/${options.entityId}/integrations`;
-            const intSnap = await db.collection(integrationsPath).get();
+            const entityPath = `users/${options.userId}/entities/${options.entityId}`;
+            // Target ONLY WhatsApp specific documents
+            const [standardSnap, internalSnap] = await Promise.all([
+                db.doc(`${entityPath}/integrations/whatsapp`).get(),
+                db.doc(`${entityPath}/integrations/whatsapp_internal`).get()
+            ]);
 
-            let foundToken: string | null = null;
-            let foundPhone: string | null = null;
+            const standardData = standardSnap.data();
+            const internalData = internalSnap.data();
 
-            for (const doc of intSnap.docs) {
-                const d = doc.data();
-                const t = d?.accessToken || d?.token || d?.access_token || d?.pageAccessToken;
-                const p = d?.phoneNumberId || d?.phone_number_id || d?.phoneId;
+            // Prioritize standard connection, fallback to internal
+            const data = standardData || internalData;
+
+            if (data) {
+                token = data.accessToken || data.token || data.access_token;
+                phoneNumberId = data.phoneNumberId || data.phone_number_id || data.phoneId;
                 
-                // 🛡️ FILTRO CRÍTICO: Asegurar que el token sea de Meta (Empieza con EAA)
-                // Evitar usar tokens de Gmail (que empiezan con ya29) para WhatsApp
-                if (t && typeof t === 'string' && t.startsWith('EAA')) {
-                    if (!foundToken) {
-                        foundToken = t;
-                        console.log(`[WhatsApp] 🛡️ Meta Token found in document: ${doc.id}`);
-                    }
-                }
-                
-                if (p && !foundPhone) {
-                    foundPhone = p;
-                    console.log(`[WhatsApp] 📱 PhoneID found in document: ${doc.id}`);
-                }
+                if (token) console.log(`[WhatsApp] 🛡️ Token resolved surgically from ${standardSnap.exists ? 'whatsapp' : 'whatsapp_internal'}`);
+                if (phoneNumberId) console.log(`[WhatsApp] 📱 PhoneID resolved surgically.`);
             }
-
-            if (foundToken) token = foundToken;
-            if (foundPhone) phoneNumberId = foundPhone;
 
             console.log(`[WhatsApp] 🎯 Final Resolution: hasToken=${!!token}, hasPhoneId=${!!phoneNumberId}`);
 
@@ -464,14 +456,22 @@ export async function sendWhatsAppMessage(
 export async function sendTelegramMessage(
     chatId: string,
     text: string,
-    options: { userId?: string; entityId?: string; botToken?: string } = {}
+    options: { 
+        userId?: string; 
+        entityId?: string; 
+        botToken?: string;
+        type?: 'text' | 'image' | 'video' | 'audio' | 'document' | 'quick_reply';
+        url?: string;
+        filename?: string;
+        buttons?: any[];
+    } = {}
 ): Promise<any> {
-    if (!text) return;
+    const { userId, entityId, type = 'text', url: mediaUrl, filename, buttons } = options;
     let token = options.botToken;
 
-    if (options.userId && options.entityId && !token) {
+    if (userId && entityId && !token) {
         try {
-            const configPath = `users/${options.userId}/entities/${options.entityId}/integrations/telegram`;
+            const configPath = `users/${userId}/entities/${entityId}/integrations/telegram`;
             const configDoc = await db.doc(configPath).get();
             if (configDoc.exists) {
                 token = configDoc.data()?.botToken;
@@ -485,35 +485,58 @@ export async function sendTelegramMessage(
         throw new Error('Telegram Bot Token is not configured for this entity.');
     }
 
-    const url = `https://api.telegram.org/bot${token}/sendMessage`;
-    const payload: any = {
-        chat_id: chatId,
-        text: text,
-        parse_mode: 'HTML'
-    };
+    // Determine endpoint based on type
+    let method = 'sendMessage';
+    const payload: any = { chat_id: chatId };
 
-    // Support for buttons (Quick Replies / Inline Keyboard)
-    const optAny = options as any;
-    if (optAny.type === 'quick_reply' && Array.isArray(optAny.buttons)) {
+    if (type === 'image' || type === 'video' || type === 'audio' || type === 'document') {
+        const isPhoto = type === 'image';
+        method = isPhoto ? 'sendPhoto' : (type === 'video' ? 'sendVideo' : (type === 'audio' ? 'sendAudio' : 'sendDocument'));
+        const field = isPhoto ? 'photo' : type;
+        payload[field] = mediaUrl;
+        payload.caption = text;
+        payload.parse_mode = 'HTML';
+    } else {
+        payload.text = text;
+        payload.parse_mode = 'HTML';
+    }
+
+    // Support for buttons (Inline Keyboard)
+    if ((type === 'quick_reply' || buttons) && Array.isArray(buttons)) {
         payload.reply_markup = {
-            inline_keyboard: optAny.buttons.map((btn: any) => {
+            inline_keyboard: buttons.map((btn: any) => {
                 const b = btn.reply || btn;
-                return [{ text: b.title, callback_data: b.id || b.title }];
+                return [{ text: b.title || b.text || 'Opción', callback_data: b.id || b.title || b.text }];
             })
         };
     }
 
+    const apiUrl = `https://api.telegram.org/bot${token}/${method}`;
+
     try {
-        const response = await axios.post(url, payload);
+        const response = await axios.post(apiUrl, payload);
         return {
             ...response.data,
             message_id: response.data.result?.message_id,
             sentTo: chatId
         };
     } catch (error: any) {
-        const errorData = error.response?.data || error.message;
-        console.error('Telegram API Error:', JSON.stringify(errorData, null, 2));
-        throw new Error(`Telegram API Error: ${JSON.stringify(errorData)}`);
+        const errorData = error.response?.data || { message: error.message };
+        const detailedError = JSON.stringify(errorData);
+        console.error('Telegram API Error:', detailedError);
+
+        // Self-log error if context exists
+        if (userId && entityId) {
+            const entityPath = `users/${userId}/entities/${entityId}`;
+            db.collection(`${entityPath}/system_logs`).add({
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                type: 'error_telegram',
+                error: errorData,
+                recipient: chatId
+            }).catch(() => {});
+        }
+
+        throw new Error(`Telegram API Error: ${detailedError}`);
     }
 }
 

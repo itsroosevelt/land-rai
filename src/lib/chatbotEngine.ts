@@ -236,30 +236,38 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
 
     // Filter and score bots by platform relevance
     const platformBots = allActiveBots.map(bot => {
-        const targets = bot.targetPlatforms || [];
+        const targets = (bot.targetPlatforms || []).map((t: string) => t.toLowerCase().trim());
         let score = 0;
         
         // Match platform case-insensitive and trimmed
         const currentPlatform = platform.toLowerCase().trim();
-        const hasMatch = targets.some((t: string) => t.toLowerCase().trim() === currentPlatform);
+        
+        // Robust matching for common abbreviations
+        const aliases: Record<string, string[]> = {
+            'whatsapp': ['wa', 'wpp', 'whatsapp cloud'],
+            'instagram': ['ig', 'insta'],
+            'messenger': ['fb', 'facebook', 'msg'],
+            'telegram': ['tg', 'tele']
+        };
+
+        const currentAliases = aliases[currentPlatform] || [];
+        const hasMatch = targets.some((t: string) => t === currentPlatform || currentAliases.includes(t));
 
         if (hasMatch) {
             score = 10; // Explicit match (High Priority)
         } else if (currentPlatform === 'gmail') {
-            score = 0; // STRIC MATCH REQUIRED: Gmail should never be targeted by a global/wildcard bot
-        } else if (targets.length === 0 || targets.includes('*')) {
+            score = 0; // STRICT MATCH REQUIRED: Gmail should never be targeted by a global/wildcard bot
+        } else if (targets.length === 0 || targets.includes('*') || targets.includes('all')) {
             score = 5;  // Global Match (Medium Priority) for other platforms
         } else {
-            // FALLBACK RULE: If we have multiple bots, but none match this platform, 
-            // the oldest/first active bot acts as a general fallback.
-            score = 1;
+            score = 1; // Fallback
         }
         
         return { ...bot, _score: score };
     }).filter(bot => bot._score > 0);
 
     if (platformBots.length === 0) {
-        console.log(`[ChatbotEngine] ⚠️ No matching bots found for platform ${platform} on entity ${entityId}`);
+        console.log(`[ChatbotEngine] ⚠️ No matching bots found for platform ${platform} on entity ${entityId}. Active targets:`, allActiveBots.map(b => b.targetPlatforms));
         return;
     }
 

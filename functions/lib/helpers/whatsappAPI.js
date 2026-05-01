@@ -26,21 +26,26 @@ async function getWhatsAppCredentials(ctx) {
     if ((ctx === null || ctx === void 0 ? void 0 : ctx.userId) && (ctx === null || ctx === void 0 ? void 0 : ctx.entityId)) {
         try {
             const db = admin.firestore();
-            const paths = [
-                `users/${ctx.userId}/entities/${ctx.entityId}/integrations/whatsapp`,
-                `users/${ctx.userId}/entities/${ctx.entityId}/integrations/whatsapp_internal`
-            ];
-            for (const configPath of paths) {
-                const snapshot = await db.doc(configPath).get();
-                if (snapshot.exists) {
-                    const configData = snapshot.data();
-                    if ((configData === null || configData === void 0 ? void 0 : configData.accessToken) && (configData === null || configData === void 0 ? void 0 : configData.phoneNumberId)) {
-                        apiToken = configData.accessToken;
-                        phoneId = configData.phoneNumberId;
-                        break;
-                    }
+            const integrationsPath = `users/${ctx.userId}/entities/${ctx.entityId}/integrations`;
+            const intSnap = await db.collection(integrationsPath).get();
+            let foundToken = null;
+            let foundPhone = null;
+            for (const doc of intSnap.docs) {
+                const d = doc.data();
+                const t = (d === null || d === void 0 ? void 0 : d.accessToken) || (d === null || d === void 0 ? void 0 : d.token) || (d === null || d === void 0 ? void 0 : d.access_token) || (d === null || d === void 0 ? void 0 : d.pageAccessToken);
+                const p = (d === null || d === void 0 ? void 0 : d.phoneNumberId) || (d === null || d === void 0 ? void 0 : d.phone_number_id) || (d === null || d === void 0 ? void 0 : d.phoneId);
+                // Prioritize Meta tokens (EAA) and ignore others like Gmail (ya29)
+                if (t && typeof t === 'string' && t.startsWith('EAA')) {
+                    if (!foundToken)
+                        foundToken = t;
                 }
+                if (p && !foundPhone)
+                    foundPhone = p;
             }
+            if (foundToken)
+                apiToken = foundToken;
+            if (foundPhone)
+                phoneId = foundPhone;
         }
         catch (e) {
             functions.logger.error("[WhatsApp API] Failed to fetch custom credentials", e);

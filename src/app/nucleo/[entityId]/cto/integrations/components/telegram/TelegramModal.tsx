@@ -59,14 +59,19 @@ export default function TelegramModal({ isOpen, onClose, activeEntity, currentUs
         const toastId = toast.loading("Activando Protocolo Telegram...");
 
         try {
-            // 1. REVERSIÓN: Buscar en la colección raíz 'telegram-integrations'
-            const queryRef = query(collectionGroup(db, 'telegram-integrations'), where('botToken', '==', botToken));
+            // 1. Validar que el bot no esté en uso (Agnosticismo Total - Rule 1 & 7)
+            // Usamos collectionGroup para buscar en todas las bóvedas sin usar una tabla raíz
+            const queryRef = query(
+                collectionGroup(db, 'integrations'), 
+                where('provider', '==', 'telegram'),
+                where('botToken', '==', botToken)
+            );
             const snap = await getDocs(queryRef);
             
             const isUsedByAnotherTenant = !snap.empty && !snap.docs.every((d: any) => d.ref.path.includes(activeEntity));
                                     
             if (isUsedByAnotherTenant) {
-                toast.error("Este Bot ya está siendo utilizado en otro nodo.", { id: toastId });
+                toast.error("Este Bot ya está siendo utilizado por otra entidad.", { id: toastId });
                 setIsLoading(false);
                 return;
             }
@@ -88,13 +93,12 @@ export default function TelegramModal({ isOpen, onClose, activeEntity, currentUs
                 throw new Error(setupData.error || 'Error en el registro del webhook');
             }
 
-            // 3. REVERSIÓN: Guardar tanto en la entidad como en la raíz 'telegram-integrations'
+            // 3. Persistencia Aislada (Rule 4: Root Isolation)
+            // Solo guardamos dentro de la bóveda de la entidad activa
             const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/telegram`);
-            const rootRef = doc(db, `telegram-integrations/${botToken.split(':')[0]}`);
 
             const telegramConfig = {
                 botToken,
-                chatId: setupData.chatId || '',
                 botName: setupData.botName || 'Telegram Bot',
                 status: 'Connected',
                 provider: 'telegram',
@@ -103,10 +107,7 @@ export default function TelegramModal({ isOpen, onClose, activeEntity, currentUs
                 updatedAt: new Date(),
             };
 
-            await Promise.all([
-                setDoc(configRef, telegramConfig, { merge: true }),
-                setDoc(rootRef, telegramConfig, { merge: true })
-            ]);
+            await setDoc(configRef, telegramConfig, { merge: true });
 
             setBotName(setupData.botName || 'Telegram Bot');
             toast.success("¡Protocolo Telegram Activado!", { id: toastId });

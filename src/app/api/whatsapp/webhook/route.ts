@@ -409,7 +409,7 @@ export async function POST(req: Request) {
                 // 4. TRIGGER UNIVERSAL CHATBOT
                 if (groupId && cardId) {
                     debugLog(`[POST] Triggering universal chatbot for whatsapp in tenant ${entityId}...`);
-                    processChatbotFlow({
+                    await processChatbotFlow({
                         userId, entityId, groupId, cardId, platform: 'whatsapp', from: from, text: text,
                         messageId: messageId
                     }).catch(botError => {

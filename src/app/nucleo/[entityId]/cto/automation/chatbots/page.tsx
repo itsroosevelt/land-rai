@@ -71,7 +71,7 @@ const ChatbotsPage = () => {
           (doc) =>
           ({
             id: doc.id,
-            name: doc.data().name || 'Bot sin nombre',
+            name: doc.data().name || 'Unnamed Bot',
             isActive: doc.data().isActive === true || doc.data().isActive === 'true',
             targetPlatforms: normalizeTargetPlatforms(doc.data().targetPlatforms),
             ...doc.data(),
@@ -87,7 +87,7 @@ const ChatbotsPage = () => {
       },
       (error) => {
         console.error('Error fetching bots with snapshot: ', error);
-        toast.error('No se pudieron cargar los bots.');
+        toast.error('Could not load bots.');
         setIsLoading(false);
       }
     );
@@ -138,12 +138,12 @@ const ChatbotsPage = () => {
             const botRef = doc(db, 'users', currentUser.uid, 'entities', activeEntity, 'chatbots', formattedId);
             transaction.set(botRef, {
                 id: formattedId,
-                name: 'Nuevo Chatbot',
+                name: 'New Chatbot',
                 isActive: false,
                 targetPlatforms: [],
                 createdAt: new Date(),
                 flow: {
-                    nodes: [{ id: '1', type: 'startNode', position: { x: 250, y: 5 }, data: { label: 'Inicio' } }],
+                    nodes: [{ id: '1', type: 'startNode', position: { x: 250, y: 5 }, data: { label: 'Start' } }],
                     edges: []
                 }
             });
@@ -154,7 +154,7 @@ const ChatbotsPage = () => {
         router.push(`/nucleo/${activeEntity}/cto/automation/chatbots/${newBotId}`);
     } catch (error) {
         console.error("Error creating bot:", error);
-        toast.error("No se pudo crear el chatbot.");
+        toast.error("Could not create chatbot.");
         setIsLoading(false);
     }
   };
@@ -171,7 +171,7 @@ const ChatbotsPage = () => {
 
     const primaryPlatform = getPrimaryPlatform(bot.targetPlatforms);
     if (!bot.isActive && primaryPlatform && !connectedPlatforms.includes(primaryPlatform)) {
-      toast.error(`No puedes activar este bot porque ${primaryPlatform.toUpperCase()} no está conectado. Conecta la integración e inténtalo de nuevo.`);
+      toast.error(`You cannot activate this bot because ${primaryPlatform.toUpperCase()} is not connected. Connect the integration and try again.`);
       return;
     }
 
@@ -189,11 +189,11 @@ const ChatbotsPage = () => {
       });
       
       toast.success(
-        `Bot "${bot.name}" ${newStatus ? 'activado' : 'desactivado'}.`
+        `Bot "${bot.name}" ${newStatus ? 'activated' : 'deactivated'}.`
       );
     } catch (error) {
       console.error('Error updating bot status:', error);
-      toast.error('No se pudo actualizar el estado del bot.');
+      toast.error('Could not update bot status.');
     } finally {
       setUpdatingBots((prev) => prev.filter((id) => id !== bot.id));
     }
@@ -214,10 +214,10 @@ const ChatbotsPage = () => {
             platformId,
             activate: true
         });
-        toast.success(`Bot "${bot.name}" asignado a ${platformId.toUpperCase()} y activado.`);
+        toast.success(`Bot "${bot.name}" assigned to ${platformId.toUpperCase()} and activated.`);
     } catch (error) {
         console.error('Error in quick activation:', error);
-        toast.error('No se pudo activar el bot.');
+        toast.error('Could not activate bot.');
     } finally {
         setUpdatingBots((prev) => prev.filter((id) => id !== bot.id));
     }
@@ -237,9 +237,9 @@ const ChatbotsPage = () => {
         platformId: isRemoving ? null : platformId,
         activate: isRemoving ? false : bot.isActive
       });
-      toast.success(`${platformId.toUpperCase()} ${!isRemoving ? 'asignada' : 'removida'} en "${bot.name}"`);
+      toast.success(`${platformId.toUpperCase()} ${!isRemoving ? 'assigned' : 'removed'} in "${bot.name}"`);
     } catch (error) {
-      toast.error('No se pudo actualizar la plataforma.');
+      toast.error('Could not update platform.');
     } finally {
       setUpdatingBots((prev) => prev.filter((id) => id !== bot.id));
     }
@@ -256,11 +256,11 @@ const ChatbotsPage = () => {
 
     try {
       await deleteDoc(doc(db, 'users', currentUser!.uid, 'entities', activeEntity!, 'chatbots', botToDelete.id));
-      toast.success(`Bot "${botToDelete.name}" eliminado correctamente.`);
+      toast.success(`Bot "${botToDelete.name}" deleted successfully.`);
       setBotToDelete(null);
     } catch (error) {
       console.error('Error deleting bot:', error);
-      toast.error('Error al eliminar el bot.');
+      toast.error('Error deleting bot.');
     }
   };
 
@@ -271,7 +271,7 @@ const ChatbotsPage = () => {
           <Button variant="outline" size="icon" onClick={handleGoBack} className="h-8 w-8">
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <h1 className="text-xl font-medium tracking-tight">Mis Chatbots</h1>
+          <h1 className="text-xl font-medium tracking-tight">My Chatbots</h1>
           <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${
             connectionStatus === 'connected' 
               ? 'bg-green-500/10 border-green-500/20 text-green-400' 
@@ -283,7 +283,7 @@ const ChatbotsPage = () => {
               connectionStatus === 'connected' ? 'bg-green-500 animate-pulse' : 'bg-red-500'
             }`} />
             <span className="text-[10px] uppercase tracking-wider font-bold">
-              {connectionStatus === 'connected' ? `OMNICANAL: ${activeChannelsCount} ACTIVOS` : connectionStatus === 'loading' ? 'Verificando...' : 'SIN CONEXIÓN'}
+              {connectionStatus === 'connected' ? `OMNICHANNEL: ${activeChannelsCount} ACTIVE` : connectionStatus === 'loading' ? 'Checking...' : 'OFFLINE'}
             </span>
           </div>
         </div>
@@ -291,14 +291,14 @@ const ChatbotsPage = () => {
           onClick={handleCreateNewBot}
           className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium py-1.5 px-3 rounded-lg shadow-md transform transition-transform duration-200 hover:scale-105 h-8"
         >
-          <Plus className="mr-1.5 h-4 w-4" /> Crear Nuevo Bot
+          <Plus className="mr-1.5 h-4 w-4" /> Create New Bot
         </Button>
       </div>
 
       {isLoading ? (
         <div className="flex flex-col justify-center items-center mt-32 gap-3">
           <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
-          <p className="text-neutral-500 text-[10px] font-bold uppercase tracking-widest">Cargando...</p>
+          <p className="text-neutral-500 text-[10px] font-bold uppercase tracking-widest">Loading...</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -363,7 +363,7 @@ const ChatbotsPage = () => {
                             : 'bg-neutral-600/50 text-neutral-400'
                             }`}
                         >
-                          {bot.isActive ? 'Activo' : 'Inactivo'}
+                          {bot.isActive ? 'Active' : 'Inactive'}
                         </span>
                         <Button
                           variant="ghost"
@@ -400,7 +400,7 @@ const ChatbotsPage = () => {
                     ) : (
                       <>
                         <Power className="mr-2 h-4 w-4" />
-                        {bot.isActive ? 'Desactivar' : 'Activar'}
+                        {bot.isActive ? 'Deactivate' : 'Activate'}
                       </>
                     )}
                   </Button>
@@ -410,10 +410,10 @@ const ChatbotsPage = () => {
           ) : (
             <div className="col-span-full text-center py-20 bg-neutral-800 rounded-xl border border-dashed border-neutral-700">
               <MessageCircle size={32} className="text-neutral-700 mx-auto mb-4" />
-              <h3 className="text-sm font-bold text-white mb-2">Sin Chatbots</h3>
-              <p className="text-neutral-600 text-[10px] mb-6">No tienes flujos configurados.</p>
+              <h3 className="text-sm font-bold text-white mb-2">No Chatbots</h3>
+              <p className="text-neutral-600 text-[10px] mb-6">You don't have any flows configured.</p>
               <Button onClick={handleCreateNewBot} className="bg-blue-600 hover:bg-blue-700 font-bold px-6 py-2 rounded-lg h-8 text-[10px]">
-                Crear Ahora
+                Create Now
               </Button>
             </div>
           )}
@@ -424,16 +424,16 @@ const ChatbotsPage = () => {
       <Dialog open={!!botToDelete} onOpenChange={(open) => !open && setBotToDelete(null)}>
         <DialogContent className="bg-neutral-900 border-neutral-700 text-white sm:max-w-md rounded-xl">
           <DialogHeader>
-            <DialogTitle>Eliminar Chatbot</DialogTitle>
-            <DialogDescription className="text-neutral-400">
-              Confirma escribiendo "delete" para eliminar <span className="text-white font-bold">{botToDelete?.name}</span>.
+            <DialogTitle>Delete Chatbot</DialogTitle>
+            <DialogDescription className="text-neutral-400 text-xs">
+              Confirm by typing <span className="text-white font-bold italic">"delete"</span> to remove <span className="text-white font-bold">"{botToDelete?.name}"</span>.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <Input
                 value={deleteConfirmation}
                 onChange={(e) => setDeleteConfirmation(e.target.value)}
-                className="bg-neutral-800 border-neutral-700 text-white rounded-lg py-5 px-4 placeholder:text-neutral-800 text-sm font-mono"
+                className="bg-neutral-800 border-neutral-700 text-white rounded-lg py-5 px-4 placeholder:text-neutral-800 text-sm font-mono text-center tracking-widest"
                 placeholder="delete"
                 autoComplete="off"
               />
@@ -442,17 +442,17 @@ const ChatbotsPage = () => {
             <Button
               variant="secondary"
               onClick={() => setBotToDelete(null)}
-              className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-white border-neutral-700 rounded-lg"
+              className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-white border-neutral-700 rounded-lg text-xs"
             >
-              Cancelar
+              Cancel
             </Button>
             <Button
               variant="destructive"
               disabled={deleteConfirmation !== 'delete'}
               onClick={confirmDelete}
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold"
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-xs"
             >
-              Eliminar
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -462,9 +462,9 @@ const ChatbotsPage = () => {
       <Dialog open={!!botToActivate} onOpenChange={(open) => !open && setBotToActivate(null)}>
         <DialogContent className="bg-neutral-900 border-neutral-700 text-white max-w-sm rounded-xl p-8">
             <DialogHeader className="mb-4">
-                <DialogTitle className="text-xl font-bold">Seleccionar Canal</DialogTitle>
+                <DialogTitle className="text-xl font-bold">Select Channel</DialogTitle>
                 <DialogDescription className="text-neutral-400 text-xs">
-                    Elige por qué canal responderá <span className="text-white font-bold">"{botToActivate?.name}"</span>
+                    Choose which channel <span className="text-white font-bold">"{botToActivate?.name}"</span> will respond to.
                 </DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-1 gap-3">
@@ -487,13 +487,13 @@ const ChatbotsPage = () => {
                 ))}
                 {connectedPlatforms.length === 0 && (
                     <div className="py-8 text-center bg-neutral-800 rounded-xl border border-dashed border-neutral-700">
-                        <p className="text-xs text-neutral-500 mb-4">No tienes integraciones conectadas para activar este bot.</p>
+                        <p className="text-xs text-neutral-500 mb-4">You don't have any connected integrations to activate this bot.</p>
                         <Button 
                             variant="outline" 
                             className="text-[10px] font-bold rounded-xl h-8 border-blue-500/30 text-blue-400"
                             onClick={() => router.push(`/nucleo/${activeEntity}/cto/integrations`)}
                         >
-                            Ir a Integraciones
+                            Go to Integrations
                         </Button>
                     </div>
                 )}
@@ -504,7 +504,7 @@ const ChatbotsPage = () => {
                     onClick={() => setBotToActivate(null)}
                     className="w-full bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-white rounded-xl py-6"
                 >
-                    Cancelar
+                    Cancel
                 </Button>
             </DialogFooter>
         </DialogContent>
