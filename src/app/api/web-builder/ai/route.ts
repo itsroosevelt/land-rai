@@ -499,9 +499,10 @@ async function callVertex(modelName: string, messages: any[], fileContext: strin
       const vertex = getVertexAI();
       
       let canonicalModel = modelName.toLowerCase();
-      if (canonicalModel.includes("2.0 flash")) canonicalModel = "gemini-2.0-flash-exp";
-      else if (canonicalModel.includes("1.5 pro")) canonicalModel = "gemini-1.5-pro-002";
-      else canonicalModel = "gemini-1.5-flash-002"; // Default
+      if (canonicalModel.includes("2.0 flash")) canonicalModel = "gemini-2.0-flash-001";
+      else if (canonicalModel.includes("2.0 pro")) canonicalModel = "gemini-2.0-pro-exp-02-05";
+      else if (canonicalModel.includes("1.5 pro")) canonicalModel = "gemini-1.5-pro";
+      else canonicalModel = "gemini-1.5-flash"; // Default stable
       
       console.log(`[Vertex AI] 🔍 Probando conexión con modelo estable: ${canonicalModel}`);
 
@@ -626,15 +627,15 @@ async function callVertex(modelName: string, messages: any[], fileContext: strin
   } catch (e: any) {
     if (strategyAError) {
       // If both strategies failed, prioritize showing the Google Cloud (Vertex) error
-      throw new Error(`[GCP Vertex AI Error]: ${strategyAError}`);
+      throw new Error(`[GCP Vertex AI Error]: ${strategyAError}. Sugerencia: Verifica que la API de Vertex AI esté habilitada y que el modelo '${modelName}' esté disponible en us-central1.`);
     }
-    const fallbacks = ['gemini-1.5-flash-latest', 'gemini-1.5-pro-latest', 'gemini-1.5-flash'];
+    const fallbacks = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash'];
     let lastError = e;
     for (const fb of fallbacks) {
       if (fb.toLowerCase().includes(modelName.toLowerCase())) continue;
       try { return await tryWithFetch(fb); } catch (inner) { lastError = inner; }
     }
-    throw lastError;
+    throw new Error(`Error de Conexión AI: ${lastError.message}. Verifica tu GEMINI_API_KEY en el archivo .env.`);
   }
 }
 
