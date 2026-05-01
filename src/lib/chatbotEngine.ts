@@ -296,11 +296,11 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     let waitingForInput = cardData.botState?.waitingForInput || false;
 
     // FIX: Only restart if NOT explicitly waiting for user input.
-    // isStartTrigger alone should NOT override an active waitingForInput state — 
-    // only isReset/isMenu hard commands should force a restart.
+    // If the flow is marked as 'completed', DO NOT restart automatically.
+    // It must only restart if the user explicitly types 'reiniciar' (isReset = true).
     const shouldRestart = (isReset || isMenu)
         ? true
-        : (!waitingForInput && (!currentNodeId || cardData.botState?.status === 'completed' || cardData.botState?.status === 'inactive' || !cardData.botState?.status));
+        : (!waitingForInput && cardData.botState?.status !== 'completed' && (!currentNodeId || cardData.botState?.status === 'inactive' || !cardData.botState?.status));
 
     // Handle incoming input for current node
     if (waitingForInput && currentNodeId) {
