@@ -411,12 +411,18 @@ export async function POST(req: Request) {
             const channelKey = (provider || 'messenger').toLowerCase();
             const channelLabel = channelKey === 'instagram' ? 'Instagram' : 'Messenger';
             
-            destinationGroupId = `group_${channelKey}`;
-            
-            const groupRef = db.collection(`${entityPath}/kanban-groups`).doc(destinationGroupId);
-            const groupSnap = await groupRef.get();
-            
-            if (!groupSnap.exists) {
+            const inboxGroup = groupsSnapshot.docs.find(g => 
+                (g.data().name || '').toLowerCase().includes('inbox') || 
+                (g.data().name || '').toLowerCase().includes('entrada')
+            );
+
+            if (inboxGroup) {
+                destinationGroupId = inboxGroup.id;
+            } else if (!groupsSnapshot.empty) {
+                destinationGroupId = groupsSnapshot.docs[0].id;
+            } else {
+                destinationGroupId = `group_${channelKey}`;
+                const groupRef = db.collection(`${entityPath}/kanban-groups`).doc(destinationGroupId);
                 debugLog(`[Kanban] 📦 Creating dedicated tray for: ${channelLabel}`);
                 await groupRef.set({
                     id: destinationGroupId,
