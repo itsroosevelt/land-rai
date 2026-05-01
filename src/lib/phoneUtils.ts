@@ -22,7 +22,6 @@ export const normalizePhoneNumber = (phone: string): string => {
         return `+593${clean}`;
     }
 
-    // Default: just add the plus if it had digits but was short/long
     return clean ? `+${clean}` : '';
 };
 

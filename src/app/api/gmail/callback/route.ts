@@ -53,6 +53,19 @@ export async function GET(req: Request) {
             throw new Error('No se pudo obtener el correo de la cuenta de Gmail autorizada.');
         }
 
+        // Validate uniqueness across all Roosevelt tenants
+        const integrationsSnap = await db.collectionGroup('integrations').where('email', '==', email).get();
+        let isAlreadyConnected = false;
+        integrationsSnap.forEach(docSnap => {
+            if (!docSnap.ref.path.includes(`users/${userId}/entities/${entityId}`)) {
+                isAlreadyConnected = true;
+            }
+        });
+
+        if (isAlreadyConnected) {
+            throw new Error(`Esta cuenta de Gmail (${email}) ya está vinculada a otro usuario en la plataforma.`);
+        }
+
         // Save tokens and info in Firestore
         const integrationData = {
             email,
