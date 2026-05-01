@@ -63,7 +63,6 @@ export default function TelegramModal({ isOpen, onClose, activeEntity, currentUs
             // Usamos collectionGroup para buscar en todas las bóvedas sin usar una tabla raíz
             const queryRef = query(
                 collectionGroup(db, 'integrations'), 
-                where('provider', '==', 'telegram'),
                 where('botToken', '==', botToken)
             );
             const snap = await getDocs(queryRef);
