@@ -149,7 +149,20 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     
     // Command categorization (Master Engine Sync)
     // Regex expanded to catch typos like 'reinciar', 'reiniciar', 'restart', etc.
-    const isReset = /^(reinici[ao]r?|reinici|reinci(ar)?|reset|restart|clear|limpiar|borrar)/i.test(normalizedInput);
+    const isExplicitReset = /^(reinici[ao]r?|reinici|reinci(ar)?|reset|restart|clear|limpiar|borrar)/i.test(normalizedInput);
+    
+    // TIMEOUT LOGIC: If waiting for input for >= 15 days, auto-reset
+    let isTimeoutReset = false;
+    if (cardData.botState?.waitingForInput && cardData.botState?.lastWaitStartedAt) {
+        const lastWait = cardData.botState.lastWaitStartedAt.toDate?.() || new Date(cardData.botState.lastWaitStartedAt);
+        const daysPassed = (Date.now() - lastWait.getTime()) / (1000 * 60 * 60 * 24);
+        if (daysPassed >= 15) {
+            console.log(`[ChatbotEngine] ⏳ 15-day timeout reached for card ${cardRef.id}. Forcing reset.`);
+            isTimeoutReset = true;
+        }
+    }
+    
+    const isReset = isExplicitReset || isTimeoutReset;
     const isMenu = /^(menu|opciones|ayuda|help)/i.test(normalizedInput);
     const isStop = /^(detener|stop|salir|chau|adios)/i.test(normalizedInput);
     const isStartTrigger = /^(hola|hi|buenas|inicio|start|buen(as)?\s*(dias|tardes|noches)|que\s*tal|saludos)/i.test(normalizedInput);
@@ -203,13 +216,20 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         cardData.customFields = {};
         
         if (isReset) {
-            const resetText = "🔄 Reinicio completado. Por favor, envíanos un mensaje para empezar de nuevo.";
-            await dispatchMessage(resetText);
-            await appendAgentMessage({ text: resetText, type: 'text', messageId: `bot_sys_${Date.now()}` });
-            
-            // Detenemos la ejecución aquí para que el bot ESPERE un nuevo mensaje
-            // antes de iniciar el flujo principal nuevamente.
-            return;
+            if (isExplicitReset) {
+                const resetText = "🔄 Reinicio completado. Por favor, envíanos un mensaje para empezar de nuevo.";
+                await dispatchMessage(resetText);
+                await appendAgentMessage({ text: resetText, type: 'text', messageId: `bot_sys_${Date.now()}` });
+                
+                // Detenemos la ejecución aquí para que el bot ESPERE un nuevo mensaje
+                // antes de iniciar el flujo principal nuevamente.
+                return;
+            } else {
+                const timeoutText = "⏳ Por inactividad prolongada, hemos reiniciado la conversación.";
+                await dispatchMessage(timeoutText);
+                await appendAgentMessage({ text: timeoutText, type: 'text', messageId: `bot_sys_${Date.now()}` });
+                // No retornamos. Dejamos que el motor inicie el flujo principal automáticamente con este nuevo mensaje.
+            }
         }
 
         if (isMenu || (isReset && !isStartTrigger)) {
@@ -523,6 +543,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 'botState.status': 'active',
                 'botState.waitingForInput': true,
                 'botState.currentNodeId': node.id,
+                'botState.lastWaitStartedAt': admin.firestore.FieldValue.serverTimestamp(),
                 messages: admin.firestore.FieldValue.arrayUnion({
                     sender: 'agent',
                     text: body,
@@ -554,7 +575,8 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 'botState.status': 'active',
                 'botState.waitingForInput': true,
                 'botState.currentNodeId': node.id,
-                'botState.variableName': node.data?.variableName || 'input'
+                'botState.variableName': node.data?.variableName || 'input',
+                'botState.lastWaitStartedAt': admin.firestore.FieldValue.serverTimestamp()
             };
             
             if (content.trim()) {
