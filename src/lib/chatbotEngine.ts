@@ -165,7 +165,10 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     const isReset = isExplicitReset || isTimeoutReset;
     const isMenu = /^(menu|opciones|ayuda|help)/i.test(normalizedInput);
     const isStop = /^(detener|stop|salir|chau|adios)/i.test(normalizedInput);
-    const isStartTrigger = /^(hola|hi|buenas|inicio|start|buen(as)?\s*(dias|tardes|noches)|que\s*tal|saludos)/i.test(normalizedInput);
+    const _isWaiting = cardData.botState?.waitingForInput || false;
+    const isStartTrigger = _isWaiting
+        ? /^(hola|hi|buenas|inicio|start|buen(as)?\s*(dias|tardes|noches)|que\s*tal|saludos)$/i.test(normalizedInput) // Strict match if waiting
+        : /^(hola|hi|buenas|inicio|start|buen(as)?\s*(dias|tardes|noches)|que\s*tal|saludos)/i.test(normalizedInput); // Loose match if not waiting
     
     const isCommand = isReset || isMenu || isStop;
 
@@ -183,10 +186,17 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             const matches = val.match(/[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*/g);
             return matches ? matches[0] : val;
         }
-        if (/nombre|name|cli/i.test(varName)) {
+        if (/nombre|name|cli|apell/i.test(varName)) {
             let cleaned = val;
-            [/me llamo /i, /mi nombre es /i, /soy /i, /mucho gusto/i, /hola/i].forEach(p => cleaned = cleaned.replace(p, ''));
-            return cleaned.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ').trim();
+            const prefixes = [
+                /mi apellido es /i, /me apellido /i, /mi nombre es /i, /me llamo /i, /yo soy /i, /soy /i, 
+                /mucho gusto,? /i, /hola,? /i, /saludos,? /i, /buenas,? /i, /que tal,? /i, 
+                /buenos d[ií]as,? /i, /buenas tardes,? /i, /buenas noches,? /i
+            ];
+            prefixes.forEach(p => cleaned = cleaned.replace(p, ''));
+            // Remove lingering punctuation and extra spaces
+            cleaned = cleaned.replace(/^[,.\s]+/, '').replace(/[,.\s]+$/, '');
+            return cleaned.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ').trim();
         }
         return val;
     };
