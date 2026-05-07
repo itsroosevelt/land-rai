@@ -75,18 +75,18 @@ export const ChatSidebar = ({
     }, [handleGenerate]);
 
     return (
-        <div className="w-[317px] border-r border-white/5 flex flex-col bg-[#09090b]/90 backdrop-blur-xl relative z-20 shadow-[10px_0_30px_rgba(0,0,0,0.5)] font-sans">
+        <div className="w-[317px] border-r border-white/5 flex flex-col bg-[#0a0a0a]/90 backdrop-blur-xl relative z-20 shadow-[10px_0_30px_rgba(0,0,0,0.5)] font-sans">
             {/* Header with Actions */}
             <div className="h-14 border-b border-white/[0.03] bg-white/[0.01] flex items-center justify-between px-4 shrink-0">
                 <div className="flex items-center gap-2.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
                     <span className="text-[10px] font-black text-white/90 uppercase tracking-[0.2em] flex items-center gap-2">
                         AI Architect
                     </span>
                     {(credits !== null || isAdmin) && (
-                        <div className={`px-2 py-0.5 rounded-full flex items-center gap-1 animate-in fade-in zoom-in duration-500 ${isAdmin ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-blue-500/10 border border-blue-500/20'}`}>
-                            <Sparkles className={`w-2.5 h-2.5 ${isAdmin ? 'text-amber-400' : 'text-blue-400'}`} />
-                            <span className={`text-[9px] font-bold ${isAdmin ? 'text-amber-400' : 'text-blue-400'}`}>
+                        <div className={`px-2 py-0.5 rounded-full flex items-center gap-1 animate-in fade-in zoom-in duration-500 ${isAdmin ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-cyan-500/10 border border-cyan-500/20'}`}>
+                            <Sparkles className={`w-2.5 h-2.5 ${isAdmin ? 'text-amber-400' : 'text-cyan-400'}`} />
+                            <span className={`text-[9px] font-bold ${isAdmin ? 'text-amber-400' : 'text-cyan-400'}`}>
                                 {isAdmin ? '∞' : credits}
                             </span>
                         </div>

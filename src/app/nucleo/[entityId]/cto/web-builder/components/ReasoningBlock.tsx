@@ -13,7 +13,15 @@ interface ReasoningBlockProps {
 }
 
 export const ReasoningBlock = ({ content, steps = [], thinkingTime, isGenerating, msgId, approved }: ReasoningBlockProps) => {
-    const [isExpanded, setIsExpanded] = useState(false);
+    // Helper to strip <think> tags from content
+    const cleanContent = (text: string) => {
+        return text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    };
+
+    const hasOtherContent = cleanContent(content).length > 0;
+    const [isExpanded, setIsExpanded] = useState(!hasOtherContent);
+
+    const isError = content.includes("🚨") || content.includes("⚠️") || content.includes("⏳") || content.startsWith("Error:");
 
     // Extract content inside <think> tags
     const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/);
@@ -31,14 +39,20 @@ export const ReasoningBlock = ({ content, steps = [], thinkingTime, isGenerating
                 className="flex items-center justify-between gap-2 mb-2 px-1 cursor-pointer group"
                 onClick={() => setIsExpanded(!isExpanded)}
             >
-                <div className="flex items-center gap-2 text-blue-400/80">
+                <div className={`flex items-center gap-2 ${isError ? 'text-red-500' : 'text-blue-400/80'}`}>
                     {isGenerating ? (
                         <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : isError ? (
+                        <Circle className="w-3 h-3 fill-current animate-pulse" />
                     ) : (
                         <Brain className="w-3 h-3" />
                     )}
                     <span className="text-[10px] font-bold tracking-widest uppercase opacity-70">
-                        {isGenerating ? "Arquitecto AI Pensando..." : `Análisis Completado (${thinkingTime || 0}s)`}
+                        {isGenerating 
+                            ? "Arquitecto AI Pensando..." 
+                            : isError 
+                                ? "Fallo en el Proceso de Análisis" 
+                                : `Análisis Completado (${thinkingTime || 0}s)`}
                     </span>
                 </div>
                 <div className="flex items-center gap-2">

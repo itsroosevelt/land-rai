@@ -382,7 +382,7 @@ export const useChatAI = (
             while (attempts < maxClientAttempts) {
                 try {
                     attempts++;
-                    res = await fetch('/api/web-builder/ai', {
+                    res = await fetch('/api/web-builder/ai/v2', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({

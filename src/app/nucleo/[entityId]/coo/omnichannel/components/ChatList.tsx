@@ -40,21 +40,36 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
             filtered = filtered.filter(c => c.assignedTo === 'Mío');
         } else if (selectedFolder === 'unassigned') {
             filtered = filtered.filter(c => !c.assignedTo || c.assignedTo === 'Unassigned');
-        } else if (selectedFolder === 'whatsapp1') {
-            filtered = filtered.filter(c => (c.channel || c.source || '').toLowerCase().includes('whatsapp'));
-        } else if (selectedFolder === 'ig1') {
-            filtered = filtered.filter(c => (c.channel || c.source || '').toLowerCase().includes('instagram'));
+        } else if (selectedFolder === 'whatsapp') {
+            filtered = filtered.filter(c => {
+                const src = (c.channel || c.source || c.primary_channel || '').toLowerCase();
+                return src.includes('whatsapp');
+            });
+        } else if (selectedFolder === 'instagram') {
+            filtered = filtered.filter(c => {
+                const src = (c.channel || c.source || c.primary_channel || '').toLowerCase();
+                return src.includes('instagram');
+            });
         } else if (selectedFolder === 'messenger') {
             filtered = filtered.filter(c => {
                 const src = (c.channel || c.source || c.primary_channel || '').toLowerCase();
                 return src.includes('messenger') || src.includes('facebook') || src.includes('meta');
             });
         } else if (selectedFolder === 'telegram') {
-            filtered = filtered.filter(c => (c.channel || c.source || '').toLowerCase().includes('telegram'));
-        } else if (selectedFolder === 'twitter') {
-            filtered = filtered.filter(c => (c.channel || c.source || '').toLowerCase().includes('x') || (c.channel || c.source || '').toLowerCase().includes('twitter'));
+            filtered = filtered.filter(c => {
+                const src = (c.channel || c.source || c.primary_channel || '').toLowerCase();
+                return src.includes('telegram');
+            });
+        } else if (selectedFolder === 'twitter' || selectedFolder === 'x') {
+            filtered = filtered.filter(c => {
+                const src = (c.channel || c.source || c.primary_channel || '').toLowerCase();
+                return src.includes('x') || src.includes('twitter');
+            });
         } else if (selectedFolder === 'gmail') {
-            filtered = filtered.filter(c => (c.channel || c.source || '').toLowerCase().includes('gmail'));
+            filtered = filtered.filter(c => {
+                const src = (c.channel || c.source || c.primary_channel || '').toLowerCase();
+                return src.includes('gmail') || src.includes('email');
+            });
         } else if (selectedFolder === 'all') {
             // No filter applied for 'all'
         } else if (selectedFolder.startsWith('label:')) {
@@ -78,14 +93,15 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
             );
         }
 
-        // 4. Deduplication logic
-        // If multiple cards exist for the same contact, we only show the one with the latest update
+        // 4. Deduplication logic (Reverted to Platform Isolation)
+        // If multiple cards exist for the same contact, we show them separately by platform
         const uniqueMap = new Map<string, any>();
         filtered.forEach(c => {
-            // Robust key: Platform + (Phone or ID) to keep channels separated (Rule: Platform Isolation)
             const phone = c.contactNumber || c.contactNumberClean;
             const sourceKey = (c.source || c.channel || c.primary_channel || 'unknown').toLowerCase();
             const idKey = phone ? phone.replace(/\D/g, '') : (c.platform_ids?.[sourceKey] || c.platform_ids?.messenger || c.external_id || c.id);
+            
+            // KEY: Keep them separated by platform (Rule: Platform Isolation)
             const key = `${sourceKey}_${idKey}`;
             
             const existing = uniqueMap.get(key);
@@ -125,12 +141,22 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
         return filtered.map(c => ({
             id: c.id,
             name: c.contactName || c.contactNumber || 'Desconocido',
-            channel: (c.channel || c.source || c.primary_channel || '').toLowerCase().includes('gmail') ? 'gmail' : (c.channel || c.source || c.primary_channel || 'WhatsApp'),
+            channel: (() => {
+                const src = (c.channel || c.source || c.primary_channel || '').toLowerCase();
+                if (src.includes('gmail') || src.includes('email')) return 'gmail';
+                if (src.includes('instagram')) return 'instagram';
+                if (src.includes('messenger') || src.includes('facebook')) return 'messenger';
+                if (src.includes('telegram')) return 'telegram';
+                if (src.includes('x') || src.includes('twitter')) return 'twitter';
+                if (src.includes('whatsapp')) return 'whatsapp';
+                return 'whatsapp'; // Default
+            })(),
             snippet: c.lastMessage || c.description || 'Nueva conversación',
             time: c.updatedAt ? (typeof c.updatedAt.toDate === 'function' ? c.updatedAt.toDate() : (c.updatedAt.seconds ? new Date(c.updatedAt.seconds * 1000) : new Date(c.updatedAt))).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'}) : 'Reciente',
             unread: c.unreadCount || 0,
             status: 'open',
-            presence: c.presence || null
+            presence: c.presence || null,
+            allChannels: Array.from(c.allChannels || [])
         }));
     }, [cards, selectedFolder, searchQuery, sortBy, filterBy]);
 
@@ -225,7 +251,7 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
                                             chat.channel.toLowerCase().includes('instagram') ? 'bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888]' :
                                                 chat.channel.toLowerCase().includes('messenger') || chat.channel.toLowerCase().includes('facebook') ? 'bg-[#00B2FF]' :
                                                     chat.channel.toLowerCase().includes('telegram') ? 'bg-[#229ED9]' :
-                                                        chat.channel.toLowerCase().includes('gmail') ? 'bg-[#EA4335]' :
+                                                        chat.channel.toLowerCase().includes('gmail') || chat.channel.toLowerCase().includes('email') ? 'bg-[#EA4335]' :
                                                             chat.channel.toLowerCase().includes('twitter') || chat.channel.toLowerCase().includes('x') ? 'bg-black' : 'bg-neutral-500'}
                                     `}>
                                         {chat.channel.toLowerCase().includes('whatsapp') ? (

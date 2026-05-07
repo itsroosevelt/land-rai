@@ -82,7 +82,7 @@ export const Toolbar = ({
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
     return (
-        <div className="h-14 border-b border-[#222] bg-[#09090b] flex items-center justify-between px-4 z-[90] shrink-0 font-sans">
+        <div className="h-14 border-b border-white/5 bg-[#050505] flex items-center justify-between px-4 z-[90] shrink-0 font-sans">
             {/* Left: Exit & Dashboard */}
             <div className="flex items-center gap-4">
                 <button
@@ -109,7 +109,7 @@ export const Toolbar = ({
 
                 {activeProjectName && (
                     <>
-                        <div className="h-4 w-[1px] bg-[#333]"></div>
+                        <div className="h-4 w-[1px] bg-white/10"></div>
                         <div className="flex items-center gap-2 text-white">
                             <span className="text-sm font-semibold tracking-tight">{activeProjectName}</span>
                         </div>
@@ -121,7 +121,7 @@ export const Toolbar = ({
             <div className="flex items-center gap-2">
 
                 {/* Tools Group */}
-                <div className="flex items-center gap-1 bg-[#111] p-1 rounded-xl border border-[#222]">
+                <div className="flex items-center gap-1 bg-[#0a0a0a] p-1 rounded-xl border border-white/5">
                     {[
                         { id: 'select', icon: MousePointer2, title: 'Seleccionar' },
                         { id: 'hand', icon: Hand, title: 'Mano (Pan)' },
@@ -141,13 +141,13 @@ export const Toolbar = ({
                             }}
                             className={`p-1.5 rounded-lg transition-all ${activeTool === tool.id ? 'bg-[#222] text-white shadow-sm' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}
                         >
-                            <tool.icon className={`w-3.5 h-3.5 ${activeTool === 'zoom' && tool.id === 'zoom' ? 'text-blue-400' : ''}`} />
+                            <tool.icon className={`w-3.5 h-3.5 ${activeTool === 'zoom' && tool.id === 'zoom' ? 'text-cyan-400' : ''}`} />
                         </button>
                     ))}
                 </div>
 
                 {/* View Modes Group */}
-                <div className="flex items-center gap-3 bg-[#111] p-1 pr-3 rounded-xl border border-[#222]">
+                <div className="flex items-center gap-3 bg-[#0a0a0a] p-1 pr-3 rounded-xl border border-white/5">
                     <div className="flex items-center gap-1">
                         {[
                             { id: 'desktop', icon: Monitor },
@@ -163,45 +163,68 @@ export const Toolbar = ({
                             </button>
                         ))}
                     </div>
-                    <div className="h-4 w-[1px] bg-[#222]"></div>
-                    <button
-                        onClick={resetPan}
-                        title="Restablecer vista"
-                        className="text-[10px] text-gray-500 font-mono hover:text-blue-400 transition-colors px-1"
-                    >
-                        {zoom}%
-                    </button>
+                    <div className="h-4 w-[1px] bg-white/10"></div>
+                    <div className="relative group">
+                        <button
+                            className="flex items-center gap-1 text-[10px] text-cyan-400 font-mono hover:text-white transition-colors px-1"
+                        >
+                            {zoom}% <ChevronDown className="w-3 h-3 opacity-50" />
+                        </button>
+                        
+                        {/* Zoom Dropdown */}
+                        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block bg-[#0a0a0a] border border-white/10 rounded-lg shadow-2xl py-1 z-50 max-h-[200px] overflow-y-auto custom-scrollbar min-w-[60px]">
+                            {[50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200].map((level) => (
+                                <button
+                                    key={level}
+                                    onClick={() => {
+                                        setZoom(level);
+                                        resetPan?.();
+                                    }}
+                                    className={`w-full px-3 py-1.5 text-left text-[10px] font-mono transition-colors ${zoom === level ? 'bg-cyan-500/10 text-cyan-400' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
+                                >
+                                    {level}%
+                                </button>
+                            ))}
+                            <div className="h-[1px] bg-white/5 my-1"></div>
+                            <button
+                                onClick={resetPan}
+                                className="w-full px-3 py-1.5 text-left text-[10px] font-mono text-gray-500 hover:text-white hover:bg-white/5 transition-colors"
+                            >
+                                Reset
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
 
                 {/* Undo/Redo Group */}
-                <div className="flex items-center gap-1 bg-[#111] p-1 rounded-xl border border-[#222]">
+                <div className="flex items-center gap-1 bg-[#0a0a0a] p-1 rounded-xl border border-white/5">
                     <button onClick={handleUndo} disabled={historyLength === 0} className="p-1.5 text-gray-500 hover:text-white transition-colors disabled:opacity-20 disabled:cursor-not-allowed rounded-lg hover:bg-white/5"><Undo2 className="w-3.5 h-3.5" /></button>
                     <button onClick={handleRedo} disabled={futureLength === 0} className="p-1.5 text-gray-500 hover:text-white transition-colors disabled:opacity-20 disabled:cursor-not-allowed rounded-lg hover:bg-white/5"><Redo2 className="w-3.5 h-3.5" /></button>
                 </div>
 
-                <div className="h-4 w-[1px] bg-[#222] mx-2"></div>
+                <div className="h-4 w-[1px] bg-white/10 mx-2"></div>
 
                 {/* Publish Split Button */}
                 {activeProjectId && (
                     <div className="relative flex items-center" ref={publishMenuRef}>
-                        <div className="flex items-center bg-[#111] rounded-full border border-[#222] overflow-hidden shadow-lg shadow-black/20">
+                        <div className="flex items-center bg-[#0a0a0a] rounded-full border border-white/5 overflow-hidden shadow-lg shadow-black/20">
                             {/* Primary Action Button */}
                             <button
                                 onClick={!isConfigured ? () => handlePublish() : () => handlePublish(true)}
                                 disabled={isPublishing}
                                 className={`flex items-center gap-2 px-3 py-1.5 transition-all ${isPublishing
-                                    ? 'text-blue-400 cursor-wait'
+                                    ? 'text-cyan-400 cursor-wait'
                                     : isConfigured
                                         ? 'text-green-400 hover:bg-white/5'
                                         : 'text-blue-400 hover:bg-white/5'
                                     }`}
                             >
                                 <div className={`w-1.5 h-1.5 rounded-full ${isPublishing
-                                    ? 'bg-blue-400 animate-pulse'
+                                    ? 'bg-cyan-400 animate-pulse'
                                     : isConfigured
                                         ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]'
-                                        : 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]'
+                                        : 'bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.5)]'
                                     }`} />
                                 <span className="text-[10px] font-black tracking-widest uppercase truncate max-w-[100px]">
                                     {isPublishing ? 'PUBLISHING...' : isConfigured ? 'UPDATE LIVE' : 'PUBLISH'}
@@ -209,7 +232,7 @@ export const Toolbar = ({
                             </button>
 
                             {/* Dropdown Chevron */}
-                            <div className="w-[1px] h-4 bg-[#222]"></div>
+                            <div className="w-[1px] h-4 bg-white/10"></div>
                             <button
                                 onClick={() => setShowPublishMenu(!showPublishMenu)}
                                 className={`p-1.5 transition-all hover:bg-white/5 ${showPublishMenu ? 'text-white' : 'text-gray-500'}`}
@@ -220,15 +243,15 @@ export const Toolbar = ({
 
                         {/* Dropdown Menu */}
                         {showPublishMenu && (
-                            <div className="absolute top-full right-0 mt-2 w-60 bg-[#0c0c0e] border border-[#222] rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-1">
+                            <div className="absolute top-full right-0 mt-2 w-60 bg-[#0c0c0e] border border-white/5 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-1">
                                 <div className="p-2 flex flex-col gap-1">
                                     <button
                                         onClick={() => { handlePublish(true); setShowPublishMenu(false); }}
                                         disabled={isPublishing || !isConfigured}
                                         className="w-full px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors flex items-center gap-3 group text-left disabled:opacity-30 disabled:cursor-not-allowed"
                                     >
-                                        <div className="p-1.5 bg-blue-500/10 rounded-lg group-hover:bg-blue-500/20 transition-colors">
-                                            <Rocket className="w-4 h-4 text-blue-400" />
+                                        <div className="p-1.5 bg-cyan-500/10 rounded-lg group-hover:bg-cyan-500/20 transition-colors">
+                                            <Rocket className="w-4 h-4 text-cyan-400" />
                                         </div>
                                         <div>
                                             <div className="text-xs font-bold text-white">Publicar Cambios</div>
@@ -268,7 +291,7 @@ export const Toolbar = ({
                                         </a>
                                     )}
 
-                                    <div className="h-[1px] bg-[#222] my-1" />
+                                    <div className="h-[1px] bg-white/5 my-1" />
 
                                     <button
                                         onClick={() => { setShowSettings(true); setShowPublishMenu(false); }}
@@ -289,7 +312,7 @@ export const Toolbar = ({
                 )}
 
                 {/* Preview Controls (Terminal & Refresh & Auto-Fix) */}
-                <div className="flex items-center gap-1 bg-[#111] p-1 rounded-xl border border-[#222]">
+                <div className="flex items-center gap-1 bg-[#0a0a0a] p-1 rounded-xl border border-white/5">
                     <button
                         onClick={() => setIsAutoFixEnabled?.(!isAutoFixEnabled)}
                         className={`p-1.5 rounded-lg transition-all ${isAutoFixEnabled ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}
@@ -299,7 +322,7 @@ export const Toolbar = ({
                     </button>
                     <button
                         onClick={() => setShowTerminal?.(!showTerminal)}
-                        className={`p-1.5 rounded-lg transition-all ${showTerminal ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}
+                        className={`p-1.5 rounded-lg transition-all ${showTerminal ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}
                         title="Show Terminal"
                     >
                         <TerminalIcon className="w-3.5 h-3.5" />
@@ -310,16 +333,16 @@ export const Toolbar = ({
                         className={`p-1.5 rounded-lg transition-all text-gray-500 hover:text-white hover:bg-white/5 disabled:opacity-30`}
                         title="Refresh Preview"
                     >
-                        <RefreshCw className={`w-3.5 h-3.5 ${isPreviewLoading ? 'animate-spin text-blue-400' : ''}`} />
+                        <RefreshCw className={`w-3.5 h-3.5 ${isPreviewLoading ? 'animate-spin text-cyan-400' : ''}`} />
                     </button>
                 </div>
 
-                <div className="h-4 w-[1px] bg-[#222] mx-1"></div>
+                <div className="h-4 w-[1px] bg-white/10 mx-1"></div>
 
                 {/* Code Toggle */}
                 <button
                     onClick={() => setShowCode(!showCode)}
-                    className={`flex items-center justify-center w-8 h-8 rounded-full border transition-all ${showCode ? 'bg-white text-black border-white' : 'bg-[#111] hover:bg-[#222] border-[#222] text-gray-400'}`}
+                    className={`flex items-center justify-center w-8 h-8 rounded-full border transition-all ${showCode ? 'bg-white text-black border-white' : 'bg-[#0a0a0a] hover:bg-[#111] border-white/5 text-gray-400'}`}
                     title="Code Editor"
                 >
                     <Code2 className="w-4 h-4" />
@@ -330,7 +353,7 @@ export const Toolbar = ({
                     <div className="relative ml-1">
                         <button
                             onClick={() => setShowUserMenu(!showUserMenu)}
-                            className="flex items-center justify-center w-8 h-8 rounded-full bg-[#111] border border-[#222] hover:border-gray-500 transition-colors"
+                            className="flex items-center justify-center w-8 h-8 rounded-full bg-[#0a0a0a] border border-white/5 hover:border-gray-500 transition-colors"
                         >
                             {user.photoURL ? (
                                 <img src={user.photoURL} alt="User" className="w-full h-full rounded-full object-cover" />
@@ -370,7 +393,7 @@ export const Toolbar = ({
                                                     className={`w-full px-3 py-2 text-xs text-left transition-colors flex items-center justify-between group ${activeProjectId === proj.id ? 'bg-blue-600/10 text-blue-400' : 'text-gray-300 hover:bg-[#27272a]'}`}
                                                 >
                                                     <span className="truncate max-w-[120px]">{proj.name}</span>
-                                                    {activeProjectId === proj.id && <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />}
+                                                    {activeProjectId === proj.id && <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.5)]" />}
                                                 </button>
                                             ))
                                         )}

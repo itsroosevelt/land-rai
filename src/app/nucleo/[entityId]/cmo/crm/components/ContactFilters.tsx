@@ -86,10 +86,149 @@ export const ContactFilters: React.FC<ContactFiltersProps> = ({
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-10 pr-16 bg-black/40 border-white/5 h-10 focus:ring-1 focus:ring-blue-500/50 focus:border-blue-500/50 text-white font-medium placeholder:text-neutral-600 text-xs uppercase tracking-wider rounded-lg transition-all"
                 />
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-40 group-focus-within:opacity-100 transition-opacity pointer-events-none">
-                    <kbd className="h-5 px-1.5 rounded border border-white/20 bg-white/5 text-[9px] font-medium text-neutral-400 flex items-center justify-center min-w-[20px]">⌘</kbd>
-                    <kbd className="h-5 px-1.5 rounded border border-white/20 bg-white/5 text-[9px] font-medium text-neutral-400 flex items-center justify-center min-w-[20px]">K</kbd>
-                </div>
+                <Dialog open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+                    <DialogTrigger asChild>
+                        <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 text-neutral-500 hover:text-blue-500 transition-all">
+                            <Filter className="w-3.5 h-3.5" />
+                            {activeFiltersCount > 0 && (
+                                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-blue-600 rounded-full border border-black" />
+                            )}
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent className="bg-neutral-950 border-neutral-800 text-white sm:max-w-2xl rounded-lg p-6 backdrop-blur-3xl">
+                        <DialogHeader>
+                            <DialogTitle className="text-2xl font-medium tracking-tight uppercase flex items-center justify-between">
+                                <span className="flex items-center">
+                                    <Filter className="w-6 h-6 mr-3 text-blue-500" />
+                                    Advanced Filters
+                                </span>
+                                {activeFiltersCount > 0 && (
+                                    <Button
+                                        variant="ghost"
+                                        onClick={clearAllFilters}
+                                        className="text-xs text-red-400 hover:text-red-300 font-medium"
+                                    >
+                                        Clear All
+                                    </Button>
+                                )}
+                            </DialogTitle>
+                            <DialogDescription className="text-neutral-300 font-medium">
+                                Refine your contact list with precision filters
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-8 py-6">
+                            {/* Stage Filter */}
+                            <div>
+                                <Label className="text-[10px] font-medium uppercase tracking-[0.2em] text-neutral-400 mb-4 block">
+                                    Stage / Status
+                                </Label>
+                                <div className="flex flex-wrap gap-2">
+                                    {availableStages.map(stage => (
+                                        <Button
+                                            key={stage}
+                                            variant={selectedStages.includes(stage) ? "default" : "outline"}
+                                            size="sm"
+                                            onClick={() => {
+                                                setSelectedStages(prev =>
+                                                    prev.includes(stage)
+                                                        ? prev.filter(s => s !== stage)
+                                                        : [...prev, stage]
+                                                );
+                                            }}
+                                            className={cn(
+                                                "h-9 px-4 text-xs font-medium rounded-xl transition-all",
+                                                selectedStages.includes(stage)
+                                                    ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30 border-blue-500"
+                                                    : "bg-neutral-900/50 text-neutral-400 border-neutral-800 hover:border-blue-500/50 hover:text-neutral-200"
+                                            )}
+                                        >
+                                            {stage}
+                                        </Button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Source Filter */}
+                            <div>
+                                <Label className="text-[10px] font-medium uppercase tracking-[0.2em] text-neutral-400 mb-4 block">
+                                    Source / Origin
+                                </Label>
+                                <div className="flex flex-wrap gap-2">
+                                    {availableSources.map(source => (
+                                        <Button
+                                            key={source}
+                                            variant={selectedSources.includes(source) ? "default" : "outline"}
+                                            size="sm"
+                                            onClick={() => {
+                                                setSelectedSources(prev =>
+                                                    prev.includes(source)
+                                                        ? prev.filter(s => s !== source)
+                                                        : [...prev, source]
+                                                );
+                                            }}
+                                            className={cn(
+                                                "h-9 px-4 text-xs font-medium rounded-xl transition-all",
+                                                selectedSources.includes(source)
+                                                    ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30 border-blue-500"
+                                                    : "bg-neutral-900/50 text-neutral-400 border-neutral-800 hover:border-blue-500/50 hover:text-neutral-200"
+                                            )}
+                                        >
+                                            {source}
+                                        </Button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Tags Filter */}
+                            {availableTags.length > 0 && (
+                                <div>
+                                    <Label className="text-[10px] font-medium uppercase tracking-[0.2em] text-neutral-400 mb-4 block">
+                                        Tags / Categories
+                                    </Label>
+                                    <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto custom-scrollbar">
+                                        {availableTags.map(tag => (
+                                            <Button
+                                                key={tag}
+                                                variant={selectedTags.includes(tag) ? "default" : "outline"}
+                                                size="sm"
+                                                onClick={() => {
+                                                    setSelectedTags(prev =>
+                                                        prev.includes(tag)
+                                                            ? prev.filter(t => t !== tag)
+                                                            : [...prev, tag]
+                                                    );
+                                                }}
+                                                className={cn(
+                                                    "h-9 px-4 text-xs font-medium rounded-xl transition-all",
+                                                    selectedTags.includes(tag)
+                                                        ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30 border-blue-500"
+                                                        : "bg-neutral-900/50 text-neutral-400 border-neutral-800 hover:border-blue-500/50 hover:text-neutral-200"
+                                                )}
+                                            >
+                                                {tag}
+                                            </Button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <DialogFooter className="mt-6">
+                            <div className="flex items-center justify-between w-full">
+                                <p className="text-sm text-neutral-400">
+                                    <span className="font-medium text-blue-400">{filteredCount}</span> contacts match your filters
+                                </p>
+                                <Button
+                                    onClick={() => setIsFilterOpen(false)}
+                                    className="bg-blue-600 hover:bg-blue-700 px-8 rounded-xl font-medium shadow-lg shadow-blue-600/20"
+                                >
+                                    Apply Filters
+                                </Button>
+                            </div>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             </div>
 
             {/* Relocated Tabs */}
@@ -135,154 +274,6 @@ export const ContactFilters: React.FC<ContactFiltersProps> = ({
                     </div>
 
                     <div className="h-6 w-[1px] bg-neutral-800" />
-
-                    <Dialog open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-                        <DialogTrigger asChild>
-                            <Button variant="ghost" className="h-9 text-neutral-500 hover:text-white font-medium text-xs uppercase tracking-wider flex items-center group">
-                                <Filter className="w-3.5 h-3.5 mr-2 group-hover:text-blue-500 transition-colors" />
-                                Filters
-                                {activeFiltersCount > 0 && (
-                                    <Badge className="ml-2 bg-blue-600 text-white text-[9px] px-1.5 py-0 font-medium rounded-sm">
-                                        {activeFiltersCount}
-                                    </Badge>
-                                )}
-                            </Button>
-                        </DialogTrigger>
-                        <DialogContent className="bg-neutral-950 border-neutral-800 text-white sm:max-w-2xl rounded-lg p-6 backdrop-blur-3xl">
-                            <DialogHeader>
-                                <DialogTitle className="text-2xl font-medium tracking-tight uppercase flex items-center justify-between">
-                                    <span className="flex items-center">
-                                        <Filter className="w-6 h-6 mr-3 text-blue-500" />
-                                        Advanced Filters
-                                    </span>
-                                    {activeFiltersCount > 0 && (
-                                        <Button
-                                            variant="ghost"
-                                            onClick={clearAllFilters}
-                                            className="text-xs text-red-400 hover:text-red-300 font-medium"
-                                        >
-                                            Clear All
-                                        </Button>
-                                    )}
-                                </DialogTitle>
-                                <DialogDescription className="text-neutral-300 font-medium">
-                                    Refine your contact list with precision filters
-                                </DialogDescription>
-                            </DialogHeader>
-
-                            <div className="space-y-8 py-6">
-                                {/* Stage Filter */}
-                                <div>
-                                    <Label className="text-[10px] font-medium uppercase tracking-[0.2em] text-neutral-400 mb-4 block">
-                                        Stage / Status
-                                    </Label>
-                                    <div className="flex flex-wrap gap-2">
-                                        {availableStages.map(stage => (
-                                            <Button
-                                                key={stage}
-                                                variant={selectedStages.includes(stage) ? "default" : "outline"}
-                                                size="sm"
-                                                onClick={() => {
-                                                    setSelectedStages(prev =>
-                                                        prev.includes(stage)
-                                                            ? prev.filter(s => s !== stage)
-                                                            : [...prev, stage]
-                                                    );
-                                                }}
-                                                className={cn(
-                                                    "h-9 px-4 text-xs font-medium rounded-xl transition-all",
-                                                    selectedStages.includes(stage)
-                                                        ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30 border-blue-500"
-                                                        : "bg-neutral-900/50 text-neutral-400 border-neutral-800 hover:border-blue-500/50 hover:text-neutral-200"
-                                                )}
-                                            >
-                                                {stage}
-                                            </Button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Source Filter */}
-                                <div>
-                                    <Label className="text-[10px] font-medium uppercase tracking-[0.2em] text-neutral-400 mb-4 block">
-                                        Source / Origin
-                                    </Label>
-                                    <div className="flex flex-wrap gap-2">
-                                        {availableSources.map(source => (
-                                            <Button
-                                                key={source}
-                                                variant={selectedSources.includes(source) ? "default" : "outline"}
-                                                size="sm"
-                                                onClick={() => {
-                                                    setSelectedSources(prev =>
-                                                        prev.includes(source)
-                                                            ? prev.filter(s => s !== source)
-                                                            : [...prev, source]
-                                                    );
-                                                }}
-                                                className={cn(
-                                                    "h-9 px-4 text-xs font-medium rounded-xl transition-all",
-                                                    selectedSources.includes(source)
-                                                        ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30 border-blue-500"
-                                                        : "bg-neutral-900/50 text-neutral-400 border-neutral-800 hover:border-blue-500/50 hover:text-neutral-200"
-                                                )}
-                                            >
-                                                {source}
-                                            </Button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Tags Filter */}
-                                {availableTags.length > 0 && (
-                                    <div>
-                                        <Label className="text-[10px] font-medium uppercase tracking-[0.2em] text-neutral-400 mb-4 block">
-                                            Tags / Categories
-                                        </Label>
-                                        <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto custom-scrollbar">
-                                            {availableTags.map(tag => (
-                                                <Button
-                                                    key={tag}
-                                                    variant={selectedTags.includes(tag) ? "default" : "outline"}
-                                                    size="sm"
-                                                    onClick={() => {
-                                                        setSelectedTags(prev =>
-                                                            prev.includes(tag)
-                                                                ? prev.filter(t => t !== tag)
-                                                                : [...prev, tag]
-                                                        );
-                                                    }}
-                                                    className={cn(
-                                                        "h-9 px-4 text-xs font-medium rounded-xl transition-all",
-                                                        selectedTags.includes(tag)
-                                                            ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30 border-blue-500"
-                                                            : "bg-neutral-900/50 text-neutral-400 border-neutral-800 hover:border-blue-500/50 hover:text-neutral-200"
-                                                    )}
-                                                >
-                                                    {tag}
-                                                </Button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            <DialogFooter className="mt-6">
-                                <div className="flex items-center justify-between w-full">
-                                    <p className="text-sm text-neutral-400">
-                                        <span className="font-medium text-blue-400">{filteredCount}</span> contacts match your filters
-                                    </p>
-                                    <Button
-                                        onClick={() => setIsFilterOpen(false)}
-                                        className="bg-blue-600 hover:bg-blue-700 px-8 rounded-xl font-medium shadow-lg shadow-blue-600/20"
-                                    >
-                                        Apply Filters
-                                    </Button>
-                                </div>
-                            </DialogFooter>
-                        </DialogContent>
-                    </Dialog>
-
                     {selectedCount > 0 && (
                         <Button
                             variant="ghost"

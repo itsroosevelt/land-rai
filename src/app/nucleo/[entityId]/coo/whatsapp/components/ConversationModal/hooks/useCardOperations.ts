@@ -55,6 +55,18 @@ export const useCardOperations = ({
         return `users/${currentUser.uid}/entities/${activeEntity}`;
     };
 
+    const sanitizeData = (data: any) => {
+        const sanitized = { ...data };
+        Object.keys(sanitized).forEach(key => {
+            if (sanitized[key] === undefined) {
+                sanitized[key] = '';
+            } else if (typeof sanitized[key] === 'object' && sanitized[key] !== null && !Array.isArray(sanitized[key])) {
+                sanitized[key] = sanitizeData(sanitized[key]);
+            }
+        });
+        return sanitized;
+    };
+
     const handleInfoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
         setContactInfo((prev) => ({ ...prev, [name]: value }));
@@ -69,7 +81,7 @@ export const useCardOperations = ({
         const metaSenderId = liveCardData?.metaSenderId || (card as any)?.metaSenderId || (card as any)?.contactNumber;
         
         try {
-            const dataToSave = latestContactInfo.current;
+            const dataToSave = sanitizeData(latestContactInfo.current);
             // 1. Update Kanban Card
             if (currentCardId && currentGroupId && !currentCardId.startsWith('temp-')) {
                 await updateDoc(doc(db, `${tenantPath}/kanban-groups`, currentGroupId, 'cards', currentCardId), dataToSave);

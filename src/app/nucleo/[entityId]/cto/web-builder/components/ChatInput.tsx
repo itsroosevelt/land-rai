@@ -194,29 +194,34 @@ export const ChatInput = ({
                             >
                                 <Sparkles className="w-2.5 h-2.5 text-blue-400" />
                                 {selectedModel.split(' ')[0]}
+                                <span className="ml-0.5 text-[7px] bg-purple-500/20 text-purple-400 px-0.5 rounded border border-purple-500/30">V2</span>
                                 <ChevronDown className="w-2.5 h-2.5 opacity-30" />
                             </button>
                             {showModelDropdown && (
                                 <div className="absolute bottom-full left-0 mb-3 w-64 bg-[#18181b] border border-[#27272a] rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] py-1 z-[100] animate-in fade-in slide-in-from-bottom-2">
                                     <div className="px-3 py-2 text-[10px] font-semibold text-gray-500 uppercase tracking-wider border-b border-[#27272a]">Modelos Disponibles</div>
                                     {[
-                                        { id: 'Multi-AI (Consensus)', label: 'Multi-AI (Consensus)' },
+                                        { id: 'Multi-AI (Consensus)', label: 'Multi-AI (Consensus)', disabled: true },
                                         { id: 'Gemini 3.0 (Preview)', label: 'Gemini 3.0 (Preview) 🚀' },
                                         { id: 'Gemini 2.0 Flash', label: 'Gemini 2.0 Flash' },
                                         { id: 'Gemini 2.0 Pro', label: 'Gemini 2.0 Pro' },
                                         { id: 'Gemini 1.5 Flash', label: 'Gemini 1.5 Flash ⭐' },
                                         { id: 'Gemini 1.5 Pro', label: 'Gemini 1.5 Pro ⭐' },
-                                        { id: 'Claude 3.5 Sonnet', label: 'Claude 3.5 Sonnet' },
-                                        { id: 'GPT-4o', label: 'GPT-4o' },
+                                        { id: 'Claude 3.5 Sonnet', label: 'Claude 3.5 Sonnet', disabled: true },
+                                        { id: 'GPT-4o', label: 'GPT-4o', disabled: true },
                                     ].map(m => (
                                         <button
                                             key={m.id}
+                                            disabled={m.disabled}
                                             onClick={() => { setSelectedModel(m.id); setShowModelDropdown(false); }}
-                                            className={`w-full text-left px-3 py-2 text-xs hover:bg-[#27272a] transition-colors flex items-center justify-between ${selectedModel === m.id ? 'text-blue-400 bg-blue-400/5' : 'text-gray-300'}`}
+                                            className={`w-full text-left px-3 py-2 text-xs transition-colors flex items-center justify-between ${m.disabled ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:bg-[#27272a]'} ${selectedModel === m.id ? 'text-blue-400 bg-blue-400/5' : 'text-gray-300'}`}
                                         >
                                             <div className="flex items-center gap-2">
                                                 <Sparkles className={`w-3.5 h-3.5 ${selectedModel === m.id ? 'text-blue-400' : 'text-gray-500'}`} />
-                                                <span className="font-medium">{m.label}</span>
+                                                <div className="flex flex-col">
+                                                    <span className="font-medium">{m.label}</span>
+                                                    {m.disabled && <span className="text-[8px] text-red-500 font-bold uppercase tracking-widest">Requiere Llave</span>}
+                                                </div>
                                             </div>
                                             {selectedModel === m.id && <div className="w-1 h-1 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,1)]"></div>}
                                         </button>

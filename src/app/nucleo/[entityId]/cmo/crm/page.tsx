@@ -658,6 +658,12 @@ export default function ContactsPage() {
                     if (!snapPhone.empty) existingContactDoc = snapPhone.docs[0];
                 }
 
+                if (!existingContactDoc && cardData.email) {
+                    const qEmail = query(collection(db, `${tenantPath}/contacts`), where("email", "==", cardData.email));
+                    const snapEmail = await getDocs(qEmail);
+                    if (!snapEmail.empty) existingContactDoc = snapEmail.docs[0];
+                }
+
                 const contactData: any = {
                     name: nameStr,
                     email: cardData.email || '',

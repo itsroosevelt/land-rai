@@ -278,7 +278,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
     }, [editingField, contactInfo]);
 
     return (
-        <div className="h-full w-full overflow-y-auto overflow-x-hidden p-6 pt-4 space-y-4 pb-32 bg-[#191919] text-neutral-200 custom-scrollbar">
+        <div className="h-full w-full overflow-y-auto overflow-x-hidden p-6 pt-4 space-y-4 pb-10 bg-[#191919] text-neutral-200 custom-scrollbar">
             {/* Header section... (skipped for brevity but included in full) */}
             <div className="space-y-4 px-2">
                 <div className="pt-2">

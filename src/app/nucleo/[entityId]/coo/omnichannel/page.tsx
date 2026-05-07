@@ -1,10 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import InboxSidebar from './components/InboxSidebar';
 import ChatList from './components/ChatList';
 import ChatArea from './components/ChatArea';
 import { useKanbanBoard } from '../whatsapp/hooks/useKanbanBoard';
+import { useAuth } from '@/contexts/AuthContext';
+import { db } from '@/lib/firebase';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { AlertTriangle } from 'lucide-react';
 
 export default function OmnichannelInboxPage() {
     // State to manage which conversation is active
@@ -28,12 +32,53 @@ export default function OmnichannelInboxPage() {
         }
     }, [activeConversationId, cards, loading]);
 
+    // Global Integration Status Watchdog
+    const [integrationStatuses, setIntegrationStatuses] = useState<Record<string, string>>({});
+    const { currentUser, activeEntity } = useAuth();
+    
+    React.useEffect(() => {
+        if (!currentUser || !activeEntity) return;
+        const integrationsRef = collection(db, `users/${currentUser.uid}/entities/${activeEntity}/integrations`);
+        const unsubscribe = onSnapshot(integrationsRef, (snapshot) => {
+            const statuses: Record<string, string> = {};
+            snapshot.docs.forEach(doc => {
+                if (doc.id === '_init') return;
+                statuses[doc.id] = doc.data().status;
+            });
+            setIntegrationStatuses(statuses);
+        });
+        return () => unsubscribe();
+    }, [currentUser, activeEntity]);
+
+    const offlineChannels = Object.entries(integrationStatuses)
+        .filter(([_, status]) => status === 'Error')
+        .map(([id]) => id.charAt(0).toUpperCase() + id.slice(1));
+
     // Find active card data
     const activeCard = cards.find(c => c.id === activeConversationId) || null;
     const activeGroupName = groups.find(g => activeCard && g.id === activeCard.groupId)?.name || '';
 
     return (
-        <div className="flex h-screen bg-[#0a0a0a] text-white overflow-hidden text-sm">
+        <div className="flex flex-col h-screen bg-[#0a0a0a] text-white overflow-hidden text-sm">
+            {/* 0. Global Connectivity Alert Banner */}
+            {offlineChannels.length > 0 && (
+                <div className="bg-amber-600 px-4 py-1.5 flex items-center justify-between animate-in slide-in-from-top duration-500 z-[100]">
+                    <div className="flex items-center gap-2">
+                        <AlertTriangle size={14} className="text-white animate-pulse" />
+                        <span className="text-[11px] font-black uppercase tracking-wider text-white">
+                            Atención: {offlineChannels.join(', ')} se ha desconectado. Reconéctalo en Configuración.
+                        </span>
+                    </div>
+                    <button 
+                        onClick={() => window.open(`/nucleo/${activeEntity}/cto/integrations`, '_blank')}
+                        className="bg-white/20 hover:bg-white/30 text-white text-[9px] font-black px-3 py-1 rounded transition-colors uppercase"
+                    >
+                        Reconectar Ahora
+                    </button>
+                </div>
+            )}
+
+            <div className="flex flex-1 overflow-hidden">
             {/* 1. Left Sidebar: Folders, Channels, Tags */}
             <InboxSidebar
                 selectedFolder={selectedFolder}
@@ -69,6 +114,7 @@ export default function OmnichannelInboxPage() {
                         <p className="text-lg">Select a conversation to start messaging</p>
                     </div>
                 )}
+            </div>
             </div>
         </div>
     );

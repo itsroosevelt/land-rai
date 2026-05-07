@@ -45,8 +45,8 @@ export const ChatMessageList = ({ messages, isGenerating, statusMessage }: ChatM
                                 : 'bg-transparent text-gray-200'
                                 }`}>
 
-                                {/* Reasoning Block */}
-                                {msg.role === 'ai' && (
+                                {/* Reasoning Block - Only show if it's a complex task or has thinking content */}
+                                {msg.role === 'ai' && (msg.plan || msg.content.includes("<think>")) && (
                                     <ReasoningBlock
                                         content={msg.content}
                                         steps={msg.steps}
@@ -63,12 +63,22 @@ export const ChatMessageList = ({ messages, isGenerating, statusMessage }: ChatM
                                         if (msg.plan && !msg.approved) return null;
 
                                         const cleaned = msg.role === 'ai' ? cleanContent(msg.content) : msg.content.trim();
-                                        if (cleaned === "" && msg.images && msg.images.length > 0) {
+                                        
+                                        if (cleaned === "" && (!msg.images || msg.images.length === 0)) {
                                             return null;
                                         }
-                                        return cleaned.split('\n').map((line, i) => (
-                                            <p key={i} className="text-xs mb-1.5 last:mb-0 leading-relaxed min-h-[1em]">{line}</p>
-                                        ));
+
+                                        const isError = cleaned.includes("🚨") || cleaned.includes("⚠️") || cleaned.includes("⏳") || cleaned.startsWith("Error:");
+
+                                        return (
+                                            <div className={isError ? "p-3 bg-red-500/10 border border-red-500/20 rounded-xl my-2" : ""}>
+                                                {cleaned.split('\n').map((line, i) => (
+                                                    <p key={i} className={`text-xs mb-1.5 last:mb-0 leading-relaxed min-h-[1em] ${isError ? 'text-red-200' : ''}`}>
+                                                        {line}
+                                                    </p>
+                                                ))}
+                                            </div>
+                                        );
                                     })()}
 
                                     {/* Images Grid */}
@@ -142,14 +152,6 @@ export const ChatMessageList = ({ messages, isGenerating, statusMessage }: ChatM
                         </div>
                     </div>
                 ))
-            )}
-            {isGenerating && messages[messages.length - 1]?.role !== 'ai' && (
-                <div className="flex items-center gap-3 text-gray-500 animate-pulse px-4">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span className="text-[10px] font-medium uppercase tracking-widest">
-                        {statusMessage || "Generando..."}
-                    </span>
-                </div>
             )}
         </div>
     );

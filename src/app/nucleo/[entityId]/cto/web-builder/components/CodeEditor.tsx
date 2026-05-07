@@ -1,7 +1,38 @@
 import React, { useState, useEffect, useRef } from "react";
-import { X, Copy, Download, Maximize2, Minimize2, ChevronRight, FileCode, Search, AlertTriangle } from "lucide-react";
-import Editor, { Monaco } from "@monaco-editor/react";
+import { X, Copy, Check, Download, Maximize2, Minimize2, ChevronRight, FileCode, Search, AlertTriangle } from "lucide-react";
+import Editor, { Monaco, loader } from "@monaco-editor/react";
 import { FileTree } from "./FileTree";
+
+// Initialize Monaco Theme globally to prevent light-theme flashes
+loader.init().then((monaco) => {
+    monaco.editor.defineTheme('obsidian-pro', {
+        base: 'vs-dark',
+        inherit: true,
+        rules: [
+            { token: 'keyword', foreground: '0ea5e9', fontStyle: 'bold' },
+            { token: 'identifier', foreground: 'e2e8f0' },
+            { token: 'type', foreground: 'c084fc' },
+            { token: 'function', foreground: '38bdf8' },
+            { token: 'string', foreground: '10b981' },
+            { token: 'comment', foreground: '4b5563', fontStyle: 'italic' },
+            { token: 'number', foreground: 'f59e0b' },
+            { token: 'operator', foreground: '94a3b8' },
+            { token: 'tag', foreground: '0ea5e9' },
+            { token: 'attribute.name', foreground: 'c084fc' },
+        ],
+        colors: {
+            'editor.background': '#050505',
+            'editor.foreground': '#e2e8f0',
+            'editorCursor.foreground': '#0ea5e9',
+            'editor.lineHighlightBackground': '#111111',
+            'editorLineNumber.foreground': '#444444',
+            'editorLineNumber.activeForeground': '#0ea5e9',
+            'editor.selectionBackground': '#0ea5e940',
+            'editorWidget.background': '#0a0a0a',
+            'editor.border': '#ffffff08',
+        }
+    });
+});
 
 interface CodeEditorProps {
     showCode: boolean;
@@ -30,6 +61,19 @@ export const CodeEditor = ({
 }: CodeEditorProps) => {
     const [openFiles, setOpenFiles] = useState<string[]>([]);
     const [isMaxEditor, setIsMaxEditor] = useState(false);
+    const [dismissedErrors, setDismissedErrors] = useState<Record<string, string>>({});
+    const [copied, setCopied] = useState(false);
+
+    // Reset dismissal if the error message changes
+    useEffect(() => {
+        if (activeFile && runtimeErrors[activeFile] && dismissedErrors[activeFile] !== runtimeErrors[activeFile]) {
+            setDismissedErrors(prev => {
+                const next = { ...prev };
+                delete next[activeFile];
+                return next;
+            });
+        }
+    }, [runtimeErrors[activeFile], activeFile]);
 
     // Sync activeFile with openFiles
     useEffect(() => {
@@ -94,7 +138,10 @@ export const CodeEditor = ({
 
     const handleCopy = () => {
         const content = files[activeFile] || "";
-        navigator.clipboard.writeText(content);
+        navigator.clipboard.writeText(content).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        });
     };
 
     const handleDownload = () => {
@@ -114,21 +161,21 @@ export const CodeEditor = ({
     const lines = codeContent.split('\n');
 
     return (
-        <div className={`fixed z-[100] bg-[#0d0d0d] flex flex-col overflow-hidden transition-all duration-300 border border-[#222] shadow-[0_0_50px_rgba(0,0,0,0.5)] ${isMaxEditor ? 'inset-0 rounded-none' : 'inset-6 rounded-2xl'
+        <div className={`fixed z-[100] bg-[#050505] flex flex-col overflow-hidden transition-all duration-300 border border-white/5 shadow-[0_0_80px_rgba(0,0,0,0.8)] ${isMaxEditor ? 'inset-0 rounded-none' : 'inset-6 rounded-2xl'
             }`}>
             {/* Main Header / Tab Bar */}
-            <div className="flex items-center justify-between bg-[#141414] border-b border-[#222] h-11">
+            <div className="flex items-center justify-between bg-[#0a0a0a] border-b border-white/5 h-11">
                 <div className="flex-1 flex items-center overflow-x-auto no-scrollbar h-full">
                     {openFiles.map(path => (
                         <div
                             key={path}
                             onClick={() => setActiveFile(path)}
-                            className={`group flex items-center gap-2 px-4 h-full cursor-pointer text-[13px] border-r border-[#222] transition-colors relative min-w-[120px] max-w-[200px] ${activeFile === path
-                                ? 'bg-[#1e1e1e] text-white'
-                                : 'bg-[#141414] text-[#858585] hover:bg-[#1a1a1a] hover:text-[#cccccc]'
+                            className={`group flex items-center gap-2 px-4 h-full cursor-pointer text-[13px] border-r border-white/5 transition-colors relative min-w-[120px] max-w-[200px] ${activeFile === path
+                                ? 'bg-[#0f0f0f] text-white'
+                                : 'bg-[#0a0a0a] text-neutral-500 hover:bg-[#111] hover:text-neutral-300'
                                 }`}
                         >
-                            {activeFile === path && <div className="absolute top-0 left-0 right-0 h-[2px] bg-blue-500" />}
+                            {activeFile === path && <div className="absolute top-0 left-0 right-0 h-[2px] bg-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.5)]" />}
                             <span className="truncate flex-1">{path}</span>
                             {runtimeErrors[path] && (
                                 <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]" title={runtimeErrors[path]} />
@@ -143,19 +190,18 @@ export const CodeEditor = ({
                     ))}
                 </div>
 
-                {/* Actions */}
-                <div className="flex items-center gap-1 px-3 border-l border-[#222] h-full bg-[#141414]">
-                    <button onClick={handleCopy} className="p-2 text-[#858585] hover:text-white rounded-lg transition-colors" title="Copiar c├│digo">
-                        <Copy className="w-4 h-4" />
+                <div className="flex items-center gap-1 px-3 border-l border-white/5 h-full bg-[#0a0a0a]">
+                    <button onClick={handleCopy} className="p-2 text-neutral-500 hover:text-white rounded-lg transition-colors relative" title="Copiar código">
+                        {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
                     </button>
-                    <button onClick={handleDownload} className="p-2 text-[#858585] hover:text-white rounded-lg transition-colors" title="Descargar archivo">
+                    <button onClick={handleDownload} className="p-2 text-neutral-500 hover:text-white rounded-lg transition-colors" title="Descargar archivo">
                         <Download className="w-4 h-4" />
                     </button>
-                    <button onClick={() => setIsMaxEditor(!isMaxEditor)} className="p-2 text-[#858585] hover:text-white rounded-lg transition-colors">
+                    <button onClick={() => setIsMaxEditor(!isMaxEditor)} className="p-2 text-neutral-500 hover:text-white rounded-lg transition-colors">
                         {isMaxEditor ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
                     </button>
-                    <div className="w-[1px] h-4 bg-[#333] mx-1" />
-                    <button onClick={() => setShowCode(false)} className="p-2 text-[#858585] hover:text-red-400 rounded-lg transition-colors">
+                    <div className="w-[1px] h-4 bg-white/10 mx-1" />
+                    <button onClick={() => setShowCode(false)} className="p-2 text-neutral-500 hover:text-red-400 rounded-lg transition-colors">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
@@ -163,7 +209,7 @@ export const CodeEditor = ({
 
             <div className="flex flex-1 overflow-hidden">
                 {/* File Explorer Sidebar */}
-                <div className="w-[280px] bg-[#0d0d0d] border-r border-[#222] flex flex-col overflow-hidden">
+                <div className="w-[280px] bg-[#0a0a0a] border-r border-white/5 flex flex-col overflow-hidden">
                     <FileTree
                         files={files}
                         activeFile={activeFile}
@@ -175,15 +221,23 @@ export const CodeEditor = ({
                 </div>
 
                 {/* Editor Surface */}
-                <div className="flex-1 flex flex-col bg-[#1e1e1e] relative overflow-hidden">
+                <div className="flex-1 flex flex-col bg-[#050505] relative overflow-hidden">
                     {/* Floating Error Banner */}
-                    {runtimeErrors[activeFile] && (
+                    {runtimeErrors[activeFile] && dismissedErrors[activeFile] !== runtimeErrors[activeFile] && (
                         <div className="absolute top-4 left-4 right-4 z-[110] animate-in slide-in-from-top duration-500">
-                            <div className="bg-red-500/10 backdrop-blur-md border border-red-500/20 rounded-xl p-4 flex items-start gap-4 shadow-2xl shadow-red-500/20">
+                            <div className="bg-red-500/10 backdrop-blur-md border border-red-500/20 rounded-xl p-4 flex items-start gap-4 shadow-2xl shadow-red-500/20 relative group/error">
+                                <button 
+                                    onClick={() => {
+                                        setDismissedErrors(prev => ({ ...prev, [activeFile]: runtimeErrors[activeFile] }));
+                                    }}
+                                    className="absolute top-3 right-3 p-1 hover:bg-red-500/20 rounded-lg text-red-400 transition-colors"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
                                 <div className="p-2 bg-red-500/20 rounded-lg">
                                     <AlertTriangle className="w-5 h-5 text-red-500" />
                                 </div>
-                                <div className="flex-1">
+                                <div className="flex-1 pr-6">
                                     <h4 className="text-red-200 text-xs font-bold uppercase tracking-wider mb-1">Error de Ejecución</h4>
                                     <p className="text-red-100/80 text-sm leading-relaxed font-mono">
                                         {runtimeErrors[activeFile]}
@@ -210,9 +264,31 @@ export const CodeEditor = ({
                         <div className="flex flex-1 overflow-hidden">
                             <div className="flex-1 relative overflow-hidden flex">
                                 <Editor
+                            loading={<div className="h-full w-full bg-[#050505] flex items-center justify-center text-neutral-700 text-xs uppercase tracking-widest animate-pulse font-mono">Initializing Obsidian Pro...</div>}
                                     height="100%"
-                                    defaultLanguage="typescript"
-                                    theme="vs-dark"
+                                    path={activeFile}
+                                    language={activeFile.endsWith('.tsx') || activeFile.endsWith('.ts') ? 'typescript' : activeFile.endsWith('.css') ? 'css' : 'javascript'}
+                                    theme="obsidian-pro"
+                                    options={{
+                                        fontSize: 14,
+                                        fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                                        minimap: { enabled: true, side: 'right' },
+                                        scrollBeyondLastLine: false,
+                                        smoothScrolling: true,
+                                        cursorBlinking: "expand",
+                                        cursorSmoothCaretAnimation: "on",
+                                        lineNumbers: "on",
+                                        renderLineHighlight: "all",
+                                        scrollbar: {
+                                            vertical: 'visible',
+                                            horizontal: 'visible',
+                                            verticalScrollbarSize: 10,
+                                            horizontalScrollbarSize: 10,
+                                        },
+                                        padding: { top: 16, bottom: 16 },
+                                        fixedOverflowWidgets: true,
+                                        automaticLayout: true,
+                                    }}
                                     value={codeContent}
                                     beforeMount={(monaco: Monaco) => {
                                         const ts = (monaco as any).languages?.typescript;
@@ -227,34 +303,41 @@ export const CodeEditor = ({
                                             allowJs: true,
                                         });
                                         ts?.typescriptDefaults?.setDiagnosticsOptions({
-                                            // Disable static analysis — creates false positives for valid
-                                            // TypeScript generics and class components in .tsx files.
-                                            // Real runtime errors are caught by the Visor Engine.
                                             noSemanticValidation: true,
-                                            noSyntaxValidation: true,
+                                            noSyntaxValidation: false,
                                         });
                                     }}
                                     onMount={(editor, monaco) => {
                                         editorRef.current = editor;
 
                                         // Sync editor markers (errors/warnings) to the file tree
+                                        let markerTimeout: any = null;
                                         monaco.editor.onDidChangeMarkers(() => {
-                                            const markers = monaco.editor.getModelMarkers({ resource: editor.getModel()?.uri });
-                                            const highestSeverity = markers.reduce((max, m) => Math.max(max, m.severity), 0);
+                                            if (markerTimeout) clearTimeout(markerTimeout);
+                                            markerTimeout = setTimeout(() => {
+                                                const model = editor.getModel();
+                                                if (!model) return;
+                                                const markers = monaco.editor.getModelMarkers({ resource: model.uri });
+                                                const highestSeverity = markers.reduce((max, m) => Math.max(max, m.severity), 0);
 
-                                            if (highestSeverity >= monaco.MarkerSeverity.Error) {
-                                                const firstError = markers.find(m => m.severity === monaco.MarkerSeverity.Error);
-                                                if (firstError && activeFile && setRuntimeErrors) {
-                                                    setRuntimeErrors(prev => ({ ...prev, [activeFile]: firstError.message }));
+                                                if (highestSeverity >= monaco.MarkerSeverity.Error) {
+                                                    const firstError = markers.find(m => m.severity === monaco.MarkerSeverity.Error);
+                                                    if (firstError && activeFile && setRuntimeErrors) {
+                                                        setRuntimeErrors(prev => {
+                                                            if (prev[activeFile] === firstError.message) return prev;
+                                                            return { ...prev, [activeFile]: firstError.message };
+                                                        });
+                                                    }
+                                                } else if (activeFile && setRuntimeErrors) {
+                                                    // Immediately clear if no markers
+                                                    setRuntimeErrors(prev => {
+                                                        if (!prev[activeFile]) return prev;
+                                                        const next = { ...prev };
+                                                        delete next[activeFile];
+                                                        return next;
+                                                    });
                                                 }
-                                            } else if (activeFile && setRuntimeErrors && runtimeErrors[activeFile]) {
-                                                // Clear error if resolved (and it was a code-time error)
-                                                setRuntimeErrors(prev => {
-                                                    const next = { ...prev };
-                                                    delete next[activeFile];
-                                                    return next;
-                                                });
-                                            }
+                                            }, 500); // Faster 500ms debounce
                                         });
                                     }}
                                     onChange={(val) => {
@@ -262,27 +345,13 @@ export const CodeEditor = ({
                                             updateFiles(prev => ({ ...prev, [activeFile]: val || "" }));
                                         }
                                     }}
-                                    options={{
-                                        minimap: { enabled: false },
-                                        fontSize: 14,
-                                        lineNumbers: 'on',
-                                        roundedSelection: false,
-                                        scrollBeyondLastLine: false,
-                                        readOnly: false,
-                                        automaticLayout: true,
-                                        padding: { top: 20 },
-                                        glyphMargin: false,
-                                        folding: true,
-                                        lineDecorationsWidth: 10,
-                                        lineNumbersMinChars: 3,
-                                    }}
                                 />
                             </div>
                         </div>
                     )}
 
                     {/* Footer Info */}
-                    <div className={`h-6 flex items-center px-4 justify-between text-[11px] font-medium transition-colors ${(runtimeErrors[activeFile] || runtimeErrors['__runtime__']) ? 'bg-red-900/50 text-red-200' : 'bg-[#007acc] text-white'}`}>
+                    <div className={`h-6 flex items-center px-4 justify-between text-[11px] font-medium transition-colors border-t border-white/5 ${(runtimeErrors[activeFile] || runtimeErrors['__runtime__']) ? 'bg-red-950/50 text-red-200' : 'bg-[#0a0a0a] text-neutral-400'}`}>
                         <div className="flex items-center gap-4">
                             {(runtimeErrors[activeFile] || runtimeErrors['__runtime__']) ? (
                                 <span className="font-bold flex items-center gap-1">
