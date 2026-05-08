@@ -137,8 +137,8 @@ export default function SubscriptionsPage() {
   const { status: subscriptionStatus, plan, expiresAt } = useSubscriptionStatus();
   const [selectedPlan, setSelectedPlan] = useState<typeof plans[number] | null>(null);
 
-  // Use 'life' as default entity if not set
-  const entityId = activeEntity || 'life';
+  // Use active entity from context
+  const entityId = activeEntity;
 
   const hasActiveSubscription = subscriptionStatus === 'active';
 
@@ -159,7 +159,7 @@ export default function SubscriptionsPage() {
                   </p>
                 </div>
                 <Button
-                  onClick={() => router.push(`/nucleo/${entityId}`)}
+                  onClick={() => router.push('/nucleo')}
                   className="bg-green-600 hover:bg-green-700 text-white rounded-full h-10 font-semibold tracking-wider text-xs"
                 >
                   Go to Dashboard
@@ -302,7 +302,7 @@ export default function SubscriptionsPage() {
           {/* Go to Nucleo - Bottom Right */}
           <div className="fixed bottom-8 right-8 md:bottom-12 md:right-12 z-[50]">
             <button
-              onClick={() => router.push(`/nucleo/${entityId}`)}
+              onClick={() => router.push('/nucleo')}
               className="group flex items-center gap-2 text-white/40 hover:text-white transition-all duration-300"
             >
               <span className="text-sm font-medium tracking-wide">Go to Nucleo</span>

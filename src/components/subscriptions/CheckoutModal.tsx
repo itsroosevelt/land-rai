@@ -25,7 +25,7 @@ interface CheckoutModalProps {
     features: string[];
   };
   onClose: () => void;
-  entityId: string;
+  entityId: string | null;
 }
 
 export default function CheckoutModal({ plan, onClose, entityId: propEntityId }: CheckoutModalProps) {
@@ -36,12 +36,12 @@ export default function CheckoutModal({ plan, onClose, entityId: propEntityId }:
   const [billingData, setBillingData] = useState<BillingData | null>(null);
   const [isBillingValid, setIsBillingValid] = useState(false);
 
-  const entityId = propEntityId || activeEntity || 'life';
+  const entityId = propEntityId || activeEntity || '';
 
   const handleSuccess = () => {
     onClose();
     setTimeout(() => {
-      router.push(`/nucleo/${entityId}`);
+      router.push('/nucleo');
     }, 1500);
   };
 

@@ -13,7 +13,7 @@ interface SubscriptionData {
 }
 
 export function useSubscriptionStatus(): SubscriptionData & { loading: boolean } {
-  const { currentUser } = useAuth();
+  const { currentUser, activeEntity } = useAuth();
   const [subscriptionData, setSubscriptionData] = useState<SubscriptionData>({
     status: null,
     plan: null,
@@ -24,16 +24,16 @@ export function useSubscriptionStatus(): SubscriptionData & { loading: boolean }
 
   useEffect(() => {
     const checkSubscription = async () => {
-      if (!currentUser) {
+      if (!currentUser || !activeEntity) {
         setLoading(false);
         return;
       }
 
       try {
-        // Check subscription in user's default entity (life)
+        // Check subscription in user's active entity
         const subscriptionRef = doc(
           db,
-          `users/${currentUser.uid}/entities/life/subscriptions/current`
+          `users/${currentUser.uid}/entities/${activeEntity}/subscriptions/current`
         );
         const docSnap = await getDoc(subscriptionRef);
 
@@ -70,7 +70,7 @@ export function useSubscriptionStatus(): SubscriptionData & { loading: boolean }
     };
 
     checkSubscription();
-  }, [currentUser]);
+  }, [currentUser, activeEntity]);
 
   return { ...subscriptionData, loading };
 }
