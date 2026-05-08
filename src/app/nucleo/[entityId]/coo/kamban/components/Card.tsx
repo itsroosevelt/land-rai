@@ -121,10 +121,11 @@ const Card = ({ card, groupId, onClick, cardColor = 'bg-neutral-800', contacts =
         await Promise.all(deletePromises);
 
         // 3. Clear Contact References (Data Integrity)
-        if (card.crmId || cleanPhone) {
+        const telegramId = card.telegramChatId || (card.platform_ids?.telegram);
+        if (card.crmId || card.contactId || cleanPhone || telegramId) {
           try {
             const contactsRef = collection(db, `${tenantPath}/contacts`);
-            let contactDocId = card.crmId;
+            let contactDocId = card.crmId || card.contactId;
 
             if (!contactDocId && cleanPhone) {
               const { query, where, getDocs } = await import('firebase/firestore');
@@ -133,13 +134,48 @@ const Card = ({ card, groupId, onClick, cardColor = 'bg-neutral-800', contacts =
               if (!snap.empty) contactDocId = snap.docs[0].id;
             }
 
+            if (!contactDocId && telegramId) {
+              const { query, where, getDocs } = await import('firebase/firestore');
+              const q = query(contactsRef, where('telegramChatId', '==', String(telegramId)));
+              const snap = await getDocs(q);
+              if (!snap.empty) contactDocId = snap.docs[0].id;
+              else if (typeof telegramId === 'string' && telegramId.startsWith('tg_')) contactDocId = telegramId;
+              else contactDocId = `tg_${telegramId}`;
+            }
+
             if (contactDocId) {
-              const { updateDoc, deleteField } = await import('firebase/firestore');
-              await updateDoc(doc(db, `${tenantPath}/contacts/${contactDocId}`), {
-                kanbanGroupId: deleteField(),
-                kanbanCardId: deleteField()
-              });
-              console.log(`[Card] 🔗 Unlinked contact ${contactDocId}`);
+              // FULL CASCADE DELETE FROM KANBAN
+              await deleteDoc(doc(db, `${tenantPath}/contacts/${contactDocId}`));
+              console.log(`[Card] 🗑️ Full Cascade: Deleted contact ${contactDocId}`);
+              
+              // Purge main chat history
+              const chatRef = doc(db, `${tenantPath}/chats/${contactDocId}`);
+              await deleteDoc(chatRef).catch(() => {});
+              
+              if (card.metaSenderId) {
+                const metaChatRef = doc(db, `${tenantPath}/chats/${card.metaSenderId}`);
+                await deleteDoc(metaChatRef).catch(() => {});
+                
+                // NEW: Purge message deduplication history to allow immediate restart
+                try {
+                  const { collection, getDocs, where, query } = await import('firebase/firestore');
+                  const dedupRef = collection(db, `${tenantPath}/processed_messages`);
+                  const q = query(dedupRef, where('senderId', '==', card.metaSenderId));
+                  const snap = await getDocs(q);
+                  const batch = snap.docs.map(d => deleteDoc(d.ref));
+                  await Promise.all(batch);
+                } catch (e) { console.error("Dedup purge failed:", e); }
+              }
+              
+              if (telegramId) {
+                const tgChatRef = doc(db, `${tenantPath}/chats/${telegramId}`);
+                await deleteDoc(tgChatRef).catch(() => {});
+              }
+              
+              // Also purge specific chat archive for this card
+              const cardChatRef = doc(db, `${tenantPath}/chats/${card.id}`);
+              await deleteDoc(cardChatRef).catch(() => {});
+              console.log(`[Card] 💬 Chat history purged.`);
             }
           } catch (err) {
             console.error("[Card] Error unlinking contact:", err);

@@ -2,218 +2,167 @@ import { NextResponse } from 'next/server';
 import { db, admin } from '@/lib/firebase-admin';
 import { processChatbotFlow } from '@/lib/chatbotEngine';
 
-export async function GET(req: Request) {
-    return new Response('Telegram Webhook Active', { status: 200 });
-}
-
 export async function POST(req: Request) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('u');
     const entityId = searchParams.get('e');
 
-    if (!userId || !entityId) {
-        return NextResponse.json({ success: false, error: 'Missing tenant context' }, { status: 400 });
-    }
-
     try {
         const body = await req.json();
+        const isCallback = !!body.callback_query;
+        const msg = isCallback ? body.callback_query.message : body.message;
         
-        // 1. Extract message or callback
-        const message = body.message;
-        const callbackQuery = body.callback_query;
-        
-        if (!message && !callbackQuery) {
-            return NextResponse.json({ success: true, ignored: 'no_processable_content' });
-        }
+        if (!msg && !isCallback) return NextResponse.json({ ok: true });
 
-        const telegramChatId = String(message?.chat?.id || callbackQuery?.message?.chat?.id);
-        const text = callbackQuery?.data || message?.text || '';
-        const firstName = (message?.from || callbackQuery?.from)?.first_name || 'Usuario';
-        const lastName = (message?.from || callbackQuery?.from)?.last_name || '';
-        const fullName = `${firstName} ${lastName}`.trim() || 'Usuario Telegram';
+        const { chat, from, message_id } = msg || {};
+        const chatId = String(body.callback_query?.from?.id || chat?.id);
+        const text = isCallback ? body.callback_query.data : body.message.text;
+        const messageId = String(isCallback ? `cb_${body.callback_query.id}` : (message_id || Date.now()));
 
-        if (!text && !message?.attachments) {
-             return NextResponse.json({ success: true, ignored: 'empty_content' });
+        if (!userId || !entityId) {
+            console.error('[Telegram] Webhook received without u/e context');
+            return NextResponse.json({ ok: true });
         }
 
         const entityPath = `users/${userId}/entities/${entityId}`;
+        
+        // 1. Validate Integration (Isolated)
+        const integrationRef = db.doc(`${entityPath}/integrations/telegram`);
+        const integrationSnap = await integrationRef.get();
 
-        // OMNICHANNEL INGESTION
-        let targetCardDoc: any = null;
-        let targetGroupId: string | null = null;
-        let existingContactId: string | null = null;
+        if (!integrationSnap.exists) {
+            return NextResponse.json({ ok: true });
+        }
 
-        // Try to find if user exists by telegramChatId in Contacts
+        const integrationData = integrationSnap.data();
+        if (integrationData?.status !== 'Connected') {
+            return NextResponse.json({ ok: true });
+        }
+
+        // 2. Find or Create Contact/Card
         const contactSnap = await db.collection(`${entityPath}/contacts`)
-            .where('telegramChatId', '==', telegramChatId)
-            .limit(1)
+            .where('telegramChatId', '==', chatId)
             .get();
+
+        let cardId = '';
+        let groupId = '';
+        let contactDocRef: any = null;
+        const user = body.callback_query?.from || body.message?.from || {};
+        const contactName = user.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : `Telegram User ${chatId.slice(-4)}`;
 
         if (!contactSnap.empty) {
             const contactDoc = contactSnap.docs[0];
             const contactData = contactDoc.data();
-            existingContactId = contactDoc.id;
-            targetGroupId = contactData.kanbanGroupId;
-            const contactCardId = contactData.kanbanCardId;
-
-            if (targetGroupId && contactCardId) {
-                const cardRef = db.doc(`${entityPath}/kanban-groups/${targetGroupId}/cards/${contactCardId}`);
+            cardId = contactData.kanbanCardId;
+            groupId = contactData.kanbanGroupId;
+            contactDocRef = contactDoc.ref;
+            
+            // AMNESIA CHECK: Verify the card still exists in Kanban
+            if (cardId && groupId) {
+                const cardRef = db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`);
                 const cardGet = await cardRef.get();
-                if (cardGet.exists) {
-                    targetCardDoc = cardGet;
+                if (!cardGet.exists) {
+                    console.log(`[Telegram] 👻 GHOST CARD DETECTED: ${cardId}. Clearing reference from contact.`);
+                    await contactDocRef.update({
+                        kanbanCardId: admin.firestore.FieldValue.delete(),
+                        kanbanGroupId: admin.firestore.FieldValue.delete()
+                    }).catch(() => {});
+                    cardId = '';
+                    groupId = '';
                 }
             }
         }
 
-        // FALLBACK SEARCH: Scan all groups like WhatsApp/Meta do
-        if (!targetCardDoc) {
-             console.log(`[Telegram] No card found via contact. Deep searching all groups...`);
-             const allMatches: any[] = [];
-             const groupsRef = db.collection(`${entityPath}/kanban-groups`);
-             const groupsSnapshot = await groupsRef.get();
-
-             for (const groupDoc of groupsSnapshot.docs) {
-                 const cardsSnapshot = await groupDoc.ref.collection('cards')
-                     .where('telegramChatId', '==', telegramChatId)
-                     .orderBy('updatedAt', 'desc')
-                     .limit(1)
-                     .get();
-
-                 cardsSnapshot.forEach(doc => {
-                     allMatches.push({ doc, groupId: groupDoc.id });
-                 });
-             }
-
-             if (allMatches.length > 0) {
-                 allMatches.sort((a, b) => {
-                     const tA = (a.doc.data().updatedAt?.toDate?.() || new Date(0)).getTime();
-                     const tB = (b.doc.data().updatedAt?.toDate?.() || new Date(0)).getTime();
-                     return tB - tA;
-                 });
-                 targetCardDoc = allMatches[0].doc;
-                 targetGroupId = allMatches[0].groupId;
-                 console.log(`[Telegram] Found existing card via Deep Search: ${targetCardDoc.id}`);
-             }
-        }
-
-        let cardId: string | null = targetCardDoc?.id || null;
-        let groupId: string | null = targetGroupId || null;
-        let contactId: string | null = existingContactId || null;
-
         const newMessage = {
             sender: 'user',
-            text: text,
-            timestamp: admin.firestore.Timestamp.now(),
-            messageId: message?.message_id ? `tg_${message.message_id}` : `tg_cb_${Date.now()}`,
-            platform: 'telegram'
+            text: text || (isCallback ? '[Botón]' : '[Mensaje de Telegram]'),
+            timestamp: new Date(),
+            platform: 'telegram',
+            messageId: messageId
         };
 
         const queueItem = {
             text: text || '',
-            messageId: message?.message_id ? `tg_${message.message_id}` : `tg_cb_${Date.now()}`,
+            from: chatId,
             platform: 'telegram',
-            from: telegramChatId,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            messageId: messageId
         };
 
-        if (targetCardDoc && groupId) {
-            const cardRef = targetCardDoc.ref;
-            await cardRef.update({
-                lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
-                updatedAt: admin.firestore.Timestamp.now(),
-                unreadCount: admin.firestore.FieldValue.increment(1),
+        if (cardId && groupId) {
+            // Update existing card
+            await db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`).update({
                 messages: admin.firestore.FieldValue.arrayUnion(newMessage),
-                'botState.messageQueue': admin.firestore.FieldValue.arrayUnion(queueItem),
-                status: 'open',
-                source: 'TELEGRAM',
-                [`platform_ids.telegram`]: telegramChatId
+                updatedAt: new Date(),
+                lastMessage: text || '[Telegram]',
+                unreadCount: admin.firestore.FieldValue.increment(1),
+                'botState.messageQueue': admin.firestore.FieldValue.arrayUnion(queueItem)
             });
-
-            // Sync contact source
-            if (contactId) {
-                await db.collection(`${entityPath}/contacts`).doc(contactId).update({
-                    source: 'TELEGRAM',
-                    telegramChatId: telegramChatId,
-                    updatedAt: admin.firestore.Timestamp.now()
-                });
-            }
         } else {
-            // Create New Contact & Card
-            const finalContactId = contactId || String(Date.now()).slice(-10);
+            // Create new Lead Capture
             const groupsRef = db.collection(`${entityPath}/kanban-groups`);
-            const groupsSnapshot = await groupsRef.get();
-            
-            const fallbackGroup = groupsSnapshot.docs.find(g => (g.data().name || '').toLowerCase().includes('inbox')) || groupsSnapshot.docs[0];
-            const destinationGroupId = fallbackGroup ? fallbackGroup.id : 'default_inbox';
+            const groupsSnap = await groupsRef.get();
+            const inboxGroup = groupsSnap.docs.find(g => 
+                (g.data().name || '').toLowerCase().includes('inbox') || 
+                (g.data().name || '').toLowerCase().includes('entrada')
+            );
 
-            if (destinationGroupId === 'default_inbox' && !fallbackGroup) {
-                await db.collection(`${entityPath}/kanban-groups`).doc('default_inbox').set({
-                    name: 'Inbox', order: 0, color: '#3B82F6', createdAt: admin.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });
+            groupId = inboxGroup ? inboxGroup.id : (groupsSnap.empty ? 'incoming' : groupsSnap.docs[0].id);
+            
+            if (groupsSnap.empty) {
+                await groupsRef.doc(groupId).set({ name: 'Inbox', order: 0, createdAt: admin.firestore.FieldValue.serverTimestamp() });
             }
 
-            const newCardRef = db.collection(`${entityPath}/kanban-groups/${destinationGroupId}/cards`).doc();
-            
-            const newMessage = {
-                sender: 'user',
-                text: text,
-                timestamp: admin.firestore.Timestamp.now(),
-                messageId: message?.message_id ? `tg_${message.message_id}` : `tg_cb_${Date.now()}`,
-                platform: 'telegram'
-            };
+            const cardRef = db.collection(`${entityPath}/kanban-groups/${groupId}/cards`).doc();
+            cardId = cardRef.id;
 
-            const queueItem = {
-                text: text || '',
-                messageId: message?.message_id ? `tg_${message.message_id}` : `tg_cb_${Date.now()}`,
-                platform: 'telegram',
-                from: telegramChatId,
-                timestamp: Date.now()
-            };
-
-            await newCardRef.set({
-                crmId: finalContactId,
-                contactName: fullName,
-                contactNumber: telegramChatId,
-                telegramChatId: telegramChatId,
-                lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
-                updatedAt: admin.firestore.Timestamp.now(),
-                createdAt: admin.firestore.Timestamp.now(),
+            await cardRef.set({
+                id: cardId,
+                contactName,
+                lastMessage: text || '[Telegram]',
+                updatedAt: new Date(),
+                createdAt: new Date(),
                 messages: [newMessage],
-                'botState.messageQueue': [queueItem],
                 unreadCount: 1,
                 status: 'open',
                 source: 'TELEGRAM',
-                primary_channel: 'telegram',
-                platform_ids: { telegram: telegramChatId }
+                channel: 'telegram',
+                'botState': {
+                    status: 'active',
+                    messageQueue: [queueItem],
+                    waitingForInput: false,
+                    currentNodeId: null
+                },
+                platform_ids: { telegram: chatId }
             });
 
-            await db.collection(`${entityPath}/contacts`).doc(finalContactId).set({
-                crmId: finalContactId,
-                name: fullName,
-                telegramChatId: telegramChatId,
-                kanbanGroupId: destinationGroupId,
-                kanbanCardId: newCardRef.id,
-                source: 'TELEGRAM',
-                updatedAt: admin.firestore.Timestamp.now(),
-                createdAt: admin.firestore.Timestamp.now()
-            }, { merge: true });
-
-            cardId = newCardRef.id;
-            groupId = destinationGroupId;
-        }
-
-        // 2. TRIGGER UNIVERSAL CHATBOT
-        if (groupId && cardId) {
-            processChatbotFlow({
-                userId, entityId, groupId, cardId, platform: 'telegram', from: telegramChatId, text: text
-            }).catch(error => {
-                 console.error(`[Telegram Chatbot Error] ${error}`);
+            // Sync with Contacts
+            await db.collection(`${entityPath}/contacts`).add({
+                name: contactName,
+                telegramChatId: chatId,
+                kanbanCardId: cardId,
+                kanbanGroupId: groupId,
+                createdAt: new Date()
             });
         }
 
-        return NextResponse.json({ success: true });
+        // 3. Trigger Chatbot
+        if (cardId && groupId) {
+            await processChatbotFlow({
+                userId, entityId, groupId, cardId, 
+                platform: 'telegram', from: chatId, text: text || '',
+                messageId: messageId
+            }).catch(console.error);
+        }
+
+        // 4. Acknowledge Callback (Crucial for Telegram UX)
+        if (isCallback && integrationData.botToken) {
+            fetch(`https://api.telegram.org/bot${integrationData.botToken}/answerCallbackQuery?callback_query_id=${body.callback_query.id}`).catch(() => {});
+        }
+
+        return NextResponse.json({ ok: true });
     } catch (error: any) {
         console.error('[Telegram Webhook Error]', error);
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        return NextResponse.json({ ok: true });
     }
 }

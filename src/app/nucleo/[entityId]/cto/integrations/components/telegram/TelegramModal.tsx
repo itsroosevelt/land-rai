@@ -17,6 +17,7 @@ interface TelegramModalProps {
 export default function TelegramModal({ isOpen, onClose, activeEntity, currentUser }: TelegramModalProps) {
     const [step, setStep] = useState(1);
     const [botToken, setBotToken] = useState('');
+    const [botName, setBotName] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [initialLoading, setInitialLoading] = useState(true);
 
@@ -32,6 +33,7 @@ export default function TelegramModal({ isOpen, onClose, activeEntity, currentUs
                 if (data.status === 'Connected') {
                     setStep(3);
                     setBotToken(data.botToken || '');
+                    setBotName(data.botName || 'Bot Conectado');
                 }
             } else {
                 setStep(1);
@@ -57,14 +59,18 @@ export default function TelegramModal({ isOpen, onClose, activeEntity, currentUs
         const toastId = toast.loading("Activando Protocolo Telegram...");
 
         try {
-            // 1. Check if used by another tenant
-            const queryRef = query(collectionGroup(db, 'integrations'), where('botToken', '==', botToken));
+            // 1. Validar que el bot no esté en uso (Agnosticismo Total - Rule 1 & 7)
+            // Usamos collectionGroup para buscar en todas las bóvedas sin usar una tabla raíz
+            const queryRef = query(
+                collectionGroup(db, 'integrations'), 
+                where('botToken', '==', botToken)
+            );
             const snap = await getDocs(queryRef);
             
             const isUsedByAnotherTenant = !snap.empty && !snap.docs.every((d: any) => d.ref.path.includes(activeEntity));
                                     
             if (isUsedByAnotherTenant) {
-                toast.error("Este Bot ya está siendo utilizado en otro nodo.", { id: toastId });
+                toast.error("Este Bot ya está siendo utilizado por otra entidad.", { id: toastId });
                 setIsLoading(false);
                 return;
             }
@@ -86,15 +92,23 @@ export default function TelegramModal({ isOpen, onClose, activeEntity, currentUs
                 throw new Error(setupData.error || 'Error en el registro del webhook');
             }
 
-            // 3. Save Configuration
+            // 3. Persistencia Aislada (Rule 4: Root Isolation)
+            // Solo guardamos dentro de la bóveda de la entidad activa
             const configRef = doc(db, `users/${currentUser?.uid}/entities/${activeEntity}/integrations/telegram`);
-            await setDoc(configRef, {
+
+            const telegramConfig = {
                 botToken,
+                botName: setupData.botName || 'Telegram Bot',
                 status: 'Connected',
                 provider: 'telegram',
+                userId: currentUser?.uid,
+                entityId: activeEntity,
                 updatedAt: new Date(),
-            }, { merge: true });
+            };
 
+            await setDoc(configRef, telegramConfig, { merge: true });
+
+            setBotName(setupData.botName || 'Telegram Bot');
             toast.success("¡Protocolo Telegram Activado!", { id: toastId });
             setStep(3);
         } catch (error: any) {
@@ -162,32 +176,56 @@ export default function TelegramModal({ isOpen, onClose, activeEntity, currentUs
 
                         <div className="flex-1 flex flex-col justify-center">
                             <AnimatePresence mode="wait">
-                                {step === 1 || step === 2 ? (
+                                {step === 1 ? (
                                     <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-8">
-                                        
                                         {/* Micro-Tutorial */}
-                                        <div className="bg-[#26A5E4]/5 border border-[#26A5E4]/20 rounded-3xl p-6 relative overflow-hidden">
+                                        <div className="bg-[#26A5E4]/5 border border-[#26A5E4]/20 rounded-3xl p-8 relative overflow-hidden">
                                             <div className="absolute top-0 right-0 w-32 h-32 bg-[#26A5E4] opacity-[0.03] blur-[50px] rounded-full pointer-events-none" />
-                                            <h3 className="text-white text-lg font-medium mb-4 flex items-center gap-2">
+                                            <h3 className="text-white text-xl font-medium mb-6 flex items-center gap-2">
                                                 <div className="w-2 h-2 rounded-full bg-[#26A5E4] animate-pulse"></div>
-                                                Obligatorio: Conseguir el Bot Token
+                                                Paso 1: Crear tu Bot Oficial
                                             </h3>
-                                            <p className="text-white/60 text-[13px] leading-relaxed mb-6 max-w-sm">
-                                                Telegram no usa inicios de sesión. Obliga a que tú crees el bot primero con su asistente oficial.
+                                            <p className="text-white/60 text-[14px] leading-relaxed mb-8 max-w-sm">
+                                                Para proteger tu privacidad, Roosevelt no accede a tu cuenta personal. Debes crear un "Bot" que actuará como tu asistente oficial.
                                             </p>
                                             
-                                            <div className="flex items-start gap-4">
-                                                <div className="w-8 h-8 rounded-full bg-[#26A5E4]/10 border border-[#26A5E4]/20 flex items-center justify-center shrink-0 text-[#26A5E4] text-[10px] font-black">1</div>
-                                                <div className="text-[12px] text-white/50 pt-1.5 font-light">
-                                                    Háblale a <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="text-[#26A5E4] font-medium hover:underline">@BotFather</a> en Telegram y pon <span className="bg-white/5 px-2 py-0.5 rounded text-white/80 font-mono">/newbot</span>
+                                            <div className="space-y-6">
+                                                <div className="flex items-start gap-4">
+                                                    <div className="w-8 h-8 rounded-full bg-[#26A5E4]/10 border border-[#26A5E4]/20 flex items-center justify-center shrink-0 text-[#26A5E4] text-[10px] font-black">1</div>
+                                                    <div className="text-[13px] text-white/50 pt-1.5 font-light leading-relaxed">
+                                                        Busca a <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="text-[#26A5E4] font-medium hover:underline">@BotFather</a> en Telegram.
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-start gap-4">
+                                                    <div className="w-8 h-8 rounded-full bg-[#26A5E4]/10 border border-[#26A5E4]/20 flex items-center justify-center shrink-0 text-[#26A5E4] text-[10px] font-black">2</div>
+                                                    <div className="text-[13px] text-white/50 pt-1.5 font-light leading-relaxed">
+                                                        Envía <span className="bg-white/5 px-2 py-0.5 rounded text-white/80 font-mono">/newbot</span> y sigue sus instrucciones.
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-start gap-4">
+                                                    <div className="w-8 h-8 rounded-full bg-[#26A5E4]/10 border border-[#26A5E4]/20 flex items-center justify-center shrink-0 text-[#26A5E4] text-[10px] font-black">3</div>
+                                                    <div className="text-[13px] text-white/50 pt-1.5 font-light leading-relaxed">
+                                                        Al terminar, guarda el <span className="text-white font-medium">HTTP API Token</span>.
+                                                    </div>
                                                 </div>
                                             </div>
-                                            <div className="flex items-start gap-4 mt-4">
-                                                <div className="w-8 h-8 rounded-full bg-[#26A5E4]/10 border border-[#26A5E4]/20 flex items-center justify-center shrink-0 text-[#26A5E4] text-[10px] font-black">2</div>
-                                                <div className="text-[12px] text-white/50 pt-1.5 font-light">
-                                                    Copia el <span className="text-white font-medium">HTTP API Token</span> y pégalo abajo.
-                                                </div>
-                                            </div>
+                                        </div>
+
+                                        <div className="flex gap-4 pt-4">
+                                            <button onClick={onClose} className="flex-1 h-14 bg-white/5 text-white/40 text-[10px] font-black uppercase tracking-widest rounded-xl hover:text-white transition-all">Cancelar</button>
+                                            <button 
+                                                onClick={() => setStep(2)}
+                                                className="flex-[2] h-14 bg-[#26A5E4] text-white font-black uppercase tracking-widest text-[11px] rounded-xl hover:bg-[#1f88c0] hover:shadow-[0_0_30px_rgba(38,165,228,0.4)] transition-all"
+                                            >
+                                                Ya tengo mi Token
+                                            </button>
+                                        </div>
+                                    </motion.div>
+                                ) : step === 2 ? (
+                                    <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-10">
+                                        <div className="space-y-4">
+                                            <h3 className="text-white text-2xl font-light tracking-tight">Vincular Token</h3>
+                                            <p className="text-white/40 text-sm font-light">Pega la llave maestra que te entregó BotFather para activar el puente.</p>
                                         </div>
 
                                         {/* Input Area */}
@@ -199,11 +237,12 @@ export default function TelegramModal({ isOpen, onClose, activeEntity, currentUs
                                                 value={botToken}
                                                 onChange={(e) => setBotToken(e.target.value)}
                                                 className="w-full bg-white/[0.03] border border-white/10 rounded-2xl px-6 py-5 text-white font-mono text-sm focus:outline-none focus:border-[#26A5E4]/50 focus:bg-white/[0.05] transition-all"
+                                                autoFocus
                                             />
                                         </div>
 
                                         <div className="flex gap-4 pt-2">
-                                            <button onClick={onClose} className="flex-1 h-14 bg-white/5 text-white/40 text-[10px] font-black uppercase tracking-widest rounded-xl hover:text-white transition-all">Cancelar</button>
+                                            <button onClick={() => setStep(1)} className="flex-1 h-14 bg-white/5 text-white/40 text-[10px] font-black uppercase tracking-widest rounded-xl hover:text-white transition-all">Atrás</button>
                                             <button 
                                                 onClick={handleConnect}
                                                 disabled={isLoading}
@@ -213,7 +252,7 @@ export default function TelegramModal({ isOpen, onClose, activeEntity, currentUs
                                                     : 'bg-[#26A5E4] text-white hover:bg-[#1f88c0] hover:shadow-[0_0_30px_rgba(38,165,228,0.4)] hover:scale-[1.02] active:scale-[0.98]'
                                                 }`}
                                             >
-                                                {isLoading ? 'Conectando...' : 'Activar Protocolo Telegram'}
+                                                {isLoading ? 'Vinculando...' : 'Activar Protocolo'}
                                             </button>
                                         </div>
                                     </motion.div>
@@ -229,8 +268,8 @@ export default function TelegramModal({ isOpen, onClose, activeEntity, currentUs
                                         <div className="w-full max-w-sm mt-8 border border-white/5 rounded-2xl bg-black/50 p-6 relative overflow-hidden group">
                                             <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-[#26A5E4]/30 to-transparent"></div>
                                             <div className="flex flex-col gap-1 items-start mb-6">
-                                                <span className="text-[9px] font-black uppercase tracking-widest text-[#26A5E4]">Token Registrado</span>
-                                                <code className="text-white font-mono text-[13px] tracking-tight">{botToken}</code>
+                                                <span className="text-[9px] font-black uppercase tracking-widest text-[#26A5E4]">Bot Conectado</span>
+                                                <code className="text-white font-mono text-lg tracking-tight">{botName || 'Telegram Bot'}</code>
                                             </div>
                                             <div className="flex items-center gap-3">
                                                 <button onClick={onClose} className="flex-1 h-12 bg-white/5 hover:bg-white/10 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">TERMINAR</button>

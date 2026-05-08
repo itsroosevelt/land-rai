@@ -230,6 +230,14 @@ export async function POST(req: Request) {
                         const cardGet = await cardRef.get();
                         if (cardGet.exists) {
                             targetCardDoc = cardGet;
+                        } else {
+                            // 👻 TARJETA FANTASMA: Borrar referencia para permitir re-creación
+                            console.log(`[Webhook] 👻 Ghost card detected (${contactCardId}). Clearing reference.`);
+                            await db.doc(`${entityPath}/contacts/${existingContactId}`).update({
+                                kanbanCardId: admin.firestore.FieldValue.delete(),
+                                kanbanGroupId: admin.firestore.FieldValue.delete()
+                            }).catch(() => {});
+                            targetGroupId = null;
                         }
                     }
                 }
@@ -288,6 +296,9 @@ export async function POST(req: Request) {
                 };
 
                 if (targetCardDoc && targetGroupId) {
+                    cardId = targetCardDoc.id;
+                    groupId = targetGroupId;
+
                     await targetCardDoc.ref.update({
                         lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
                         updatedAt: new Date(),
@@ -360,15 +371,23 @@ export async function POST(req: Request) {
                             updatedAt: new Date(),
                             createdAt: new Date(),
                             messages: [newMessage],
-                            'botState.messageQueue': [queueItem],
+                            botState: { messageQueue: [queueItem], status: 'active' },
                             unreadCount: 1,
                             status: 'open',
-                            source: 'whatsapp',
-                            primary_channel: 'whatsapp'
+                            source: 'WHATSAPP',
+                            primary_channel: 'whatsapp',
+                            platform_ids: { whatsapp: from }
                         });
 
-                        // 2. Update/Create the Contact in the CRM Database
-                        if (numericId && (finalContactName.trim() || cleanFrom.length >= 5)) {
+                        // 3. Update or Create Contact Reference
+                        if (existingContactId) {
+                            await db.collection(`${entityPath}/contacts`).doc(existingContactId).update({
+                                kanbanGroupId: destinationGroupId,
+                                kanbanCardId: newCardRef.id,
+                                updatedAt: new Date().toISOString()
+                            });
+                        } else {
+                            const numericId = Date.now().toString() + Math.floor(Math.random() * 1000).toString();
                             await db.collection(`${entityPath}/contacts`).doc(numericId).set({
                                 crmId: numericId,
                                 name: finalContactName || cleanFrom,
@@ -378,8 +397,8 @@ export async function POST(req: Request) {
                                 kanbanGroupId: destinationGroupId,
                                 kanbanCardId: newCardRef.id,
                                 updatedAt: new Date().toISOString(),
-                                ...(existingContactId ? {} : { createdAt: new Date().toISOString() })
-                            }, { merge: true });
+                                createdAt: new Date().toISOString()
+                            });
                         }
 
                         cardId = newCardRef.id;
@@ -390,8 +409,9 @@ export async function POST(req: Request) {
                 // 4. TRIGGER UNIVERSAL CHATBOT
                 if (groupId && cardId) {
                     debugLog(`[POST] Triggering universal chatbot for whatsapp in tenant ${entityId}...`);
-                    processChatbotFlow({
-                        userId, entityId, groupId, cardId, platform: 'whatsapp', from: from, text: text
+                    await processChatbotFlow({
+                        userId, entityId, groupId, cardId, platform: 'whatsapp', from: from, text: text,
+                        messageId: messageId
                     }).catch(botError => {
                         debugLog(`[POST] Chatbot Async Error: ${botError?.message || String(botError)}`);
                     });

@@ -121,25 +121,39 @@ export const CaptureInputNode = ({ data = {} }: NodeProps) => {
     );
 };
 
-export const QuickReplyNode = ({ data = {} }: NodeProps) => (
-    <NodeWrapper header="Respuesta Rápida" icon={<Zap size={16} className="text-purple-400" />} label={data.label} color="border-purple-500">
-        <p className="text-xs text-neutral-400">Texto:</p>
-        <p className="whitespace-pre-wrap bg-neutral-900/70 p-2 rounded-md text-white max-h-20 overflow-y-auto text-xs">
-            {data.bodyText || data.text || 'Haz clic para editar.'}
-        </p>
-        <div className="space-y-1.5 pt-1">
-            {(data.buttons || []).filter(b => b).map((btn, i) => {
-                const isObject = typeof btn === 'object' && btn !== null;
-                const label = isObject ? btn.title : btn;
-                const id = isObject ? (btn.id || btn.payload || btn.title) : btn;
-                return (
-                    <OptionRow key={i} handleId={id}>{label}</OptionRow>
-                )
-            })}
-        </div>
-        <HandleStyled type="target" position={Position.Left} />
-    </NodeWrapper>
-);
+export const QuickReplyNode = ({ data = {} }: NodeProps) => {
+    const buttons = (data.buttons || []).filter(b => b);
+    
+    return (
+        <NodeWrapper header="Respuesta Rápida" icon={<Zap size={16} className="text-purple-400" />} label={data.label} color="border-purple-500">
+            <p className="text-xs text-neutral-400">Texto:</p>
+            <p className="whitespace-pre-wrap bg-neutral-900/70 p-2 rounded-md text-white max-h-20 overflow-y-auto text-xs">
+                {data.bodyText || data.text || 'Haz clic para editar.'}
+            </p>
+            
+            <div className="space-y-1.5 pt-1">
+                {buttons.length > 0 ? (
+                    buttons.map((btn, i) => {
+                        const isObject = typeof btn === 'object' && btn !== null;
+                        const label = isObject ? btn.title : btn;
+                        const id = isObject ? (btn.id || btn.payload || btn.title) : btn;
+                        return (
+                            <OptionRow key={i} handleId={String(id)}>{label}</OptionRow>
+                        );
+                    })
+                ) : (
+                    <div className="flex justify-center p-2 border border-dashed border-neutral-700 rounded-md opacity-50">
+                        <p className="text-[10px]">Sin botones definidos</p>
+                        {/* Handle de respaldo solo cuando no hay botones para permitir conexión inicial */}
+                        <HandleStyled type="source" position={Position.Right} />
+                    </div>
+                )}
+            </div>
+
+            <HandleStyled type="target" position={Position.Left} />
+        </NodeWrapper>
+    );
+};
 
 export const ListMessageNode = ({ data = {} }: NodeProps) => (
     <NodeWrapper header="Mensaje de Lista" icon={<Rows size={16} className="text-indigo-400" />} label={data.label} color="border-indigo-500">

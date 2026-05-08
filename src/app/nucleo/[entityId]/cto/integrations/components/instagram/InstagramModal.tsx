@@ -9,7 +9,7 @@ import {
     Lock
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
-import { doc, setDoc, deleteDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, onSnapshot, serverTimestamp, collectionGroup, getDocs, query, where } from 'firebase/firestore';
 import { toast } from 'sonner';
 
 interface InstagramModalProps {
@@ -100,6 +100,26 @@ const InstagramModal: React.FC<InstagramModalProps> = ({ isOpen, onClose, active
                 return;
             }
 
+            const instagramIdToCheck = page.instagram_business_account.id;
+            const integrationsQuery = query(
+                collectionGroup(db, 'integrations'),
+                where('instagramId', '==', instagramIdToCheck)
+            );
+            const integrationsSnap = await getDocs(integrationsQuery);
+            
+            let isAlreadyConnected = false;
+            integrationsSnap.forEach(docSnap => {
+                // Check if connected to another tenant entirely
+                if (!docSnap.ref.path.includes(`users/${userId}/entities/${entityId}`)) {
+                    isAlreadyConnected = true;
+                }
+            });
+
+            if (isAlreadyConnected) {
+                toast.error(`Esta cuenta de Instagram (@${page.instagram_business_account.username}) ya está vinculada a otro usuario.`, { id: toastId });
+                return;
+            }
+
             const exchangeRes = await fetch('/api/meta/exchange-token', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -128,13 +148,7 @@ const InstagramModal: React.FC<InstagramModalProps> = ({ isOpen, onClose, active
             };
 
             await setDoc(doc(db, `users/${userId}/entities/${entityId}/integrations/instagram`), instagramConfig);
-            await setDoc(doc(db, `integrations/instagram/accounts/${page.instagram_business_account.id}`), {
-                entityId,
-                userId,
-                username: page.instagram_business_account.username,
-                accessToken: permanentToken,
-                updatedAt: serverTimestamp()
-            });
+
 
             setConfig(instagramConfig);
             setIsConnected(true);
@@ -151,9 +165,7 @@ const InstagramModal: React.FC<InstagramModalProps> = ({ isOpen, onClose, active
         const toastId = toast.loading("Desconectando...");
         try {
             await deleteDoc(doc(db, `users/${userId}/entities/${entityId}/integrations/instagram`));
-            if (config?.instagramId) {
-                await deleteDoc(doc(db, `integrations/instagram/accounts/${config.instagramId}`));
-            }
+
             toast.success("Desconectado correctamente.", { id: toastId });
         } catch (error) {
             toast.error("Error al desconectar.");

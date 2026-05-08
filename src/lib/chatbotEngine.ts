@@ -6,7 +6,7 @@ export interface ChatbotContext {
     entityId: string;
     groupId: string;
     cardId: string;
-    platform: 'whatsapp' | 'messenger' | 'instagram' | 'telegram' | 'gmail';
+    platform: 'whatsapp' | 'messenger' | 'instagram' | 'telegram' | 'gmail' | 'x_twitter' | 'x';
     from: string;
     text: string;
     messageId?: string;
@@ -34,7 +34,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             const bState = data.botState || {};
 
             const normInput = (text || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            const isPriorityCommand = /^(reinicia|reinicio|reset|clear|limpiar|menu|opciones|ayuda|help|inicio|start)/i.test(normInput);
+            const isPriorityCommand = /^(reinici[ao]r?|reinici|reinci(ar)?|restart|reset|clear|limpiar|borrar|menu|opciones|ayuda|help|inicio|start)/i.test(normInput);
 
             if (isPriorityCommand && data.botLock) {
                 console.log(`[ChatbotEngine] 🔓 Priority command breaking existing lock for ${cardId}`);
@@ -148,7 +148,21 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     const normalizedInput = text.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     
     // Command categorization (Master Engine Sync)
-    const isReset = /^(reinicia(r| todo ahora)?|reinicio|reset|clear|limpiar)/i.test(normalizedInput);
+    // Regex expanded to catch typos like 'reinciar', 'reiniciar', 'restart', etc.
+    const isExplicitReset = /^(reinici[ao]r?|reinici|reinci(ar)?|reset|restart|clear|limpiar|borrar)/i.test(normalizedInput);
+    
+    // TIMEOUT LOGIC: If waiting for input for >= 15 days, auto-reset
+    let isTimeoutReset = false;
+    if (cardData.botState?.waitingForInput && cardData.botState?.lastWaitStartedAt) {
+        const lastWait = cardData.botState.lastWaitStartedAt.toDate?.() || new Date(cardData.botState.lastWaitStartedAt);
+        const daysPassed = (Date.now() - lastWait.getTime()) / (1000 * 60 * 60 * 24);
+        if (daysPassed >= 15) {
+            console.log(`[ChatbotEngine] ⏳ 15-day timeout reached for card ${cardRef.id}. Forcing reset.`);
+            isTimeoutReset = true;
+        }
+    }
+    
+    const isReset = isExplicitReset || isTimeoutReset;
     const isMenu = /^(menu|opciones|ayuda|help)/i.test(normalizedInput);
     const isStop = /^(detener|stop|salir|chau|adios)/i.test(normalizedInput);
     const isStartTrigger = /^(hola|hi|buenas|inicio|start|buen(as)?\s*(dias|tardes|noches)|que\s*tal|saludos)/i.test(normalizedInput);
@@ -186,8 +200,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             'botState.status': 'active',
             'botState.waitingForInput': false,
             'botState.currentNodeId': null,
-            customFields: {},
-            contactName: 'Usuario'
+            customFields: {}
         };
 
         // If it's a hard reset, we clear the queue to prevent "echoes" of previous flow messages
@@ -201,16 +214,22 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         // Sync local cardData for current cycle execution
         cardData.botState = { ...(cardData.botState || {}), status: 'active', waitingForInput: false, currentNodeId: null };
         cardData.customFields = {};
-        cardData.contactName = 'Usuario';
         
         if (isReset) {
-            const resetText = "🔄 Reinicio completado. Por favor, envíanos un mensaje para empezar de nuevo.";
-            await dispatchMessage(resetText);
-            await appendAgentMessage({ text: resetText, type: 'text', messageId: `bot_sys_${Date.now()}` });
-            
-            // Detenemos la ejecución aquí para que el bot ESPERE un nuevo mensaje
-            // antes de iniciar el flujo principal nuevamente.
-            return;
+            if (isExplicitReset) {
+                const resetText = "🔄 Reinicio completado. Por favor, envíanos un mensaje para empezar de nuevo.";
+                await dispatchMessage(resetText);
+                await appendAgentMessage({ text: resetText, type: 'text', messageId: `bot_sys_${Date.now()}` });
+                
+                // Detenemos la ejecución aquí para que el bot ESPERE un nuevo mensaje
+                // antes de iniciar el flujo principal nuevamente.
+                return;
+            } else {
+                const timeoutText = "⏳ Por inactividad prolongada, hemos reiniciado la conversación.";
+                await dispatchMessage(timeoutText);
+                await appendAgentMessage({ text: timeoutText, type: 'text', messageId: `bot_sys_${Date.now()}` });
+                // No retornamos. Dejamos que el motor inicie el flujo principal automáticamente con este nuevo mensaje.
+            }
         }
 
         if (isMenu || (isReset && !isStartTrigger)) {
@@ -222,7 +241,8 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         }
     }
 
-    let bState = cardData.botState || {};
+    // cardData.botState is the live source of truth (updated by Master Bypass above if needed)
+
 
     // --- C. FLOW RESOLUTION (Rule 4: Root Isolation) ---
     const botsRef = db.collection(`${entityPath}/chatbots`);
@@ -236,30 +256,38 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
 
     // Filter and score bots by platform relevance
     const platformBots = allActiveBots.map(bot => {
-        const targets = bot.targetPlatforms || [];
+        const targets = (bot.targetPlatforms || []).map((t: string) => t.toLowerCase().trim());
         let score = 0;
         
         // Match platform case-insensitive and trimmed
         const currentPlatform = platform.toLowerCase().trim();
-        const hasMatch = targets.some((t: string) => t.toLowerCase().trim() === currentPlatform);
+        
+        // Robust matching for common abbreviations
+        const aliases: Record<string, string[]> = {
+            'whatsapp': ['wa', 'wpp', 'whatsapp cloud'],
+            'instagram': ['ig', 'insta'],
+            'messenger': ['fb', 'facebook', 'msg'],
+            'telegram': ['tg', 'tele']
+        };
+
+        const currentAliases = aliases[currentPlatform] || [];
+        const hasMatch = targets.some((t: string) => t === currentPlatform || currentAliases.includes(t));
 
         if (hasMatch) {
             score = 10; // Explicit match (High Priority)
         } else if (currentPlatform === 'gmail') {
-            score = 0; // STRIC MATCH REQUIRED: Gmail should never be targeted by a global/wildcard bot
-        } else if (targets.length === 0 || targets.includes('*')) {
+            score = 0; // STRICT MATCH REQUIRED: Gmail should never be targeted by a global/wildcard bot
+        } else if (targets.length === 0 || targets.includes('*') || targets.includes('all')) {
             score = 5;  // Global Match (Medium Priority) for other platforms
         } else {
-            // FALLBACK RULE: If we have multiple bots, but none match this platform, 
-            // the oldest/first active bot acts as a general fallback.
-            score = 1;
+            score = 1; // Fallback
         }
         
         return { ...bot, _score: score };
     }).filter(bot => bot._score > 0);
 
     if (platformBots.length === 0) {
-        console.log(`[ChatbotEngine] ⚠️ No matching bots found for platform ${platform} on entity ${entityId}`);
+        console.log(`[ChatbotEngine] ⚠️ No matching bots found for platform ${platform} on entity ${entityId}. Active targets:`, allActiveBots.map(b => b.targetPlatforms));
         return;
     }
 
@@ -282,11 +310,17 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     };
 
     // --- INNER EXECUTION LOOP ---
-    let currentNodeId: string | null = bState.currentNodeId || null;
-    let waitingForInput = bState.waitingForInput || false;
+    // CRITICAL: Read bState AFTER Master Bypass updates cardData.botState in memory
+    // so that waitingForInput reflects the current state of this execution cycle.
+    let currentNodeId: string | null = cardData.botState?.currentNodeId || null;
+    let waitingForInput = cardData.botState?.waitingForInput || false;
 
-    // FIX: If status is 'active' but we have no node (stuck) or it's 'completed', we should try to restart
-    const shouldRestart = isStartTrigger || !currentNodeId || bState.status === 'completed' || bState.status === 'inactive';
+    // FIX: Only restart if NOT explicitly waiting for user input.
+    // If the flow is marked as 'completed', DO NOT restart automatically.
+    // It must only restart if the user explicitly types 'reiniciar' (isReset = true).
+    const shouldRestart = (isReset || isMenu)
+        ? true
+        : (!waitingForInput && cardData.botState?.status !== 'completed' && (!currentNodeId || cardData.botState?.status === 'inactive' || !cardData.botState?.status));
 
     // Handle incoming input for current node
     if (waitingForInput && currentNodeId) {
@@ -352,7 +386,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 const updatePayload: any = { [`customFields.${varName}`]: extracted, 'botState.waitingForInput': false };
                 
                 if (isName) {
-                    updatePayload.contactName = extracted;
+                    // We NO LONGER modify contactName here per user request. The name assigned in Kanban is permanent.
                     sessionVars.nombre = extracted;
                     sessionVars.name = extracted;
                 }
@@ -509,6 +543,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 'botState.status': 'active',
                 'botState.waitingForInput': true,
                 'botState.currentNodeId': node.id,
+                'botState.lastWaitStartedAt': admin.firestore.FieldValue.serverTimestamp(),
                 messages: admin.firestore.FieldValue.arrayUnion({
                     sender: 'agent',
                     text: body,
@@ -540,7 +575,8 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 'botState.status': 'active',
                 'botState.waitingForInput': true,
                 'botState.currentNodeId': node.id,
-                'botState.variableName': node.data?.variableName || 'input'
+                'botState.variableName': node.data?.variableName || 'input',
+                'botState.lastWaitStartedAt': admin.firestore.FieldValue.serverTimestamp()
             };
             
             if (content.trim()) {

@@ -28,8 +28,8 @@ const FileTreeItem = ({ name, path, isFolder, level, isOpen, onToggle, onClick, 
 
             <div
                 className={`flex items-center gap-2 py-1.5 px-3 text-[13px] cursor-pointer select-none transition-all border-l-2 relative z-10 ${activeFile === path
-                    ? 'bg-[#2a2d2e] text-white border-blue-500 shadow-sm'
-                    : 'text-[#969696] hover:text-[#cccccc] hover:bg-[#2a2d2e]/50 border-transparent'
+                    ? 'bg-white/5 text-white border-cyan-500 shadow-sm'
+                    : 'text-neutral-500 hover:text-neutral-300 hover:bg-white/[0.02] border-transparent'
                     }`}
                 style={{ paddingLeft: `${level * 12 + 12}px` }}
                 onClick={isFolder ? onToggle : onClick}
@@ -157,12 +157,12 @@ export const FileTree = ({ files, activeFile, setActiveFile, expandedFolders, se
     };
 
     return (
-        <div className="flex flex-col h-full bg-[#1e1e1e]">
+        <div className="flex flex-col h-full bg-[#0a0a0a]">
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 bg-[#252526] border-b border-[#333]">
+            <div className="flex items-center justify-between px-4 py-3 bg-[#0a0a0a] border-b border-white/5">
                 <div className="flex items-center gap-2">
-                    <Folder className="w-4 h-4 text-[#8a8a8a]" />
-                    <span className="text-[11px] font-bold text-[#cccccc] uppercase tracking-wider">Archivos</span>
+                    <Folder className="w-4 h-4 text-neutral-600" />
+                    <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Archivos</span>
                 </div>
                 <button className="p-1 hover:bg-[#37373d] rounded transition-colors group">
                     <Search className="w-3.5 h-3.5 text-[#8a8a8a] group-hover:text-white" />
@@ -177,7 +177,7 @@ export const FileTree = ({ files, activeFile, setActiveFile, expandedFolders, se
                         placeholder="Buscar archivos"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-[#3c3c3c] text-white text-[12px] px-3 py-1.5 rounded border border-transparent focus:border-blue-500/50 focus:outline-none transition-all placeholder:text-[#8a8a8a]"
+                        className="w-full bg-[#111] text-white text-[12px] px-3 py-1.5 rounded-lg border border-white/5 focus:border-cyan-500/50 focus:outline-none transition-all placeholder:text-neutral-600"
                     />
                 </div>
             </div>

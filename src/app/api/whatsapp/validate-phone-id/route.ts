@@ -9,41 +9,47 @@ export async function POST(req: Request) {
             return NextResponse.json({ valid: false, message: 'Falta el Phone ID.' });
         }
 
-        // Rule 4: Isolated Data Vault - Using collectionGroup to find duplicates across tenants
-        // without violating Rule 7: No Global Mapping Roots
-        const integrationsSnap = await db.collectionGroup('integrations')
-            .where('phoneNumberId', '==', String(phoneNumberId))
-            .get();
+        const currentEntityPath = `users/${userId}/entities/${entityId}`;
+        const collectionsToCheck = ['integrations', 'whatsapp_internal', 'whatsapp-integrations'];
+        const fieldsToCheck = ['phoneNumberId', 'phone_number_id', 'id', 'wabaId'];
+        
+        const numericId = Number(phoneNumberId);
+        const stringId = String(phoneNumberId);
 
-        if (!integrationsSnap.empty) {
-            // Check if any of the found docs belong to a DIFFERENT tenant/entity
-            for (const doc of integrationsSnap.docs) {
-                const pathParts = doc.ref.path.split('/');
-                // Path pattern: users/{uid}/entities/{eid}/integrations/{integrationId}
-                const docUserId = pathParts[1];
-                const docEntityId = pathParts[3];
-
-                if (docUserId !== userId || docEntityId !== entityId) {
-                    console.log(`[Validation] ❌ Duplicate Phone ID ${phoneNumberId} found in ${doc.ref.path}`);
-                    return NextResponse.json({ 
-                        valid: false, 
-                        message: 'Este Phone ID ya está vinculado a otra cuenta de Roosevelt. Por favor usa una App de Meta diferente o contacta a soporte.' 
-                    });
+        for (const collName of collectionsToCheck) {
+            for (const fieldName of fieldsToCheck) {
+                try {
+                    // Diagnostic scan
+                    const snap = await db.collectionGroup(collName).where(fieldName, '==', stringId).get();
+                    
+                    if (!snap.empty) {
+                        for (const doc of snap.docs) {
+                            const existingPath = doc.ref.path;
+                            // Block only if it's NOT in our current entity path
+                            if (!existingPath.includes(currentEntityPath)) {
+                                console.log(`[Validation] 🛡️ CONFLICT: Found ${stringId} in ${existingPath}. Blocking connection for ${currentEntityPath}`);
+                                return NextResponse.json({ 
+                                    valid: false, 
+                                    message: `ERROR: Este número ya está en uso por otra empresa en el sistema (Detectado en: ${collName}).` 
+                                }, { status: 200 });
+                            }
+                        }
+                    }
+                } catch (idxError: any) {
+                    // Silence index errors to allow user to connect their own data while indices build
+                    console.error(`[Validation] ⚠️ Skipping global check for ${collName}/${fieldName} due to missing index.`);
                 }
             }
         }
 
-        console.log(`[Validation] ✅ Phone ID ${phoneNumberId} is valid for User: ${userId}, Entity: ${entityId}`);
-        return NextResponse.json({ valid: true });
+        console.log(`[Validation] ✅ Phone ID ${phoneNumberId} is valid for ${currentEntityPath}`);
+        return NextResponse.json({ valid: true }, { status: 200 });
 
     } catch (error: any) {
-        console.error('[Validation API Error]:\n\n====================\nAtención! Copia este error (incluyendo el link si lo hay):\n', error.message, '\n====================\n');
-        // Devolvemos 200 para que NextJS no intercepte el 500 con un HTML de error y el frontend pueda leer el JSON.
+        console.error(`[Validation CRASH] ${error.stack || error.message}`);
         return NextResponse.json({ 
             valid: false, 
-            message: error.message.includes('index') 
-                ? 'Firebase requiere un "Índice (Index)" para validar este número. Revisa la terminal (consola negra) abajo donde corre "npm run dev", y haz clic en el link que Firebase generó para crearlo automáticamente.'
-                : error.message 
-        }, { status: 200 }); // Status 200 para forzar a la UI a mostrar el mensaje real
+            message: `Error de servidor: ${error.message}` 
+        }, { status: 200 });
     }
 }

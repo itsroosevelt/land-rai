@@ -225,11 +225,17 @@ export async function POST(req: Request) {
         // Try to find if user exists by email in Contacts
         const contactSnap = await db.collection(`${entityPath}/contacts`)
             .where('email', '==', fromEmail)
-            .limit(1)
             .get();
 
         if (!contactSnap.empty) {
-            const contactDoc = contactSnap.docs[0];
+            // Sort by updatedAt to ensure we pick the most recent/active one
+            const sortedDocs = contactSnap.docs.sort((a, b) => {
+                const tA = new Date(a.data().updatedAt || 0).getTime();
+                const tB = new Date(b.data().updatedAt || 0).getTime();
+                return tB - tA;
+            });
+
+            const contactDoc = sortedDocs[0];
             const contactData = contactDoc.data();
             existingContactId = contactDoc.id;
             targetGroupId = contactData.kanbanGroupId;

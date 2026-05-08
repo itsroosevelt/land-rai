@@ -1,6 +1,16 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Merge, Trash2, AlertTriangle, CheckCircle2, RefreshCw, Users } from 'lucide-react';
+import { X, Merge, Trash2, AlertTriangle, CheckCircle2, RefreshCw, Users, Mail, MessageCircle, Instagram, Send, Phone } from "lucide-react";
+
+const getPlatformIcon = (source: string) => {
+    const s = (source || "").toUpperCase();
+    if (s.includes("GMAIL")) return <Mail className="w-3 h-3 text-red-400" />;
+    if (s.includes("MESSENGER")) return <MessageCircle className="w-3 h-3 text-blue-400" />;
+    if (s.includes("WHATSAPP")) return <MessageCircle className="w-3 h-3 text-emerald-400" />;
+    if (s.includes("TELEGRAM")) return <Send className="w-3 h-3 text-sky-400" />;
+    if (s.includes("INSTAGRAM")) return <Instagram className="w-3 h-3 text-pink-400" />;
+    return <Users className="w-3 h-3 text-neutral-500" />;
+};
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,72 +46,74 @@ export const DuplicateManager: React.FC<DuplicateManagerProps> = ({
     const [processing, setProcessing] = useState(false);
 
     // NEW: Manual merge mode
-    const [mode, setMode] = useState<'auto' | 'manual'>('auto');
+    const [mode, setMode] = useState<'auto' | 'integrations' | 'manual'>('auto');
     const [selectedForMerge, setSelectedForMerge] = useState<string[]>([]);
 
-    // Grouping Logic - Detect by ID duplicates AND phone duplicates
+    const [exactDuplicates, setExactDuplicates] = useState<any[]>([]);
+    const [integrationGroups, setIntegrationGroups] = useState<any[]>([]);
+
     const analyzeDuplicates = () => {
         setAnalyzing(true);
         setTimeout(() => {
-            const groups: any[] = [];
+            const exact: any[] = [];
+            const integrations: any[] = [];
             const processedIds = new Set();
 
-            // First, group by Firestore ID (detect database duplicates)
-            // Fix: Only group if it's the SAME document appearing multiple times in the array
-            // (Internal memory duplication)
-            const idGroups = new Map<string, any[]>();
-            contacts.forEach(contact => {
-                if (!contact.id) return;
-                if (!idGroups.has(contact.id)) {
-                    idGroups.set(contact.id, []);
-                }
-                idGroups.get(contact.id)!.push(contact);
-            });
-
-            // Add ID-based duplicates to groups
-            idGroups.forEach((contactsWithSameId, id) => {
-                if (contactsWithSameId.length > 1) {
-                    // Logic fix: Don't show these as mergeable duplicates (they are the same doc)
-                    // Instead, we just mark them as processed to avoid double dipping
-                    contactsWithSameId.forEach(c => processedIds.add(c.id));
-                }
-            });
-
-            // Then, group by phone number (for different contacts with same phone)
+            // 1. EXACT MATCHES (Phone or Email)
             contacts.forEach(contact => {
                 if (processedIds.has(contact.id)) return;
-                if (!contact.phone) return;
-
-                // Smart Normalization: 
-                // 1. Remove non-digits
-                // 2. Handle double prefixes (e.g., 1593...)
-                let normalizedPhone = contact.phone.replace(/\D/g, '');
-                if (normalizedPhone.startsWith('1') && normalizedPhone.length > 11) {
-                    normalizedPhone = normalizedPhone.substring(1); // Strip leading 1 if it looks like double prefix
-                }
+                
+                const normalizedPhone = contact.phone ? contact.phone.replace(/\D/g, "") : "";
+                const normalizedEmail = contact.email ? contact.email.toLowerCase().trim() : "";
 
                 const matches = contacts.filter(c => {
                     if (c.id === contact.id) return false;
                     if (processedIds.has(c.id)) return false;
-                    if (!c.phone) return false;
+                    
+                    const cPhone = c.phone ? c.phone.replace(/\D/g, "") : "";
+                    const cEmail = c.email ? c.email.toLowerCase().trim() : "";
 
-                    let cNormalized = c.phone.replace(/\D/g, '');
-                    if (cNormalized.startsWith('1') && cNormalized.length > 11) {
-                        cNormalized = cNormalized.substring(1);
-                    }
-
-                    const isMatch = cNormalized === normalizedPhone;
-                    return isMatch;
+                    const phoneMatch = normalizedPhone && cPhone && normalizedPhone === cPhone;
+                    const emailMatch = normalizedEmail && cEmail && normalizedEmail === cEmail;
+                    
+                    return phoneMatch || emailMatch;
                 });
 
                 if (matches.length > 0) {
                     const group = [contact, ...matches];
-                    groups.push(group);
+                    exact.push(group);
                     group.forEach(g => processedIds.add(g.id));
                 }
             });
 
-            setDuplicates(groups);
+            // 2. INTEGRATION MATCHES (Name similarity across different sources)
+            contacts.forEach(contact => {
+                if (processedIds.has(contact.id)) return;
+                const name = (contact.name || "").toLowerCase().trim();
+                if (name.length < 3 || name === "sin nombre" || name.includes("usuario")) return;
+
+                const matches = contacts.filter(c => {
+                    if (c.id === contact.id) return false;
+                    if (processedIds.has(c.id)) return false;
+                    const cName = (c.name || "").toLowerCase().trim();
+                    if (cName.length < 3) return false;
+
+                    // Match if one name contains the other and sources are different
+                    const nameMatch = cName.includes(name) || name.includes(cName);
+                    const differentSource = (contact.source || "other").toLowerCase() !== (c.source || "other").toLowerCase();
+                    
+                    return nameMatch && differentSource;
+                });
+
+                if (matches.length > 0) {
+                    const group = [contact, ...matches];
+                    integrations.push(group);
+                    group.forEach(g => processedIds.add(g.id));
+                }
+            });
+
+            setExactDuplicates(exact);
+            setIntegrationGroups(integrations);
             setAnalyzing(false);
         }, 500);
     };
@@ -131,6 +143,16 @@ export const DuplicateManager: React.FC<DuplicateManagerProps> = ({
                 if (!primaryContact.email && other.email) updates.email = other.email;
                 if (!primaryContact.company && other.company) updates.company = other.company;
                 if (!primaryContact.address && other.address) updates.address = other.address;
+                if (!primaryContact.phone && other.phone) updates.phone = other.phone;
+                
+                // ✅ Merge Platform Identifiers
+                if (!primaryContact.telegramChatId && other.telegramChatId) updates.telegramChatId = other.telegramChatId;
+                if (!primaryContact.metaSenderId && other.metaSenderId) updates.metaSenderId = other.metaSenderId;
+                if (!primaryContact.instagramId && other.instagramId) updates.instagramId = other.instagramId;
+                
+                // Merge platform_ids object
+                const mergedPlatformIds = { ...(primaryContact.platform_ids || {}), ...(other.platform_ids || {}) };
+                updates.platform_ids = mergedPlatformIds;
                 // Add more fields as needed
             });
 
@@ -275,10 +297,16 @@ export const DuplicateManager: React.FC<DuplicateManagerProps> = ({
             onContactsUpdated(finalContacts);
             setDuplicates(prev => prev.filter((_, idx) => idx !== selectedGroupIndex));
             setSelectedGroupIndex(null);
+            
+            // ✅ Success Feedback and Auto-Close
+            toast.success(`Fusión Exitosa: ${others.length} duplicados unificados en ${primaryContact.name}.`);
+            setTimeout(() => {
+                onClose();
+            }, 1000);
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("Merge error:", error);
-            toast.error("Error al fusionar contactos.");
+            toast.error(`Error en la fusión: ${error.message || 'Error desconocido'}`);
         } finally {
             setProcessing(false);
         }
@@ -290,8 +318,13 @@ export const DuplicateManager: React.FC<DuplicateManagerProps> = ({
             toast.error('Selecciona al menos 2 contactos para fusionar');
             return;
         }
+        
+        // When merging manually, we want to make sure the user knows which one is primary.
+        // We'll use the first one selected as default, or we could show a selection UI.
+        // For now, let's just make sure handleMerge is called with clear feedback.
         const group = contacts.filter(c => selectedForMerge.includes(c.id));
-        handleMerge(group, selectedForMerge[0]);
+        const primaryId = selectedForMerge[0]; 
+        handleMerge(group, primaryId);
     };
 
     // Toggle contact selection
@@ -306,86 +339,103 @@ export const DuplicateManager: React.FC<DuplicateManagerProps> = ({
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
             <DialogContent className="bg-[#0b141a] border-neutral-800 text-white sm:max-w-5xl p-0 overflow-hidden outline-none max-h-[85vh]">
-                <DialogHeader className="p-6 border-b border-white/5 bg-neutral-900/50">
-                    <DialogTitle className="text-xl font-medium flex items-center gap-2">
-                        <Merge className="text-blue-500" />
+                <DialogHeader className="p-3 border-b border-white/5 bg-neutral-900/50">
+                    <DialogTitle className="text-[12px] font-black uppercase tracking-widest flex items-center gap-2">
+                        <Merge className="text-blue-500 w-3 h-3" />
                         Gestor de Duplicados
                     </DialogTitle>
-                    <DialogDescription className="text-neutral-400">
-                        Detecta y fusiona contactos duplicados automáticamente o selecciona manualmente cuáles fusionar.
-                    </DialogDescription>
                 </DialogHeader>
 
                 {/* Mode Tabs */}
+                {/* Mode Tabs */}
                 <div className="px-6 pt-4 flex gap-2 border-b border-white/5">
                     <Button
-                        variant={mode === 'auto' ? 'default' : 'ghost'}
-                        onClick={() => setMode('auto')}
+                        variant={mode === "auto" ? "default" : "ghost"}
+                        onClick={() => { setMode("auto"); setSelectedGroupIndex(null); }}
                         className={cn(
-                            "rounded-t-lg rounded-b-none",
-                            mode === 'auto' ? 'bg-blue-600 hover:bg-blue-700' : 'hover:bg-white/5'
+                            "rounded-t-lg rounded-b-none h-8 text-[11px] uppercase tracking-wider font-bold",
+                            mode === "auto" ? "bg-blue-600 hover:bg-blue-700" : "hover:bg-white/5"
                         )}
                     >
-                        <RefreshCw className="w-4 h-4 mr-2" />
-                        Auto-Detectados ({duplicates.length})
+                        <RefreshCw className="w-3 h-3 mr-2" />
+                        Auto ({exactDuplicates.length})
                     </Button>
                     <Button
-                        variant={mode === 'manual' ? 'default' : 'ghost'}
-                        onClick={() => setMode('manual')}
+                        variant={mode === "integrations" ? "default" : "ghost"}
+                        onClick={() => { setMode("integrations"); setSelectedGroupIndex(null); }}
                         className={cn(
-                            "rounded-t-lg rounded-b-none",
-                            mode === 'manual' ? 'bg-blue-600 hover:bg-blue-700' : 'hover:bg-white/5'
+                            "rounded-t-lg rounded-b-none h-8 text-[11px] uppercase tracking-wider font-bold",
+                            mode === "integrations" ? "bg-purple-600 hover:bg-purple-700" : "hover:bg-white/5"
                         )}
                     >
-                        <Users className="w-4 h-4 mr-2" />
+                        <Merge className="w-3 h-3 mr-2" />
+                        Integraciones ({integrationGroups.length})
+                    </Button>
+                    <Button
+                        variant={mode === "manual" ? "default" : "ghost"}
+                        onClick={() => { setMode("manual"); setSelectedGroupIndex(null); }}
+                        className={cn(
+                            "rounded-t-lg rounded-b-none h-8 text-[11px] uppercase tracking-wider font-bold",
+                            mode === "manual" ? "bg-blue-600 hover:bg-blue-700" : "hover:bg-white/5"
+                        )}
+                    >
+                        <Users className="w-3 h-3 mr-2" />
                         Fusión Manual
                     </Button>
                 </div>
 
                 <div className="p-6 h-[500px] overflow-y-auto custom-scrollbar">
-                    {mode === 'auto' ? (
+                    {mode !== "manual" ? (
                         <div className="flex gap-6">
                             {/* Groups List */}
                             <div className="w-1/3 border-r border-white/5 pr-6 space-y-4">
                                 <div className="flex justify-between items-center mb-4">
                                     <span className="text-xs font-medium text-neutral-500 uppercase tracking-wider">
-                                        {duplicates.length} Grupos Encontrados
+                                        {(mode === "auto" ? exactDuplicates : integrationGroups).length} Grupos Encontrados
                                     </span>
                                     <Button variant="ghost" size="sm" onClick={analyzeDuplicates} disabled={analyzing}>
-                                        <RefreshCw className={`w-4 h-4 ${analyzing ? 'animate-spin' : ''}`} />
+                                        <RefreshCw className={`w-4 h-4 ${analyzing ? "animate-spin" : ""}`} />
                                     </Button>
                                 </div>
 
-                                {duplicates.length === 0 && !analyzing && (
+                                {(mode === "auto" ? exactDuplicates : integrationGroups).length === 0 && !analyzing && (
                                     <div className="text-center py-10 text-neutral-500 text-sm">
                                         <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-emerald-500/50" />
-                                        <p>Todo limpio. No se encontraron duplicados.</p>
+                                        <p>Todo limpio. No se encontraron {mode === "auto" ? "duplicados" : "integraciones"}.</p>
                                     </div>
                                 )}
 
-                                {duplicates.map((group, idx) => (
+                                {(mode === "auto" ? exactDuplicates : integrationGroups).map((group, idx) => (
                                     <div
                                         key={idx}
                                         onClick={() => setSelectedGroupIndex(idx)}
-                                        className={`p-4 rounded-xl border cursor-pointer transition-all ${selectedGroupIndex === idx ? 'bg-blue-500/10 border-blue-500/50' : 'bg-neutral-900/50 border-white/5 hover:border-white/10'}`}
+                                        className={`p-4 rounded-xl border cursor-pointer transition-all ${selectedGroupIndex === idx ? "bg-blue-500/10 border-blue-500/50" : "bg-neutral-900/50 border-white/5 hover:border-white/10"}`}
                                     >
                                         <div className="flex items-center justify-between mb-2">
                                             <Badge variant="outline" className="bg-neutral-950 text-neutral-400 border-neutral-800">
                                                 {group.length} Contactos
                                             </Badge>
+                                            {mode === "integrations" && (
+                                                <Badge className="bg-purple-600/20 text-purple-400 border-purple-500/30 text-[8px] uppercase font-black">
+                                                    Sugerencia Multicanal
+                                                </Badge>
+                                            )}
                                         </div>
                                         <p className="font-medium text-sm truncate">{group[0].name}</p>
-                                        <p className="text-xs text-neutral-500 truncate">{group[0].phone}</p>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <Badge variant="secondary" className="bg-white/5 text-[9px] px-1 h-4">{group[0].source}</Badge>
+                                            <p className="text-[10px] text-neutral-500 truncate">{group[0].phone || group[0].email}</p>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
 
                             {/* Merge Area */}
                             <div className="flex-1 pl-2">
-                                {selectedGroupIndex !== null && duplicates[selectedGroupIndex] ? (
+                                {selectedGroupIndex !== null && (mode === "auto" ? exactDuplicates : integrationGroups)[selectedGroupIndex] ? (
                                     <MergeView
-                                        group={duplicates[selectedGroupIndex]}
-                                        onMerge={(primaryId) => handleMerge(duplicates[selectedGroupIndex], primaryId)}
+                                        group={(mode === "auto" ? exactDuplicates : integrationGroups)[selectedGroupIndex]}
+                                        onMerge={(primaryId) => handleMerge((mode === "auto" ? exactDuplicates : integrationGroups)[selectedGroupIndex], primaryId)}
                                         processing={processing}
                                     />
                                 ) : (
@@ -398,15 +448,12 @@ export const DuplicateManager: React.FC<DuplicateManagerProps> = ({
                     ) : (
                         /* Manual Mode */
                         <div className="space-y-4">
-                            <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-lg flex items-start gap-3">
-                                <Users className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
-                                <div>
-                                    <p className="text-sm text-blue-200/90 font-medium mb-1">Modo de Fusión Manual</p>
-                                    <p className="text-xs text-blue-200/70 leading-relaxed">
-                                        Selecciona 2 o más contactos para fusionarlos. Todos los chats, mensajes y datos se combinarán sin pérdida de información.
-                                    </p>
-                                </div>
-                            </div>
+                        <div className="bg-blue-600/10 border border-blue-500/20 p-2.5 rounded-lg flex items-center gap-3">
+                            <Users className="w-4 h-4 text-blue-500 shrink-0" />
+                            <p className="text-[10px] text-blue-200/80 font-bold uppercase tracking-wider leading-relaxed">
+                                Selecciona 2+ contactos. Se unificarán chats y datos sin pérdida. El primer seleccionado conserva el nombre.
+                            </p>
+                        </div>
 
                             {selectedForMerge.length > 0 && (
                                 <div className="flex items-center justify-between p-3 bg-neutral-900/50 rounded-lg border border-white/5">
@@ -418,14 +465,14 @@ export const DuplicateManager: React.FC<DuplicateManagerProps> = ({
                                             variant="ghost"
                                             size="sm"
                                             onClick={() => setSelectedForMerge([])}
-                                            className="text-xs"
+                                            className="h-7 text-[10px] font-bold uppercase"
                                         >
                                             Limpiar
                                         </Button>
                                         <Button
                                             onClick={handleManualMerge}
                                             disabled={selectedForMerge.length < 2 || processing}
-                                            className="bg-blue-600 hover:bg-blue-500 text-white text-xs"
+                                            className="bg-blue-600 hover:bg-blue-500 text-white h-7 text-[10px] font-black uppercase tracking-tighter"
                                         >
                                             {processing ? (
                                                 <RefreshCw className="w-3 h-3 animate-spin mr-2" />
@@ -450,13 +497,23 @@ export const DuplicateManager: React.FC<DuplicateManagerProps> = ({
                                                 : "bg-neutral-900/30 border-white/5 hover:bg-neutral-900/50 hover:border-white/10"
                                         )}
                                     >
-                                        <Checkbox
-                                            checked={selectedForMerge.includes(contact.id)}
-                                            onCheckedChange={() => toggleContactSelection(contact.id)}
-                                            className="border-neutral-600"
-                                        />
+                                        <div className="flex flex-col items-center">
+                                            <Checkbox
+                                                checked={selectedForMerge.includes(contact.id)}
+                                                onCheckedChange={() => toggleContactSelection(contact.id)}
+                                                className="border-neutral-600 mb-1"
+                                            />
+                                            {selectedForMerge[0] === contact.id && (
+                                                <span className="text-[8px] font-black text-blue-500 uppercase leading-none">Principal</span>
+                                            )}
+                                        </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="font-medium text-sm text-white truncate">{contact.name || 'Sin Nombre'}</p>
+                                            <div className="flex items-center gap-2">
+                                                <p className="font-medium text-sm text-white truncate">{contact.name || 'Sin Nombre'}</p>
+                                                {selectedForMerge[0] === contact.id && (
+                                                    <Badge className="bg-blue-600 text-[8px] px-1 h-3 border-none">NOMBRE QUE SE CONSERVARÁ</Badge>
+                                                )}
+                                            </div>
                                             <div className="flex items-center gap-3 text-xs text-neutral-400">
                                                 <span className="truncate">{contact.phone || 'Sin teléfono'}</span>
                                                 {contact.email && (
@@ -474,9 +531,6 @@ export const DuplicateManager: React.FC<DuplicateManagerProps> = ({
                                                         {tag}
                                                     </Badge>
                                                 ))}
-                                                {contact.tags.length > 2 && (
-                                                    <span className="text-[9px] text-neutral-500">+{contact.tags.length - 2}</span>
-                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -515,8 +569,8 @@ const MergeView = ({ group, onMerge, processing }: { group: any[], onMerge: (id:
                                     {primaryIndex === idx && <div className="w-2 h-2 bg-white rounded-full" />}
                                 </div>
                                 <div>
-                                    <p className="font-medium text-sm text-white">{contact.name}</p>
-                                    <p className="text-xs text-neutral-400">{contact.phone} • {contact.email || 'Sin Email'}</p>
+                                    <p className="font-medium text-sm text-white flex items-center gap-2">{getPlatformIcon(contact.source)}{contact.name}<Badge variant="secondary" className="bg-white/10 text-[8px] px-1.5 h-4 uppercase font-bold tracking-wider">{contact.source || "Other"}</Badge></p>
+                                    <p className="text-xs text-neutral-400">{contact.phone || contact.email || "Sin datos de contacto"}</p>
                                 </div>
                             </div>
                             <div className="text-right">

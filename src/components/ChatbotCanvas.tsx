@@ -108,9 +108,10 @@ interface SidebarNodeProps {
     onDragStart: (event: React.DragEvent, nodeType: string) => void;
     isCollapsed: boolean;
     disabled?: boolean;
+    disabledReason?: string;
 }
 
-const SidebarNode = ({ icon, label, type: nodeType, onDragStart, isCollapsed, disabled }: SidebarNodeProps) => {
+const SidebarNode = ({ icon, label, type: nodeType, onDragStart, isCollapsed, disabled, disabledReason }: SidebarNodeProps) => {
     const nodeContent = (
         <div
             className={cn(
@@ -130,16 +131,18 @@ const SidebarNode = ({ icon, label, type: nodeType, onDragStart, isCollapsed, di
         </div>
     );
 
-    return isCollapsed ? (
-        <Tooltip>
-            <TooltipTrigger asChild>{nodeContent}</TooltipTrigger>
-            <TooltipContent side="right" className="bg-neutral-800 text-white border-neutral-700">
-                <p>{label}</p>
-            </TooltipContent>
-        </Tooltip>
-    ) : (
-        nodeContent
-    );
+    // Always wrap in Tooltip when collapsed OR when there's a reason to show
+    if (isCollapsed || (disabled && disabledReason)) {
+        return (
+            <Tooltip>
+                <TooltipTrigger asChild>{nodeContent}</TooltipTrigger>
+                <TooltipContent side="right" className="bg-neutral-800 text-white border-neutral-700 max-w-[180px]">
+                    <p>{disabled && disabledReason ? disabledReason : label}</p>
+                </TooltipContent>
+            </Tooltip>
+        );
+    }
+    return nodeContent;
 };
 
 const dagreGraph = new dagre.graphlib.Graph();
@@ -298,13 +301,23 @@ const ChatbotCanvas = forwardRef<ChatbotCanvasRef, ChatbotCanvasProps>(
                                     {isLeftSidebarOpen ? group.title : "•"}
                                 </h3>
                                 {group.nodes.map(nodeInfo => {
-                                    const isMessengerIncompatible = nodeInfo.type === 'listMessageNode' && targetPlatforms?.includes('messenger');
-                                    const isInstagramIncompatible = nodeInfo.type === 'quickReplyNode' && targetPlatforms?.includes('instagram');
+                                    const isTelegramListBlock = nodeInfo.type === 'listMessageNode' && targetPlatforms?.includes('telegram');
+                                    const isMessengerListBlock = nodeInfo.type === 'listMessageNode' && targetPlatforms?.includes('messenger');
+                                    const isInstagramQRBlock = nodeInfo.type === 'quickReplyNode' && targetPlatforms?.includes('instagram');
+
+                                    let disabledReason: string | undefined;
+                                    if (isTelegramListBlock) disabledReason = 'No compatible con Telegram. Usa Respuesta Rápida.';
+                                    else if (isMessengerListBlock) disabledReason = 'No compatible con Messenger.';
+                                    else if (isInstagramQRBlock) disabledReason = 'No compatible con Instagram.';
+                                    else if (nodeInfo.disabled) disabledReason = 'Próximamente';
+
+                                    const isBlocked = isTelegramListBlock || isMessengerListBlock || isInstagramQRBlock;
                                     return (
                                         <SidebarNode 
                                             key={nodeInfo.type} 
                                             {...nodeInfo} 
-                                            disabled={nodeInfo.disabled || isMessengerIncompatible || isInstagramIncompatible}
+                                            disabled={nodeInfo.disabled || isBlocked}
+                                            disabledReason={disabledReason}
                                             onDragStart={(e, type) => e.dataTransfer.setData('application/reactflow', type)} 
                                             isCollapsed={!isLeftSidebarOpen} 
                                         />

@@ -9,7 +9,7 @@ import {
     Lock
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
-import { doc, setDoc, deleteDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, onSnapshot, serverTimestamp, collectionGroup, getDocs, query, where } from 'firebase/firestore';
 import { toast } from 'sonner';
 
 interface MessengerModalProps {
@@ -98,6 +98,26 @@ const MessengerModal: React.FC<MessengerModalProps> = ({ isOpen, onClose, active
                 return;
             }
 
+            const pageIdToCheck = page.id;
+            const integrationsQuery = query(
+                collectionGroup(db, 'integrations'),
+                where('pageId', '==', pageIdToCheck)
+            );
+            const integrationsSnap = await getDocs(integrationsQuery);
+            
+            let isAlreadyConnected = false;
+            integrationsSnap.forEach(docSnap => {
+                // Check if connected to another tenant entirely
+                if (!docSnap.ref.path.includes(`users/${userId}/entities/${entityId}`)) {
+                    isAlreadyConnected = true;
+                }
+            });
+
+            if (isAlreadyConnected) {
+                toast.error(`Esta Fanpage (${page.name}) ya está vinculada a otro usuario.`, { id: toastId });
+                return;
+            }
+
             const exchangeRes = await fetch('/api/meta/exchange-token', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -125,13 +145,7 @@ const MessengerModal: React.FC<MessengerModalProps> = ({ isOpen, onClose, active
             };
 
             await setDoc(doc(db, `users/${userId}/entities/${entityId}/integrations/messenger`), messengerConfig);
-            await setDoc(doc(db, `integrations/messenger/pages/${page.id}`), {
-                entityId,
-                userId,
-                pageName: page.name,
-                accessToken: permanentToken,
-                updatedAt: serverTimestamp()
-            });
+
 
             setConfig(messengerConfig);
             setIsConnected(true);
@@ -148,9 +162,7 @@ const MessengerModal: React.FC<MessengerModalProps> = ({ isOpen, onClose, active
         const toastId = toast.loading("Desconectando...");
         try {
             await deleteDoc(doc(db, `users/${userId}/entities/${entityId}/integrations/messenger`));
-            if (config?.pageId) {
-                await deleteDoc(doc(db, `integrations/messenger/pages/${config.pageId}`));
-            }
+
             toast.success("Desconectado correctamente.", { id: toastId });
         } catch (error) {
             toast.error("Error al desconectar.");

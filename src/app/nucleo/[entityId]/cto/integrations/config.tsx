@@ -60,24 +60,6 @@ export const INTEGRATIONS: Integration[] = [
         color: '#25D366'
     },
     {
-        id: 'whatsapp_qr_business',
-        name: 'WhatsApp Business (App)',
-        description: 'Conecta tu aplicación móvil actual de WhatsApp Business escaneando un código QR. Rápido y sin revisión de Meta.',
-        icon: <WhatsAppIcon className="w-10 h-10 opacity-90" />,
-        category: 'Business Messaging',
-        popular: true,
-        color: '#25D366'
-    },
-    {
-        id: 'whatsapp_qr_personal',
-        name: 'WhatsApp Personal',
-        description: 'Vincula tu número de WhatsApp normal (Personal) escaneando un código QR. Útil para profesionales independientes.',
-        icon: <WhatsAppIcon className="w-10 h-10 opacity-75 grayscale-[20%]" />,
-        category: 'Business Messaging',
-        popular: false,
-        color: '#128C7E'
-    },
-    {
         id: 'telegram',
         name: 'Telegram',
         description: 'Conecta tu bot de Telegram para gestionar mensajes y automatizaciones directamente desde Roosevelt.',

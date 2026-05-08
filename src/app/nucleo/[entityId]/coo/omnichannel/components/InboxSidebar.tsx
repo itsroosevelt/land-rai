@@ -44,9 +44,9 @@ export default function InboxSidebar({ selectedFolder, setSelectedFolder, cards 
     };
 
     const counts = {
-        all: cards.length,
-        mine: cards.filter(c => c.assignedTo === 'Mío').length,
-        unassigned: cards.filter(c => !c.assignedTo || c.assignedTo === 'Unassigned').length,
+        all: cards.reduce((acc, c) => acc + (c.unreadCount || 0), 0),
+        mine: cards.filter(c => c.assignedTo === 'Mío').reduce((acc, c) => acc + (c.unreadCount || 0), 0),
+        unassigned: cards.filter(c => !c.assignedTo || c.assignedTo === 'Unassigned').reduce((acc, c) => acc + (c.unreadCount || 0), 0),
     };
 
     const folders = [
@@ -56,12 +56,12 @@ export default function InboxSidebar({ selectedFolder, setSelectedFolder, cards 
     ];
 
     const channels = [
-        { id: 'whatsapp1', label: 'WhatsApp Main', type: 'whatsapp' },
-        { id: 'ig1', label: 'Instagram CS', type: 'instagram' },
+        { id: 'whatsapp', label: 'WhatsApp', type: 'whatsapp' },
+        { id: 'instagram', label: 'Instagram', type: 'instagram' },
         { id: 'messenger', label: 'Messenger', type: 'messenger' },
-        { id: 'telegram', label: 'Telegram', type: 'telegram' },
         { id: 'twitter', label: 'X (Twitter)', type: 'twitter' },
         { id: 'gmail', label: 'Gmail', type: 'gmail' },
+        { id: 'telegram', label: 'Telegram', type: 'telegram' },
     ];
 
     return (
@@ -142,8 +142,22 @@ export default function InboxSidebar({ selectedFolder, setSelectedFolder, cards 
                                             return <div className="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 bg-neutral-800 rounded-full border border-[#0a0a0a]" />;
                                         })()}
                                     </div>
-                                    <span className="truncate">{channel.label}</span>
-                                    {integrationStatuses[channel.id] === 'Error' && <AlertTriangle size={10} className="ml-auto text-amber-500/50" />}
+                                    <span className={`truncate flex-1 ${integrationStatuses[channel.id] === 'Error' ? 'text-amber-500 font-bold' : ''}`}>
+                                        {channel.label}
+                                    </span>
+                                    {integrationStatuses[channel.id] === 'Error' && (
+                                        <div 
+                                            className="ml-auto flex items-center gap-1 bg-amber-500/20 px-1 rounded animate-pulse"
+                                            title="Click para reconectar en Configuración"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                window.open(`/nucleo/${activeEntity}/cto/integrations`, '_blank');
+                                            }}
+                                        >
+                                            <AlertTriangle size={10} className="text-amber-500" />
+                                            <span className="text-[8px] font-black text-amber-500 uppercase">OFFLINE</span>
+                                        </div>
+                                    )}
                                 </button>
                             ))}
                         </div>

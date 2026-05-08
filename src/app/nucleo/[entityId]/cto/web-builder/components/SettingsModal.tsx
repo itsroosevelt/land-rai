@@ -21,12 +21,16 @@ interface SettingsModalProps {
     supabaseUrl?: string;
     supabaseAnonKey?: string;
     onSaveDatabaseConfig?: (config: { url: string; key: string }) => Promise<void>;
+    // AI Configuration
+    geminiApiKey?: string;
+    onSaveAIConfig?: (config: { geminiApiKey: string }) => Promise<void>;
 }
 
 export const SettingsModal = ({
     show, setShow, repoUrl, repoName, githubUser, projectId, onDisconnect, handleClearCache,
     onOpenGitHubSettings, handleSync, isSyncing, hasChanges, onCheckChanges, onSaveRepoUrl,
-    projectName, supabaseUrl: initialUrl, supabaseAnonKey: initialKey, onSaveDatabaseConfig
+    projectName, supabaseUrl: initialUrl, supabaseAnonKey: initialKey, onSaveDatabaseConfig,
+    geminiApiKey: initialApiKey, onSaveAIConfig
 }: SettingsModalProps) => {
     const [isChecking, setIsChecking] = useState(false);
     const [step, setStep] = useState<'idle' | 'repo-input'>('idle');
@@ -38,6 +42,11 @@ export const SettingsModal = ({
     const [dbUrl, setDbUrl] = useState(initialUrl || "");
     const [dbKey, setDbKey] = useState(initialKey || "");
     const [isSavingDb, setIsSavingDb] = useState(false);
+
+    // AI State
+    const [aiKey, setAiKey] = useState(initialApiKey || "");
+    const [isSavingAi, setIsSavingAi] = useState(false);
+    const [showAiKey, setShowAiKey] = useState(false);
 
     // Repo Picker State
     const [repos, setRepos] = useState<any[]>([]);
@@ -333,6 +342,58 @@ export const SettingsModal = ({
                             <p className="text-[9px] text-gray-600 text-center px-8 leading-relaxed uppercase tracking-widest font-bold">
                                 Conecta tu base de datos PostgreSQL (GCP Cloud SQL compatible) para habilitar persistencia Full-Stack real.
                             </p>
+                        </div>
+                    </section>
+
+                    {/* AI Configuration Section */}
+                    <section className="space-y-3 pt-4 border-t border-[#1a1a1a]">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-widest">
+                                <Search className="w-3.5 h-3.5" /> AI Engine (Gemini / Vertex AI)
+                            </div>
+                            {initialApiKey && (
+                                <span className="flex items-center gap-1.5 text-[10px] font-bold text-green-400 bg-green-400/5 px-2 py-0.5 rounded-full border border-green-500/10">
+                                    <Check className="w-3 h-3" /> Llave Configurada
+                                </span>
+                            )}
+                        </div>
+
+                        <div className="p-4 bg-[#0c0c0e] border border-[#222] rounded-xl space-y-4">
+                            <div className="space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Gemini API Key</label>
+                                    <button 
+                                        onClick={() => setShowAiKey(!showAiKey)}
+                                        className="text-[9px] text-blue-400 hover:text-blue-300 font-bold uppercase tracking-widest"
+                                    >
+                                        {showAiKey ? "Ocultar" : "Mostrar"}
+                                    </button>
+                                </div>
+                                <input
+                                    type={showAiKey ? "text" : "password"}
+                                    value={aiKey}
+                                    onChange={e => setAiKey(e.target.value)}
+                                    placeholder="Ingresa tu Gemini API Key..."
+                                    className="w-full bg-[#09090b] border border-[#333] rounded-lg px-3 py-2 text-xs text-white placeholder-gray-700 outline-none focus:border-blue-500/30"
+                                />
+                                <p className="text-[9px] text-gray-600 leading-relaxed">
+                                    Tu llave se guardará de forma aislada para este proyecto. Si la dejas vacía, se usará la llave global de la plataforma (sujeto a límites).
+                                </p>
+                            </div>
+
+                            <button
+                                onClick={async () => {
+                                    if (!onSaveAIConfig) return;
+                                    setIsSavingAi(true);
+                                    await onSaveAIConfig({ geminiApiKey: aiKey });
+                                    setIsSavingAi(false);
+                                }}
+                                disabled={isSavingAi || (aiKey === (initialApiKey || ""))}
+                                className="w-full py-2.5 bg-green-600 hover:bg-green-500 disabled:bg-[#1a1a1a] disabled:text-gray-600 text-white text-[11px] font-bold rounded-lg transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-500/10"
+                            >
+                                {isSavingAi ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PlusCircle className="w-3.5 h-3.5" />}
+                                Actualizar Configuración AI
+                            </button>
                         </div>
                     </section>
                 </div>

@@ -116,41 +116,28 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
         allConversations: allConversations
     });
 
-    // Clear unread count when conversation is opened/focused
+    // Reset unread ONLY when the user actively opens a different conversation (card?.id changes).
+    // card?.unreadCount and liveCardData?.unreadCount are intentionally excluded from deps:
+    // if the user already has the chat open, new messages should still show the unread badge
+    // until they scroll down or re-open the conversation.
+    // The window-focus listener is removed for the same reason — focusing the browser window
+    // should not silently clear unread counts.
     useEffect(() => {
-        const resetUnread = async () => {
-            // Priority: use liveCardData information (subscription) vs card props (can be stale)
-            const currentGid = logic.liveCardData?.groupId || card?.groupId;
-            const currentCid = logic.liveCardData?.id || card?.id;
-            // Robust check: use unreadCount from both live sub and props
-            const hasUnread = (logic.liveCardData?.unreadCount || 0) > 0 || (card?.unreadCount || 0) > 0;
+        const groupId = logic.liveCardData?.groupId || card?.groupId;
+        const cardId = card?.id;
+        const uid = currentUser?.uid;
+        const entity = activeEntity;
+        const unreadCount = logic.liveCardData?.unreadCount || card?.unreadCount || 0;
 
-            if (currentCid && currentGid && hasUnread && currentUser?.uid && activeEntity) {
-                const tenantPath = `users/${currentUser.uid}/entities/${activeEntity}`;
-                console.log(`[ChatArea] Resetting unreadCount for ${currentCid} in group ${currentGid}`);
-                try {
-                    const cardRef = doc(db, `${tenantPath}/kanban-groups/${currentGid}/cards/${currentCid}`);
-                    await updateDoc(cardRef, {
-                        unreadCount: 0,
-                        lastReadAt: Timestamp.now()
-                    });
-                } catch (err: any) {
-                    // Fail silently if document moved or already deleted - state will sync on next render
-                    if (err.code === 'not-found' || err.message?.includes('No document to update')) {
-                        console.warn("[ChatArea] Card moved or not found at path during unread reset. Ignoring.");
-                    } else {
-                        console.error("[ChatArea] Error clearing unread count:", err);
-                    }
-                }
+        if (!cardId || !groupId || !uid || !entity || unreadCount === 0) return;
+
+        const cardRef = doc(db, `users/${uid}/entities/${entity}/kanban-groups/${groupId}/cards/${cardId}`);
+        updateDoc(cardRef, { unreadCount: 0, lastReadAt: Timestamp.now() }).catch((err: any) => {
+            if (err.code !== 'not-found' && !err.message?.includes('No document')) {
+                console.error("[ChatArea] Error clearing unread count:", err);
             }
-        };
-
-        resetUnread();
-
-        // Also reset when window gains focus
-        window.addEventListener('focus', resetUnread);
-        return () => window.removeEventListener('focus', resetUnread);
-    }, [card?.id, card?.unreadCount, card?.groupId, logic.liveCardData?.groupId, logic.liveCardData?.unreadCount, currentUser?.uid, activeEntity]);
+        });
+    }, [card?.id, card?.groupId, logic.liveCardData?.groupId, logic.liveCardData?.unreadCount, currentUser?.uid, activeEntity]);
 
     const [integrationStatus, setIntegrationStatus] = useState<string | null>(null);
 
@@ -418,7 +405,7 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
                                 msg.type === 'audio' ||
                                 msg.type === 'document'
                             );
-                            const shouldRenderPlainText = !!msg.text && !isAgentButtons && !isAgentList;
+                            const shouldRenderPlainText = !!msg.text && !isAgentButtons && !isAgentList && !isAgentMedia;
 
                             const showGapMarker = prevMsg && msg.timestamp?.toDate && prevMsg.timestamp?.toDate &&
                                 (msg.timestamp.toDate().getTime() - prevMsg.timestamp.toDate().getTime() > EXPIRE_THRESHOLD);
@@ -503,7 +490,7 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
                                                     }`}>
 
                                                     {/* File Support */}
-                                                    {attachment.fileUrl && (
+                                                    {attachment.fileUrl && !isAgentMedia && (
                                                         <div className="mb-2">
                                                             {attachment.fileType?.startsWith('image/') ? (
                                                                 <img src={attachment.fileUrl} alt={attachment.fileName} className="max-w-full rounded-xl max-h-52 border border-white/10" />
@@ -557,10 +544,16 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
 
                                                     {isAgentMedia && (
                                                         <div className="mb-1 min-w-[200px]">
-                                                            {attachment.fileUrl && attachment.fileType?.startsWith('image/') && (
-                                                                <div className="mb-2 relative group cursor-pointer overflow-hidden rounded-xl border border-white/10 shadow-lg">
-                                                                    <img src={attachment.fileUrl} alt={attachment.fileName || 'media'} className="w-full max-h-64 object-cover transition-transform duration-500 group-hover:scale-110" />
-                                                                </div>
+                                                            {attachment.fileUrl && (
+                                                                attachment.fileType?.startsWith('image/') ? (
+                                                                    <div className="mb-2 relative group cursor-pointer overflow-hidden rounded-xl border border-white/10 shadow-lg">
+                                                                        <img src={attachment.fileUrl} alt={attachment.fileName || 'media'} className="w-full max-h-64 object-cover transition-transform duration-500 group-hover:scale-110" />
+                                                                    </div>
+                                                                ) : (
+                                                                    <a href={attachment.fileUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 underline text-[11px] opacity-80 hover:opacity-100 bg-black/20 p-2 rounded-lg mb-2">
+                                                                        <FileText size={14} className="text-blue-400" /> {attachment.fileName || 'Archivo'}
+                                                                    </a>
+                                                                )
                                                             )}
                                                             {msg.text && <p className="text-[13px] leading-snug whitespace-pre-wrap font-medium">{msg.text}</p>}
                                                         </div>

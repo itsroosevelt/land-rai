@@ -123,18 +123,15 @@ export const KambanHeader = ({
                         placeholder="Search..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-8 h-7 bg-black/20 border-white/5 text-[10px] placeholder:text-neutral-600 focus:bg-black/40 transition-all rounded-lg"
+                        className="pl-8 pr-8 h-7 bg-black/20 border-white/5 text-[10px] placeholder:text-neutral-600 focus:bg-black/40 transition-all rounded-lg"
                     />
-                </div>
-
-                <div className="flex items-center gap-0.5">
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className={cn(
-                                "h-7 w-7 text-neutral-400 hover:text-white border border-transparent hover:border-white/5 hover:bg-white/5 transition-all rounded-full",
+                                "absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 text-neutral-500 hover:text-white transition-all rounded-md",
                                 filter !== 'all' && "text-blue-400 bg-blue-500/10 border-blue-500/20"
                             )}>
-                                <Filter size={12} />
+                                <Filter size={11} />
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="bg-neutral-900 border-neutral-800 text-white shadow-2xl rounded-xl p-1 w-40">
@@ -152,6 +149,9 @@ export const KambanHeader = ({
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
+                </div>
+
+                <div className="flex items-center gap-0.5">
 
                     <Button 
                         variant="ghost" 
