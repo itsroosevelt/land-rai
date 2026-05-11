@@ -45,7 +45,7 @@ export const LandingNavbar = () => {
         <div className="w-full flex items-center justify-between relative">
           {/* Logo */}
           <Link href="/" className="flex items-center group">
-            <span className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent leading-none tracking-tight">
+            <span className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent leading-none tracking-tight">
               Roosevelt
             </span>
           </Link>
@@ -56,7 +56,7 @@ export const LandingNavbar = () => {
               <Link 
                 key={link.name} 
                 href={link.href}
-                className="text-sm font-medium text-white/70 hover:text-white transition-colors relative group"
+                className="text-xs font-medium text-white/70 hover:text-white transition-colors relative group"
               >
                 {link.name}
                 <span className="absolute -bottom-1 left-0 w-0 h-[1px] bg-white transition-all duration-300 group-hover:w-full" />
@@ -65,18 +65,17 @@ export const LandingNavbar = () => {
           </div>
 
           {/* Actions */}
-          <div className="hidden xl:flex items-center gap-6">
+          <div className="hidden xl:flex items-center gap-4">
             <Link href="/login?mode=login">
               <Button 
-                variant="ghost" 
-                className="text-sm font-medium text-white/70 hover:text-white hover:bg-white/5 rounded-full px-8 h-10"
+                className="bg-white text-black hover:bg-white/90 text-xs rounded-full px-6 h-8 font-semibold transition-all hover:scale-105 shadow-[0_0_20px_rgba(255,255,255,0.1)]"
               >
                 Login
               </Button>
             </Link>
             <Link href="/login?register=true">
               <Button 
-                className="bg-white text-black hover:bg-white/90 text-sm rounded-full px-8 h-10 font-semibold transition-all hover:scale-105 shadow-[0_0_20px_rgba(255,255,255,0.1)]"
+                className="bg-gradient-to-r from-blue-400 to-blue-600 hover:from-blue-500 hover:to-blue-700 text-white text-xs rounded-full px-6 h-8 font-semibold transition-all hover:scale-105 shadow-[0_0_20px_rgba(59,130,246,0.3)]"
               >
                 Get Started
               </Button>
@@ -136,12 +135,12 @@ export const LandingNavbar = () => {
 
             <div className="mt-auto space-y-4">
               <Link href="/login?mode=login" onClick={() => setIsMobileMenuOpen(false)}>
-                <Button variant="outline" className="w-full h-16 rounded-2xl border-white/10 text-white hover:bg-white/5 text-xl font-light">
+                <Button className="w-full h-16 rounded-2xl bg-white text-black hover:bg-white/90 text-xl font-semibold transition-all">
                   Login
                 </Button>
               </Link>
               <Link href="/login?register=true" onClick={() => setIsMobileMenuOpen(false)}>
-                <Button className="w-full h-16 rounded-2xl bg-white text-black hover:bg-white/90 text-xl font-semibold">
+                <Button className="w-full h-16 rounded-2xl bg-gradient-to-r from-blue-400 to-blue-600 hover:from-blue-500 hover:to-blue-700 text-white text-xl font-semibold transition-all shadow-[0_0_20px_rgba(59,130,246,0.2)]">
                   Get Started
                 </Button>
               </Link>
