@@ -84,11 +84,11 @@ export default function LandingPage() {
       <LandingNavbar />
 
       {/* Central Roosevelt AI GIF - Low Z-index */}
-      <div className="relative xl:absolute xl:inset-0 pointer-events-none z-0 opacity-100 min-h-[100svh] xl:min-h-0 overflow-hidden">
+      <div className="relative xl:absolute xl:inset-0 pointer-events-none z-0 opacity-100 min-h-[85svh] xl:min-h-0 overflow-hidden">
         <img
           src="/assets/Roosevelt Ai.gif"
           alt="Roosevelt AI"
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[110vw] md:max-w-[90vw] xl:max-w-6xl h-auto scale-[1.4] md:scale-[1.2] xl:scale-[1.2] object-cover"
+          className="absolute top-1/2 left-1/2 -translate-x-[46%] -translate-y-[55%] w-full max-w-[110vw] md:max-w-[90vw] xl:max-w-6xl h-auto scale-[1.4] md:scale-[1.2] xl:scale-[1.2] object-cover"
         />
       </div>
 
@@ -96,14 +96,14 @@ export default function LandingPage() {
       <BlueParticles />
 
       {/* Main Content Container */}
-      <div className="relative z-[10] w-full px-6 md:px-16 xl:px-28 pt-10 xl:pt-0 flex flex-col xl:flex-row items-center xl:items-end justify-between min-h-0 xl:min-h-screen pb-20 xl:pb-32 gap-12 xl:gap-8">
+      <div className="relative z-[10] w-full px-6 md:px-16 xl:px-28 pt-10 xl:pt-0 flex flex-col xl:flex-row items-center xl:items-end justify-between min-h-0 xl:min-h-[85vh] pb-20 xl:pb-32 gap-12 xl:gap-8">
         
         {/* Left Column: Hero Text */}
         <motion.div
           initial={{ opacity: 0, x: -50 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
-          className="w-full xl:w-1/2 flex flex-col items-center xl:items-start text-center xl:text-left justify-center mt-[40vh] md:mt-[50vh] xl:mt-[65vh]"
+          className="w-full xl:w-1/2 flex flex-col items-center xl:items-start text-center xl:text-left justify-center mt-[35vh] md:mt-[45vh] xl:mt-[55vh] relative top-12 xl:top-20"
         >
           <span className="text-blue-500 text-[9px] md:text-[10px] tracking-[0.3em] uppercase font-bold mb-4 md:mb-5 block">
             Autonomous Infrastructure
@@ -121,15 +121,6 @@ export default function LandingPage() {
 
       </div>
 
-      {/* Footer Branding */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 0.3 }}
-        transition={{ delay: 1, duration: 1 }}
-        className="absolute bottom-6 left-1/2 -translate-x-1/2 text-[8px] md:text-[9px] tracking-[0.4em] md:tracking-[0.6em] uppercase text-white/40 text-center w-full"
-      >
-        Autonomous Management System
-      </motion.div>
     </div>
   );
 }
