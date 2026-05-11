@@ -88,7 +88,7 @@ export default function LandingPage() {
         <img
           src="/assets/Roosevelt Ai.gif"
           alt="Roosevelt AI"
-          className="absolute top-1/2 left-1/2 -translate-x-[46%] -translate-y-[55%] w-full max-w-[110vw] md:max-w-[90vw] xl:max-w-6xl h-auto scale-[1.4] md:scale-[1.2] xl:scale-[1.2] object-cover"
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[110vw] md:max-w-[90vw] xl:max-w-6xl h-auto scale-[1.4] md:scale-[1.2] xl:scale-[1.2] object-cover"
         />
       </div>
 
@@ -103,7 +103,7 @@ export default function LandingPage() {
           initial={{ opacity: 0, x: -50 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
-          className="w-full xl:w-1/2 flex flex-col items-center xl:items-start text-center xl:text-left justify-center mt-[35vh] md:mt-[45vh] xl:mt-[55vh] relative top-12 xl:top-20"
+          className="w-full xl:w-1/2 flex flex-col items-center xl:items-start text-center xl:text-left justify-center mt-4 md:mt-8 xl:mt-[55vh] relative top-0 xl:top-20"
         >
           <span className="text-blue-500 text-[9px] md:text-[10px] tracking-[0.3em] uppercase font-bold mb-4 md:mb-5 block">
             Autonomous Infrastructure

@@ -164,24 +164,46 @@ function LoginContent() {
               onMouseEnter={() => setIsHoveringText(true)}
               onMouseLeave={() => setIsHoveringText(false)}
             >
-              <h1 className="text-3xl md:text-5xl font-semibold tracking-tight text-white mb-12 text-center leading-[1.15]">
-                Welcome to your <br />
-                <span className="text-blue-500 font-bold uppercase tracking-[0.3em] text-[9px] md:text-[10px] mt-4 block">
-                  Personal Administrator
-                </span>
-              </h1>
+              <div className="flex flex-col items-center mb-12">
+                <div className="flex flex-wrap justify-center gap-x-[0.25em] text-3xl md:text-5xl font-light tracking-tight text-white leading-[1.15]">
+                  {"Welcome to your".split(' ').map((word, wordIndex) => (
+                    <motion.span
+                      key={`welcome-word-${wordIndex}`}
+                      initial={{ opacity: 0, y: 10, filter: 'blur(4px)' }}
+                      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                      transition={{ delay: 0.3 + (wordIndex * 0.15), duration: 0.8, ease: "easeOut" }}
+                      className="inline-block"
+                    >
+                      {word}
+                    </motion.span>
+                  ))}
+                </div>
+                <div className="flex flex-wrap justify-center gap-x-[0.25em] text-blue-400 text-lg md:text-2xl font-light tracking-wide mt-2">
+                  {"Personal Assistant".split(' ').map((word, wordIndex) => (
+                    <motion.span
+                      key={`admin-word-${wordIndex}`}
+                      initial={{ opacity: 0, y: 10, filter: 'blur(4px)' }}
+                      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                      transition={{ delay: 0.3 + 1.0 + (wordIndex * 0.15), duration: 0.8, ease: "easeOut" }}
+                      className="inline-block"
+                    >
+                      {word}
+                    </motion.span>
+                  ))}
+                </div>
+              </div>
 
               <Button
                 variant="outline"
                 onClick={() => { setShowForm(true); setIsRegistering(true); }}
-                className="w-full max-w-sm h-14 rounded-full bg-white/5 border-white/10 text-white/90 hover:bg-white/10 font-semibold text-xs md:text-sm tracking-widest transition-all shadow-lg"
+                className="w-full max-w-sm h-14 rounded-full bg-white/5 border-white/10 text-white/90 hover:bg-white/10 font-light text-xs md:text-sm tracking-widest transition-all shadow-lg"
               >
                 GET MY DIGITAL CHARACTER
               </Button>
 
               <Button
                 variant="outline"
-                className="w-full max-w-sm h-14 rounded-full bg-white/10 backdrop-blur-xl border-white/20 text-white hover:bg-white/20 font-semibold text-xs md:text-sm tracking-widest transition-all shadow-lg"
+                className="w-full max-w-sm h-14 rounded-full bg-white/10 backdrop-blur-xl border-white/20 text-white hover:bg-white/20 font-light text-xs md:text-sm tracking-widest transition-all shadow-lg"
                 onClick={() => { setShowForm(true); setIsRegistering(false); }}
               >
                 I ALREADY HAVE MY DIGITAL CHARACTER
@@ -203,15 +225,39 @@ function LoginContent() {
               exit={{ opacity: 0, y: -20 }}
               className="w-full max-w-7xl px-4 space-y-8"
             >
-              <div className="text-center">
-                <h2 className="text-xl md:text-2xl font-semibold tracking-tight text-white">Initialize Roosevelt</h2>
+              <div className="text-center px-4 max-w-2xl mx-auto flex flex-col gap-3 md:gap-4 min-h-[6rem] md:min-h-[8rem] justify-center mb-6">
+                {(isRegistering 
+                  ? ["I'm Roosevelt, and I'm ready to get to work for you", "Let's create your account and get started"]
+                  : ["Welcome back! I’ve been keeping everything ready for you", "Just sign in to continue"]
+                ).map((line, lineIndex) => (
+                  <div
+                    key={`${isRegistering ? 'reg' : 'log'}-line-${lineIndex}`}
+                    className={`flex flex-wrap justify-center gap-x-[0.25em] gap-y-1 text-white/90 font-light tracking-wide ${lineIndex === 0 ? 'text-2xl md:text-3xl' : 'text-lg md:text-xl text-white/60'}`}
+                  >
+                    {line.split(' ').map((word, wordIndex) => (
+                      <motion.span
+                        key={`${isRegistering ? 'reg' : 'log'}-word-${lineIndex}-${wordIndex}`}
+                        initial={{ opacity: 0, y: 10, filter: 'blur(4px)' }}
+                        animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                        transition={{ 
+                          delay: 0.3 + (lineIndex * 1.6) + (wordIndex * 0.15), 
+                          duration: 0.8, 
+                          ease: "easeOut" 
+                        }}
+                        className="inline-block"
+                      >
+                        {word}
+                      </motion.span>
+                    ))}
+                  </div>
+                ))}
               </div>
 
               <form onSubmit={handleEmailLogin} className="space-y-4 max-w-sm mx-auto w-full">
                 <div className="space-y-1">
                   <Input
                     type="email"
-                    placeholder="User (Email)"
+                    placeholder="User"
                     className="bg-white/5 border-white/10 rounded-full h-12 focus:border-white/30 text-white placeholder:text-white/20 transition-all text-xs tracking-widest px-6 text-center"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -231,7 +277,7 @@ function LoginContent() {
 
                 <Button
                   type="submit"
-                  className="w-full h-12 rounded-full bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm tracking-wider transition-all disabled:opacity-50 mt-4 shadow-lg shadow-blue-900/20"
+                  className="w-full h-12 rounded-full bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 text-white font-light text-sm tracking-wider transition-all hover:scale-[1.02] shadow-[0_0_20px_rgba(37,99,235,0.5)] disabled:opacity-50 disabled:hover:scale-100 mt-4"
                   disabled={loading}
                 >
                   {loading ? 'Synchronizing...' : (isRegistering ? 'Register' : 'Login')}
