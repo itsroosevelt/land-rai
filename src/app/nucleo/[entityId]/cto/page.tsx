@@ -17,26 +17,156 @@ import ReactFlow, {
     ReactFlowInstance
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { 
-    Bot, Code2, Cpu, Globe, Shield, Database, 
-    Network, Activity, X
-} from 'lucide-react';
+import {
+    FileCheck, Scale, MessageSquare, TrendingUp, FileText, Megaphone, Cpu, Activity, Package, BookOpen, Contact, Brain, Users, Search, Award, Truck, Settings, Layout, Building, PieChart, Gavel, Coffee, Lightbulb, Briefcase, Share2, Server, Network, LifeBuoy, Calendar, Code2, Database, UserPlus, Globe, Shield, PenTool, Lock, Rocket, Landmark, Bot, Layers, ShieldAlert, CreditCard, Heart, Crown, GraduationCap, Target, BarChart, Send, Zap, DollarSign
+} from "lucide-react";
+import { WindowNode } from '@/components/shared/WindowNode';
+
+const themes: Record<string, any> = {
+    cyan: { bg: 'rgba(6, 182, 212, 0.15)', border: 'rgba(6, 182, 212, 0.3)', shadow: 'rgba(6,182,212,0.3)', blur: 'bg-cyan-500/30', iconBg: 'bg-cyan-500/20', iconText: 'text-cyan-400', iconShadow: 'drop-shadow-[0_0_8px_rgba(6,182,212,0.6)]' },
+    amber: { bg: 'rgba(245, 158, 11, 0.15)', border: 'rgba(245, 158, 11, 0.3)', shadow: 'rgba(245,158,11,0.3)', blur: 'bg-amber-500/30', iconBg: 'bg-amber-500/20', iconText: 'text-amber-400', iconShadow: 'drop-shadow-[0_0_8px_rgba(245,158,11,0.6)]' },
+    blue: { bg: 'rgba(59, 130, 246, 0.15)', border: 'rgba(59, 130, 246, 0.3)', shadow: 'rgba(59,130,246,0.3)', blur: 'bg-blue-500/30', iconBg: 'bg-blue-500/20', iconText: 'text-blue-400', iconShadow: 'drop-shadow-[0_0_8px_rgba(59,130,246,0.6)]' },
+    emerald: { bg: 'rgba(16, 185, 129, 0.15)', border: 'rgba(16, 185, 129, 0.3)', shadow: 'rgba(16,185,129,0.3)', blur: 'bg-emerald-500/30', iconBg: 'bg-emerald-500/20', iconText: 'text-emerald-400', iconShadow: 'drop-shadow-[0_0_8px_rgba(16,185,129,0.6)]' },
+    rose: { bg: 'rgba(244, 63, 94, 0.15)', border: 'rgba(244, 63, 94, 0.3)', shadow: 'rgba(244,63,94,0.3)', blur: 'bg-rose-500/30', iconBg: 'bg-rose-500/20', iconText: 'text-rose-400', iconShadow: 'drop-shadow-[0_0_8px_rgba(244,63,94,0.6)]' },
+    purple: { bg: 'rgba(168, 85, 247, 0.15)', border: 'rgba(168, 85, 247, 0.3)', shadow: 'rgba(168,85,247,0.3)', blur: 'bg-purple-500/30', iconBg: 'bg-purple-500/20', iconText: 'text-purple-400', iconShadow: 'drop-shadow-[0_0_8px_rgba(168,85,247,0.6)]' },
+    orange: { bg: 'rgba(249, 115, 22, 0.15)', border: 'rgba(249, 115, 22, 0.3)', shadow: 'rgba(249,115,22,0.3)', blur: 'bg-orange-500/30', iconBg: 'bg-orange-500/20', iconText: 'text-orange-400', iconShadow: 'drop-shadow-[0_0_8px_rgba(249,115,22,0.6)]' },
+    indigo: { bg: 'rgba(99, 102, 241, 0.15)', border: 'rgba(99, 102, 241, 0.3)', shadow: 'rgba(99,102,241,0.3)', blur: 'bg-indigo-500/30', iconBg: 'bg-indigo-500/20', iconText: 'text-indigo-400', iconShadow: 'drop-shadow-[0_0_8px_rgba(99,102,241,0.6)]' },
+    red: { bg: 'rgba(239, 68, 68, 0.15)', border: 'rgba(239, 68, 68, 0.3)', shadow: 'rgba(239,68,68,0.3)', blur: 'bg-red-500/30', iconBg: 'bg-red-500/20', iconText: 'text-red-400', iconShadow: 'drop-shadow-[0_0_8px_rgba(239,68,68,0.6)]' },
+    slate: { bg: 'rgba(100, 116, 139, 0.15)', border: 'rgba(100, 116, 139, 0.3)', shadow: 'rgba(100,116,139,0.3)', blur: 'bg-slate-500/30', iconBg: 'bg-slate-500/20', iconText: 'text-slate-400', iconShadow: 'drop-shadow-[0_0_8px_rgba(100,116,139,0.6)]' }
+};
 
 const layers = [
-    { id: 'orchestrator', label: 'Orchestrator', path: 'orchestrator', icon: Activity },
-    { id: 'data', label: 'Data Center', path: 'data', icon: Database },
-    { id: 'security', label: 'Security', path: 'security', icon: Shield },
-    { id: 'integrations', label: 'Integrations', path: 'integrations', icon: Network },
-    { id: 'cloud', label: 'Cloud', path: 'cloud', icon: Cpu },
-    { id: 'web-builder', label: 'Web Builder', path: 'web-builder', icon: Globe },
-    { id: 'smart-contracts', label: 'Smart Contracts', path: 'smart-contracts', icon: Code2 },
-    { id: 'automation', label: 'AI Automation', path: 'automation/chatbots', icon: Bot },
+    { 
+        id: 'board', label: 'Board of Directors', path: '../board', icon: Briefcase, theme: 'slate',
+        subLayers: [
+            { id: 'board-governance', label: 'Protocol Governance', path: '../board/governance', icon: Gavel, theme: 'slate' },
+            { id: 'board-treasury', label: 'MultiSig Treasury', path: '../board/treasury', icon: Landmark, theme: 'slate' }
+        ]
+    },
+    { 
+        id: 'cdo', label: 'Chief Data Officer', path: '../cdo', icon: Database, theme: 'indigo',
+        subLayers: [
+            { id: 'cdo-ai-engine', label: 'AI Engine', path: '../cdo/ai-engine', icon: Brain, theme: 'indigo' },
+            { id: 'cdo-lake', label: 'Data Lake', path: '../cdo/lake', icon: Database, theme: 'indigo' }
+        ]
+    },
+    { 
+        id: 'ceo', label: 'Chief Executive Officer', path: '../ceo', icon: Crown, theme: 'amber',
+        subLayers: [
+            { id: 'ceo-kpis', label: 'Global KPIs', path: '../ceo/kpis', icon: BarChart, theme: 'amber' },
+            { id: 'ceo-strategy', label: 'Vision & Strategy', path: '../ceo/strategy', icon: Target, theme: 'amber' }
+        ]
+    },
+    { 
+        id: 'cfo', label: 'Chief Financial Officer', path: '../cfo', icon: DollarSign, theme: 'emerald',
+        subLayers: [
+            { id: 'cfo-revenue', label: 'Revenue & Treasury', path: '../cfo/revenue', icon: DollarSign, theme: 'emerald' },
+            { id: 'cfo-billing', label: 'Invoices & Billing', path: '../cfo/billing', icon: FileText, theme: 'emerald' }
+        ]
+    },
+    { 
+        id: 'chro', label: 'Chief HR Officer', path: '../chro', icon: Users, theme: 'orange',
+        subLayers: [
+            { id: 'chro-recruitment', label: 'Recruitment', path: '../chro/recruitment', icon: UserPlus, theme: 'orange' },
+            { id: 'chro-onboarding', label: 'Onboarding', path: '../chro/onboarding', icon: GraduationCap, theme: 'orange' }
+        ]
+    },
+    { 
+        id: 'ciso', label: 'Chief Info Security Officer', path: '../ciso', icon: ShieldAlert, theme: 'red',
+        subLayers: [
+            { id: 'ciso-map', label: 'Cyber Threat Map', path: '../ciso/map', icon: Shield, theme: 'red' },
+            { id: 'ciso-identity', label: 'Identity & Access', path: '../ciso/identity', icon: Lock, theme: 'red' }
+        ]
+    },
+    { 
+        id: 'clo', label: 'Chief Legal Officer', path: '../clo', icon: Scale, theme: 'slate',
+        subLayers: [
+            { id: 'clo-contracts', label: 'Legal Contracts', path: '../clo/contracts', icon: FileText, theme: 'slate' },
+            { id: 'clo-compliance', label: 'Compliance & Risk', path: '../clo/compliance', icon: Shield, theme: 'slate' }
+        ]
+    },
+    { 
+        id: 'cmo', label: 'Chief Marketing Officer', path: '../cmo', icon: Megaphone, theme: 'rose',
+        subLayers: [
+            { id: 'cmo-analytics', label: 'Sales Analytics', path: '../cmo/analytics', icon: BarChart, theme: 'rose' },
+            { id: 'cmo-crm', label: 'Contacts (CRM)', path: '../cmo/crm', icon: Contact, theme: 'rose' }
+        ]
+    },
+    { 
+        id: 'coo', label: 'Chief Operations Officer', path: '../coo', icon: Settings, theme: 'blue',
+        subLayers: [
+            { id: 'coo-omnichannel', label: 'Omnichannel Inbox', path: '../coo/omnichannel', icon: MessageSquare, theme: 'blue' },
+            { id: 'coo-kamban', label: 'Kamban Leads', path: '../coo/kamban', icon: Contact, theme: 'blue' }
+        ]
+    },
+    { 
+        id: 'cpo', label: 'Chief Product Officer', path: '../cpo', icon: Package, theme: 'purple',
+        subLayers: [
+            { id: 'cpo-roadmap', label: 'Product Roadmap', path: '../cpo/roadmap', icon: Target, theme: 'purple' },
+            { id: 'cpo-requests', label: 'Feature Requests', path: '../cpo/requests', icon: MessageSquare, theme: 'purple' }
+        ]
+    },
+    { 
+        id: 'cso', label: 'Chief Strategy Officer', path: '../cso', icon: Target, theme: 'indigo',
+        subLayers: [
+            { id: 'cso-growth', label: 'Growth Initiatives', path: '../cso/growth', icon: TrendingUp, theme: 'indigo' },
+            { id: 'cso-intelligence', label: 'Market Intelligence', path: '../cso/intelligence', icon: Target, theme: 'indigo' }
+        ]
+    },
+
+    // --- CTO DEPARTMENT (Expanded) ---,
+    { id: 'orchestrator', label: 'Orchestrator', path: 'orchestrator', icon: Activity, theme: 'cyan', group: 'cto' },
+    { id: 'data', label: 'Data Center', path: 'data', icon: Database, theme: 'cyan', group: 'cto' },
+    { id: 'security', label: 'Security', path: 'security', icon: Shield, theme: 'cyan', group: 'cto' },
+    { id: 'integrations', label: 'Integrations', path: 'integrations', icon: Network, theme: 'cyan', group: 'cto' },
+    { id: 'cloud', label: 'Cloud', path: 'cloud', icon: Cpu, theme: 'cyan', group: 'cto' },
+    { id: 'web-builder', label: 'Web Builder', path: 'web-builder', icon: Globe, theme: 'cyan', group: 'cto' },
+    { id: 'smart-contracts', label: 'Smart Contracts', path: 'smart-contracts', icon: Code2, theme: 'cyan', group: 'cto' },
+    { id: 'automation', label: 'AI Automation', path: 'automation/chatbots', icon: Bot, theme: 'cyan', group: 'cto' }
 ];
 
 const StackNode = ({ data }: NodeProps) => {
     const [hoveredLayer, setHoveredLayer] = useState<string | null>(null);
-    const hoveredIndex = data.layers.findIndex((l: any) => l.id === hoveredLayer);
-    
+    const [expandedDepts, setExpandedDepts] = useState<Record<string, boolean>>({});
+
+    const displayLayers = useMemo(() => {
+        const result = [];
+        let currentZ = 0;
+        let lastGroup = null;
+
+        for (const layer of data.layers) {
+            const group = layer.group || layer.id;
+            
+            if (lastGroup !== null && lastGroup !== group) {
+                currentZ += 100; // Large gap between different officers
+            } else if (lastGroup !== null) {
+                currentZ += 15; // Tight gap for same officer main layers
+            }
+            
+            result.push({ ...layer, isSubLayer: false, calculatedZ: currentZ, xOffset: 0, labelXOffset: 0 });
+            lastGroup = group;
+
+            if (expandedDepts[layer.id] && layer.subLayers) {
+                let subIndex = 1;
+                for (const sub of layer.subLayers) {
+                    currentZ += 0; // Literally ZERO gap for sub-layers
+                    result.push({ 
+                        ...sub, 
+                        isSubLayer: true, 
+                        calculatedZ: currentZ, 
+                        xOffset: subIndex * -180, 
+                        labelXOffset: subIndex * -140 
+                    });
+                    subIndex++;
+                    lastGroup = group;
+                }
+            }
+        }
+        return result;
+    }, [data.layers, expandedDepts]);
+
+    const hoveredIndex = displayLayers.findIndex((l: any) => l.id === hoveredLayer);
+
     // Track pointer to distinguish between click and drag
     const pointerDownPos = useRef<{ x: number, y: number } | null>(null);
 
@@ -46,14 +176,18 @@ const StackNode = ({ data }: NodeProps) => {
 
     const onPointerUp = (e: React.PointerEvent, layer: any) => {
         if (!pointerDownPos.current) return;
-        
+
         const dx = e.clientX - pointerDownPos.current.x;
         const dy = e.clientY - pointerDownPos.current.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        
+
         // If distance is small, it's a click. Otherwise it was a drag, so we do nothing here (onDrop will handle it).
         if (dist < 5) {
-            data.onLayerClick(layer);
+            if (layer.subLayers) {
+                setExpandedDepts(prev => ({ ...prev, [layer.id]: !prev[layer.id] }));
+            } else {
+                data.onLayerClick(layer);
+            }
         }
         pointerDownPos.current = null;
     };
@@ -64,25 +198,57 @@ const StackNode = ({ data }: NodeProps) => {
     };
 
     return (
-        <div style={{ perspective: '2000px', width: '700px', height: '800px' }} className="flex items-center justify-center relative pointer-events-auto">
-            <div 
-                className="relative w-[380px] h-[380px]"
-                style={{ 
-                    transform: 'rotateX(55deg) rotateZ(-45deg)', 
-                    transformStyle: 'preserve-3d' 
+        <div style={{ perspective: '99999px', width: '700px', height: '1100px' }} className="relative pointer-events-auto">
+            {/* FLAT TITLE AT TOP */}
+            <div className="absolute top-0 left-1/2 -ml-12 -translate-x-1/2 z-50 pointer-events-none w-[120%] flex flex-col items-center">
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.8, delay: 0.2 }}
+                    className="flex flex-col items-center text-center"
+                >
+                    <h1 className="text-4xl md:text-5xl font-light bg-gradient-to-r from-white via-white to-white/30 bg-clip-text text-transparent tracking-wide mb-6 drop-shadow-xl whitespace-nowrap">
+                        Chief Technology Officer
+                    </h1>
+                    <div className="flex items-center gap-3 text-white/50 bg-[#1A1D24]/80 px-5 py-3 rounded-full backdrop-blur-md border border-white/10 w-max shadow-2xl">
+                        <svg className="w-4 h-4 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+                        </svg>
+                        <p className="text-xs font-medium">
+                            Drag any glass module to spawn its spatial window
+                        </p>
+                    </div>
+                    
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); data.onGoToNucleo && data.onGoToNucleo(); }}
+                        className="nodrag mt-6 pointer-events-auto px-6 py-2.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 font-medium tracking-wide rounded-full border border-cyan-500/30 transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(6,182,212,0.2)] cursor-pointer"
+                    >
+                        <Network className="w-4 h-4" />
+                        Ir al núcleo
+                    </button>
+                </motion.div>
+            </div>
+
+            {/* 3D TOWER ANCHORED AT BOTTOM */}
+            <div
+                className="absolute bottom-[50px] left-1/2 -translate-x-1/2 w-[380px] h-[380px]"
+                style={{
+                    transform: 'rotateX(55deg) rotateZ(-45deg)',
+                    transformStyle: 'preserve-3d'
                 }}
             >
-                {data.layers.map((layer: any, index: number) => {
+                {displayLayers.map((layer: any, index: number) => {
                     const isHovered = hoveredLayer === layer.id;
                     const isAboveHovered = hoveredIndex !== -1 && index > hoveredIndex;
 
-                    const baseZ = index * 45; 
+                    const baseZ = layer.calculatedZ;
                     let hoverOffset = 0;
                     if (isHovered) hoverOffset = 40;
-                    if (isAboveHovered) hoverOffset = 140; 
-                    
+                    if (isAboveHovered) hoverOffset = 140;
+
                     const zPosition = baseZ + hoverOffset;
-                    
+                    const layerTheme = themes[layer.theme || 'cyan'];
+
                     return (
                         <motion.div
                             key={layer.id}
@@ -91,32 +257,32 @@ const StackNode = ({ data }: NodeProps) => {
                             onPointerDown={onPointerDown}
                             onPointerUp={(e: any) => onPointerUp(e, layer)}
                             className={`absolute inset-0 rounded-[2.5rem] cursor-grab active:cursor-grabbing backdrop-blur-xl transition-colors duration-500`}
-                            style={{ 
+                            style={{
                                 transformStyle: 'preserve-3d',
-                                backgroundColor: isHovered ? 'rgba(0, 200, 255, 0.15)' : 'rgba(255, 255, 255, 0.04)',
+                                backgroundColor: isHovered ? layerTheme.bg : 'rgba(255, 255, 255, 0.04)',
                                 borderTop: isHovered ? '2px solid rgba(255,255,255,0.7)' : '1px solid rgba(255, 255, 255, 0.2)',
                                 borderLeft: isHovered ? '2px solid rgba(255,255,255,0.7)' : '1px solid rgba(255, 255, 255, 0.2)',
-                                borderBottom: isHovered ? '1px solid rgba(0, 255, 255, 0.3)' : '1px solid rgba(255, 255, 255, 0.01)',
-                                borderRight: isHovered ? '1px solid rgba(0, 255, 255, 0.3)' : '1px solid rgba(255, 255, 255, 0.01)',
-                                boxShadow: isHovered 
-                                    ? `inset 0 0 50px rgba(0,255,255,0.3), 0 40px 60px rgba(0,0,0,0.6)` 
+                                borderBottom: isHovered ? `1px solid ${layerTheme.border}` : '1px solid rgba(255, 255, 255, 0.01)',
+                                borderRight: isHovered ? `1px solid ${layerTheme.border}` : '1px solid rgba(255, 255, 255, 0.01)',
+                                boxShadow: isHovered
+                                    ? `inset 0 0 50px ${layerTheme.shadow}, 0 40px 60px rgba(0,0,0,0.6)`
                                     : `inset 0 0 10px rgba(255,255,255,0.05), 0 15px 30px rgba(0,0,0,0.5)`
                             }}
-                            animate={{ z: zPosition }}
+                            animate={{ z: zPosition, x: layer.xOffset }}
                             transition={{ type: 'spring', stiffness: 200, damping: 25 }}
                             onMouseEnter={() => setHoveredLayer(layer.id)}
                             onMouseLeave={() => setHoveredLayer(null)}
                         >
                             <Handle type="source" position={Position.Right} id={layer.id} className="opacity-0" />
                             <Handle type="target" position={Position.Left} id={layer.id} className="opacity-0" />
-                            
+
                             <AnimatePresence>
                                 {isHovered && (
-                                    <motion.div 
+                                    <motion.div
                                         initial={{ opacity: 0, scale: 0.8 }}
                                         animate={{ opacity: 1, scale: 1 }}
                                         exit={{ opacity: 0, scale: 0.8 }}
-                                        className="absolute inset-0 m-auto w-[60%] h-[60%] bg-cyan-400/30 blur-[50px] rounded-full pointer-events-none" 
+                                        className={`absolute inset-0 m-auto w-[60%] h-[60%] ${layerTheme.blur} blur-[50px] rounded-full pointer-events-none`}
                                     />
                                 )}
                             </AnimatePresence>
@@ -125,18 +291,19 @@ const StackNode = ({ data }: NodeProps) => {
                 })}
             </div>
 
-            <div className="absolute top-0 right-10 w-[300px] h-full pointer-events-none flex flex-col justify-end pb-[165px]">
-                {data.layers.map((layer: any, index: number) => {
+            <div className="absolute top-0 right-10 w-[300px] h-full pointer-events-none flex flex-col justify-end">
+                {displayLayers.map((layer: any, index: number) => {
                     const isHovered = hoveredLayer === layer.id;
-                    const bottomPos = index * 30 + 200; 
+                    const bottomPos = layer.calculatedZ * 0.573 + 240;
+                    const layerTheme = themes[layer.theme || 'cyan'];
 
                     return (
                         <AnimatePresence key={`label-${layer.id}`}>
                             {isHovered && (
                                 <motion.div
-                                    initial={{ opacity: 0, x: -30, filter: 'blur(10px)' }}
-                                    animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
-                                    exit={{ opacity: 0, x: 20, filter: 'blur(10px)' }}
+                                    initial={{ opacity: 0, x: layer.labelXOffset - 30, filter: 'blur(10px)' }}
+                                    animate={{ opacity: 1, x: layer.labelXOffset, filter: 'blur(0px)' }}
+                                    exit={{ opacity: 0, x: layer.labelXOffset + 20, filter: 'blur(10px)' }}
                                     transition={{ duration: 0.3, ease: 'easeOut' }}
                                     className="absolute right-0 pointer-events-auto cursor-grab active:cursor-grabbing"
                                     style={{ bottom: `${bottomPos}px` }}
@@ -148,8 +315,8 @@ const StackNode = ({ data }: NodeProps) => {
                                     <div className="relative flex items-center gap-4 bg-[#1A1D24]/80 backdrop-blur-2xl px-6 py-3 shadow-[0_20px_40px_rgba(0,0,0,0.6)] rounded-full border border-white/10">
                                         <div className="absolute top-1/2 -left-3 -translate-y-1/2 w-0 h-0 border-y-[8px] border-y-transparent border-r-[12px] border-r-white/10" />
                                         <div className="absolute top-1/2 -left-[10px] -translate-y-1/2 w-0 h-0 border-y-[7px] border-y-transparent border-r-[11px] border-r-[#1A1D24]/80" />
-                                        <div className="p-2 bg-cyan-500/20 rounded-full">
-                                            <layer.icon className="w-5 h-5 text-cyan-400 drop-shadow-[0_0_8px_rgba(0,255,255,0.6)]" />
+                                        <div className={`p-2 ${layerTheme.iconBg} rounded-full`}>
+                                            <layer.icon className={`w-5 h-5 ${layerTheme.iconText} ${layerTheme.iconShadow}`} />
                                         </div>
                                         <span className="text-white font-medium tracking-wide text-lg whitespace-nowrap pointer-events-none">
                                             {layer.label}
@@ -165,34 +332,7 @@ const StackNode = ({ data }: NodeProps) => {
     );
 };
 
-const WindowNode = ({ data }: NodeProps) => {
-    return (
-        <div className="w-[1000px] h-[700px] bg-[#0A0A0A]/90 backdrop-blur-3xl border border-cyan-500/30 rounded-2xl shadow-[0_30px_80px_rgba(0,0,0,0.8)] flex flex-col overflow-hidden pointer-events-auto">
-            {/* Window Drag Handle / Titlebar */}
-            <div className="custom-drag-handle h-12 border-b border-cyan-500/20 bg-black/40 flex items-center px-4 justify-between cursor-grab active:cursor-grabbing">
-                <div className="flex items-center gap-3">
-                    <div className="p-1.5 bg-cyan-500/20 rounded-lg">
-                        <data.icon className="w-4 h-4 text-cyan-400" />
-                    </div>
-                    <span className="text-cyan-50 font-bold tracking-[0.2em] uppercase text-xs pointer-events-none">{data.label}</span>
-                </div>
-                <button 
-                    onClick={(e) => { e.stopPropagation(); data.onClose(); }} 
-                    className="p-1.5 hover:bg-red-500/20 text-white/50 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
-                >
-                    <X className="w-4 h-4" />
-                </button>
-            </div>
-            
-            {/* Interactive Frame Content */}
-            <div className="flex-1 w-full bg-black/50 relative z-0 nodrag cursor-auto">
-                <iframe src={data.url} className="w-full h-full border-none pointer-events-auto" />
-            </div>
 
-            <Handle type="target" position={Position.Left} className="opacity-0" />
-        </div>
-    );
-};
 
 const nodeTypes = {
     stackNode: StackNode,
@@ -203,7 +343,7 @@ export default function CTODashboard() {
     const router = useRouter();
     const params = useParams();
     const entityId = params.entityId as string;
-    
+
     const reactFlowWrapper = useRef<HTMLDivElement>(null);
     const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
 
@@ -212,9 +352,10 @@ export default function CTODashboard() {
             id: 'modules-stack',
             type: 'stackNode',
             position: { x: 50, y: 50 },
-            data: { 
+            data: {
                 layers,
-                onLayerClick: (layer: any) => spawnWindow(layer, { x: 800, y: Math.max(0, 100 + (Math.random() * 50 - 25)) }) 
+                onGoToNucleo: () => router.push(`/nucleo/${entityId}`),
+                onLayerClick: (layer: any) => spawnWindow(layer, { x: 800, y: Math.max(0, 100 + (Math.random() * 50 - 25)) })
             },
         }
     ]);
@@ -222,11 +363,11 @@ export default function CTODashboard() {
 
     const spawnWindow = useCallback((layer: any, position: { x: number, y: number }) => {
         const windowId = `window-${layer.id}`;
-        
+
         // Prevent opening duplicates
         setNodes((nds) => {
             if (nds.some(n => n.id === windowId)) return nds;
-            
+
             const newNode: Node = {
                 id: windowId,
                 type: 'windowNode',
@@ -262,7 +403,7 @@ export default function CTODashboard() {
             if (!layer) return;
 
             const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
-            
+
             const position = reactFlowInstance.project({
                 x: event.clientX - reactFlowBounds.left,
                 y: event.clientY - reactFlowBounds.top,
@@ -275,26 +416,10 @@ export default function CTODashboard() {
 
     return (
         <div className="w-full h-screen bg-[#050505] flex flex-col relative overflow-hidden" ref={reactFlowWrapper}>
-            {/* Header Overlay */}
-            <div className="absolute top-24 left-10 z-10 pointer-events-none">
-                <motion.div
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.6 }}
-                >
-                    <h6 className="text-cyan-500 uppercase tracking-[0.3em] text-[10px] font-bold mb-3">Technology Department</h6>
-                    <h1 className="text-4xl md:text-5xl font-light bg-gradient-to-r from-white to-white/40 bg-clip-text text-transparent tracking-wide mb-4">
-                        CTO Architecture
-                    </h1>
-                    <p className="text-white/40 max-w-sm text-xs font-medium leading-relaxed">
-                        Drag any glass plate or its label into the workspace to open an independent window.
-                    </p>
-                </motion.div>
-            </div>
-            
+
             {/* React Flow Diagram - Only for the Stack */}
             <div className="flex-1 w-full h-full relative z-0">
-                <ReactFlow 
+                <ReactFlow
                     nodes={nodes}
                     edges={edges}
                     onNodesChange={onNodesChange}
