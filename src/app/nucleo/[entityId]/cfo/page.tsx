@@ -131,7 +131,7 @@ const StackNode = ({ data }: NodeProps) => {
     const [expandedDepts, setExpandedDepts] = useState<Record<string, boolean>>({});
 
     const displayLayers = useMemo(() => {
-        const result = [];
+        const result: any[] = [];
         let currentZ = 0;
         let lastGroup = null;
 
