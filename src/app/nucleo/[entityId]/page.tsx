@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Carousel } from './components/Carousel';
 import { Wallet, Fingerprint, FileCheck, Gem } from 'lucide-react';
-import { FloatingOrbitNav } from '@/components/FloatingOrbitNav';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { IdentitySwitcher } from '@/components/IdentitySwitcher';
 import { useAuth } from '@/contexts/AuthContext';
@@ -56,12 +55,7 @@ export default function SuiteDashboard() {
                 {/* Pure Black Background */}
                 <div className="absolute inset-0 bg-black" />
 
-                {/* Information Orbit Menu */}
-                <FloatingOrbitNav 
-                    title="INFORMATION"
-                    items={informationItems}
-                    colorClass="bg-blue-600"
-                />
+                {/* Information Orbit Menu removed */}
 
                 {/* Main layout - Fixed height, no scrolling */}
                 <div className="relative z-10 w-full h-screen flex flex-col items-center justify-between pt-10 pb-6 overflow-hidden no-scrollbar">
