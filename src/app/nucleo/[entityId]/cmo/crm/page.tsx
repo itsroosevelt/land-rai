@@ -1169,7 +1169,7 @@ export default function ContactsPage() {
     const activeFiltersCount = selectedStages.length + selectedSources.length + selectedTags.length;
 
     return (
-        <div className="flex  min-h-screen overflow-y-auto md: min-h-screen overflow-y-auto md:h-screen bg-black text-white selection:bg-blue-500/30  md: md:overflow-hidden font-sans">
+        <div className="flex min-h-screen overflow-y-auto md:h-screen md:overflow-hidden bg-black text-white selection:bg-blue-500/30 font-sans">
 
 
             <div className="flex-1 flex flex-col min-w-0 bg-[#050505]">

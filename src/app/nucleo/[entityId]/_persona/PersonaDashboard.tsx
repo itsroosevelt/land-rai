@@ -27,7 +27,7 @@ export const PersonaDashboard = () => {
                 {/* Personal Information Orbit Menu removed */}
 
                 {/* Main layout - Fixed height, no scrolling */}
-                <div className="relative z-10 w-full h-screen flex flex-col items-center justify-between pt-10 pb-6 overflow-hidden no-scrollbar">
+                <div className="relative z-10 w-full min-h-dvh flex flex-col items-center justify-between pt-10 pb-6 overflow-y-auto">
 
                     {/* Global Identity Switcher Glass Pill */}
                     <IdentitySwitcher />

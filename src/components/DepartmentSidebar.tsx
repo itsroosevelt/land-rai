@@ -36,7 +36,7 @@ export function DepartmentSidebar({ items, title, colorClass = "bg-blue-600" }: 
 
     return (
         <TooltipProvider delayDuration={0}>
-            <aside className={`bg-neutral-950 border-r border-neutral-800 text-neutral-300 flex flex-col transition-all duration-300 ease-in-out ${isCollapsed ? 'w-20' : 'w-64'} h-screen sticky top-0`}>
+            <aside className={`bg-neutral-950 border-r border-neutral-800 text-neutral-300 flex flex-col transition-all duration-300 ease-in-out hidden md:flex ${isCollapsed ? 'w-20' : 'w-64'} h-dvh sticky top-0`}>
                 <div className={`flex items-center p-4 h-16 border-b border-neutral-800 ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
                     <div className={`flex items-center space-x-3 ${isCollapsed ? 'hidden' : 'flex'}`}>
                         <div className={`p-1.5 rounded-lg ${colorClass}`}>

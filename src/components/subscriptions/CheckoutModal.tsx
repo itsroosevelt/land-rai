@@ -47,7 +47,7 @@ export default function CheckoutModal({ plan, onClose, entityId: propEntityId }:
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-[1200px] bg-[#0a0a0a] border-white/10 text-white rounded-2xl p-0 overflow-hidden min-h-[800px] h-[95vh]">
+      <DialogContent className="max-w-[1200px] bg-[#0a0a0a] border-white/10 text-white rounded-2xl p-0 overflow-hidden max-h-[90dvh]">
         <DialogTitle className="sr-only">Checkout - {plan.name}</DialogTitle>
 
         <div className="flex flex-col lg:flex-row h-full">

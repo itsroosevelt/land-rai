@@ -96,8 +96,8 @@ const PreApplicationForm = ({ onClose }: PreApplicationFormProps) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] max-w-3xl w-full my-8 relative border border-gray-100 dark:border-gray-800">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-start justify-center pt-4 pb-4 overflow-y-auto">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] max-w-3xl w-full my-auto relative border border-gray-100 dark:border-gray-800">
 
         {/* Header con gradiente sutil */}
         <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-primary via-purple-500 to-pink-500 rounded-t-2xl" />

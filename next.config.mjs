@@ -1,6 +1,14 @@
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  experimental: {
+    optimizePackageImports: [
+      'lucide-react',
+      '@tabler/icons-react',
+      'framer-motion',
+      'recharts',
+    ],
+  },
   images: {
     remotePatterns: [
       // From next.config.mjs

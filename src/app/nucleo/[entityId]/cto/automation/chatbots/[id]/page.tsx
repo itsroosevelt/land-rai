@@ -213,7 +213,7 @@ function FlowPage() {
   }
 
   return (
-    <div className="fixed inset-0 flex flex-col  min-h-screen overflow-y-auto md: min-h-screen overflow-y-auto md:h-screen bg-neutral-900 text-white  md: md:overflow-hidden">
+    <div className="fixed inset-0 flex flex-col min-h-screen overflow-y-auto md:h-screen md:overflow-hidden bg-neutral-900 text-white">
       <style jsx global>{`
         html, body {
           overflow: hidden !important;

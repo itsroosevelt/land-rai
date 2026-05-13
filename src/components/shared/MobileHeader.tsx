@@ -55,7 +55,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({ title, layers, onLay
                             animate={{ x: 0 }}
                             exit={{ x: '-100%' }}
                             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-                            className="fixed top-0 left-0 bottom-0 w-[85vw] bg-[#050505] border-r border-white/5 z-[120] p-6 flex flex-col pointer-events-auto shadow-[30px_0_60px_rgba(0,0,0,0.7)]"
+                            className="fixed top-0 left-0 bottom-0 w-[85vw] bg-[#050505] border-r border-white/5 z-[120] p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] flex flex-col pointer-events-auto shadow-[30px_0_60px_rgba(0,0,0,0.7)]"
                         >
                             <div className="flex items-center justify-between mb-12">
                                 <div className="flex items-center gap-3">

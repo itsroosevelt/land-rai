@@ -133,7 +133,7 @@ export default function ConfigurationPage() {
     };
 
     return (
-        <div className="min-h-screen bg-black text-white selection:bg-blue-500/30 font-sans flex overflow-hidden relative">
+        <div className="min-h-screen bg-black text-white selection:bg-blue-500/30 font-sans flex relative">
             
             {/* Ambient Background */}
             <div className="absolute inset-0 z-0 pointer-events-none">
@@ -143,7 +143,7 @@ export default function ConfigurationPage() {
             </div>
 
             {/* Left Sidebar */}
-            <aside className="w-64 sm:w-72 h-screen shrink-0 border-r border-white/5 bg-black/50 backdrop-blur-xl relative z-10 hidden md:flex flex-col">
+            <aside className="w-64 sm:w-72 h-dvh shrink-0 border-r border-white/5 bg-black/50 backdrop-blur-xl relative z-10 hidden md:flex flex-col">
                 <div className="p-6 flex items-center gap-3">
                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
                       <Settings className="w-4 h-4 text-white" />
@@ -191,7 +191,7 @@ export default function ConfigurationPage() {
             </aside>
 
             {/* Main Content Area */}
-            <main className="flex-1 h-screen overflow-y-auto relative z-10">
+            <main className="flex-1 h-dvh overflow-y-auto relative z-10">
                 {/* Top Right Identity Switcher */}
                 <div className="absolute top-8 right-8 z-[2000]">
                     <DropdownMenu.Root>

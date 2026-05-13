@@ -27,7 +27,12 @@ export default function ConversationModal(props: ConversationModalProps) {
   const [muteDuration, setMuteDuration] = React.useState<string | null>(null);
 
   // Resize State
-  const [sidebarWidth, setSidebarWidth] = React.useState(450);
+  const [sidebarWidth, setSidebarWidth] = React.useState(() => {
+    if (typeof window !== 'undefined') {
+      return Math.min(450, Math.max(300, window.innerWidth - 16));
+    }
+    return 450;
+  });
   const [isResizing, setIsResizing] = React.useState(false);
 
   const startResizing = React.useCallback((e: React.MouseEvent) => {
@@ -42,7 +47,7 @@ export default function ConversationModal(props: ConversationModalProps) {
   const resize = React.useCallback((e: MouseEvent) => {
     if (isResizing) {
       const newWidth = window.innerWidth - e.clientX;
-      if (newWidth > 350 && newWidth < 900) {
+      if (newWidth > 300 && newWidth < 900 && newWidth <= window.innerWidth - 80) {
         setSidebarWidth(newWidth);
       }
     }

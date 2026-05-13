@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { auth, db } from "@/lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
@@ -20,7 +21,10 @@ import { useChatAI } from "./hooks/useChatAI";
 import { Toolbar } from "./components/Toolbar";
 import { ChatSidebar } from "./components/ChatSidebar";
 import { PreviewArea } from "./components/PreviewArea";
-import { CodeEditor } from "./components/CodeEditor";
+const CodeEditor = dynamic(() => import("./components/CodeEditor").then(mod => ({ default: mod.CodeEditor })), {
+  ssr: false,
+  loading: () => <div className="bg-neutral-900 animate-pulse flex-1 rounded-lg" />,
+});
 import { DashboardModal } from "./components/DashboardModal";
 import { SettingsModal } from "./components/SettingsModal";
 import { NewProjectModal } from "./components/NewProjectModal";

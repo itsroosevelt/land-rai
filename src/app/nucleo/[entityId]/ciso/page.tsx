@@ -208,17 +208,12 @@ const StackNode = ({ data }: NodeProps) => {
                     transition={{ duration: 0.8, delay: 0.2 }}
                     className="flex flex-col items-center text-center"
                 >
-                    <h1 className="text-4xl md:text-5xl font-light bg-gradient-to-r from-white via-white to-white/30 bg-clip-text text-transparent tracking-wide mb-6 drop-shadow-xl whitespace-nowrap">
+                    <h1 className="text-3xl md:text-5xl font-light text-white tracking-wide mb-2 md:mb-3 text-center">
                         Chief Info Security Officer
                     </h1>
-                    <div className="flex items-center gap-3 text-white/50 bg-[#1A1D24]/80 px-5 py-3 rounded-full backdrop-blur-md border border-white/10 w-max shadow-2xl">
-                        <svg className="w-4 h-4 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
-                        </svg>
-                        <p className="text-xs font-medium">
-                            Drag any glass module to spawn its spatial window
-                        </p>
-                    </div>
+                    <p className="text-xs md:text-sm text-white/40 font-light text-center mb-6 md:mb-8">
+                        Drag any glass module to spawn its spatial window
+                    </p>
                     
                     <button 
                         onClick={(e) => { e.stopPropagation(); data.onGoToNucleo && data.onGoToNucleo(); }}

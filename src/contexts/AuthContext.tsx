@@ -43,10 +43,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }, [pathname]);
 
     useEffect(() => {
-        console.log("AuthContext: Starting effect, subscribing to onAuthStateChanged...");
         try {
             const unsubscribe = onAuthStateChanged(auth, async (user) => {
-                console.log("AuthContext: onAuthStateChanged fired! User:", user?.email || "null");
                 if (user) {
                     try {
                         const userDocRef = doc(db, 'users', user.uid);
@@ -67,33 +65,31 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                                 { id: 'life', name: 'Personal', desc: 'Personal OS', type: 'persona' },
                                 { id: randomCompanyId, name: 'Mi Primera Empresa', desc: 'Business OS', type: 'empresa' }
                             ];
-                            
-                            for (const entity of initialEntities) {
-                                await setDoc(doc(db, `users/${user.uid}/entities/${entity.id}`), {
-                                    initialized: true,
-                                    name: entity.name,
-                                    type: entity.type,
-                                    description: entity.desc,
-                                    createdAt: new Date()
-                                });
-                                // seed settings
-                                await setDoc(doc(db, `users/${user.uid}/entities/${entity.id}/settings/general`), {
-                                    theme: 'dark'
-                                });
-                                // seed integrations
-                                await setDoc(doc(db, `users/${user.uid}/entities/${entity.id}/integrations/_init`), {
-                                    encrypted: false,
-                                    updatedAt: new Date()
-                                });
-                            }
 
-                            console.log("User isolated document & subcollections fully seeded in /users/[USER_ID]");
+                            // Seed entities and settings in parallel
+                            await Promise.all(initialEntities.map((entity) =>
+                                Promise.all([
+                                    setDoc(doc(db, `users/${user.uid}/entities/${entity.id}`), {
+                                        initialized: true,
+                                        name: entity.name,
+                                        type: entity.type,
+                                        description: entity.desc,
+                                        createdAt: new Date()
+                                    }),
+                                    setDoc(doc(db, `users/${user.uid}/entities/${entity.id}/settings/general`), {
+                                        theme: 'dark'
+                                    }),
+                                    setDoc(doc(db, `users/${user.uid}/entities/${entity.id}/integrations/_init`), {
+                                        encrypted: false,
+                                        updatedAt: new Date()
+                                    })
+                                ])
+                            ));
                         } else {
                             // If user already exists, only update their last login
                             await updateDoc(userDocRef, {
                                 lastLogin: new Date()
                             });
-                            console.log("Existing user tracked: updated lastLogin.");
                         }
                     } catch (error) {
                         console.error("Error creating isolated user document:", error);

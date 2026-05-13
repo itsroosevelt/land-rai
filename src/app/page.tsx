@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
+import Image from 'next/image';
 
 
 import { LandingNavbar } from '@/components/landing/LandingNavbar';
@@ -89,6 +90,8 @@ export default function LandingPage() {
           src="/assets/Roosevelt Ai.gif"
           alt="Roosevelt AI"
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[110vw] md:max-w-[90vw] xl:max-w-6xl h-auto scale-[1.4] md:scale-[1.2] xl:scale-[1.2] object-cover"
+          loading="lazy"
+          decoding="async"
         />
       </div>
 

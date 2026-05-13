@@ -61,7 +61,7 @@ export const ContactDetailsModal: React.FC<ContactDetailsModalProps> = ({
 
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
-            <DialogContent className="bg-[#080808]/95 border-neutral-800 text-white sm:max-w-7xl p-0 overflow-hidden outline-none rounded-[2rem] sm:rounded-[3rem] backdrop-blur-3xl shadow-[0_50px_100px_rgba(0,0,0,0.8)] border-white/5 h-[95vh] sm:h-[90vh] flex flex-col">
+            <DialogContent className="bg-[#080808]/95 border-neutral-800 text-white sm:max-w-7xl p-0 overflow-hidden outline-none rounded-[2rem] sm:rounded-[3rem] backdrop-blur-3xl shadow-[0_50px_100px_rgba(0,0,0,0.8)] border-white/5 max-h-[90dvh] overflow-y-auto flex flex-col">
                 <DialogTitle className="sr-only">Contact Details</DialogTitle>
                 <DialogDescription className="sr-only">View and edit contact information.</DialogDescription>
  

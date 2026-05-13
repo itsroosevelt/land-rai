@@ -49,7 +49,7 @@ export const AddElementModal = ({ isOpen, onClose, onAdd }: AddElementModalProps
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[8001] w-full max-w-lg bg-zinc-900 border border-white/10 p-6 rounded-2xl shadow-2xl"
+                        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[8001] w-full max-w-lg bg-zinc-900 border border-white/10 p-6 rounded-2xl shadow-2xl max-h-[90dvh] overflow-y-auto"
                     >
                         <button 
                             onClick={onClose}

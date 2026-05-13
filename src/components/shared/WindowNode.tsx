@@ -51,10 +51,11 @@ export const WindowNode = ({ data, xPos, yPos }: NodeProps) => {
                 y: 0,
                 filter: 'blur(0px)'
             }}
-            transition={{ 
-                type: 'spring', 
-                stiffness: isClosing ? 150 : 120, 
-                damping: isClosing ? 25 : 20,
+            transition={{
+                type: 'spring',
+                stiffness: isClosing ? 150 : 100,
+                damping: isClosing ? 25 : 22,
+                restDelta: 0.001,
                 opacity: { duration: 0.3 }
             }}
             className={cn(
@@ -65,7 +66,7 @@ export const WindowNode = ({ data, xPos, yPos }: NodeProps) => {
                         ? "fixed inset-0 w-screen h-screen z-[9999] rounded-none shadow-none" 
                         : "w-[95vw] sm:w-[1000px] h-[80vh] sm:h-[700px] rounded-2xl shadow-[0_30px_80px_rgba(0,0,0,0.8)] border-cyan-500/20"
             )}
-            style={isMaximized ? { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh' } : {}}
+            style={isMaximized ? { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100dvh' } : {}}
         >
             {/* Top Bar FIJA - Siempre visible */}
             <div className={cn(
@@ -106,7 +107,7 @@ export const WindowNode = ({ data, xPos, yPos }: NodeProps) => {
                 <div className="flex items-center gap-3 px-4 py-1.5 bg-white/[0.03] rounded-full border border-white/10 shadow-[inset_0_1px_10px_rgba(255,255,255,0.02)]">
                     {data.icon && <data.icon className="w-3.5 h-3.5 text-cyan-500 drop-shadow-[0_0_8px_rgba(6,182,212,0.4)]" />}
                     <span className="text-white/90 font-medium tracking-[0.1em] uppercase text-[10px] whitespace-nowrap">
-                        {data.title}
+                        {data.label}
                     </span>
                 </div>
 
@@ -123,24 +124,15 @@ export const WindowNode = ({ data, xPos, yPos }: NodeProps) => {
                     >
                         <Maximize2 className={cn("w-3.5 h-3.5 transition-colors", isMaximized ? "text-cyan-400" : "text-white/40 group-hover:text-cyan-400")} />
                     </button>
-                    <button 
-                        onClick={(e) => { 
-                            e.stopPropagation(); 
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
                             window.open(data.url, '_blank');
                         }}
                         className="p-1.5 hover:bg-white/5 rounded-lg transition-colors group"
                         title="Nueva pestaña"
                     >
                         <ExternalLink className="w-3.5 h-3.5 text-white/40 group-hover:text-cyan-400 transition-colors" />
-                    </button>
-                    <button 
-                        onClick={(e) => { 
-                            e.stopPropagation(); 
-                            handleClose();
-                        }}
-                        className="p-1.5 hover:bg-red-500/20 rounded-lg transition-colors group ml-1"
-                    >
-                        <X className="w-4 h-4 text-red-500/50 group-hover:text-red-500" />
                     </button>
                 </div>
             </div>

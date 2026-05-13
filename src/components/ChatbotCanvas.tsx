@@ -106,20 +106,22 @@ interface SidebarNodeProps {
     label: string;
     type: string;
     onDragStart: (event: React.DragEvent, nodeType: string) => void;
+    onClick: (nodeType: string, label: string) => void;
     isCollapsed: boolean;
     disabled?: boolean;
     disabledReason?: string;
 }
 
-const SidebarNode = ({ icon, label, type: nodeType, onDragStart, isCollapsed, disabled, disabledReason }: SidebarNodeProps) => {
+const SidebarNode = ({ icon, label, type: nodeType, onDragStart, onClick, isCollapsed, disabled, disabledReason }: SidebarNodeProps) => {
     const nodeContent = (
         <div
             className={cn(
                 "flex items-center p-2 mb-0.5 rounded-md transition-all group",
-                disabled ? "opacity-30 grayscale cursor-not-allowed" : "cursor-grab hover:bg-white/5",
+                disabled ? "opacity-30 grayscale cursor-not-allowed" : "cursor-grab hover:bg-white/5 active:scale-95 active:bg-white/10",
                 isCollapsed && "justify-center"
             )}
             onDragStart={disabled ? undefined : (event) => onDragStart(event, nodeType)}
+            onClick={disabled ? undefined : () => onClick(nodeType, label)}
             draggable={!disabled}
         >
             <div className="text-neutral-500 group-hover:text-blue-400 transition-colors">
@@ -221,6 +223,22 @@ const ChatbotCanvas = forwardRef<ChatbotCanvasRef, ChatbotCanvasProps>(
             [reactFlowInstance, setNodes],
         );
 
+        const onSidebarItemClick = useCallback((type: string, label: string) => {
+            if (!reactFlowInstance) return;
+            // Calcular el centro de la pantalla para instanciar el nodo ahí (ideal para iPad/Mobile)
+            const position = reactFlowInstance.screenToFlowPosition({ 
+                x: window.innerWidth / 2, 
+                y: window.innerHeight / 2 
+            });
+            const newNode: Node = { 
+                id: `tapnode_${+new Date()}`, 
+                type, 
+                position, 
+                data: { label: label || 'Nuevo Nodo' } 
+            };
+            setNodes((nds) => nds.concat(newNode));
+        }, [reactFlowInstance, setNodes]);
+
         const onEdgeUpdate = useCallback(
             (oldEdge, newConnection) => setEdges((els) => updateEdge(oldEdge, newConnection, els)),
             [setEdges]
@@ -319,6 +337,7 @@ const ChatbotCanvas = forwardRef<ChatbotCanvasRef, ChatbotCanvasProps>(
                                             disabled={nodeInfo.disabled || isBlocked}
                                             disabledReason={disabledReason}
                                             onDragStart={(e, type) => e.dataTransfer.setData('application/reactflow', type)} 
+                                            onClick={(type, label) => onSidebarItemClick(type, label)}
                                             isCollapsed={!isLeftSidebarOpen} 
                                         />
                                     );
@@ -348,7 +367,7 @@ const ChatbotCanvas = forwardRef<ChatbotCanvasRef, ChatbotCanvasProps>(
                         className="bg-neutral-950"
                     >
                         <Controls className="[&>button]:bg-neutral-800/80 [&>button]:border-neutral-700 hover:[&>button]:bg-neutral-700" />
-                        <MiniMap nodeStrokeWidth={3} zoomable pannable className="!bg-neutral-900/80 !border-neutral-700" />
+                        <MiniMap nodeStrokeWidth={3} className="!bg-neutral-900/80 !border-neutral-700" />
                         <Background variant={BackgroundVariant.Dots} gap={24} size={1.5} color="#2d2d2d" />
                     </ReactFlow>
                 </div>

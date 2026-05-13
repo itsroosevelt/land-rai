@@ -65,7 +65,7 @@ export default function OmnichannelInboxPage() {
     const activeGroupName = groups.find(g => activeCard && g.id === activeCard.groupId)?.name || '';
 
     return (
-        <div className="flex flex-col  min-h-screen overflow-y-auto md: min-h-screen overflow-y-auto md:h-screen bg-[#0a0a0a] text-white  md: md:overflow-hidden text-sm">
+        <div className="flex flex-col min-h-screen overflow-y-auto md:h-screen md:overflow-hidden bg-[#0a0a0a] text-white text-sm">
             {/* 0. Global Connectivity Alert Banner */}
             {offlineChannels.length > 0 && (
                 <div className="bg-amber-600 px-4 py-1.5 flex items-center justify-between animate-in slide-in-from-top duration-500 z-[100]">
