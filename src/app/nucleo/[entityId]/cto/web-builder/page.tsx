@@ -43,6 +43,7 @@ function WebBuilderContent() {
     const [showPublishModal, setShowPublishModal] = useState(false);
     const [showNewProjectModal, setShowNewProjectModal] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
+    const [showChat, setShowChat] = useState(true);
     const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(["src", "src/app", "src/components"]));
     const [previewPath, setPreviewPath] = useState("");
     const searchParams = useSearchParams();
@@ -405,12 +406,15 @@ function WebBuilderContent() {
         window.addEventListener('approve-plan', onApprovePlan);
         window.addEventListener('reject-plan', onRejectPlan);
         window.addEventListener('resend-message', onResendMessage);
+        const onToggleChat = () => setShowChat(prev => !prev);
+        window.addEventListener('toggle-chat', onToggleChat);
 
         return () => {
             window.removeEventListener('message', handleGlobalMessage);
             window.removeEventListener('approve-plan', onApprovePlan);
             window.removeEventListener('reject-plan', onRejectPlan);
             window.removeEventListener('resend-message', onResendMessage);
+            window.removeEventListener('toggle-chat', onToggleChat);
         };
     }, [
         handleGenerate, showToast, setRefreshSignal, setPreviewPath,
@@ -632,7 +636,7 @@ function WebBuilderContent() {
     };
 
     return (
-        <div className="h-screen w-full bg-[#050505] text-white flex flex-col overflow-hidden font-sans selection:bg-blue-500/30">
+        <div className="min-h-screen w-full bg-[#050505] text-white flex flex-col font-sans selection:bg-blue-500/30">
             <ToastContainer toasts={toasts} onRemove={removeToast} />
 
             {activeProjectId ? (
@@ -669,32 +673,36 @@ function WebBuilderContent() {
                         isPreviewLoading={isPreviewLoading}
                         isAutoFixEnabled={isAutoFixEnabled}
                         setIsAutoFixEnabled={setIsAutoFixEnabled}
+                        showChat={showChat}
+                        onToggleChat={() => setShowChat(!showChat)}
                     />
 
-                    <div className="flex-1 flex overflow-hidden relative">
-                        <ChatSidebar
-                            messages={chatHistory}
-                            isGenerating={isGenerating}
-                            statusMessage={statusMessage}
-                            handleGenerate={(msg) => activeProjectId && handleGenerate(msg)}
-                            projectOpen={!!activeProjectId}
-                            selectedModel={selectedModel}
-                            setSelectedModel={setSelectedModel}
-                            reasoningLevel={reasoningLevel}
-                            setReasoningLevel={setReasoningLevel}
-                            conversations={conversations}
-                            activeConversationId={activeConversationId}
-                            setActiveConversationId={setActiveConversationId}
-                            handleNewConversation={handleNewConversation}
-                            approvePlan={approvePlan}
-                            deleteConversation={deleteConversation}
-                            cancelGeneration={cancelGeneration}
-                            onOpenSettings={() => setShowSettings(true)}
-                            credits={credits}
-                            isAdmin={isAdmin}
-                        />
+                    <div className="flex-1 flex flex-col md:flex-row relative">
+                        {showChat && (
+                            <ChatSidebar
+                                messages={chatHistory}
+                                isGenerating={isGenerating}
+                                statusMessage={statusMessage}
+                                handleGenerate={(msg) => activeProjectId && handleGenerate(msg)}
+                                projectOpen={!!activeProjectId}
+                                selectedModel={selectedModel}
+                                setSelectedModel={setSelectedModel}
+                                reasoningLevel={reasoningLevel}
+                                setReasoningLevel={setReasoningLevel}
+                                conversations={conversations}
+                                activeConversationId={activeConversationId}
+                                setActiveConversationId={setActiveConversationId}
+                                handleNewConversation={handleNewConversation}
+                                approvePlan={approvePlan}
+                                deleteConversation={deleteConversation}
+                                cancelGeneration={cancelGeneration}
+                                onOpenSettings={() => setShowSettings(true)}
+                                credits={credits}
+                                isAdmin={isAdmin}
+                            />
+                        )}
 
-                        <div className="flex-1 overflow-hidden relative flex items-center justify-center bg-[#050505]">
+                        <div className="flex-1 min-h-[500px] md:min-h-0 relative flex items-center justify-center bg-[#050505]">
                             <div className="absolute inset-0 opacity-[0.03]"
                                 style={{
                                     backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)',

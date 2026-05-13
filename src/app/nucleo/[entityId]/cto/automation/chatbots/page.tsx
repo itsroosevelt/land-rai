@@ -265,7 +265,7 @@ const ChatbotsPage = () => {
   };
 
   return (
-    <div className="p-6 bg-neutral-900 text-white min-h-screen">
+    <div className="p-6 bg-neutral-900 text-white min-h-screen overflow-y-auto">
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-3">
           <Button variant="outline" size="icon" onClick={handleGoBack} className="h-8 w-8">

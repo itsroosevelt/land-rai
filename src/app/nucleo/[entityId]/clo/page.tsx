@@ -21,6 +21,7 @@ import {
     FileCheck, Scale, MessageSquare, TrendingUp, FileText, Megaphone, Cpu, Activity, Package, BookOpen, Contact, Brain, Users, Search, Award, Truck, Settings, Layout, Building, PieChart, Gavel, Coffee, Lightbulb, Briefcase, Share2, Server, Network, LifeBuoy, Calendar, Code2, Database, UserPlus, Globe, Shield, PenTool, Lock, Rocket, Landmark, Bot, Layers, ShieldAlert, CreditCard, Heart, Crown, GraduationCap, Target, BarChart, Send, Zap, DollarSign
 } from "lucide-react";
 import { WindowNode } from '@/components/shared/WindowNode';
+import { MobileHeader } from '@/components/shared/MobileHeader';
 
 const themes: Record<string, any> = {
     cyan: { bg: 'rgba(6, 182, 212, 0.15)', border: 'rgba(6, 182, 212, 0.3)', shadow: 'rgba(6,182,212,0.3)', blur: 'bg-cyan-500/30', iconBg: 'bg-cyan-500/20', iconText: 'text-cyan-400', iconShadow: 'drop-shadow-[0_0_8px_rgba(6,182,212,0.6)]' },
@@ -412,10 +413,22 @@ export default function CLODashboard() {
     );
 
     return (
-        <div className="w-full h-screen bg-[#050505] flex flex-col relative overflow-hidden" ref={reactFlowWrapper}>
+        <div className="w-full min-h-screen  overflow-y-auto md:h-screen bg-[#050505] flex flex-col relative overflow-y-auto md:overflow-hidden" ref={reactFlowWrapper}>
+            <MobileHeader 
+                title="Legal Compliance"
+                layers={layers}
+                onLayerClick={(layer) => {
+                    const isMobile = window.innerWidth < 768;
+                    spawnWindow(layer, { 
+                        x: isMobile ? 20 : 800, 
+                        y: Math.max(0, (isMobile ? 400 : 100) + (Math.random() * 50 - 25)) 
+                    });
+                }}
+                onHomeClick={() => router.push(`/nucleo/${entityId}`)}
+            />
 
             {/* React Flow Diagram - Only for the Stack */}
-            <div className="flex-1 w-full h-full relative z-0">
+            <div className="flex-1 w-full min-h-[600px] h-full relative z-0">
                 <ReactFlow
                     nodes={nodes}
                     edges={edges}
@@ -429,6 +442,7 @@ export default function CLODashboard() {
                     minZoom={0.2}
                     maxZoom={2}
                     proOptions={{ hideAttribution: true }}
+                    fitView
                 >
                     <Background color="#ffffff" gap={24} size={1} className="opacity-5" />
                     <Controls className="!bg-[#111] !border-white/10 !fill-white/60 hover:!fill-white shadow-2xl" />

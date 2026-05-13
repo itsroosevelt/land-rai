@@ -38,7 +38,7 @@ export const KambanHeader = ({
                 <div className="h-6 w-[1px] bg-neutral-800 mx-2 hidden lg:block" />
 
                 {/* Stats Bar */}
-                <div className="flex items-center gap-4 py-1 px-1 overflow-x-auto no-scrollbar">
+                <div className="hidden md:flex items-center gap-4 py-1 px-1 overflow-x-auto no-scrollbar">
                     {/* WhatsApp */}
                     <div className="flex flex-col items-center gap-0.5 transition-all cursor-pointer group/pill hover:opacity-80">
                         <div className="relative">
@@ -117,13 +117,13 @@ export const KambanHeader = ({
             </div>
 
             <div className="flex items-center gap-1.5 ml-auto">
-                <div className="relative group/search w-32 transition-all duration-300 focus-within:w-48">
+                <div className="relative group/search w-16 sm:w-32 transition-all duration-300 focus-within:w-40 sm:focus-within:w-48">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-neutral-500 group-focus-within/search:text-blue-500 transition-colors" />
                     <Input
                         placeholder="Search..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-8 pr-8 h-7 bg-black/20 border-white/5 text-[10px] placeholder:text-neutral-600 focus:bg-black/40 transition-all rounded-lg"
+                        className="pl-8 pr-2 h-7 bg-black/20 border-white/5 text-[10px] placeholder:text-neutral-600 focus:bg-black/40 transition-all rounded-lg hidden sm:block"
                     />
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -170,7 +170,7 @@ export const KambanHeader = ({
                         className="h-8 bg-blue-600 hover:bg-blue-500 text-white gap-2 shadow-lg shadow-blue-900/20 text-[11px] px-3 font-medium rounded-lg"
                     >
                         <UserPlus size={14} />
-                        <span>New Chat</span>
+                        <span className="hidden sm:inline">New Chat</span>
                     </Button>
                 </div>
             </div>

@@ -61,8 +61,17 @@ export const CodeEditor = ({
 }: CodeEditorProps) => {
     const [openFiles, setOpenFiles] = useState<string[]>([]);
     const [isMaxEditor, setIsMaxEditor] = useState(false);
+    const [showSidebar, setShowSidebar] = useState(true);
     const [dismissedErrors, setDismissedErrors] = useState<Record<string, string>>({});
     const [copied, setCopied] = useState(false);
+
+    // Auto-hide sidebar on mobile
+    useEffect(() => {
+        const isMobile = window.innerWidth < 640;
+        if (isMobile) {
+            setShowSidebar(false);
+        }
+    }, []);
 
     // Reset dismissal if the error message changes
     useEffect(() => {
@@ -161,11 +170,19 @@ export const CodeEditor = ({
     const lines = codeContent.split('\n');
 
     return (
-        <div className={`fixed z-[100] bg-[#050505] flex flex-col overflow-hidden transition-all duration-300 border border-white/5 shadow-[0_0_80px_rgba(0,0,0,0.8)] ${isMaxEditor ? 'inset-0 rounded-none' : 'inset-6 rounded-2xl'
+        <div className={`fixed z-[100] bg-[#050505] flex flex-col overflow-hidden transition-all duration-300 border border-white/5 shadow-[0_0_80px_rgba(0,0,0,0.8)] ${isMaxEditor ? 'inset-0 rounded-none' : 'inset-0 sm:inset-6 sm:rounded-2xl'
             }`}>
             {/* Main Header / Tab Bar */}
-            <div className="flex items-center justify-between bg-[#0a0a0a] border-b border-white/5 h-11">
-                <div className="flex-1 flex items-center overflow-x-auto no-scrollbar h-full">
+            <div className="flex items-center justify-between bg-[#0a0a0a] border-b border-white/5 h-11 shrink-0">
+                <div className="flex items-center h-full">
+                    <button
+                        onClick={() => setShowSidebar(!showSidebar)}
+                        className={`p-3 h-full border-r border-white/5 transition-colors ${showSidebar ? 'bg-white/5 text-cyan-400' : 'text-neutral-500 hover:text-white'}`}
+                        title="Toggle Sidebar"
+                    >
+                        <Search className="w-4 h-4" />
+                    </button>
+                    <div className="flex-1 flex items-center overflow-x-auto no-scrollbar h-full">
                     {openFiles.map(path => (
                         <div
                             key={path}
@@ -189,6 +206,7 @@ export const CodeEditor = ({
                         </div>
                     ))}
                 </div>
+            </div>
 
                 <div className="flex items-center gap-1 px-3 border-l border-white/5 h-full bg-[#0a0a0a]">
                     <button onClick={handleCopy} className="p-2 text-neutral-500 hover:text-white rounded-lg transition-colors relative" title="Copiar código">
@@ -207,18 +225,29 @@ export const CodeEditor = ({
                 </div>
             </div>
 
-            <div className="flex flex-1 overflow-hidden">
+            <div className="flex flex-1 overflow-hidden relative">
                 {/* File Explorer Sidebar */}
-                <div className="w-[280px] bg-[#0a0a0a] border-r border-white/5 flex flex-col overflow-hidden">
-                    <FileTree
-                        files={files}
-                        activeFile={activeFile}
-                        setActiveFile={setActiveFile}
-                        expandedFolders={expandedFolders}
-                        setExpandedFolders={setExpandedFolders}
-                        runtimeErrors={runtimeErrors}
-                    />
-                </div>
+                {showSidebar && (
+                    <div className="absolute inset-y-0 left-0 w-[280px] sm:relative sm:w-[280px] bg-[#0a0a0a] border-r border-white/5 flex flex-col overflow-hidden z-[120] animate-in slide-in-from-left duration-300 shadow-[20px_0_50px_rgba(0,0,0,0.5)] sm:shadow-none sm:z-0 sm:animate-none sm:inset-auto sm:shrink-0">
+                        <div className="flex items-center justify-between p-4 border-b border-white/5 sm:hidden">
+                            <span className="text-xs font-bold uppercase tracking-widest text-gray-400">Archivos</span>
+                            <button onClick={() => setShowSidebar(false)} className="p-1 hover:bg-white/5 rounded-lg text-gray-500">
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                        <FileTree
+                            files={files}
+                            activeFile={activeFile}
+                            setActiveFile={(path) => {
+                                setActiveFile(path);
+                                if (window.innerWidth < 640) setShowSidebar(false);
+                            }}
+                            expandedFolders={expandedFolders}
+                            setExpandedFolders={setExpandedFolders}
+                            runtimeErrors={runtimeErrors}
+                        />
+                    </div>
+                )}
 
                 {/* Editor Surface */}
                 <div className="flex-1 flex flex-col bg-[#050505] relative overflow-hidden">
@@ -270,9 +299,9 @@ export const CodeEditor = ({
                                     language={activeFile.endsWith('.tsx') || activeFile.endsWith('.ts') ? 'typescript' : activeFile.endsWith('.css') ? 'css' : 'javascript'}
                                     theme="obsidian-pro"
                                     options={{
-                                        fontSize: 14,
+                                        fontSize: window.innerWidth < 640 ? 12 : 14,
                                         fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-                                        minimap: { enabled: true, side: 'right' },
+                                        minimap: { enabled: window.innerWidth >= 640, side: 'right' },
                                         scrollBeyondLastLine: false,
                                         smoothScrolling: true,
                                         cursorBlinking: "expand",

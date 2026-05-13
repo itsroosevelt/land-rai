@@ -190,10 +190,10 @@ export const ChatInput = ({
                         <div className="relative">
                             <button
                                 onClick={toggleModelDropdown}
-                                className="flex items-center gap-1 pr-1.5 py-1 text-[9px] font-bold text-[#a1a1aa] hover:bg-white/5 rounded-lg transition-all uppercase tracking-tight"
+                                className="flex items-center gap-1 px-1.5 py-1 text-[9px] font-bold text-[#a1a1aa] hover:bg-white/5 rounded-lg transition-all uppercase tracking-tight"
                             >
                                 <Sparkles className="w-2.5 h-2.5 text-blue-400" />
-                                {selectedModel.split(' ')[0]}
+                                <span className="hidden sm:inline">{selectedModel.split(' ')[0]}</span>
                                 <span className="ml-0.5 text-[7px] bg-purple-500/20 text-purple-400 px-0.5 rounded border border-purple-500/30">V2</span>
                                 <ChevronDown className="w-2.5 h-2.5 opacity-30" />
                             </button>
@@ -236,7 +236,8 @@ export const ChatInput = ({
                                 onClick={toggleReasoningDropdown}
                                 className="flex items-center gap-1 px-1.5 py-1 text-[9px] font-bold text-[#a1a1aa] hover:bg-white/5 rounded-lg transition-all uppercase tracking-tight"
                             >
-                                {reasoningLevel}
+                                <span className="hidden sm:inline">{reasoningLevel}</span>
+                                <span className="sm:hidden">{reasoningLevel.charAt(0)}</span>
                                 <ChevronDown className="w-2.5 h-2.5 opacity-30" />
                             </button>
                             {showReasoningDropdown && (

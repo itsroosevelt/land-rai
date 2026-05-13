@@ -51,14 +51,14 @@ export default function SuiteDashboard() {
 
     return (
         <ProtectedRoute>
-            <div className="min-h-screen bg-black text-white overflow-hidden relative selection:bg-blue-500/30 select-none">
+            <div className="min-h-screen bg-black text-white overflow-y-auto relative selection:bg-blue-500/30 select-none">
                 {/* Pure Black Background */}
                 <div className="absolute inset-0 bg-black" />
 
                 {/* Information Orbit Menu removed */}
 
                 {/* Main layout - Fixed height, no scrolling */}
-                <div className="relative z-10 w-full h-screen flex flex-col items-center justify-between pt-10 pb-6 overflow-hidden no-scrollbar">
+                <div className="relative z-10 w-full h-screen flex flex-col items-center justify-between pt-10 pb-6 overflow-y-auto">
 
                     <motion.div
                         initial={{ opacity: 0 }}

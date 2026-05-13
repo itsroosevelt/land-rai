@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreVertical, Info, Send, Paperclip, Mail, Smile, Image as ImageIcon, FileText, Loader2, Zap, User, XCircle, Ban, Mic, X, Plus, MapPin, Contact2, AlertCircle, RefreshCw, List, MousePointer2, ExternalLink } from 'lucide-react';
+import { MoreVertical, Info, Send, Paperclip, Mail, Smile, Image as ImageIcon, FileText, Loader2, Zap, User, XCircle, Ban, Mic, X, Plus, MapPin, Contact2, AlertCircle, RefreshCw, List, MousePointer2, ExternalLink, ChevronLeft } from 'lucide-react';
 import { useConversationLogic } from '../../whatsapp/components/ConversationModal/hooks/useConversationLogic';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -12,6 +12,7 @@ interface ChatAreaProps {
     groups: any[];
     groupName: string;
     allConversations: any[];
+    onBack?: () => void;
 }
 
 const QUICK_REPLIES = [
@@ -21,7 +22,7 @@ const QUICK_REPLIES = [
     { id: 'bye', label: 'Despedida', text: '¡Gracias por contactarnos! Que tengas un excelente día.' },
 ];
 
-export default function ChatArea({ card, groups, groupName, allConversations }: ChatAreaProps) {
+export default function ChatArea({ card, groups, groupName, allConversations, onBack }: ChatAreaProps) {
     const [showQuickReplies, setShowQuickReplies] = useState(false);
     const [showMoreMenu, setShowMoreMenu] = useState(false);
     const [showAttachments, setShowAttachments] = useState(false);
@@ -306,9 +307,17 @@ export default function ChatArea({ card, groups, groupName, allConversations }: 
         <div className="flex-1 flex flex-col h-full relative">
 
             {/* Header */}
-            <div className="h-12 border-b border-neutral-800 bg-[#111] flex items-center justify-between px-4 flex-shrink-0">
-                <div className="flex items-center space-x-2">
-                    <div className="w-7 h-7 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center font-bold text-white text-[11px] shadow-sm">
+            <div className="h-14 border-b border-neutral-800 bg-[#111] flex items-center justify-between px-3 flex-shrink-0">
+                <div className="flex items-center gap-3">
+                    {onBack && (
+                        <button 
+                            onClick={onBack}
+                            className="md:hidden p-2 -ml-1 text-blue-500 hover:bg-blue-500/10 rounded-full transition-all active:scale-90"
+                        >
+                            <ChevronLeft size={24} />
+                        </button>
+                    )}
+                    <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center font-bold text-white text-[12px] shadow-sm">
                         {contactName.charAt(0).toUpperCase()}
                     </div>
                     <div>

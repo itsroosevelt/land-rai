@@ -200,7 +200,7 @@ export default function KambanBoard() {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <div className="flex min-h-full min-w-max p-2 pt-1 pb-4 gap-2">
+          <div className="flex min-h-full w-full md:min-w-max p-2 pt-1 pb-4 gap-2 overflow-x-auto snap-x snap-mandatory no-scrollbar">
             {groups.map(group => (
               <KambanColumn
                 key={group.id}

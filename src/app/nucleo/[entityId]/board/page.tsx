@@ -21,6 +21,7 @@ import {
     FileCheck, Scale, MessageSquare, TrendingUp, FileText, Megaphone, Cpu, Activity, Package, BookOpen, Contact, Brain, Users, Search, Award, Truck, Settings, Layout, Building, PieChart, Gavel, Coffee, Lightbulb, Briefcase, Share2, Server, Network, LifeBuoy, Calendar, Code2, Database, UserPlus, Globe, Shield, PenTool, Lock, Rocket, Landmark, Bot, Layers, ShieldAlert, CreditCard, Heart, Crown, GraduationCap, Target, BarChart, Send, Zap, DollarSign
 } from "lucide-react";
 import { WindowNode } from '@/components/shared/WindowNode';
+import { MobileHeader } from '@/components/shared/MobileHeader';
 
 const themes: Record<string, any> = {
     cyan: { bg: 'rgba(6, 182, 212, 0.15)', border: 'rgba(6, 182, 212, 0.3)', shadow: 'rgba(6,182,212,0.3)', blur: 'bg-cyan-500/30', iconBg: 'bg-cyan-500/20', iconText: 'text-cyan-400', iconShadow: 'drop-shadow-[0_0_8px_rgba(6,182,212,0.6)]' },
@@ -197,40 +198,40 @@ const StackNode = ({ data }: NodeProps) => {
     };
 
     return (
-        <div style={{ perspective: '99999px', width: '700px', height: '1100px' }} className="relative pointer-events-auto">
+        <div className="relative pointer-events-auto w-screen md:w-[700px] h-[800px] md:h-[1100px] flex flex-col items-center justify-center" style={{ perspective: '99999px' }}>
             {/* FLAT TITLE AT TOP */}
-            <div className="absolute top-0 left-1/2 -ml-12 -translate-x-1/2 z-50 pointer-events-none w-[120%] flex flex-col items-center">
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 z-50 pointer-events-none w-full flex flex-col items-center px-4">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.8, delay: 0.2 }}
                     className="flex flex-col items-center text-center"
                 >
-                    <h1 className="text-4xl md:text-5xl font-light bg-gradient-to-r from-white via-white to-white/30 bg-clip-text text-transparent tracking-wide mb-6 drop-shadow-xl whitespace-nowrap">
+                    <h1 className="text-2xl md:text-5xl font-light bg-gradient-to-r from-white via-white to-white/30 bg-clip-text text-transparent tracking-wide mb-3 md:mb-6 drop-shadow-xl whitespace-nowrap">
                         Board of Directors
                     </h1>
-                    <div className="flex items-center gap-3 text-white/50 bg-[#1A1D24]/80 px-5 py-3 rounded-full backdrop-blur-md border border-white/10 w-max shadow-2xl">
-                        <svg className="w-4 h-4 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div className="flex items-center gap-2 md:gap-3 text-white/50 bg-[#1A1D24]/80 px-3 md:px-5 py-2 md:py-3 rounded-full backdrop-blur-md border border-white/10 w-max shadow-2xl">
+                        <svg className="w-3 h-3 md:w-4 md:h-4 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
                         </svg>
-                        <p className="text-xs font-medium">
-                            Drag any glass module to spawn its spatial window
+                        <p className="text-[9px] md:text-xs font-medium">
+                            Arrastra los módulos de cristal para activarlos
                         </p>
                     </div>
                     
                     <button 
                         onClick={(e) => { e.stopPropagation(); data.onGoToNucleo && data.onGoToNucleo(); }}
-                        className="nodrag mt-6 pointer-events-auto px-6 py-2.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 font-medium tracking-wide rounded-full border border-cyan-500/30 transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(6,182,212,0.2)] cursor-pointer"
+                        className="nodrag mt-4 md:mt-6 pointer-events-auto px-4 md:px-6 py-2 md:py-2.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 font-medium tracking-wide rounded-full border border-cyan-500/30 transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(6,182,212,0.2)] cursor-pointer text-[10px] md:text-sm"
                     >
                         <Network className="w-4 h-4" />
-                        Ir al núcleo
+                        Regresar al Núcleo
                     </button>
                 </motion.div>
             </div>
 
             {/* 3D TOWER ANCHORED AT BOTTOM */}
             <div
-                className="absolute bottom-[50px] left-1/2 -translate-x-1/2 w-[380px] h-[380px]"
+                className="absolute bottom-[80px] md:bottom-[50px] left-1/2 -translate-x-1/2 w-[240px] md:w-[380px] h-[240px] md:h-[380px]"
                 style={{
                     transform: 'rotateX(55deg) rotateZ(-45deg)',
                     transformStyle: 'preserve-3d'
@@ -255,7 +256,7 @@ const StackNode = ({ data }: NodeProps) => {
                             onDragStart={(e: any) => onDragStart(e, layer.id)}
                             onPointerDown={onPointerDown}
                             onPointerUp={(e: any) => onPointerUp(e, layer)}
-                            className={`absolute inset-0 rounded-[2.5rem] cursor-grab active:cursor-grabbing backdrop-blur-xl transition-colors duration-500`}
+                            className={`absolute inset-0 rounded-[1.5rem] md:rounded-[2.5rem] cursor-grab active:cursor-grabbing backdrop-blur-xl transition-colors duration-500`}
                             style={{
                                 transformStyle: 'preserve-3d',
                                 backgroundColor: isHovered ? layerTheme.bg : 'rgba(255, 255, 255, 0.04)',
@@ -290,10 +291,10 @@ const StackNode = ({ data }: NodeProps) => {
                 })}
             </div>
 
-            <div className="absolute top-0 right-10 w-[300px] h-full pointer-events-none flex flex-col justify-end">
+            <div className="absolute top-0 right-4 md:right-10 w-[200px] md:w-[300px] h-full pointer-events-none flex flex-col justify-end">
                 {displayLayers.map((layer: any, index: number) => {
                     const isHovered = hoveredLayer === layer.id;
-                    const bottomPos = layer.calculatedZ * 0.573 + 240;
+                    const bottomPos = (layer.calculatedZ * 0.573) + (window.innerWidth < 768 ? 160 : 240);
                     const layerTheme = themes[layer.theme || 'cyan'];
 
                     return (
@@ -311,13 +312,13 @@ const StackNode = ({ data }: NodeProps) => {
                                     onPointerDown={onPointerDown}
                                     onPointerUp={(e: any) => onPointerUp(e, layer)}
                                 >
-                                    <div className="relative flex items-center gap-4 bg-[#1A1D24]/80 backdrop-blur-2xl px-6 py-3 shadow-[0_20px_40px_rgba(0,0,0,0.6)] rounded-full border border-white/10">
+                                    <div className="relative flex items-center gap-2 md:gap-4 bg-[#1A1D24]/80 backdrop-blur-2xl px-3 md:px-6 py-2 md:py-3 shadow-[0_20px_40px_rgba(0,0,0,0.6)] rounded-full border border-white/10">
                                         <div className="absolute top-1/2 -left-3 -translate-y-1/2 w-0 h-0 border-y-[8px] border-y-transparent border-r-[12px] border-r-white/10" />
                                         <div className="absolute top-1/2 -left-[10px] -translate-y-1/2 w-0 h-0 border-y-[7px] border-y-transparent border-r-[11px] border-r-[#1A1D24]/80" />
-                                        <div className={`p-2 ${layerTheme.iconBg} rounded-full`}>
-                                            <layer.icon className={`w-5 h-5 ${layerTheme.iconText} ${layerTheme.iconShadow}`} />
+                                        <div className={`p-1.5 md:p-2 ${layerTheme.iconBg} rounded-full`}>
+                                            <layer.icon className={`w-3.5 h-3.5 md:w-5 md:h-5 ${layerTheme.iconText} ${layerTheme.iconShadow}`} />
                                         </div>
-                                        <span className="text-white font-medium tracking-wide text-lg whitespace-nowrap pointer-events-none">
+                                        <span className="text-white font-medium tracking-wide text-xs md:text-lg whitespace-nowrap pointer-events-none">
                                             {layer.label}
                                         </span>
                                     </div>
@@ -354,7 +355,13 @@ export default function BOARDDashboard() {
             data: {
                 layers,
                 onGoToNucleo: () => router.push(`/nucleo/${entityId}`),
-                onLayerClick: (layer: any) => spawnWindow(layer, { x: 800, y: Math.max(0, 100 + (Math.random() * 50 - 25)) })
+                onLayerClick: (layer: any) => {
+                    const isMobile = window.innerWidth < 768;
+                    spawnWindow(layer, { 
+                        x: isMobile ? 20 : 800, 
+                        y: Math.max(0, (isMobile ? 400 : 100) + (Math.random() * 50 - 25)) 
+                    });
+                }
             },
         }
     ]);
@@ -414,10 +421,22 @@ export default function BOARDDashboard() {
     );
 
     return (
-        <div className="w-full h-screen bg-[#050505] flex flex-col relative overflow-hidden" ref={reactFlowWrapper}>
+        <div className="w-full min-h-screen  overflow-y-auto md:h-screen bg-[#050505] flex flex-col relative overflow-y-auto md:overflow-hidden" ref={reactFlowWrapper}>
+            <MobileHeader 
+                title="Board of Directors"
+                layers={layers}
+                onLayerClick={(layer) => {
+                    const isMobile = window.innerWidth < 768;
+                    spawnWindow(layer, { 
+                        x: isMobile ? 20 : 800, 
+                        y: Math.max(0, (isMobile ? 400 : 100) + (Math.random() * 50 - 25)) 
+                    });
+                }}
+                onHomeClick={() => router.push(`/nucleo/${entityId}`)}
+            />
 
             {/* React Flow Diagram - Only for the Stack */}
-            <div className="flex-1 w-full h-full relative z-0">
+            <div className="flex-1 w-full min-h-[600px] h-full relative z-0">
                 <ReactFlow
                     nodes={nodes}
                     edges={edges}
@@ -431,6 +450,7 @@ export default function BOARDDashboard() {
                     minZoom={0.2}
                     maxZoom={2}
                     proOptions={{ hideAttribution: true }}
+                    fitView
                 >
                     <Background color="#ffffff" gap={24} size={1} className="opacity-5" />
                     <Controls className="!bg-[#111] !border-white/10 !fill-white/60 hover:!fill-white shadow-2xl" />

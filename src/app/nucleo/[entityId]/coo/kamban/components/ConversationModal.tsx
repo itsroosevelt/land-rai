@@ -155,10 +155,12 @@ function FileRow({
   };
 
   return (
-    <div className="flex min-h-[36px] items-center group px-4 py-2 hover:bg-white/[0.03] transition-colors rounded-lg gap-3">
-      <Paperclip size={14} className="text-neutral-600 flex-shrink-0" />
-      <span className="w-44 text-[12px] text-neutral-500 truncate flex-shrink-0">{label}</span>
-      <div className="flex-1 flex flex-wrap items-center gap-2">
+    <div className="flex flex-col sm:flex-row sm:items-center group px-4 py-3 sm:py-2 hover:bg-white/[0.03] transition-colors rounded-xl gap-2 sm:gap-3">
+      <div className="flex items-center gap-3">
+        <Paperclip size={14} className="text-neutral-600 flex-shrink-0" />
+        <span className="w-auto sm:w-44 text-[10px] sm:text-[12px] font-bold sm:font-normal uppercase sm:capitalize tracking-wider sm:tracking-normal text-neutral-500 truncate">{label}</span>
+      </div>
+      <div className="flex-1 flex flex-wrap items-center gap-2 pl-6 sm:pl-0">
         {files.length > 0 ? (
           files.map((f, i) => (
             <div key={i} className="flex items-center gap-1 group/file">
@@ -317,14 +319,14 @@ export default function ConversationModal({
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={onClose}
         className="absolute inset-0 bg-black/50 pointer-events-auto backdrop-blur-[3px]" />
       <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} transition={{ type: 'spring', damping: 28 }}
-        className="absolute top-0 right-0 h-full w-1/2 bg-black border-l border-white/[0.07] flex flex-col pointer-events-auto">
+        className="absolute top-0 right-0 h-full w-full sm:w-[500px] md:w-1/2 bg-black border-l border-white/[0.07] flex flex-col pointer-events-auto shadow-2xl">
         <header className="h-12 flex items-center justify-between px-5 border-b border-white/[0.06] flex-shrink-0">
           <div className="flex gap-2">
             <button onClick={onClose} className="p-1.5 text-neutral-600 hover:text-white rounded"><X size={16} /></button>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-8 py-10">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 sm:py-10">
           <div className="flex items-center gap-3 flex-wrap mb-8">
             {(() => {
               const c = (data.channel || data.source || '').toLowerCase();
@@ -339,7 +341,7 @@ export default function ConversationModal({
                 onBlur={() => { setEditingName(false); update({ contactName: nameValue }); }}
                 className="bg-transparent text-white text-[28px] font-bold outline-none border-b border-white/20 flex-1" />
             ) : (
-              <h1 onClick={() => setEditingName(true)} className="text-[28px] font-bold text-white cursor-text hover:bg-white/[0.03] rounded px-1 -mx-1">
+              <h1 onClick={() => setEditingName(true)} className="text-[20px] sm:text-[28px] font-bold text-white cursor-text hover:bg-white/[0.03] rounded px-1 -mx-1">
                 {data.contactName || <span className="text-neutral-600 italic">Sin nombre</span>}
               </h1>
             )}

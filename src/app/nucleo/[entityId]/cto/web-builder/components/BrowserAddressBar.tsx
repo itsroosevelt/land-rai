@@ -12,6 +12,7 @@ interface BrowserAddressBarProps {
     onToggleMaximize?: () => void;
 }
 
+
 export const BrowserAddressBar = ({
     url,
     availableRoutes = [],
@@ -40,9 +41,9 @@ export const BrowserAddressBar = ({
     );
 
     return (
-        <div className="h-10 bg-[#161616] flex items-center px-4 gap-3 border-b border-[#222] z-50 shrink-0 select-none">
+        <div className="h-10 bg-[#161616] flex items-center px-2 md:px-4 gap-1.5 md:gap-3 border-b border-[#222] z-50 shrink-0 select-none">
             {/* Window Controls (Mac Style) */}
-            <div className="flex gap-2 mr-2">
+            <div className="hidden md:flex gap-2 mr-2">
                 <div className="w-2.5 h-2.5 rounded-full bg-[#ff5f56]"></div>
                 <div className="w-2.5 h-2.5 rounded-full bg-[#ffbd2e]"></div>
                 <div className="w-2.5 h-2.5 rounded-full bg-[#27c93f]"></div>
@@ -52,17 +53,17 @@ export const BrowserAddressBar = ({
             <div className="flex-1 flex items-center justify-center relative">
                 <form
                     onSubmit={handleSubmit}
-                    className="w-full max-w-2xl flex items-center bg-[#0d0d0d] rounded-full px-4 h-7 border border-[#222] group focus-within:border-blue-500/50 transition-all shadow-inner"
+                    className="w-full max-w-2xl flex items-center bg-[#0d0d0d] rounded-full px-2 md:px-4 h-7 border border-[#222] group focus-within:border-blue-500/50 transition-all shadow-inner"
                 >
-                    <Monitor className="w-3 h-3 text-gray-600 mr-2 group-focus-within:text-blue-400 transition-colors" />
-                    <span className="text-[11px] text-gray-500 font-medium select-none">localhost:3000/</span>
+                    <Monitor className="hidden md:block w-3 h-3 text-gray-600 mr-2 group-focus-within:text-blue-400 transition-colors" />
+                    <span className="text-[9px] md:text-[11px] text-gray-500 font-medium select-none">localhost:3000/</span>
                     <input
                         type="text"
                         value={inputValue}
                         onFocus={() => setShowDropdown(true)}
                         onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
                         onChange={(e) => setInputValue(e.target.value)}
-                        className="flex-1 bg-transparent border-none outline-none text-[11px] text-gray-200 font-medium px-0.5 placeholder:text-gray-700 h-full"
+                        className="flex-1 bg-transparent border-none outline-none text-[10px] md:text-[11px] text-gray-200 font-medium px-0.5 placeholder:text-gray-700 h-full"
                         placeholder="index"
                         spellCheck={false}
                     />

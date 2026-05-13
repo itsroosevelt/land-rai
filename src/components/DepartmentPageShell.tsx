@@ -48,13 +48,13 @@ export default function DepartmentPageShell({
             {/* Gradient background */}
             <div className={`absolute inset-0 bg-gradient-to-br ${colors.glow} to-transparent opacity-40`} />
 
-            <div className="relative z-10 p-8 md:p-12 max-w-5xl mx-auto">
+            <div className="relative z-10 p-5 sm:p-8 md:p-12 max-w-5xl mx-auto">
                 {/* Back button */}
                 <motion.button
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     onClick={() => router.push(`/nucleo/${entityId}/${department}`)}
-                    className="flex items-center gap-2 text-neutral-600 hover:text-white text-xs tracking-wider uppercase transition-colors mb-12"
+                    className="flex items-center gap-2 text-neutral-600 hover:text-white text-[10px] sm:text-xs tracking-wider uppercase transition-colors mb-8 md:mb-12"
                 >
                     <ArrowLeft className="w-3 h-3" /> Back to {department.toUpperCase()}
                 </motion.button>
@@ -64,17 +64,17 @@ export default function DepartmentPageShell({
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5 }}
-                    className="mb-16"
+                    className="mb-8 md:mb-16"
                 >
-                    <div className={`inline-flex items-center gap-2 ${colors.text} text-[10px] font-bold tracking-[0.25em] uppercase mb-4`}>
+                    <div className={`inline-flex items-center gap-2 ${colors.text} text-[9px] sm:text-[10px] font-bold tracking-[0.25em] uppercase mb-4`}>
                         <Clock className="w-3 h-3" />
                         <span>{subtitle}</span>
                     </div>
-                    <h1 className="text-3xl md:text-5xl font-extralight tracking-tighter mb-4">
+                    <h1 className="text-2xl sm:text-3xl md:text-5xl font-extralight tracking-tighter mb-4">
                         {title}
                     </h1>
                     {description && (
-                        <p className="text-neutral-500 text-sm max-w-xl leading-relaxed">
+                        <p className="text-neutral-500 text-xs sm:text-sm max-w-xl leading-relaxed">
                             {description}
                         </p>
                     )}
@@ -85,7 +85,7 @@ export default function DepartmentPageShell({
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
-                    className={`rounded-[28px] border ${colors.border} ${colors.bg} p-10 md:p-14 text-center`}
+                    className={`rounded-[22px] md:rounded-[28px] border ${colors.border} ${colors.bg} p-6 md:p-14 text-center`}
                 >
                     <div className="relative mx-auto w-20 h-20 mb-8">
                         <div className={`absolute inset-0 ${colors.bg} rounded-full blur-2xl opacity-60 animate-pulse`} />

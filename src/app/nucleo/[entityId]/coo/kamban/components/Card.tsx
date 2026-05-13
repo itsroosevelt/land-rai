@@ -286,7 +286,7 @@ const Card = ({ card, groupId, onClick, cardColor = 'bg-neutral-800', contacts =
         {...attributes}
         {...listeners}
         className={cn(
-          "group relative p-3 rounded-xl border border-white/5 transition-all duration-200 select-none cursor-pointer mb-2 shadow-sm",
+          "group relative p-2 sm:p-3 rounded-xl border border-white/5 transition-all duration-200 select-none cursor-pointer mb-1.5 sm:mb-2 shadow-sm",
           cardColor || "bg-[#181818]/50",
           "hover:bg-white/5 hover:border-white/10"
         )}
