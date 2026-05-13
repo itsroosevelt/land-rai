@@ -193,7 +193,12 @@ const StackNode = ({ data }: NodeProps) => {
     );
 };
 
-const nodeTypes = { stackNode: StackNode, windowNode: WindowNode };
+const nodeTypes = { 
+    stackNode: StackNode, 
+    windowNode: WindowNode 
+};
+
+const edgeTypes = {};
 
 export default function UnifiedWorkspace() {
     const router = useRouter();
@@ -218,9 +223,9 @@ export default function UnifiedWorkspace() {
             if (!openWindows.includes(layer.id)) {
                 setOpenWindows(prev => [...prev, layer.id]);
                 
-                // Posicionamiento mucho más a la derecha y a una altura nivelada (no tan arriba)
-                const targetX = 750 + openWindows.length * 40;
-                const targetY = 150 + openWindows.length * 40;
+                // Desplazamiento ampliado para evitar amontonamiento (Cascada PRO)
+                const targetX = 870 + openWindows.length * 80;
+                const targetY = 150 + openWindows.length * 80;
 
                 const newNode: Node = {
                     id: `window-${layer.id}`,
@@ -241,10 +246,10 @@ export default function UnifiedWorkspace() {
 
                 setNodes(nds => [...nds, newNode]);
 
-                // Desplazar automáticamente la cámara hacia la nueva ventana despejada y nivelada
+                // Desplazar automáticamente la cámara hacia la nueva ventana aún más a la derecha
                 if (reactFlowInstance) {
                     reactFlowInstance.setViewport({ 
-                        x: -targetX + (window.innerWidth / 3), 
+                        x: -targetX + (window.innerWidth / 3.5), 
                         y: -targetY + (window.innerHeight / 3), 
                         zoom: 0.7 
                     }, { duration: 1000 });
@@ -278,15 +283,15 @@ export default function UnifiedWorkspace() {
     }, [activeRole, entityId, currentDeptData]);
 
     useEffect(() => {
-        if (reactFlowInstance) {
-            // Centrar la torre automáticamente usando fitView para precisión total
+        // Solo centrar la torre automáticamente si no hay ventanas abiertas
+        if (reactFlowInstance && nodes.length > 0 && openWindows.length === 0) {
             reactFlowInstance.fitView({ 
                 nodes: [{ id: 'stack' }], 
                 padding: 0.2,
                 duration: 1000 
             });
         }
-    }, [reactFlowInstance, activeRole]);
+    }, [reactFlowInstance, activeRole, nodes.length, openWindows.length]);
 
     return (
         <div className="w-full h-screen bg-black flex flex-col relative overflow-hidden">
