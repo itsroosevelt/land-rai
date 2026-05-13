@@ -78,7 +78,7 @@ export default function IntegrationsPage() {
     });
 
     return (
-        <div className="min-h-screen bg-black text-white relative flex flex-col no-scrollbar">
+        <div className="min-h-screen bg-black text-white relative flex flex-col overflow-y-auto">
             {/* Background elements */}
             <div className="fixed inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-600/10 blur-[120px] rounded-full" />
@@ -94,10 +94,10 @@ export default function IntegrationsPage() {
                                 <Zap className="w-3 h-3 fill-current" />
                                 <span>Master Connect</span>
                             </div>
-                            <h1 className="text-4xl md:text-5xl font-extralight tracking-tighter mb-4">
+                            <h1 className="text-3xl md:text-5xl font-extralight tracking-tighter mb-4">
                                 Integraciones del <span className="font-medium text-white">CTO</span>
                             </h1>
-                            <p className="text-neutral-500 max-w-2xl leading-relaxed">
+                            <p className="text-neutral-500 text-sm md:text-base max-w-2xl leading-relaxed">
                                 Orquestación centralizada de canales externos. Conecta tus activos digitales para que la inteligencia autónoma de <span className="text-white font-medium">Roosevelt</span> pueda operar por ti.
                             </p>
                         </div>

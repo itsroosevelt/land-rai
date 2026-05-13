@@ -240,7 +240,7 @@ export default function VoiceCenterPage() {
 
     return (
         <div className="flex min-h-screen bg-[#0a0a0a] text-white">
-            <div className="flex-1 flex flex-col p-6 md:p-10 overflow-hidden">
+            <div className="flex-1 flex flex-col p-6 md:p-10 overflow-y-auto">
                 {/* Header */}
                 <div className="mb-8 flex flex-col md:flex-row justify-between items-start gap-4">
                     <div>
@@ -278,11 +278,11 @@ export default function VoiceCenterPage() {
                 </div>
 
                 {/* Main content */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 overflow-hidden">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 overflow-y-auto">
                     {/* Voice Input Panel */}
                     <div className="lg:col-span-1 flex flex-col gap-6">
                         {/* Mic Button */}
-                        <div className="flex-1 rounded-[28px] bg-white/[0.02] border border-white/5 flex flex-col items-center justify-center p-8 relative overflow-hidden">
+                        <div className="flex-1 rounded-[28px] bg-white/[0.02] border border-white/5 flex flex-col items-center justify-center p-8 relative overflow-y-auto">
                             {/* Background glow */}
                             <AnimatePresence>
                                 {isListening && (
@@ -351,7 +351,7 @@ export default function VoiceCenterPage() {
                     </div>
 
                     {/* Conversation History Panel */}
-                    <div className="lg:col-span-2 rounded-[28px] bg-white/[0.02] border border-white/5 flex flex-col overflow-hidden">
+                    <div className="lg:col-span-2 rounded-[28px] bg-white/[0.02] border border-white/5 flex flex-col overflow-y-auto">
                         <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between">
                             <h2 className="text-sm font-medium flex items-center gap-2">
                                 <Bot className="w-4 h-4 text-blue-400" />

@@ -161,7 +161,7 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
     }, [cards, selectedFolder, searchQuery, sortBy, filterBy]);
 
     return (
-        <div className="w-[280px] bg-[#0d0d0d] border-r border-neutral-900 flex flex-col h-full flex-shrink-0 text-white">
+        <div className="w-full md:w-[280px] bg-[#0d0d0d] border-r border-neutral-900 flex flex-col h-full flex-shrink-0 text-white">
             {/* Header & Search */}
             <div className="p-2 border-b border-neutral-900 space-y-2">
                 <div className="flex items-center justify-between relative px-1 pt-1">

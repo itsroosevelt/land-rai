@@ -245,7 +245,7 @@ export default function MeetAgentsPage() {
 
     return (
         <div className="flex min-h-screen bg-[#0a0a0a] text-white">
-            <div className="flex-1 flex flex-col p-6 md:p-10 overflow-hidden">
+            <div className="flex-1 flex flex-col p-6 md:p-10 overflow-y-auto">
                 {/* Header */}
                 <div className="mb-8 flex flex-col md:flex-row justify-between items-start gap-4">
                     <div>
@@ -298,9 +298,9 @@ export default function MeetAgentsPage() {
                 </div>
 
                 {/* Main Grid */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 overflow-hidden">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 overflow-y-auto">
                     {/* Agent List */}
-                    <div className="lg:col-span-1 rounded-[24px] bg-white/[0.02] border border-white/5 flex flex-col overflow-hidden">
+                    <div className="lg:col-span-1 rounded-[24px] bg-white/[0.02] border border-white/5 flex flex-col overflow-y-auto">
                         <div className="px-5 py-4 border-b border-white/5">
                             <h2 className="text-sm font-medium">All Agents</h2>
                         </div>
@@ -343,7 +343,7 @@ export default function MeetAgentsPage() {
                     </div>
 
                     {/* Agent Details */}
-                    <div className="lg:col-span-2 rounded-[24px] bg-white/[0.02] border border-white/5 flex flex-col overflow-hidden">
+                    <div className="lg:col-span-2 rounded-[24px] bg-white/[0.02] border border-white/5 flex flex-col overflow-y-auto">
                         {selectedAgent ? (
                             <div className="flex-1 p-6 overflow-y-auto no-scrollbar">
                                 <div className="flex items-start justify-between mb-8">
@@ -410,7 +410,7 @@ export default function MeetAgentsPage() {
                                 )}
 
                                 {/* Meeting Simulation Preview */}
-                                <div className="rounded-2xl bg-black/40 border border-white/5 overflow-hidden aspect-video relative">
+                                <div className="rounded-2xl bg-black/40 border border-white/5 overflow-y-auto aspect-video relative">
                                     <div className="absolute inset-0 flex items-center justify-center">
                                         <div className="text-center space-y-3">
                                             <Monitor className="w-16 h-16 text-white/5 mx-auto" />

@@ -2,7 +2,7 @@ import React from "react";
 import {
     MousePointer2, Hand, ZoomIn, Undo2, Redo2, Globe, MonitorCheck,
     Smartphone, Tablet, Monitor, Code2, GitCommit, Loader2, History, Settings, ChevronDown, LayoutGrid, Upload, Rocket, Package,
-    RefreshCw, Terminal as TerminalIcon, ExternalLink, Home, Sparkles
+    RefreshCw, Terminal as TerminalIcon, ExternalLink, Home, Sparkles, MessageSquare, Menu, X
 } from "lucide-react";
 import { ReasoningLevel } from "../types";
 import { GitHubSyncButton } from "./GitHubSyncButton";
@@ -55,6 +55,8 @@ interface ToolbarProps {
     isPreviewLoading?: boolean;
     isAutoFixEnabled?: boolean;
     setIsAutoFixEnabled?: (enabled: boolean) => void;
+    showChat?: boolean;
+    onToggleChat?: () => void;
 }
 
 export const Toolbar = ({
@@ -67,9 +69,11 @@ export const Toolbar = ({
     activeProjectName, files, onSyncComplete, onDeployComplete,
     resetPan, setZoom, isConfigured, handleCloseProject,
     showTerminal, setShowTerminal, onRefresh, isPreviewLoading,
-    isAutoFixEnabled, setIsAutoFixEnabled
+    isAutoFixEnabled, setIsAutoFixEnabled,
+    showChat, onToggleChat
 }: ToolbarProps) => {
     const [showPublishMenu, setShowPublishMenu] = React.useState(false);
+    const [showMobileMenu, setShowMobileMenu] = React.useState(false);
     const publishMenuRef = React.useRef<HTMLDivElement>(null);
 
     React.useEffect(() => {
@@ -83,11 +87,19 @@ export const Toolbar = ({
     }, []);
     return (
         <div className="h-14 border-b border-white/5 bg-[#050505] flex items-center justify-between px-4 z-[90] shrink-0 font-sans">
-            {/* Left: Exit & Dashboard */}
-            <div className="flex items-center gap-4">
+            {/* Left: Menu & Identity */}
+            <div className="flex items-center gap-2 sm:gap-4">
+                {/* Mobile Menu Toggle */}
+                <button
+                    onClick={() => setShowMobileMenu(!showMobileMenu)}
+                    className="flex sm:hidden items-center justify-center w-9 h-9 bg-white/5 border border-white/10 rounded-xl text-gray-400 hover:text-white transition-all active:scale-90"
+                >
+                    {showMobileMenu ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+                </button>
+
                 <button
                     onClick={handleCloseProject}
-                    className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors group px-2 py-1 rounded-lg hover:bg-white/5"
+                    className="hidden sm:flex items-center gap-2 text-gray-400 hover:text-white transition-colors group px-1 sm:px-2 py-1 rounded-lg hover:bg-white/5"
                     title="Cerrar Proyecto y Volver al Inicio"
                 >
                     <div className="p-1.5 rounded-lg group-hover:bg-blue-500/10 transition-colors">
@@ -95,51 +107,57 @@ export const Toolbar = ({
                     </div>
                 </button>
 
-                <div className="h-4 w-[1px] bg-[#222]"></div>
+                <div className="h-4 w-[1px] bg-[#222] hidden sm:block"></div>
 
                 <button
                     onClick={() => setShowHistory(true)}
-                    className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors group"
+                    className="hidden sm:flex items-center gap-2 text-gray-400 hover:text-white transition-colors group"
                 >
                     <div className="p-1.5 rounded-lg group-hover:bg-white/10 transition-colors">
                         <Package className="w-4 h-4" />
                     </div>
-                    <span className="text-sm font-medium">Mis Proyectos</span>
+                    <span className="text-sm font-medium hidden md:inline">Mis Proyectos</span>
                 </button>
 
                 {activeProjectName && (
-                    <>
-                        <div className="h-4 w-[1px] bg-white/10"></div>
-                        <div className="flex items-center gap-2 text-white">
-                            <span className="text-sm font-semibold tracking-tight">{activeProjectName}</span>
-                        </div>
-                    </>
+                    <div className="flex items-center gap-2 text-white max-w-[80px] sm:max-w-none">
+                        <div className="h-4 w-[1px] bg-white/10 hidden sm:block"></div>
+                        <span className="text-xs sm:text-sm font-black tracking-tight truncate opacity-80">{activeProjectName}</span>
+                    </div>
                 )}
+
+                {/* Mobile Chat Toggle */}
+                <button
+                    onClick={onToggleChat}
+                    className={`flex sm:hidden items-center gap-1.5 px-2 py-1 rounded-lg transition-all ${showChat ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'bg-white/5 text-gray-400 border border-white/10'}`}
+                >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span className="text-[10px] font-bold uppercase tracking-tight">{showChat ? 'Ver Web' : 'Chat AI'}</span>
+                </button>
             </div>
 
             {/* Right: Tools & Actions Island */}
-            <div className="flex items-center gap-2">
-
+            <div className={`${showChat ? 'hidden sm:flex' : 'flex'} items-center gap-1 sm:gap-2`}>
+                
                 {/* Tools Group */}
                 <div className="flex items-center gap-1 bg-[#0a0a0a] p-1 rounded-xl border border-white/5">
                     {[
                         { id: 'select', icon: MousePointer2, title: 'Seleccionar' },
                         { id: 'hand', icon: Hand, title: 'Mano (Pan)' },
-                        { id: 'zoom', icon: ZoomIn, title: 'Zoom (Clic para rotar)' }
+                        { id: 'zoom', icon: ZoomIn, title: 'Zoom' }
                     ].map(tool => (
                         <button
                             key={tool.id}
                             title={tool.title}
                             onClick={() => {
                                 if (tool.id === 'zoom' && activeTool === 'zoom') {
-                                    // Cycle zoom: 100 -> 150 -> 200 -> 50 -> 100
                                     const levels = [100, 150, 200, 50];
                                     const next = levels[(levels.indexOf(zoom) + 1) % levels.length];
                                     setZoom(next);
                                 }
                                 setActiveTool(tool.id);
                             }}
-                            className={`p-1.5 rounded-lg transition-all ${activeTool === tool.id ? 'bg-[#222] text-white shadow-sm' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}
+                            className={`p-1 sm:p-1.5 rounded-lg transition-all ${activeTool === tool.id ? 'bg-[#222] text-white shadow-sm' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}
                         >
                             <tool.icon className={`w-3.5 h-3.5 ${activeTool === 'zoom' && tool.id === 'zoom' ? 'text-cyan-400' : ''}`} />
                         </button>
@@ -147,7 +165,7 @@ export const Toolbar = ({
                 </div>
 
                 {/* View Modes Group */}
-                <div className="flex items-center gap-3 bg-[#0a0a0a] p-1 pr-3 rounded-xl border border-white/5">
+                <div className={`${showChat ? 'hidden lg:flex' : 'hidden sm:flex'} items-center gap-3 bg-[#0a0a0a] p-1 pr-3 rounded-xl border border-white/5`}>
                     <div className="flex items-center gap-1">
                         {[
                             { id: 'desktop', icon: Monitor },
@@ -170,40 +188,16 @@ export const Toolbar = ({
                         >
                             {zoom}% <ChevronDown className="w-3 h-3 opacity-50" />
                         </button>
-                        
-                        {/* Zoom Dropdown */}
-                        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block bg-[#0a0a0a] border border-white/10 rounded-lg shadow-2xl py-1 z-50 max-h-[200px] overflow-y-auto custom-scrollbar min-w-[60px]">
-                            {[50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200].map((level) => (
-                                <button
-                                    key={level}
-                                    onClick={() => {
-                                        setZoom(level);
-                                        resetPan?.();
-                                    }}
-                                    className={`w-full px-3 py-1.5 text-left text-[10px] font-mono transition-colors ${zoom === level ? 'bg-cyan-500/10 text-cyan-400' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
-                                >
-                                    {level}%
-                                </button>
-                            ))}
-                            <div className="h-[1px] bg-white/5 my-1"></div>
-                            <button
-                                onClick={resetPan}
-                                className="w-full px-3 py-1.5 text-left text-[10px] font-mono text-gray-500 hover:text-white hover:bg-white/5 transition-colors"
-                            >
-                                Reset
-                            </button>
-                        </div>
                     </div>
                 </div>
 
-
                 {/* Undo/Redo Group */}
-                <div className="flex items-center gap-1 bg-[#0a0a0a] p-1 rounded-xl border border-white/5">
+                <div className="hidden md:flex items-center gap-1 bg-[#0a0a0a] p-1 rounded-xl border border-white/5">
                     <button onClick={handleUndo} disabled={historyLength === 0} className="p-1.5 text-gray-500 hover:text-white transition-colors disabled:opacity-20 disabled:cursor-not-allowed rounded-lg hover:bg-white/5"><Undo2 className="w-3.5 h-3.5" /></button>
                     <button onClick={handleRedo} disabled={futureLength === 0} className="p-1.5 text-gray-500 hover:text-white transition-colors disabled:opacity-20 disabled:cursor-not-allowed rounded-lg hover:bg-white/5"><Redo2 className="w-3.5 h-3.5" /></button>
                 </div>
 
-                <div className="h-4 w-[1px] bg-white/10 mx-2"></div>
+                <div className="hidden sm:block h-4 w-[1px] bg-white/10 mx-2"></div>
 
                 {/* Publish Split Button */}
                 {activeProjectId && (
@@ -226,7 +220,7 @@ export const Toolbar = ({
                                         ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]'
                                         : 'bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.5)]'
                                     }`} />
-                                <span className="text-[10px] font-black tracking-widest uppercase truncate max-w-[100px]">
+                                <span className="text-[10px] font-black tracking-widest uppercase truncate max-w-[100px] hidden sm:inline">
                                     {isPublishing ? 'PUBLISHING...' : isConfigured ? 'UPDATE LIVE' : 'PUBLISH'}
                                 </span>
                             </button>
@@ -407,6 +401,107 @@ export const Toolbar = ({
                     </div>
                 )}
             </div>
+
+            {/* Mobile Menu Overlay */}
+            {showMobileMenu && (
+                <div className="fixed inset-0 top-14 bg-black/95 backdrop-blur-2xl z-[100] flex flex-col p-6 animate-in slide-in-from-top-4 duration-300 overflow-y-auto custom-scrollbar">
+                    <div className="flex flex-col gap-6">
+                        {/* Navigation Section */}
+                        <div className="flex flex-col gap-2">
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest px-2">Navegación</span>
+                            <button
+                                onClick={() => { handleCloseProject?.(); setShowMobileMenu(false); }}
+                                className="flex items-center gap-4 p-4 bg-white/5 rounded-2xl text-white active:bg-white/10 transition-all"
+                            >
+                                <Home className="w-5 h-5 text-blue-400" />
+                                <span className="text-sm font-bold">Volver al Inicio</span>
+                            </button>
+                            <button
+                                onClick={() => { setShowHistory(true); setShowMobileMenu(false); }}
+                                className="flex items-center gap-4 p-4 bg-white/5 rounded-2xl text-white active:bg-white/10 transition-all"
+                            >
+                                <Package className="w-5 h-5 text-purple-400" />
+                                <span className="text-sm font-bold">Mis Proyectos</span>
+                            </button>
+                        </div>
+
+                        {/* Actions Section */}
+                        <div className="flex flex-col gap-2">
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest px-2">Acciones</span>
+                            <button
+                                onClick={() => { handlePublish(true); setShowMobileMenu(false); }}
+                                className="flex items-center justify-between p-4 bg-white/5 rounded-2xl text-cyan-400 active:bg-white/10 transition-all"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <Rocket className="w-5 h-5" />
+                                    <span className="text-sm font-bold">Publicar Cambios</span>
+                                </div>
+                                <ChevronDown className="w-4 h-4 opacity-30" />
+                            </button>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    onClick={() => { onRefresh?.(); setShowMobileMenu(false); }}
+                                    className="flex flex-col items-center justify-center gap-2 p-4 bg-white/5 rounded-2xl text-gray-300 active:bg-white/10 transition-all"
+                                >
+                                    <RefreshCw className={`w-5 h-5 ${isPreviewLoading ? 'animate-spin text-cyan-400' : ''}`} />
+                                    <span className="text-[10px] font-bold uppercase">Refrescar</span>
+                                </button>
+                                <button
+                                    onClick={() => { setShowCode(!showCode); setShowMobileMenu(false); }}
+                                    className={`flex flex-col items-center justify-center gap-2 p-4 rounded-2xl transition-all ${showCode ? 'bg-white text-black' : 'bg-white/5 text-gray-300'}`}
+                                >
+                                    <Code2 className="w-5 h-5" />
+                                    <span className="text-[10px] font-bold uppercase">Ver Código</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Tools Section */}
+                        <div className="flex flex-col gap-2">
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest px-2">Herramientas AI</span>
+                            <button
+                                onClick={() => { setIsAutoFixEnabled?.(!isAutoFixEnabled); setShowMobileMenu(false); }}
+                                className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${isAutoFixEnabled ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' : 'bg-white/5 text-gray-400'}`}
+                            >
+                                <Sparkles className={`w-5 h-5 ${isAutoFixEnabled ? 'animate-pulse' : ''}`} />
+                                <span className="text-sm font-bold">Auto-Fix AI {isAutoFixEnabled ? 'Activado' : 'Desactivado'}</span>
+                            </button>
+                            <button
+                                onClick={() => { setShowTerminal?.(!showTerminal); setShowMobileMenu(false); }}
+                                className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${showTerminal ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'bg-white/5 text-gray-400'}`}
+                            >
+                                <TerminalIcon className="w-5 h-5" />
+                                <span className="text-sm font-bold">Consola / Terminal</span>
+                            </button>
+                        </div>
+
+                        {/* User Profile */}
+                        {user && (
+                            <div className="mt-4 pt-6 border-t border-white/5 flex items-center justify-between px-2">
+                                <div className="flex items-center gap-3">
+                                    {user.photoURL ? (
+                                        <img src={user.photoURL} alt="User" className="w-10 h-10 rounded-full border border-white/10" />
+                                    ) : (
+                                        <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-sm font-bold text-black border border-gray-400">
+                                            {user.email?.[0].toUpperCase()}
+                                        </div>
+                                    )}
+                                    <div className="flex flex-col">
+                                        <span className="text-sm font-bold text-white truncate max-w-[150px]">{user.displayName || 'Usuario'}</span>
+                                        <span className="text-xs text-gray-500 truncate max-w-[150px]">{user.email}</span>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => { setShowSettings(true); setShowMobileMenu(false); }}
+                                    className="p-3 bg-white/5 rounded-xl text-gray-400 active:bg-white/10"
+                                >
+                                    <Settings className="w-5 h-5" />
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -453,7 +453,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                     />
                     <motion.div
                         initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                        className="relative w-full max-w-4xl bg-[#0a0a0a] border border-white/10 rounded-[32px] shadow-2xl overflow-hidden flex flex-col md:flex-row h-[600px]"
+                        className="relative w-full max-w-[95vw] md:max-w-4xl bg-[#0a0a0a] border border-white/10 rounded-[24px] md:rounded-[32px] shadow-2xl overflow-hidden flex flex-col md:flex-row h-[85vh] md:h-[600px]"
                     >
                         {/* Left Branding */}
                         <div className="hidden md:flex w-[35%] bg-black p-10 flex-col border-r border-white/5 relative overflow-hidden shrink-0">
@@ -485,8 +485,8 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                         </div>
 
                         {/* Right Content */}
-                        <div className="flex-1 p-8 overflow-y-auto no-scrollbar relative flex flex-col h-full bg-[#0a0a0a]">
-                            <div className="flex justify-between items-center mb-8 h-10 shrink-0 relative z-50">
+                        <div className="flex-1 p-5 md:p-8 overflow-y-auto no-scrollbar relative flex flex-col h-full bg-[#0a0a0a]">
+                            <div className="flex justify-between items-center mb-6 md:mb-8 h-10 shrink-0 relative z-50">
                                 <div className="w-20">
                                     {(step > 1 && step < 4) ? (
                                         <button
@@ -494,9 +494,9 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                                                 if (step === 2) setWizardPath(null);
                                                 setStep(step - 1);
                                             }}
-                                            className="flex items-center gap-2 text-neutral-400 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest"
+                                            className="flex items-center gap-2 text-neutral-400 hover:text-white transition-colors text-[10px] md:text-xs font-bold uppercase tracking-widest"
                                         >
-                                            <ChevronLeft className="w-4 h-4" /> Atrás
+                                            <ChevronLeft className="w-3.5 h-3.5 md:w-4 md:h-4" /> Atrás
                                         </button>
                                     ) : isEditing ? (
                                         <button
@@ -516,13 +516,13 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                                     <div className="flex bg-white/5 p-1 rounded-full border border-white/10 backdrop-blur-md">
                                         <button
                                             onClick={() => setConnectionMode('meta')}
-                                            className={`px-6 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.2em] transition-all ${connectionMode === 'meta' ? 'bg-white/10 text-white shadow-lg' : 'text-white/30 hover:text-white/60'}`}
+                                            className={`px-4 md:px-6 py-1 md:py-1.5 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-[0.2em] transition-all ${connectionMode === 'meta' ? 'bg-white/10 text-white shadow-lg' : 'text-white/30 hover:text-white/60'}`}
                                         >
                                             Wizard
                                         </button>
                                         <button
                                             onClick={() => setConnectionMode('manual')}
-                                            className={`px-6 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.2em] transition-all ${connectionMode === 'manual' ? 'bg-white/10 text-white shadow-lg' : 'text-white/30 hover:text-white/60'}`}
+                                            className={`px-4 md:px-6 py-1 md:py-1.5 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-[0.2em] transition-all ${connectionMode === 'manual' ? 'bg-white/10 text-white shadow-lg' : 'text-white/30 hover:text-white/60'}`}
                                         >
                                             Manual
                                         </button>
@@ -545,75 +545,75 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
 
                             <AnimatePresence mode="wait">
                                 {initialLoading ? (
-                                    <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col items-center justify-center p-12 text-center">
-                                        <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin mb-4" />
-                                        <p className="text-xs text-neutral-500 font-medium uppercase tracking-widest">Verificando conexión...</p>
+                                    <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col items-center justify-center p-6 md:p-12 text-center">
+                                        <div className="w-10 h-10 md:w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin mb-4" />
+                                        <p className="text-[10px] text-neutral-500 font-medium uppercase tracking-widest">Verificando conexión...</p>
                                     </motion.div>
                                 ) : (step === 1 || isEditing) ? (
                                     <motion.div key={isEditing ? "edit" : "step1"} initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="flex-1 flex flex-col font-sans">
 
                                         {isEditing || connectionMode === 'manual' ? (
                                             <>
-                                                <div className="mb-6">
-                                                    <h3 className="text-2xl font-extralight text-white tracking-tighter mb-1">{isEditing ? 'Configuración de Nodo' : 'Mapeo Manual de WhatsApp'}</h3>
-                                                    <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold">Inyección Directa de Credenciales</p>
+                                                <div className="mb-4 md:mb-6">
+                                                    <h3 className="text-xl md:text-2xl font-extralight text-white tracking-tighter mb-1">{isEditing ? 'Configuración de Nodo' : 'Mapeo Manual de WhatsApp'}</h3>
+                                                    <p className="text-[9px] md:text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold">Inyección Directa de Credenciales</p>
                                                 </div>
                                                 {renderManualForm()}
                                             </>
                                         ) : (
                                             <>
-                                                <div className="mb-10">
-                                                    <h3 className="text-3xl font-extralight text-white tracking-tighter mb-2">Conectar Canal</h3>
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="h-[1px] w-12 bg-primary/50" />
-                                                        <p className="text-[10px] text-white/20 uppercase tracking-[0.4em] font-bold">Autonomous Protocol 01</p>
+                                                <div className="mb-6 md:mb-10">
+                                                    <h3 className="text-2xl md:text-3xl font-extralight text-white tracking-tighter mb-2">Conectar Canal</h3>
+                                                    <div className="flex items-center gap-3 md:gap-4">
+                                                        <div className="h-[1px] w-8 md:w-12 bg-primary/50" />
+                                                        <p className="text-[9px] md:text-[10px] text-white/20 uppercase tracking-[0.4em] font-bold">Autonomous Protocol 01</p>
                                                     </div>
                                                 </div>
 
-                                                <div className="space-y-4 flex-1">
+                                                <div className="space-y-3 md:space-y-4 flex-1">
                                                     <button
                                                         onClick={() => setAccountAction('new')}
-                                                        className={`w-full text-left p-6 rounded-[24px] border transition-all duration-500 flex items-center gap-6 ${accountAction === 'new' ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/20 shadow-[0_0_30px_rgba(37,99,235,0.05)]' : 'border-white/5 hover:border-white/10 bg-white/[0.02]'}`}
+                                                        className={`w-full text-left p-4 md:p-6 rounded-[20px] md:rounded-[24px] border transition-all duration-500 flex items-center gap-4 md:gap-6 ${accountAction === 'new' ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/20 shadow-[0_0_30px_rgba(37,99,235,0.05)]' : 'border-white/5 hover:border-white/10 bg-white/[0.02]'}`}
                                                     >
-                                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${accountAction === 'new' ? 'bg-primary text-white' : 'bg-white/5 text-white/20'}`}>
-                                                            {accountAction === 'new' ? <CheckCircle2 className="w-5 h-5 shadow-glow" /> : <Circle className="w-5 h-5" />}
+                                                        <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center shrink-0 transition-all ${accountAction === 'new' ? 'bg-primary text-white' : 'bg-white/5 text-white/20'}`}>
+                                                            {accountAction === 'new' ? <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5 shadow-glow" /> : <Circle className="w-4 h-4 md:w-5 md:h-5" />}
                                                         </div>
                                                         <div>
-                                                            <p className="font-bold text-white text-[11px] mb-1 uppercase tracking-[0.2em]">Crea y conecta cuenta</p>
-                                                            <p className="text-[10px] text-white/30 font-light leading-relaxed">Nuevo despliegue en la infraestructura de Meta Business.</p>
+                                                            <p className="font-bold text-white text-[10px] md:text-[11px] mb-1 uppercase tracking-[0.2em]">Crea y conecta cuenta</p>
+                                                            <p className="text-[9px] md:text-[10px] text-white/30 font-light leading-relaxed">Nuevo despliegue en la infraestructura de Meta Business.</p>
                                                         </div>
                                                     </button>
                                                     <button
                                                         onClick={() => setAccountAction('existing')}
-                                                        className={`w-full text-left p-6 rounded-[24px] border transition-all duration-500 flex items-center gap-6 ${accountAction === 'existing' ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/20 shadow-[0_0_30px_rgba(37,99,235,0.05)]' : 'border-white/5 hover:border-white/10 bg-white/[0.02]'}`}
+                                                        className={`w-full text-left p-4 md:p-6 rounded-[20px] md:rounded-[24px] border transition-all duration-500 flex items-center gap-4 md:gap-6 ${accountAction === 'existing' ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/20 shadow-[0_0_30px_rgba(37,99,235,0.05)]' : 'border-white/5 hover:border-white/10 bg-white/[0.02]'}`}
                                                     >
-                                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${accountAction === 'existing' ? 'bg-primary text-white' : 'bg-white/5 text-white/20'}`}>
-                                                            {accountAction === 'existing' ? <CheckCircle2 className="w-5 h-5 shadow-glow" /> : <Circle className="w-5 h-5" />}
+                                                        <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center shrink-0 transition-all ${accountAction === 'existing' ? 'bg-primary text-white' : 'bg-white/5 text-white/20'}`}>
+                                                            {accountAction === 'existing' ? <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5 shadow-glow" /> : <Circle className="w-4 h-4 md:w-5 md:h-5" />}
                                                         </div>
                                                         <div>
-                                                            <p className="font-bold text-white text-[11px] mb-1 uppercase tracking-[0.2em]">Vincular cuenta activa</p>
-                                                            <p className="text-[10px] text-white/30 font-light leading-relaxed">Migración o vinculación de WABA existente (Cualquier BSP).</p>
+                                                            <p className="font-bold text-white text-[10px] md:text-[11px] mb-1 uppercase tracking-[0.2em]">Vincular cuenta activa</p>
+                                                            <p className="text-[9px] md:text-[10px] text-white/30 font-light leading-relaxed">Migración o vinculación de WABA existente (Cualquier BSP).</p>
                                                         </div>
                                                     </button>
                                                 </div>
 
-                                                <div className="flex flex-col gap-6 mt-12">
+                                                <div className="flex flex-col gap-4 md:gap-6 mt-8 md:mt-12">
                                                     <button
                                                         onClick={() => {
                                                             setWizardPath(accountAction === 'new' ? 'new' : 'existing');
                                                             setStep(2);
                                                         }}
-                                                        className="bg-white/5 hover:bg-white/10 text-white px-10 h-12 rounded-full text-[10px] font-bold uppercase tracking-[0.3em] transition-all border border-white/10 backdrop-blur-md shadow-xl w-fit group"
+                                                        className="bg-white/5 hover:bg-white/10 text-white px-8 md:px-10 h-11 md:h-12 rounded-full text-[9px] md:text-[10px] font-bold uppercase tracking-[0.3em] transition-all border border-white/10 backdrop-blur-md shadow-xl w-fit group"
                                                     >
                                                         <span className="flex items-center gap-3">
                                                             Sincronizar <CheckCircle2 className="w-3 h-3 group-hover:scale-110 transition-transform" />
                                                         </span>
                                                     </button>
 
-                                                    <div className="flex items-center gap-4">
-                                                        <button onClick={handleConnectFacebook} className="text-[9px] text-white/40 font-bold uppercase tracking-[0.2em] hover:text-primary transition-colors">Direct OAuth Link</button>
+                                                    <div className="flex items-center gap-3 md:gap-4">
+                                                        <button onClick={handleConnectFacebook} className="text-[8px] md:text-[9px] text-white/40 font-bold uppercase tracking-[0.2em] hover:text-primary transition-colors">Direct OAuth Link</button>
                                                         <span className="w-1 h-1 rounded-full bg-white/10" />
-                                                        <button className="text-[9px] text-white/40 font-bold uppercase tracking-[0.2em] hover:text-white transition-colors">Meta Dev Portal</button>
+                                                        <button className="text-[8px] md:text-[9px] text-white/40 font-bold uppercase tracking-[0.2em] hover:text-white transition-colors">Meta Dev Portal</button>
                                                     </div>
                                                 </div>
                                             </>

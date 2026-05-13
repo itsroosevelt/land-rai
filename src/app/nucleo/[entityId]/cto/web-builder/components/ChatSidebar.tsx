@@ -75,7 +75,7 @@ export const ChatSidebar = ({
     }, [handleGenerate]);
 
     return (
-        <div className="w-[317px] border-r border-white/5 flex flex-col bg-[#0a0a0a]/90 backdrop-blur-xl relative z-20 shadow-[10px_0_30px_rgba(0,0,0,0.5)] font-sans">
+        <div className="w-full sm:w-[317px] h-full sm:h-auto border-r border-white/5 flex flex-col bg-[#0a0a0a]/90 backdrop-blur-xl absolute sm:relative inset-0 sm:inset-auto z-20 shadow-[10px_0_30px_rgba(0,0,0,0.5)] font-sans transition-all">
             {/* Header with Actions */}
             <div className="h-14 border-b border-white/[0.03] bg-white/[0.01] flex items-center justify-between px-4 shrink-0">
                 <div className="flex items-center gap-2.5">
@@ -114,6 +114,14 @@ export const ChatSidebar = ({
                         title="Historial de Chats"
                     >
                         <History className="w-4 h-4" />
+                    </button>
+                    <button
+                        onClick={() => window.dispatchEvent(new CustomEvent('toggle-chat'))}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg transition-all active:scale-95 sm:hidden"
+                        title="Ver Vista Previa"
+                    >
+                        <X className="w-3.5 h-3.5" />
+                        <span className="text-[10px] font-black uppercase tracking-tight">Ver Web</span>
                     </button>
                 </div>
             </div>

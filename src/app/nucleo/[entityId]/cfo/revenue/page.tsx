@@ -267,7 +267,7 @@ export default function RevenuePage() {
                 </div>
 
                 {/* Transactions Table */}
-                <div className="mt-6 rounded-[24px] bg-white/[0.02] border border-white/5 overflow-hidden">
+                <div className="mt-6 rounded-[24px] bg-white/[0.02] border border-white/5 overflow-y-auto">
                     <div className="px-6 py-5 border-b border-white/5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                         <h2 className="text-lg font-medium flex items-center gap-2">
                             <Clock className="w-5 h-5 text-neutral-400" />

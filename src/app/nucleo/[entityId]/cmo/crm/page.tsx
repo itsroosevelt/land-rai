@@ -1169,30 +1169,30 @@ export default function ContactsPage() {
     const activeFiltersCount = selectedStages.length + selectedSources.length + selectedTags.length;
 
     return (
-        <div className="flex h-screen bg-black text-white selection:bg-blue-500/30 overflow-hidden font-sans">
+        <div className="flex  min-h-screen overflow-y-auto md: min-h-screen overflow-y-auto md:h-screen bg-black text-white selection:bg-blue-500/30  md: md:overflow-hidden font-sans">
 
 
             <div className="flex-1 flex flex-col min-w-0 bg-[#050505]">
                 {/* Enterprise Header Bar (Metrics) */}
-                <div className="h-16 border-b border-white/5 bg-black/50 backdrop-blur-md flex items-center justify-between px-8 z-20 shrink-0">
-                    <div className="flex items-center gap-8">
+                <div className="min-h-16 border-b border-white/5 bg-black/50 backdrop-blur-md flex items-center justify-between px-4 sm:px-8 z-20 shrink-0 overflow-x-auto no-scrollbar">
+                    <div className="flex items-center gap-4 sm:gap-8 min-w-max py-4 sm:py-0">
                         <div className="flex flex-col">
-                            <span className="text-[10px] font-medium text-neutral-500 uppercase tracking-widest">Total Database</span>
-                            <span className="text-xl font-medium text-white">{contacts.length}</span>
+                            <span className="text-[9px] sm:text-[10px] font-medium text-neutral-500 uppercase tracking-widest">Total Database</span>
+                            <span className="text-lg sm:text-xl font-medium text-white">{contacts.length}</span>
                         </div>
                         <div className="h-8 w-px bg-white/10" />
                         <div className="flex flex-col">
-                            <span className="text-[10px] font-medium text-neutral-500 uppercase tracking-widest">Active Leads</span>
-                            <span className="text-xl font-medium text-blue-500">{contacts.filter(c => c.stage === 'In Progress').length}</span>
+                            <span className="text-[9px] sm:text-[10px] font-medium text-neutral-500 uppercase tracking-widest">Active Leads</span>
+                            <span className="text-lg sm:text-xl font-medium text-blue-500">{contacts.filter(c => c.stage === 'In Progress').length}</span>
                         </div>
                         <div className="h-8 w-px bg-white/10" />
                         <div className="flex flex-col">
-                            <span className="text-[10px] font-medium text-neutral-500 uppercase tracking-widest">Conversion</span>
-                            <span className="text-xl font-medium text-emerald-500">{contacts.length > 0 ? Math.round((contacts.filter(c => c.stage === 'Closed').length / contacts.length) * 100) : 0}%</span>
+                            <span className="text-[9px] sm:text-[10px] font-medium text-neutral-500 uppercase tracking-widest">Conversion</span>
+                            <span className="text-lg sm:text-xl font-medium text-emerald-500">{contacts.length > 0 ? Math.round((contacts.filter(c => c.stage === 'Closed').length / contacts.length) * 100) : 0}%</span>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="hidden sm:flex items-center gap-3">
                         <div className="px-3 py-1.5 rounded-md bg-neutral-900 border border-neutral-800 flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                             <span className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider">System Live</span>
@@ -1200,7 +1200,7 @@ export default function ContactsPage() {
                     </div>
                 </div>
 
-                <main className="flex-1 overflow-y-auto scrollbar-hide custom-scrollbar p-6 space-y-6">
+                <main className="flex-1 overflow-y-auto scrollbar-hide custom-scrollbar p-4 sm:p-8 space-y-6 sm:space-y-8">
                     <ContactHeader
                         isChatOpen={isChatOpen}
                         handleSynckambanContacts={handleSyncWhatsAppContacts}
@@ -1237,33 +1237,31 @@ export default function ContactsPage() {
 
 
 
-                    <div className="bg-neutral-900/40 border border-white/5 rounded-xl p-4">
-                        <ContactFilters
-                            isChatOpen={isChatOpen}
-                            searchQuery={searchQuery}
-                            setSearchQuery={setSearchQuery}
-                            viewMode={viewMode}
-                            setViewMode={setViewMode}
-                            isFilterOpen={isFilterOpen}
-                            setIsFilterOpen={setIsFilterOpen}
-                            activeFiltersCount={activeFiltersCount}
-                            clearAllFilters={() => { setSelectedStages([]); setSelectedSources([]); setSelectedTags([]); }}
-                            availableStages={availableStages}
-                            selectedStages={selectedStages}
-                            setSelectedStages={setSelectedStages}
-                            availableSources={availableSources}
-                            selectedSources={selectedSources}
-                            setSelectedSources={setSelectedSources}
-                            availableTags={availableTags}
-                            selectedTags={selectedTags}
-                            setSelectedTags={setSelectedTags}
-                            filteredCount={filteredContacts.length}
-                            selectedCount={selectedContactIds.length}
-                            handleBulkDelete={handleBulkDelete}
-                            currentView={currentView}
-                            setCurrentView={setCurrentView}
-                        />
-                    </div>
+                    <ContactFilters
+                        isChatOpen={isChatOpen}
+                        searchQuery={searchQuery}
+                        setSearchQuery={setSearchQuery}
+                        viewMode={viewMode}
+                        setViewMode={setViewMode}
+                        isFilterOpen={isFilterOpen}
+                        setIsFilterOpen={setIsFilterOpen}
+                        activeFiltersCount={activeFiltersCount}
+                        clearAllFilters={() => { setSelectedStages([]); setSelectedSources([]); setSelectedTags([]); }}
+                        availableStages={availableStages}
+                        selectedStages={selectedStages}
+                        setSelectedStages={setSelectedStages}
+                        availableSources={availableSources}
+                        selectedSources={selectedSources}
+                        setSelectedSources={setSelectedSources}
+                        availableTags={availableTags}
+                        selectedTags={selectedTags}
+                        setSelectedTags={setSelectedTags}
+                        filteredCount={filteredContacts.length}
+                        selectedCount={selectedContactIds.length}
+                        handleBulkDelete={handleBulkDelete}
+                        currentView={currentView}
+                        setCurrentView={setCurrentView}
+                    />
 
                     {isLoadingContacts ? (
                         <div className="flex items-center justify-center py-20">

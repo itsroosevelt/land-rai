@@ -212,8 +212,8 @@ export const kambanColumn = ({
             ref={setNodeRef}
             data-group-id={group.id}
             className={cn(
-                "flex flex-col flex-shrink-0 h-fit rounded-2xl border border-white/5 transition-all duration-300 hover:border-white/10 shadow-lg overflow-hidden pb-2 mb-8",
-                isCompact ? 'w-72' : 'w-80',
+                "flex flex-col flex-shrink-0 h-fit rounded-2xl border border-white/5 transition-all duration-300 hover:border-white/10 shadow-lg overflow-hidden pb-2 mb-8 snap-center",
+                isCompact ? 'w-[85vw] sm:w-72' : 'w-[90vw] sm:w-80',
                 selectedColor.value
             )}
         >

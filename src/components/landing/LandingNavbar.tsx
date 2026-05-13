@@ -99,21 +99,21 @@ export const LandingNavbar = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-2xl xl:hidden flex flex-col p-8"
+            className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-2xl xl:hidden flex flex-col p-6"
           >
-            <div className="flex justify-between items-center mb-16">
+            <div className="flex justify-between items-center mb-8">
                <div className="flex items-center">
-                <span className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent tracking-tight">Roosevelt</span>
+                <span className="text-lg font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent tracking-tight">Roosevelt</span>
               </div>
               <button 
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="p-2 text-white/70 hover:text-white"
+                className="p-1 text-white/70 hover:text-white"
               >
-                <X className="w-8 h-8" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="flex flex-col gap-8">
+            <div className="flex flex-col gap-3">
               {navLinks.map((link, i) => (
                 <motion.div
                   key={link.name}
@@ -124,23 +124,23 @@ export const LandingNavbar = () => {
                   <Link 
                     href={link.href}
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className="text-3xl font-extralight tracking-tight text-white/40 hover:text-white transition-colors flex items-center justify-between group"
+                    className="text-lg font-light tracking-tight text-white/40 hover:text-white transition-colors flex items-center justify-between group py-0.5"
                   >
                     {link.name}
-                    <ChevronRight className="w-6 h-6 opacity-0 group-hover:opacity-100 transition-all -translate-x-4 group-hover:translate-x-0" />
+                    <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-all -translate-x-4 group-hover:translate-x-0" />
                   </Link>
                 </motion.div>
               ))}
             </div>
 
-            <div className="mt-auto space-y-4">
+            <div className="mt-auto space-y-2 pb-2">
               <Link href="/login?mode=login" onClick={() => setIsMobileMenuOpen(false)}>
-                <Button className="w-full h-16 rounded-2xl bg-white text-black hover:bg-white/90 text-xl font-semibold transition-all">
+                <Button className="w-full h-10 rounded-lg bg-white text-black hover:bg-white/90 text-xs font-semibold transition-all">
                   Login
                 </Button>
               </Link>
               <Link href="/login?register=true" onClick={() => setIsMobileMenuOpen(false)}>
-                <Button className="w-full h-16 rounded-2xl bg-gradient-to-r from-blue-400 to-blue-600 hover:from-blue-500 hover:to-blue-700 text-white text-xl font-semibold transition-all shadow-[0_0_20px_rgba(59,130,246,0.2)]">
+                <Button className="w-full h-10 rounded-lg bg-gradient-to-r from-blue-400 to-blue-600 hover:from-blue-500 hover:to-blue-700 text-white text-xs font-semibold transition-all shadow-[0_0_15px_rgba(59,130,246,0.1)]">
                   Get Started
                 </Button>
               </Link>

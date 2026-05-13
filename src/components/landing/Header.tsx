@@ -337,35 +337,35 @@ export default function Header() {
                 </button>
               </div>
 
-              <div className="space-y-6">
+              <div className="space-y-3">
                 {menuData.map((item) => (
-                  <div key={item.label} className="border-b border-white/10 pb-4">
-                    <span className="text-2xl font-medium text-white mb-4 block tracking-tight">{item.label}</span>
+                  <div key={item.label} className="border-b border-white/10 pb-2">
+                    <span className="text-base font-medium text-white mb-2 block tracking-tight">{item.label}</span>
                     {item.megaMenu && (
-                      <div className="grid grid-cols-1 gap-4 pl-2">
+                      <div className="grid grid-cols-1 gap-1.5 pl-2">
                         {item.megaMenu.items.map((subItem, idx) => (
                           <Link
                             key={idx}
                             href={subItem.href}
                             onClick={() => setIsMobileMenuOpen(false)}
-                            className="flex items-center gap-4 py-3"
+                            className="flex items-center gap-3 py-1.5"
                           >
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${subItem.colorClass}`}>
-                              <subItem.icon className="w-6 h-6" />
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${subItem.colorClass}`}>
+                              <subItem.icon className="w-4 h-4" />
                             </div>
                             <div className="flex flex-col">
-                              <span className="text-gray-200 font-medium text-lg">{subItem.title}</span>
-                              <span className="text-gray-600 text-xs">{subItem.desc}</span>
+                              <span className="text-gray-200 font-medium text-sm">{subItem.title}</span>
+                              <span className="text-gray-600 text-[9px]">{subItem.desc}</span>
                             </div>
                           </Link>
                         ))}
 
                         {item.megaMenu.socials && (
-                          <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-white/5">
+                          <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-white/5">
                             {item.megaMenu.socials.map((social, idx) => (
-                              <a key={idx} href={social.href} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-2 p-4 bg-white/5 rounded-2xl active:scale-95 transition-transform">
-                                <img src={social.imgSrc} alt={social.label} className="w-12 h-12 rounded-xl" />
-                                <span className="text-[10px] text-gray-500 font-medium uppercase tracking-widest">{social.label}</span>
+                              <a key={idx} href={social.href} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-1.5 p-2 bg-white/5 rounded-lg active:scale-95 transition-transform">
+                                <img src={social.imgSrc} alt={social.label} className="w-8 h-8 rounded-md" />
+                                <span className="text-[8px] text-gray-500 font-medium uppercase tracking-widest">{social.label}</span>
                               </a>
                             ))}
                           </div>
@@ -375,16 +375,16 @@ export default function Header() {
                   </div>
                 ))}
 
-                <div className="pt-6 space-y-4">
+                <div className="pt-3 space-y-2">
                   <Link href="/portal" onClick={() => setIsMobileMenuOpen(false)}>
-                    <Button variant="ghost" className="w-full justify-start text-white hover:bg-white/10 h-16 text-lg font-medium border border-white/10 rounded-2xl">
-                      <GraduationCap className="w-6 h-6 mr-4" />
+                    <Button variant="ghost" className="w-full justify-start text-white hover:bg-white/10 h-10 text-sm font-medium border border-white/10 rounded-lg">
+                      <GraduationCap className="w-4 h-4 mr-3" />
                       Portal de Cliente
                     </Button>
                   </Link>
                   <Button
                     onClick={handleApplyClick}
-                    className="w-full bg-primary text-white hover:bg-primary/90 h-16 rounded-2xl text-xl font-medium shadow-lg border-none"
+                    className="w-full bg-primary text-white hover:bg-primary/90 h-10 rounded-lg text-sm font-medium shadow-md border-none"
                   >
                     Aplica Ahora
                   </Button>

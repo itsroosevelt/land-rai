@@ -48,32 +48,32 @@ export const ContactHeader: React.FC<ContactHeaderProps> = ({
         <motion.div
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
-            className="flex justify-between items-center relative z-10"
+            className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 relative z-10"
         >
             <div>
-                <h1 className={cn("font-medium tracking-tight transition-all uppercase", isChatOpen ? "text-lg" : "text-2xl")}>
+                <h1 className={cn("font-medium tracking-tight transition-all uppercase whitespace-nowrap", isChatOpen ? "text-base" : "text-base sm:text-2xl")}>
                     Control Center <span className="text-blue-500">/ Contacts</span>
                 </h1>
             </div>
 
-            <div className="flex space-x-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
                 <Button
                     onClick={() => setIsDuplicateManagerOpen(true)}
                     variant="outline"
-                    className="h-10 bg-neutral-900 border-neutral-800 hover:border-neutral-700 hover:bg-neutral-800 text-white rounded-md px-4 text-xs font-medium transition-all uppercase tracking-wider"
+                    className="h-10 w-10 sm:w-auto sm:px-4 bg-white/5 border-white/10 hover:bg-white/10 text-white rounded-xl transition-all uppercase tracking-wider flex items-center justify-center gap-2"
                 >
-                    <RefreshCw className="w-3 h-3 mr-2" />
-                    Manage Duplicates
+                    <RefreshCw className="w-4 h-4" />
+                    <span className="hidden sm:inline text-[10px]">Duplicates</span>
                 </Button>
 
                 <Button
                     onClick={handleSynckambanContacts}
                     disabled={isSyncing}
                     variant="outline"
-                    className="h-10 bg-neutral-900 border-neutral-800 hover:border-neutral-700 hover:bg-neutral-800 text-white rounded-md px-4 text-xs font-medium transition-all disabled:opacity-50 uppercase tracking-wider"
+                    className="h-10 w-10 sm:w-auto sm:px-4 bg-white/5 border-white/10 hover:bg-white/10 text-white rounded-xl transition-all disabled:opacity-50 uppercase tracking-wider flex items-center justify-center gap-2"
                 >
-                    <RefreshCw className={`w-3 h-3 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
-                    {isSyncing ? 'Syncing...' : 'Sync'}
+                    <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
+                    <span className="hidden sm:inline text-[10px]">{isSyncing ? 'Syncing' : 'Sync'}</span>
                 </Button>
 
                 <ImportDialog
@@ -84,22 +84,23 @@ export const ContactHeader: React.FC<ContactHeaderProps> = ({
 
                 <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
                     <DialogTrigger asChild>
-                        <Button className="h-10 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md px-6 text-xs transition-all uppercase tracking-wider">
-                            <UserPlus className="w-3 h-3 mr-2" />
-                            Create Profile
+                        <Button className="h-10 flex-1 sm:flex-none bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl px-4 sm:px-6 text-[10px] sm:text-xs transition-all uppercase tracking-widest shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2">
+                            <UserPlus className="w-4 h-4" />
+                            <span className="hidden sm:inline">Create Profile</span>
+                            <span className="sm:hidden">Profile</span>
                         </Button>
                     </DialogTrigger>
-                    <DialogContent className="bg-neutral-950 border-neutral-800 text-white sm:max-w-6xl rounded-3xl p-8 backdrop-blur-3xl max-h-[90vh] overflow-y-auto">
+                    <DialogContent className="bg-[#0a0a0a] border-white/5 text-white w-[95vw] sm:max-w-6xl rounded-[2rem] p-4 sm:p-8 backdrop-blur-3xl max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
-                            <DialogTitle className="text-2xl font-medium tracking-tight uppercase">Create Profile</DialogTitle>
-                            <DialogDescription className="text-neutral-300 font-medium">Add a comprehensive contact profile to your ecosystem.</DialogDescription>
+                            <DialogTitle className="text-xl sm:text-2xl font-bold tracking-tight uppercase text-white">Create Profile</DialogTitle>
+                            <DialogDescription className="text-neutral-500 font-medium text-sm">Add a comprehensive contact profile to your ecosystem.</DialogDescription>
                         </DialogHeader>
-                        <div className="py-6">
+                        <div className="py-4 sm:py-6">
                             <EnhancedContactForm contact={newContact} onChange={setNewContact} isEditing={true} />
                         </div>
-                        <DialogFooter>
-                            <Button variant="ghost" onClick={() => setIsAddModalOpen(false)} className="text-neutral-300 font-medium hover:text-white rounded-xl px-6">Cancel</Button>
-                            <Button onClick={handleAddContact} className="bg-blue-600 hover:bg-blue-700 px-10 rounded-xl font-medium shadow-lg shadow-blue-600/20 active:scale-95 transition-all">Establish Profile</Button>
+                        <DialogFooter className="flex flex-col sm:flex-row gap-2">
+                            <Button variant="ghost" onClick={() => setIsAddModalOpen(false)} className="text-neutral-400 font-medium hover:text-white rounded-xl px-6 w-full sm:w-auto">Cancel</Button>
+                            <Button onClick={handleAddContact} className="bg-blue-600 hover:bg-blue-500 px-10 rounded-xl font-bold shadow-lg shadow-blue-600/20 active:scale-95 transition-all w-full sm:w-auto uppercase tracking-widest text-[10px]">Establish Profile</Button>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>

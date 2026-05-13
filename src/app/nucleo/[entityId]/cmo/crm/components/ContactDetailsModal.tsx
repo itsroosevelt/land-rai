@@ -61,25 +61,24 @@ export const ContactDetailsModal: React.FC<ContactDetailsModalProps> = ({
 
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
-            <DialogContent className="bg-[#080808]/95 border-neutral-800 text-white sm:max-w-7xl p-0 overflow-hidden outline-none rounded-[3rem] backdrop-blur-3xl shadow-[0_50px_100px_rgba(0,0,0,0.8)] border-white/5 h-[90vh] flex flex-col">
+            <DialogContent className="bg-[#080808]/95 border-neutral-800 text-white sm:max-w-7xl p-0 overflow-hidden outline-none rounded-[2rem] sm:rounded-[3rem] backdrop-blur-3xl shadow-[0_50px_100px_rgba(0,0,0,0.8)] border-white/5 h-[95vh] sm:h-[90vh] flex flex-col">
                 <DialogTitle className="sr-only">Contact Details</DialogTitle>
                 <DialogDescription className="sr-only">View and edit contact information.</DialogDescription>
-
+ 
                 {/* Header */}
-                <div className="bg-gradient-to-br from-blue-900/20 via-transparent to-transparent p-6 border-b border-white/5 relative shrink-0">
-                    <div className="absolute top-0 right-0 p-4 space-x-2 flex">
+                <div className="bg-gradient-to-br from-blue-900/20 via-transparent to-transparent p-5 sm:p-6 border-b border-white/5 relative shrink-0">
+                    <div className="absolute top-2 right-2 sm:top-0 sm:right-0 sm:p-4 space-x-2 flex z-10">
                         {!isEditingProfile ? (
                             <>
                                 <Button
                                     onClick={() => setIsEditingProfile(true)}
                                     variant="ghost"
                                     size="sm"
-                                    className="hover:bg-blue-600/20 rounded-lg h-8 px-3 text-xs font-medium text-blue-400 border border-blue-500/30"
+                                    className="hover:bg-blue-600/20 rounded-lg h-8 px-3 text-[10px] sm:text-xs font-medium text-blue-400 border border-blue-500/30 bg-[#0c0c0c]/80 backdrop-blur-md"
                                 >
-                                    <Edit className="w-3.5 h-3.5 mr-1.5" />
+                                    <Edit className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1.5" />
                                     Editar
                                 </Button>
-                                {/* Duplicate X button removed here */}
                             </>
                         ) : (
                             <>
@@ -90,42 +89,42 @@ export const ContactDetailsModal: React.FC<ContactDetailsModalProps> = ({
                                     }}
                                     variant="ghost"
                                     size="sm"
-                                    className="hover:bg-emerald-600/20 rounded-lg h-8 px-3 text-xs font-medium text-emerald-400 border border-emerald-500/30"
+                                    className="hover:bg-emerald-600/20 rounded-lg h-8 px-3 text-[10px] sm:text-xs font-medium text-emerald-400 border border-emerald-500/30 bg-[#0c0c0c]/80 backdrop-blur-md"
                                 >
-                                    <Save className="w-3.5 h-3.5 mr-1.5" />
+                                    <Save className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1.5" />
                                     Guardar
                                 </Button>
                                 <Button
                                     onClick={() => setIsEditingProfile(false)}
                                     variant="ghost"
                                     size="sm"
-                                    className="hover:bg-red-600/20 rounded-lg h-8 px-3 text-xs font-medium text-red-400 border border-red-500/30"
+                                    className="hover:bg-red-600/20 rounded-lg h-8 px-3 text-[10px] sm:text-xs font-medium text-red-400 border border-red-500/30 bg-[#0c0c0c]/80 backdrop-blur-md"
                                 >
-                                    <X className="w-3.5 h-3.5 mr-1.5" />
+                                    <X className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1.5" />
                                     Cancelar
                                 </Button>
                             </>
                         )}
                     </div>
-
-                    <div className="flex items-center space-x-6">
+ 
+                    <div className="flex flex-col sm:flex-row items-center sm:items-center text-center sm:text-left space-y-4 sm:space-y-0 sm:space-x-6 pt-4 sm:pt-0">
                         <motion.div
                             initial={{ scale: 0.8, rotate: -10 }}
                             animate={{ scale: 1, rotate: 0 }}
-                            className="w-20 h-20 bg-blue-600 rounded-2xl flex items-center justify-center text-3xl font-medium shadow-lg relative"
+                            className="w-16 h-16 sm:w-20 sm:h-20 bg-blue-600 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl font-medium shadow-lg relative"
                         >
                             {selectedContact.name?.charAt(0)}
-                            <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-500 border-[3px] border-[#0c0c0c] rounded-full shadow-lg" />
+                            <div className="absolute -bottom-1 -right-1 w-5 h-5 sm:w-6 sm:h-6 bg-emerald-500 border-[3px] border-[#0c0c0c] rounded-full shadow-lg" />
                         </motion.div>
                         <div className="flex-1 max-w-xl">
-                            <h1 className="text-2xl font-semibold tracking-tight mb-2 text-white">
+                            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight mb-2 text-white">
                                 {selectedContact.name}
                             </h1>
-                            <div className="flex items-center space-x-3">
+                            <div className="flex items-center justify-center sm:justify-start space-x-3">
                                 <Badge variant="outline" className="px-3 py-1 border-blue-500/50 text-blue-400 bg-blue-500/10 font-medium tracking-wider text-[9px] uppercase rounded-full">
                                     <Activity className="w-3 h-3 mr-1.5" /> {selectedContact.stage === 'Closed' ? 'Completado' : selectedContact.stage}
                                 </Badge>
-                                <span className="text-neutral-500 font-medium text-[9px] uppercase tracking-widest">ESTABLISHED {selectedContact.date}</span>
+                                <span className="text-neutral-500 font-medium text-[9px] uppercase tracking-widest hidden sm:inline">ESTABLISHED {selectedContact.date}</span>
                             </div>
                         </div>
                     </div>

@@ -1,7 +1,8 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';import { useAuth } from '@/contexts/AuthContext';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth } from '@/lib/firebase';
@@ -56,7 +57,7 @@ export default function CsoKambanPage() {
   }
 
   return (
-    <div className="flex h-screen bg-black text-white overflow-hidden">
+    <div className="flex  min-h-screen overflow-y-auto md: min-h-screen overflow-y-auto md:h-screen bg-black text-white  md: md:overflow-hidden">
       <main className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-hidden">
           <KambanBoard />

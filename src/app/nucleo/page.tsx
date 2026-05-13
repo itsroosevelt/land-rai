@@ -175,12 +175,12 @@ export default function NucleoPage() {
                         <DropdownMenu.Content 
                             align="end" 
                             sideOffset={12}
-                            className="w-[400px] bg-[#1A1C1E] border border-white/5 rounded-[2.5rem] shadow-[0_24px_48px_-12px_rgba(0,0,0,0.5)] backdrop-blur-3xl animate-in fade-in slide-in-from-top-4 duration-300 z-[2000] overflow-hidden p-0"
+                            className="w-[calc(100vw-32px)] md:w-[400px] bg-[#1A1C1E] border border-white/5 rounded-[2rem] md:rounded-[2.5rem] shadow-[0_24px_48px_-12px_rgba(0,0,0,0.5)] backdrop-blur-3xl animate-in fade-in slide-in-from-top-4 duration-300 z-[2000] overflow-hidden p-0"
                         >
                             {/* Header: Email & Close */}
-                            <div className="flex justify-between items-center px-6 pt-6 mb-4">
+                            <div className="flex justify-between items-center px-6 pt-6 mb-2 md:mb-4">
                                 <div className="flex-1 text-center">
-                                    <p className="text-[11px] font-bold text-white/40 tracking-wider lowercase">{currentUser.email}</p>
+                                    <p className="text-[10px] md:text-[11px] font-bold text-white/40 tracking-wider lowercase">{currentUser.email}</p>
                                 </div>
                                 <DropdownMenu.Item className="focus:outline-none cursor-pointer">
                                     <X className="w-5 h-5 text-white/40 hover:text-white transition-colors" />
@@ -188,32 +188,32 @@ export default function NucleoPage() {
                             </div>
 
                             {/* Main Identity Area */}
-                            <div className="flex flex-col items-center px-10 pb-8 text-center">
-                                <div className="relative mb-6 group cursor-pointer" onClick={() => router.push('/perfil')}>
-                                    <Avatar className="w-24 h-24 border border-white/10 shadow-2xl">
+                            <div className="flex flex-col items-center px-6 md:px-10 pb-4 md:pb-8 text-center">
+                                <div className="relative mb-4 md:mb-6 group cursor-pointer" onClick={() => router.push('/perfil')}>
+                                    <Avatar className="w-20 h-20 md:w-24 md:h-24 border border-white/10 shadow-2xl">
                                         <AvatarImage src={currentUser.photoURL || ''} />
-                                        <AvatarFallback className="bg-neutral-800 text-2xl font-bold">
+                                        <AvatarFallback className="bg-neutral-800 text-xl md:text-2xl font-bold">
                                             {currentUser.displayName?.[0] || 'U'}
                                         </AvatarFallback>
                                     </Avatar>
-                                    <div className="absolute bottom-0 right-0 p-1.5 bg-[#2D2F31] border border-[#1A1C1E] rounded-full shadow-lg group-hover:scale-110 transition-transform">
-                                        <Camera className="w-4 h-4 text-white/60" />
+                                    <div className="absolute bottom-0 right-0 p-1 bg-[#2D2F31] border border-[#1A1C1E] rounded-full shadow-lg group-hover:scale-110 transition-transform">
+                                        <Camera className="w-3.5 h-3.5 text-white/60" />
                                     </div>
                                 </div>
                                 
-                                <h3 className="text-2xl font-light text-white mb-6">Hi, {currentUser.displayName?.split(' ')[0] || 'Luxor'}!</h3>
+                                <h3 className="text-xl md:text-2xl font-light text-white mb-4 md:mb-6">Hi, {currentUser.displayName?.split(' ')[0] || 'Luxor'}!</h3>
                                 
                                 <button 
                                     onClick={() => router.push('/configuracion')}
-                                    className="px-8 py-3.5 border border-white/10 rounded-full text-xs font-bold text-blue-400 hover:bg-blue-500/5 transition-all mb-8 w-full max-w-[280px]"
+                                    className="px-6 md:px-8 py-2.5 md:py-3.5 border border-white/10 rounded-full text-[10px] md:text-xs font-bold text-blue-400 hover:bg-blue-500/5 transition-all mb-4 md:mb-8 w-full max-w-[280px]"
                                 >
                                     Manage your Roosevelt Account
                                 </button>
                             </div>
 
                             {/* Grid Navigation Section (Prior Items) */}
-                            <div className="bg-black/20 p-4 border-y border-white/5">
-                                <div className="grid grid-cols-3 gap-2">
+                            <div className="bg-black/20 p-3 md:p-4 border-y border-white/5">
+                                <div className="grid grid-cols-3 gap-1 md:gap-2">
                                     {[
                                         { label: "Profile", icon: UserIcon, href: "/perfil" },
                                         { label: "Settings", icon: Settings, href: "/configuracion" },
@@ -225,34 +225,34 @@ export default function NucleoPage() {
                                         <DropdownMenu.Item 
                                             key={item.label}
                                             onClick={() => router.push(item.href)}
-                                            className="flex flex-col items-center gap-2 p-3 rounded-2xl hover:bg-white/5 cursor-pointer outline-none transition-all group"
+                                            className="flex flex-col items-center gap-1.5 md:gap-2 p-2 md:p-3 rounded-xl md:rounded-2xl hover:bg-white/5 cursor-pointer outline-none transition-all group"
                                         >
-                                            <item.icon className="w-5 h-5 text-white/30 group-hover:text-blue-400 transition-colors" />
-                                            <span className="text-[9px] font-bold text-white/20 uppercase tracking-widest group-hover:text-white/60">{item.label}</span>
+                                            <item.icon className="w-4 h-4 md:w-5 md:h-5 text-white/30 group-hover:text-blue-400 transition-colors" />
+                                            <span className="text-[8px] md:text-[9px] font-bold text-white/20 uppercase tracking-widest group-hover:text-white/60">{item.label}</span>
                                         </DropdownMenu.Item>
                                     ))}
                                 </div>
                             </div>
 
                             {/* Footer Actions: Add & Sign Out */}
-                            <div className="p-4 flex gap-2 h-20">
-                                <DropdownMenu.Item className="flex-1 bg-white/[0.03] hover:bg-white/[0.08] rounded-l-[1.5rem] rounded-r-lg flex items-center justify-center gap-4 cursor-pointer outline-none transition-all group">
-                                    <Plus className="w-5 h-5 text-white/40 group-hover:text-white" />
-                                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/60 group-hover:text-white">Add account</span>
+                            <div className="p-3 md:p-4 flex gap-2 h-16 md:h-20">
+                                <DropdownMenu.Item className="flex-1 bg-white/[0.03] hover:bg-white/[0.08] rounded-l-2xl md:rounded-l-[1.5rem] rounded-r-md md:rounded-r-lg flex items-center justify-center gap-3 md:gap-4 cursor-pointer outline-none transition-all group">
+                                    <Plus className="w-4 h-4 md:w-5 md:h-5 text-white/40 group-hover:text-white" />
+                                    <span className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] text-white/60 group-hover:text-white">Add account</span>
                                 </DropdownMenu.Item>
 
                                 <DropdownMenu.Item 
                                     onClick={handleLogout}
-                                    className="flex-1 bg-white/[0.03] hover:bg-red-500/10 rounded-r-[1.5rem] rounded-l-lg flex items-center justify-center gap-4 cursor-pointer outline-none transition-all group"
+                                    className="flex-1 bg-white/[0.03] hover:bg-red-500/10 rounded-r-2xl md:rounded-r-[1.5rem] rounded-l-md md:rounded-l-lg flex items-center justify-center gap-3 md:gap-4 cursor-pointer outline-none transition-all group"
                                 >
-                                    <LogOut className="w-5 h-5 text-white/40 group-hover:text-red-500" />
-                                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/60 group-hover:text-red-500">Sign out</span>
+                                    <LogOut className="w-4 h-4 md:w-5 md:h-5 text-white/40 group-hover:text-red-500" />
+                                    <span className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] text-white/60 group-hover:text-red-500">Sign out</span>
                                 </DropdownMenu.Item>
                             </div>
 
                             {/* Privacy Policy Footer */}
-                            <div className="py-4 text-center">
-                                <p className="text-[9px] font-bold text-white/10 uppercase tracking-widest cursor-default">
+                            <div className="py-3 md:py-4 text-center">
+                                <p className="text-[8px] md:text-[9px] font-bold text-white/10 uppercase tracking-widest cursor-default">
                                     Privacy Policy • Terms of Service
                                 </p>
                             </div>
@@ -267,7 +267,7 @@ export default function NucleoPage() {
                 transition={{ duration: 0.8, ease: "easeOut" }}
                 className="z-10 w-full max-w-6xl px-6 flex flex-col items-center"
             >
-                <h1 className="text-3xl md:text-5xl font-light tracking-wide text-center mb-20 text-white/90">
+                <h1 className="mt-24 md:mt-0 text-2xl md:text-5xl font-light tracking-wide text-center mb-12 md:mb-20 text-white/90 px-4">
                     {managementMode ? 'Gestión de Entornos' : '¿Qué entorno vas a conectar?'}
                 </h1>
 

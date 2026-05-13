@@ -129,10 +129,10 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
                     
-                    <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative w-full max-w-[900px] aspect-[16/10] bg-[#0A0A0A] border border-white/10 rounded-[40px] overflow-hidden shadow-2xl flex">
+                    <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative w-full max-w-[95vw] md:max-w-[900px] h-[85vh] md:min-h-[550px] md:h-auto md:aspect-[16/10] bg-[#0A0A0A] border border-white/10 rounded-[24px] md:rounded-[40px] overflow-hidden shadow-2xl flex flex-col md:flex-row">
                         
                         {/* Left Branding Side */}
-                        <div className="w-[35%] bg-red-500/5 border-r border-white/5 p-12 flex flex-col justify-between relative overflow-hidden">
+                        <div className="hidden md:flex w-[35%] bg-red-500/5 border-r border-white/5 p-12 flex flex-col justify-between relative overflow-hidden shrink-0">
                             <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
                                 <div className="absolute top-[-10%] right-[-10%] w-64 h-64 bg-red-600 rounded-full blur-[100px]" />
                             </div>
@@ -155,58 +155,58 @@ export default function GmailModal({ isOpen, onClose, activeEntity, currentUser 
                         </div>
 
                         {/* Right Content Side */}
-                        <div className="flex-1 p-12 flex flex-col relative">
-                            <button onClick={onClose} className="absolute top-8 right-8 p-2 hover:bg-white/5 rounded-full transition-colors group">
+                        <div className="flex-1 p-5 md:p-12 flex flex-col relative overflow-y-auto no-scrollbar bg-[#0A0A0A]">
+                            <button onClick={onClose} className="absolute top-6 right-6 p-2 hover:bg-white/5 rounded-full transition-colors group z-50">
                                 <X className="w-5 h-5 text-white/20 group-hover:text-white" />
                             </button>
 
-                            <div className="flex-1 flex flex-col justify-center">
+                            <div className="flex-1 flex flex-col justify-center py-2 md:py-4">
                                 {!isConnected ? (
                                     <motion.div key="connect" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-                                        <h3 className="text-6xl font-extralight text-white tracking-tighter mb-6 italic uppercase leading-tight">Vincular <br /><span className="text-[#EA4335]">Google Cloud</span></h3>
+                                        <h3 className="text-3xl md:text-6xl font-extralight text-white tracking-tighter mb-6 italic uppercase leading-tight">Vincular <br /><span className="text-[#EA4335]">Google Cloud</span></h3>
                                         
-                                        <div className="space-y-6 mb-12">
+                                        <div className="space-y-4 md:space-y-6 mb-10 md:mb-12">
                                             <div className="flex items-start gap-4">
-                                                <div className="w-8 h-8 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-[11px] font-bold text-white/40 shrink-0">01</div>
-                                                <p className="text-xs text-white/50 font-light mt-1.5 leading-relaxed">Conecta tu bandeja de entrada para centralizar tus correos.</p>
+                                                <div className="w-7 h-7 md:w-8 md:h-8 rounded-xl md:rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-[10px] md:text-[11px] font-bold text-white/40 shrink-0">01</div>
+                                                <p className="text-[11px] md:text-xs text-white/50 font-light mt-1 md:mt-1.5 leading-relaxed">Conecta tu bandeja de entrada para centralizar tus correos.</p>
                                             </div>
                                             <div className="flex items-start gap-4">
-                                                <div className="w-8 h-8 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-[11px] font-bold text-white/40 shrink-0">02</div>
-                                                <p className="text-xs text-white/50 font-light mt-1.5 leading-relaxed">Roosevelt responderá automáticamente correos usando IA.</p>
+                                                <div className="w-7 h-7 md:w-8 md:h-8 rounded-xl md:rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-[10px] md:text-[11px] font-bold text-white/40 shrink-0">02</div>
+                                                <p className="text-[11px] md:text-xs text-white/50 font-light mt-1 md:mt-1.5 leading-relaxed">Roosevelt responderá automáticamente correos usando IA.</p>
                                             </div>
                                         </div>
 
-                                        <button onClick={handleConnectGmail} className="w-full h-16 bg-[#EA4335] hover:bg-[#d93025] text-white text-[11px] font-bold uppercase tracking-[0.3em] rounded-full transition-all shadow-[0_0_40px_rgba(234,67,53,0.2)]">
+                                        <button onClick={handleConnectGmail} className="w-full h-14 md:h-16 bg-[#EA4335] hover:bg-[#d93025] text-white text-[10px] md:text-[11px] font-bold uppercase tracking-[0.3em] rounded-full transition-all shadow-[0_0_40px_rgba(234,67,53,0.2)]">
                                             CONECTAR GMAIL
                                         </button>
                                     </motion.div>
                                 ) : (
                                     <motion.div key="active" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center text-center">
-                                        <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mb-8 relative">
+                                        <div className="w-16 h-16 md:w-20 md:h-20 bg-green-500/10 rounded-full flex items-center justify-center mb-6 md:mb-8 relative">
                                             <div className="absolute inset-0 rounded-full border border-green-500/20 animate-pulse" />
-                                            <CheckCircle2 className="w-10 h-10 text-green-500" />
+                                            <CheckCircle2 className="w-8 h-8 md:w-10 md:h-10 text-green-500" />
                                         </div>
-                                        <h3 className="text-4xl font-extralight text-white tracking-tighter mb-1 italic uppercase leading-none">Bandeja Vinculada</h3>
-                                        <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-10">
-                                            Google API Status: {isConnected ? 'Operational' : 'Connection Required'}
+                                        <h3 className="text-2xl md:text-4xl font-extralight text-white tracking-tighter mb-1 italic uppercase leading-none">Bandeja Vinculada</h3>
+                                        <p className="text-[9px] md:text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-8 md:mb-10">
+                                            Google API Status: Operational
                                         </p>
                                         
-                                        <div className="w-full space-y-4 px-2">
-                                            <div className="h-28 bg-white/5 border border-white/10 rounded-[32px] flex items-center px-8 justify-between backdrop-blur-sm relative overflow-hidden group/card">
+                                        <div className="w-full space-y-3 md:space-y-4 px-2">
+                                            <div className="h-24 md:h-28 bg-white/5 border border-white/10 rounded-[24px] md:rounded-[32px] flex items-center px-6 md:px-8 justify-between backdrop-blur-sm relative overflow-hidden group/card">
                                                 <div className="absolute inset-0 bg-red-500/5 opacity-0 group-hover/card:opacity-100 transition-opacity" />
                                                 <div className="text-left relative z-10">
-                                                    <span className="text-[8px] uppercase tracking-[0.2em] text-red-500 block mb-2 font-black opacity-70">CORREO ELECTRÓNICO</span>
-                                                    <p className="text-xl font-extralight text-white tracking-tight leading-none truncate max-w-[250px]">{config.email || 'Cuenta Activa'}</p>
-                                                    <span className="text-[8px] text-white/20 mt-2 block font-mono uppercase tracking-widest text-left">
-                                                        {isConnected ? 'SYNC MODE: REAL-TIME (PUB/SUB)' : `SYNC MODE: ${String(config?.watchStatus || 'offline').toUpperCase()}`}
+                                                    <span className="text-[8px] uppercase tracking-[0.2em] text-red-500 block mb-1 md:mb-2 font-black opacity-70">CORREO ELECTRÓNICO</span>
+                                                    <p className="text-lg md:text-xl font-extralight text-white tracking-tight leading-none truncate max-w-[180px] md:max-w-[250px]">{config?.email || 'Cuenta Activa'}</p>
+                                                    <span className="text-[7px] md:text-[8px] text-white/20 mt-1 md:mt-2 block font-mono uppercase tracking-widest text-left truncate max-w-[150px]">
+                                                        SYNC: REAL-TIME (PUB/SUB)
                                                     </span>
                                                 </div>
-                                                <div className="p-4 bg-red-500/5 border border-red-500/10 rounded-2xl relative z-10"><ShieldCheck className="w-6 h-6 text-red-500/40" /></div>
+                                                <div className="p-3 md:p-4 bg-red-500/5 border border-red-500/10 rounded-2xl relative z-10"><ShieldCheck className="w-5 h-5 md:w-6 md:h-6 text-red-500/40" /></div>
                                             </div>
 
-                                            <div className="flex items-center gap-4 pt-10">
-                                                <button onClick={onClose} className="flex-1 h-14 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all">TERMINAR</button>
-                                                <button onClick={handleDelete} className="flex-1 h-14 bg-red-500/5 hover:bg-red-500/10 text-red-500/50 border border-red-500/10 text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all">DESCONECTAR</button>
+                                            <div className="flex items-center gap-3 md:gap-4 pt-6 md:pt-10">
+                                                <button onClick={onClose} className="flex-1 h-12 md:h-14 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-[9px] md:text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all">TERMINAR</button>
+                                                <button onClick={handleDelete} className="flex-1 h-12 md:h-14 bg-red-500/5 hover:bg-red-500/10 text-red-500/50 border border-red-500/10 text-[9px] md:text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all">DESCONECTAR</button>
                                             </div>
                                         </div>
                                     </motion.div>
