@@ -347,6 +347,16 @@ export default function UnifiedWorkspace() {
     const [gridType, setGridType] = useState<'none' | 'dots' | 'lines'>('none');
     const [savedLayout, setSavedLayout] = useState<Record<string, { x: number, y: number }>>({});
     const [expandedDepts, setExpandedDepts] = useState<string[]>([]);
+    const [openWindows, setOpenWindows] = useState<string[]>([]);
+    const [persistedWindows, setPersistedWindows] = useState<string[]>([]);
+    const [isMobile, setIsMobile] = useState(false);
+
+    useEffect(() => {
+        const checkMobile = () => setIsMobile(window.innerWidth < 768);
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+    }, []);
 
     const currentDeptData = useMemo(() => DEPARTMENTS_DATA[activeRole] || DEPARTMENTS_DATA.ceo, [activeRole]);
 
@@ -432,21 +442,21 @@ export default function UnifiedWorkspace() {
 
     // --- GESTIÓN DE NODOS BASE (DEPARTAMENTO) ---
     useEffect(() => {
-        const baseNodes: Node[] = [];
+        const newNodes: Node[] = [];
         
         // Ejes
-        baseNodes.push({ id: 'global-axes', type: 'axesNode', position: { x: 0, y: 0 }, draggable: false, selectable: false, zIndex: -1, data: {} });
+        newNodes.push({ id: 'global-axes', type: 'axesNode', position: { x: 0, y: 0 }, draggable: false, selectable: false, zIndex: -1, data: {} });
 
         // Título
         const titleSaved = savedLayout['dept-title'] || { x: 0, y: -3 };
-        baseNodes.push({
+        newNodes.push({
             id: 'dept-title', type: 'titleNode', position: toCanvas(titleSaved.x, titleSaved.y),
             draggable: true, style: { pointerEvents: 'none' }, data: { title: currentDeptData.title }
         });
 
         // Retorno
         const actionSaved = savedLayout['action-return'] || { x: 0, y: -4.5 };
-        baseNodes.push({
+        newNodes.push({
             id: 'action-return', type: 'actionNode', position: toCanvas(actionSaved.x, actionSaved.y),
             draggable: true, zIndex: 110, data: { 
                 label: 'Regresar a la Suite',
