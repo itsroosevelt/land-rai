@@ -199,6 +199,7 @@ const TitleNode = ({ data }: NodeProps) => (
 
 const LayerNode = ({ data }: NodeProps) => {
     const [isHovered, setIsHovered] = useState(false);
+    const [lastTap, setLastTap] = useState(0);
     const theme = themes[data.theme || 'cyan'];
     
     return (
@@ -215,19 +216,46 @@ const LayerNode = ({ data }: NodeProps) => {
             <motion.div
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
-                onClick={() => data.onClick(data)}
+                onClick={() => {
+                    const now = Date.now();
+                    const DOUBLE_TAP_DELAY = 500;
+                    if (now - lastTap < DOUBLE_TAP_DELAY) {
+                        data.onDoubleClick?.();
+                    } else {
+                        data.onClick?.();
+                    }
+                    setLastTap(now);
+                }}
                 className={cn(
-                    "w-[380px] md:w-[460px] h-[380px] md:h-[460px] rounded-[6rem] backdrop-blur-[40px] border transition-all duration-700 flex flex-col items-center justify-center cursor-grab active:cursor-grabbing pointer-events-auto",
+                    "w-[380px] md:w-[460px] h-[380px] md:h-[460px] rounded-[6rem] backdrop-blur-[40px] border transition-all duration-300 flex flex-col items-center justify-center cursor-pointer pointer-events-auto",
                     isHovered ? "scale-105" : "scale-100"
                 )}
                 style={{
                     transform: 'translate(-50%, -50%) rotateX(60deg) rotateZ(-45deg)',
                     transformStyle: 'preserve-3d',
-                    backgroundColor: isHovered ? theme.bg : 'rgba(255, 255, 255, 0.02)',
-                    borderColor: isHovered ? theme.border : 'rgba(255, 255, 255, 0.15)',
-                    boxShadow: isHovered ? `inset 0 0 80px ${theme.shadow}, 0 50px 100px rgba(0,0,0,0.7), 0 0 20px ${theme.shadow}` : '0 20px 40px rgba(0,0,0,0.4)',
+                    backgroundColor: isHovered ? theme.bg : (data.isPrimary ? 'rgba(255, 255, 255, 0.04)' : theme.bg.replace('0.15', '0.03')),
+                    borderColor: isHovered ? theme.border : (data.isPrimary ? 'rgba(255, 255, 255, 0.45)' : theme.border.replace('0.3', '0.2')),
+                    boxShadow: isHovered 
+                        ? `inset 0 0 100px ${theme.shadow}, 0 50px 100px rgba(0,0,0,0.8), 0 0 40px ${theme.shadow}` 
+                        : (data.isPrimary 
+                            ? '0 30px 60px rgba(0,0,0,0.5), inset 0 0 40px rgba(255,255,255,0.1), 0 0 20px rgba(255,255,255,0.1)'
+                            : `0 30px 60px rgba(0,0,0,0.5), inset 0 0 40px ${theme.shadow.replace('0.3', '0.05')}, 0 0 20px ${theme.shadow.replace('0.3', '0.1')}`
+                        ),
                 }}
-            />
+            >
+                {data.icon && (
+                    <div style={{ transform: 'rotateZ(45deg) rotateX(-20deg)' }} className={cn(
+                        "p-8 rounded-full transition-all duration-300",
+                        isHovered ? theme.iconBg : "bg-white/5"
+                    )}>
+                        <data.icon className={cn(
+                            "w-24 h-24 transition-all duration-300",
+                            isHovered ? theme.iconText : (data.isPrimary ? "text-white/20" : theme.iconText.replace('text-', 'text-').replace('400', '400/30')),
+                            isHovered && theme.iconShadow
+                        )} />
+                    </div>
+                )}
+            </motion.div>
         </div>
     );
 };
@@ -247,7 +275,54 @@ const ActionNode = ({ data }: NodeProps) => (
     </div>
 );
 
-const nodeTypes = { axesNode: AxesNode, titleNode: TitleNode, layerNode: LayerNode, windowNode: WindowNode, actionNode: ActionNode };
+const FolderNode = ({ data }: NodeProps) => {
+    const theme = themes[data.theme || 'cyan'];
+    const [isHovered, setIsHovered] = useState(false);
+    const [lastTap, setLastTap] = useState(0);
+
+    return (
+        <div 
+            className="group cursor-pointer pointer-events-auto"
+            style={{ transform: 'translate(-50%, -50%) rotateX(60deg) rotateZ(-45deg)', transformStyle: 'preserve-3d' }}
+        >
+            <motion.div 
+                onMouseEnter={() => setIsHovered(true)}
+                onMouseLeave={() => setIsHovered(false)}
+                onClick={() => {
+                    const now = Date.now();
+                    const DOUBLE_TAP_DELAY = 500;
+                    if (now - lastTap < DOUBLE_TAP_DELAY) {
+                        data.onDoubleClick?.();
+                    } else {
+                        data.onClick?.();
+                    }
+                    setLastTap(now);
+                }}
+                whileHover={{ scale: 1.05 }}
+                className={cn(
+                    "w-[420px] h-[420px] rounded-[6rem] border-4 border-dashed transition-all duration-300 flex flex-col items-center justify-center backdrop-blur-3xl",
+                    isHovered ? theme.bg : "bg-white/5"
+                )}
+                style={{ borderColor: theme.border, boxShadow: `0 0 60px ${theme.shadow}, inset 0 0 40px ${theme.shadow}` }}
+            >
+                <div className="flex flex-col items-center gap-6" style={{ transform: 'rotateZ(45deg) rotateX(-20deg)' }}>
+                    <div className={cn("p-8 rounded-full shadow-2xl", theme.iconBg)}>
+                        {data.icon ? (
+                            <data.icon className={cn("w-20 h-20", theme.iconText)} />
+                        ) : (
+                            <Layers className={cn("w-20 h-20", theme.iconText)} />
+                        )}
+                    </div>
+                    <div className="text-center space-y-1">
+                        <span className="block text-6xl font-thin tracking-[0.1em] text-white uppercase drop-shadow-2xl">{data.role}</span>
+                    </div>
+                </div>
+            </motion.div>
+        </div>
+    );
+};
+
+const nodeTypes = { axesNode: AxesNode, titleNode: TitleNode, layerNode: LayerNode, windowNode: WindowNode, actionNode: ActionNode, folderNode: FolderNode };
 
 export default function UnifiedWorkspace() {
     const router = useRouter();
@@ -256,13 +331,23 @@ export default function UnifiedWorkspace() {
     const entityId = params.entityId as string;
     const { currentUser, activeEntity } = useAuth();
     
-    const [activeRole, setActiveRole] = useState<string>(searchParams.get('role') || 'ceo');
+    const roleParam = searchParams.get('role') || 'ceo';
+    const [activeRole, setActiveRole] = useState<string>(roleParam);
+
+    useEffect(() => {
+        if (roleParam !== activeRole) {
+            setActiveRole(roleParam);
+            setExpandedDepts([]);
+            setOpenWindows([]);
+        }
+    }, [roleParam, activeRole]);
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [openWindows, setOpenWindows] = useState<string[]>([]);
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
     const [gridType, setGridType] = useState<'none' | 'dots' | 'lines'>('none');
     const [savedLayout, setSavedLayout] = useState<Record<string, { x: number, y: number }>>({});
+    const [expandedDepts, setExpandedDepts] = useState<string[]>([]);
 
     const currentDeptData = useMemo(() => DEPARTMENTS_DATA[activeRole] || DEPARTMENTS_DATA.ceo, [activeRole]);
 
@@ -299,25 +384,33 @@ export default function UnifiedWorkspace() {
     const cartesianPos = useMemo(() => selectedNode ? fromCanvas(selectedNode.position.x, selectedNode.position.y) : { x: 0, y: 0 }, [selectedNode]);
 
     const spawnWindow = (layer: any) => {
-        if (!openWindows.includes(layer.id)) {
-            setOpenWindows(prev => [...prev, layer.id]);
-            const targetX = 1500 + openWindows.length * 60;
-            const targetY = -400 + openWindows.length * 60;
+        setNodes((nds) => {
+            if (nds.some(node => node.id === `window-${layer.id}`)) return nds;
+
+            const windowCount = nds.filter(node => node.id.startsWith('window-')).length;
+            const xInches = 15 + (windowCount * 10);
+            const yInches = -15 - (windowCount * 10);
+            const pos = toCanvas(xInches, yInches);
+
+            const uniqueId = `window-${layer.role || activeRole}-${layer.id}`;
             const newNode: Node = {
-                id: `window-${layer.id}`,
+                id: uniqueId,
                 type: 'windowNode',
-                position: { x: targetX, y: targetY },
+                position: pos,
                 data: {
                     id: layer.id, label: layer.label, icon: layer.icon,
-                    url: `/nucleo/${entityId}/${activeRole}/${layer.path}`,
+                    url: `/nucleo/${entityId}/${layer.role || activeRole}/${layer.path}`,
                     onClose: () => {
-                        setOpenWindows(prev => prev.filter(id => id !== layer.id));
-                        setNodes(nds => nds.filter(n => n.id !== `window-${layer.id}`));
+                        setOpenWindows(prev => prev.filter(id => id !== uniqueId));
+                        setNodes(currNodes => currNodes.filter(n => n.id !== uniqueId));
                     }
                 }
             };
-            setNodes(nds => [...nds, newNode]);
-        }
+
+            setOpenWindows(prev => prev.includes(uniqueId) ? prev : [...prev, uniqueId]);
+            
+            return [...nds, newNode];
+        });
     };
 
     // Inicializar Nodos (Con Persistencia)
@@ -340,18 +433,89 @@ export default function UnifiedWorkspace() {
             }
         });
 
-        currentDeptData.layers.forEach((layer, index) => {
-            const saved = savedLayout[`layer-${layer.id}`] || { x: 0, y: -7 - (index * 2) };
-            newNodes.push({
-                id: `layer-${layer.id}`, type: 'layerNode', position: toCanvas(saved.x, saved.y),
-                draggable: true, zIndex: 100 - index,
-                style: { zIndex: 100 - index, pointerEvents: 'none' },
-                data: { ...layer, onClick: () => setSelectedNodeId(`layer-${layer.id}`) }
-            });
+        const toggleDept = (role: string) => {
+            setExpandedDepts(prev => prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]);
+        };
+
+        const allNodesData: any[] = [];
+        
+        const rainbowThemes = ['rose', 'orange', 'amber', 'emerald', 'cyan', 'blue', 'indigo', 'purple', 'slate'];
+
+        // 1. Capas del rol activo (CTO) - Siempre expandidas y BLANCAS
+        currentDeptData.layers.forEach(layer => {
+            allNodesData.push({ ...layer, role: activeRole, type: 'layer', isPrimary: true });
         });
 
-        setNodes(newNodes);
-    }, [activeRole, entityId, savedLayout, currentDeptData]);
+        // 2. Capas de todos los demás departamentos (Colapsables y ARCOIRIS)
+        let deptIndex = 0;
+        Object.entries(DEPARTMENTS_DATA).forEach(([role, dept]) => {
+            if (role === activeRole) return;
+            
+            const isExpanded = expandedDepts.includes(role);
+            const theme = rainbowThemes[deptIndex % rainbowThemes.length];
+            deptIndex++;
+            
+            if (isExpanded) {
+                // Si está expandido, añadir botón de colapsar + todas las capas
+                allNodesData.push({ 
+                    id: `folder-${role}`, 
+                    title: dept.title, 
+                    role: role.toUpperCase(),
+                    icon: dept.layers[0]?.icon,
+                    theme: theme, 
+                    type: 'folder', 
+                    isExpanded: true,
+                    onClick: () => toggleDept(role),
+                    onDoubleClick: () => spawnWindow({ ...dept.layers[0], role })
+                });
+                dept.layers.forEach(layer => {
+                    allNodesData.push({ ...layer, role: role, type: 'layer', theme: theme, isPrimary: false });
+                });
+            } else {
+                // Si está colapsado, añadir solo el folder
+                allNodesData.push({ 
+                    id: `folder-${role}`, 
+                    title: dept.title, 
+                    role: role.toUpperCase(),
+                    icon: dept.layers[0]?.icon,
+                    theme: theme, 
+                    type: 'folder', 
+                    isExpanded: false,
+                    onClick: () => toggleDept(role),
+                    onDoubleClick: () => spawnWindow({ ...dept.layers[0], role })
+                });
+            }
+        });
+
+        allNodesData.forEach((item, index) => {
+            const nodeId = item.type === 'folder' ? item.id : `layer-${item.role}-${item.id}`;
+            const saved = savedLayout[nodeId] || { x: 0, y: -7 - (index * 2) };
+            
+            if (item.type === 'folder') {
+                newNodes.push({
+                    id: nodeId, type: 'folderNode', position: toCanvas(saved.x, saved.y),
+                    draggable: false, zIndex: 1000 - index,
+                    data: { ...item }
+                });
+            } else {
+                newNodes.push({
+                    id: nodeId, type: 'layerNode', position: toCanvas(saved.x, saved.y),
+                    draggable: false, zIndex: 1000 - index,
+                    style: { zIndex: 1000 - index, pointerEvents: 'none' },
+                    data: { 
+                        ...item, 
+                        onClick: () => setSelectedNodeId(nodeId),
+                        onDoubleClick: () => spawnWindow(item)
+                    }
+                });
+            }
+        });
+
+        setNodes(prev => {
+            const windowNodes = prev.filter(n => n.type === 'windowNode');
+            return [...newNodes, ...windowNodes];
+        });
+    }, [activeRole, entityId, savedLayout, currentDeptData, expandedDepts]);
 
     const onNodeDragStop = (event: any, node: Node) => {
         if (node.id === 'dept-title' || node.id === 'action-return' || node.id.startsWith('layer-')) {
