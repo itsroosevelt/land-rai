@@ -185,7 +185,13 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         }
         if (/nombre|name|cli/i.test(varName)) {
             let cleaned = val;
-            [/me llamo /i, /mi nombre es /i, /soy /i, /mucho gusto/i, /hola/i].forEach(p => cleaned = cleaned.replace(p, ''));
+            const patterns = [
+                /me llamo\s+/i, /mi nombre es\s+/i, /soy\s+/i, /mucho gusto\s+/i, 
+                /hola\s+/i, /encantado\s+/i, /un placer\s+/i, /saludos\s+/i,
+                /que tal\s+/i, /buenas\s+/i, /buenos dias\s+/i, /buenas tardes\s+/i,
+                /buenas noches\s+/i, /por aqui\s+/i, /llaman\s+/i
+            ];
+            patterns.forEach(p => cleaned = cleaned.replace(new RegExp(p, 'gi'), ''));
             return cleaned.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ').trim();
         }
         return val;
@@ -326,7 +332,9 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     if (waitingForInput && currentNodeId) {
         // AGNOSTIC RULE: Do not allow the same message that triggered the start/reset to be captured as an input
         // This prevents capturing "Reiniciar" or "Hola" as answers to questions.
-        if (isReset || isStartTrigger || (shouldRestart && !waitingForInput)) {
+        // MOD: Solo bloqueamos si es un Reset explícito o si NO estamos esperando entrada (flujo inicial).
+        // Si estamos esperando entrada (waitingForInput), permitimos que pase para que el 'cleanInput' haga su trabajo.
+        if (isReset || (isStartTrigger && !waitingForInput)) {
             console.log(`[ChatbotEngine] 🛡️ Trigger message [${isReset?'RESET':'START'}] blocked from captureInputNode to prevent auto-fill.`);
         } else {
             const node = flow.nodes.find((n: any) => n.id === currentNodeId);

@@ -223,9 +223,9 @@ const LayerNode = ({ data }: NodeProps) => {
                 style={{
                     transform: 'translate(-50%, -50%) rotateX(60deg) rotateZ(-45deg)',
                     transformStyle: 'preserve-3d',
-                    backgroundColor: isHovered ? theme.bg : 'rgba(255, 255, 255, 0.02)',
-                    borderColor: isHovered ? theme.border : 'rgba(255, 255, 255, 0.15)',
-                    boxShadow: isHovered ? `inset 0 0 80px ${theme.shadow}, 0 50px 100px rgba(0,0,0,0.7), 0 0 20px ${theme.shadow}` : '0 20px 40px rgba(0,0,0,0.4)',
+                    backgroundColor: isHovered ? theme.bg : 'rgba(255, 255, 255, 0.06)',
+                    borderColor: isHovered ? theme.border : 'rgba(255, 255, 255, 0.3)',
+                    boxShadow: isHovered ? `inset 0 0 80px ${theme.shadow}, 0 50px 100px rgba(0,0,0,0.7), 0 0 20px ${theme.shadow}` : '0 20px 40px rgba(0,0,0,0.6)',
                 }}
             />
         </div>
@@ -259,10 +259,19 @@ export default function UnifiedWorkspace() {
     const [activeRole, setActiveRole] = useState<string>(searchParams.get('role') || 'ceo');
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-    const [openWindows, setOpenWindows] = useState<string[]>([]);
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
     const [gridType, setGridType] = useState<'none' | 'dots' | 'lines'>('none');
     const [savedLayout, setSavedLayout] = useState<Record<string, { x: number, y: number }>>({});
+    const [persistedWindows, setPersistedWindows] = useState<string[]>([]);
+    const [isMobile, setIsMobile] = useState(false);
+
+    // Detección de dispositivo móvil
+    useEffect(() => {
+        const checkMobile = () => setIsMobile(window.innerWidth < 768);
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+    }, []);
 
     const currentDeptData = useMemo(() => DEPARTMENTS_DATA[activeRole] || DEPARTMENTS_DATA.ceo, [activeRole]);
 
@@ -272,21 +281,30 @@ export default function UnifiedWorkspace() {
     // --- REGLA 4: PERSISTENCIA EN LA BÓVEDA ---
     useEffect(() => {
         if (!currentUser || !activeEntity) return;
-        const layoutRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/workspace-layout`, activeRole);
+        // Cambiamos a un documento 'global' para que todos los roles compartan las mismas ventanas
+        const layoutRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/workspace-layout`, 'global');
         
         const unsubscribe = onSnapshot(layoutRef, (docSnap) => {
             if (docSnap.exists()) {
-                setSavedLayout(docSnap.data().positions || {});
+                const data = docSnap.data();
+                setSavedLayout(data.positions || {});
+                setPersistedWindows(data.openWindows || []);
             }
         });
         return () => unsubscribe();
-    }, [currentUser, activeEntity, activeRole]);
+    }, [currentUser, activeEntity]); // Eliminamos activeRole como dependencia para evitar resets de snapshot
 
     const savePosition = async (nodeId: string, xInches: number, yInches: number) => {
         if (!currentUser || !activeEntity) return;
-        const layoutRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/workspace-layout`, activeRole);
+        const layoutRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/workspace-layout`, 'global');
         const newPositions = { ...savedLayout, [nodeId]: { x: xInches, y: yInches } };
         await setDoc(layoutRef, { positions: newPositions }, { merge: true });
+    };
+
+    const persistWindowState = async (windowIds: string[]) => {
+        if (!currentUser || !activeEntity) return;
+        const layoutRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/workspace-layout`, 'global');
+        await setDoc(layoutRef, { openWindows: windowIds }, { merge: true });
     };
 
     const updateNodePosition = (nodeId: string, xInches: number, yInches: number) => {
@@ -298,41 +316,90 @@ export default function UnifiedWorkspace() {
     const selectedNode = useMemo(() => nodes.find(n => n.id === selectedNodeId), [nodes, selectedNodeId]);
     const cartesianPos = useMemo(() => selectedNode ? fromCanvas(selectedNode.position.x, selectedNode.position.y) : { x: 0, y: 0 }, [selectedNode]);
 
-    const spawnWindow = (layer: any) => {
-        if (!openWindows.includes(layer.id)) {
-            setOpenWindows(prev => [...prev, layer.id]);
-            const targetX = 1500 + openWindows.length * 60;
-            const targetY = -400 + openWindows.length * 60;
-            const newNode: Node = {
-                id: `window-${layer.id}`,
-                type: 'windowNode',
-                position: { x: targetX, y: targetY },
-                data: {
-                    id: layer.id, label: layer.label, icon: layer.icon,
-                    url: `/nucleo/${entityId}/${activeRole}/${layer.path}`,
-                    onClose: () => {
-                        setOpenWindows(prev => prev.filter(id => id !== layer.id));
-                        setNodes(nds => nds.filter(n => n.id !== `window-${layer.id}`));
-                    }
+    // --- AUTO-MAXIMIZADO POR URL ---
+    useEffect(() => {
+        const moduleToMaximize = searchParams.get('maximize');
+        if (moduleToMaximize) {
+            const layer = findLayerAcrossDepts(moduleToMaximize)?.layer;
+            if (layer) {
+                // Si ya está en las persistidas, solo nos aseguramos de que el nodo se actualice
+                // pero spawnWindow se encargará de manejar la lógica de datos
+                setTimeout(() => spawnWindow(layer, true), 500);
+            }
+        }
+    }, [searchParams]);
+
+    const spawnWindow = (layer: any, forceMaximize: boolean = false) => {
+        const windowId = `window-${layer.id}`;
+        const isAlreadyPersisted = persistedWindows.includes(layer.id);
+        
+        if (!isAlreadyPersisted) {
+            const newWindowIds = [...persistedWindows, layer.id];
+            setPersistedWindows(newWindowIds);
+            persistWindowState(newWindowIds);
+        }
+
+        setNodes(nds => {
+            const exists = nds.find(n => n.id === windowId);
+            if (exists && !forceMaximize) return nds;
+
+            const windowCount = nds.filter(n => n.type === 'windowNode').length;
+            const targetX = 1500 + windowCount * 80;
+            const targetY = -400 + windowCount * 80;
+
+            const windowData = {
+                id: layer.id, label: layer.label, icon: layer.icon,
+                url: `/nucleo/${entityId}/${findLayerAcrossDepts(layer.id)?.role || activeRole}/${layer.path}`,
+                // En móvil siempre forzamos el maximizado para mejor UX
+                initialMaximized: isMobile || forceMaximize || searchParams.get('maximize') === layer.id,
+                onClose: () => {
+                    const updatedWindows = persistedWindows.filter(id => id !== layer.id);
+                    setPersistedWindows(updatedWindows);
+                    persistWindowState(updatedWindows);
+                    setNodes(currentNodes => currentNodes.filter(n => n.id !== windowId));
                 }
             };
-            setNodes(nds => [...nds, newNode]);
-        }
+
+            if (exists) {
+                // Si ya existe, actualizamos sus datos para forzar el maximizado
+                return nds.map(n => n.id === windowId ? { ...n, data: windowData } : n);
+            }
+
+            const newNode: Node = {
+                id: windowId, type: 'windowNode', position: { x: targetX, y: targetY },
+                dragHandle: '.custom-drag-handle',
+                data: windowData
+            };
+            return [...nds, newNode];
+        });
     };
 
-    // Inicializar Nodos (Con Persistencia)
-    useEffect(() => {
-        const newNodes: Node[] = [];
-        newNodes.push({ id: 'global-axes', type: 'axesNode', position: { x: 0, y: 0 }, draggable: false, selectable: false, zIndex: -1, data: {} });
+    // Función para encontrar un layer y su rol correspondiente en cualquier departamento
+    const findLayerAcrossDepts = (layerId: string) => {
+        for (const role in DEPARTMENTS_DATA) {
+            const layer = (DEPARTMENTS_DATA as any)[role].layers.find((l: any) => l.id === layerId);
+            if (layer) return { layer, role };
+        }
+        return null;
+    };
 
+    // --- GESTIÓN DE NODOS BASE (DEPARTAMENTO) ---
+    useEffect(() => {
+        const baseNodes: Node[] = [];
+        
+        // Ejes
+        baseNodes.push({ id: 'global-axes', type: 'axesNode', position: { x: 0, y: 0 }, draggable: false, selectable: false, zIndex: -1, data: {} });
+
+        // Título
         const titleSaved = savedLayout['dept-title'] || { x: 0, y: -3 };
-        newNodes.push({
+        baseNodes.push({
             id: 'dept-title', type: 'titleNode', position: toCanvas(titleSaved.x, titleSaved.y),
             draggable: true, style: { pointerEvents: 'none' }, data: { title: currentDeptData.title }
         });
 
+        // Retorno
         const actionSaved = savedLayout['action-return'] || { x: 0, y: -4.5 };
-        newNodes.push({
+        baseNodes.push({
             id: 'action-return', type: 'actionNode', position: toCanvas(actionSaved.x, actionSaved.y),
             draggable: true, zIndex: 110, data: { 
                 label: 'Regresar a la Suite',
@@ -340,9 +407,10 @@ export default function UnifiedWorkspace() {
             }
         });
 
+        // Capas 3D
         currentDeptData.layers.forEach((layer, index) => {
             const saved = savedLayout[`layer-${layer.id}`] || { x: 0, y: -7 - (index * 2) };
-            newNodes.push({
+            baseNodes.push({
                 id: `layer-${layer.id}`, type: 'layerNode', position: toCanvas(saved.x, saved.y),
                 draggable: true, zIndex: 100 - index,
                 style: { zIndex: 100 - index, pointerEvents: 'none' },
@@ -350,12 +418,44 @@ export default function UnifiedWorkspace() {
             });
         });
 
-        setNodes(newNodes);
-    }, [activeRole, entityId, savedLayout, currentDeptData]);
+        setNodes(nds => {
+            const existingWindows = nds.filter(n => n.type === 'windowNode');
+            
+            // Re-instanciar ventanas persistentes que no están en el estado actual
+            const newWindows: Node[] = [];
+            persistedWindows.forEach((layerId, idx) => {
+                const windowId = `window-${layerId}`;
+                if (!existingWindows.some(w => w.id === windowId)) {
+                    // Buscamos el layer en cualquier departamento
+                    const result = findLayerAcrossDepts(layerId);
+                    if (result) {
+                        const { layer, role } = result;
+                        const savedPos = savedLayout[windowId] || { x: 1500 + (idx * 80), y: -400 + (idx * 80) };
+                        newWindows.push({
+                            id: windowId, type: 'windowNode', position: savedPos.x ? { x: savedPos.x, y: savedPos.y } : savedPos,
+                            dragHandle: '.custom-drag-handle',
+                            data: {
+                                id: layer.id, label: layer.label, icon: layer.icon,
+                                url: `/nucleo/${entityId}/${role}/${layer.path}`,
+                                onClose: () => {
+                                    const updated = persistedWindows.filter(pid => pid !== layerId);
+                                    setPersistedWindows(updated);
+                                    persistWindowState(updated);
+                                    setNodes(currentNodes => currentNodes.filter(n => n.id !== windowId));
+                                }
+                            }
+                        });
+                    }
+                }
+            });
+
+            return [...baseNodes, ...existingWindows, ...newWindows];
+        });
+    }, [activeRole, currentDeptData, savedLayout, persistedWindows]);
 
     const onNodeDragStop = (event: any, node: Node) => {
-        if (node.id === 'dept-title' || node.id === 'action-return' || node.id.startsWith('layer-')) {
-            const pos = fromCanvas(node.position.x, node.position.y);
+        if (node.id === 'dept-title' || node.id === 'action-return' || node.id.startsWith('layer-') || node.type === 'windowNode') {
+            const pos = node.type === 'windowNode' ? node.position : fromCanvas(node.position.x, node.position.y);
             savePosition(node.id, pos.x, pos.y);
         }
     };
@@ -363,34 +463,58 @@ export default function UnifiedWorkspace() {
     return (
         <div className="w-full h-screen bg-black flex flex-col relative overflow-hidden">
             <AnimatePresence>
-                {selectedNodeId && selectedNode && (
-                    <motion.div initial={{ x: -400, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -400, opacity: 0 }} className="fixed left-8 top-1/2 -translate-y-1/2 z-[300] w-72 bg-[#0D0F14]/90 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-8 shadow-[0_0_80px_rgba(0,0,0,0.8)]">
-                        <div className="flex items-center justify-between mb-8">
+                {selectedNodeId && selectedNode && !isMobile && (
+                    <motion.div initial={{ x: -400, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -400, opacity: 0 }} className="fixed left-8 top-[58%] -translate-y-1/2 z-[300] w-64 bg-[#0D0F14]/90 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-6 shadow-[0_0_80px_rgba(0,0,0,0.8)]">
+                        <div className="flex items-center justify-between mb-6">
                             <div className="flex items-center gap-3 text-white/40"><Move className="w-4 h-4" /><span className="text-[10px] font-bold tracking-[0.2em] uppercase">Coordenadas</span></div>
                             <button onClick={() => setSelectedNodeId(null)} className="text-white/20 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
                         </div>
-                        <div className="space-y-6">
-                            <div><div className="text-[10px] font-black text-white/20 uppercase tracking-widest mb-2 px-1">Elemento</div><div className="text-sm font-medium text-white/90 px-1 truncate">{selectedNode.data.label || selectedNode.data.title}</div></div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2"><label className="text-[9px] font-bold text-white/30 uppercase tracking-widest px-1">Eje X (pulg)</label><input type="number" step="0.1" value={cartesianPos.x} onChange={(e) => updateNodePosition(selectedNodeId, Number(e.target.value), cartesianPos.y)} className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-cyan-500/50 transition-all" /></div>
-                                <div className="space-y-2"><label className="text-[9px] font-bold text-white/30 uppercase tracking-widest px-1">Eje Y (pulg)</label><input type="number" step="0.1" value={cartesianPos.y} onChange={(e) => updateNodePosition(selectedNodeId, cartesianPos.x, Number(e.target.value))} className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-cyan-500/50 transition-all" /></div>
+                        <div className="space-y-4">
+                            <div><div className="text-[10px] font-black text-white/20 uppercase tracking-widest mb-1 px-1">Elemento</div><div className="text-sm font-medium text-white/90 px-1 truncate">{selectedNode.data.label || selectedNode.data.title}</div></div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-2"><label className="text-[9px] font-bold text-white/30 uppercase tracking-widest px-1">Eje X</label><input type="number" step="0.1" value={cartesianPos.x} onChange={(e) => updateNodePosition(selectedNodeId, Number(e.target.value), cartesianPos.y)} className="w-full bg-white/5 border border-white/10 rounded-2xl px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-cyan-500/50 transition-all" /></div>
+                                <div className="space-y-2"><label className="text-[9px] font-bold text-white/30 uppercase tracking-widest px-1">Eje Y</label><input type="number" step="0.1" value={cartesianPos.y} onChange={(e) => updateNodePosition(selectedNodeId, cartesianPos.x, Number(e.target.value))} className="w-full bg-white/5 border border-white/10 rounded-2xl px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-cyan-500/50 transition-all" /></div>
                             </div>
-                            <div className="pt-4">{selectedNode.id.startsWith('layer-') && (<button onClick={() => spawnWindow(selectedNode.data)} className="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-bold py-4 rounded-2xl transition-all shadow-[0_10px_30px_rgba(6,182,212,0.3)] active:scale-95 flex items-center justify-center gap-2"><ExternalLink className="w-4 h-4" /><span>ABRIR MÓDULO</span></button>)}</div>
+                            <div className="pt-2">{selectedNode.id.startsWith('layer-') && (<button onClick={() => spawnWindow(selectedNode.data)} className="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-bold py-3 rounded-2xl transition-all shadow-[0_10px_30px_rgba(6,182,212,0.3)] active:scale-95 flex items-center justify-center gap-2"><ExternalLink className="w-4 h-4" /><span>ABRIR MÓDULO</span></button>)}</div>
                         </div>
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            <div className="fixed bottom-8 right-[240px] z-[200] flex gap-2 bg-[#0D0F14]/90 backdrop-blur-3xl border border-white/10 p-2 rounded-2xl shadow-2xl">
-                <button onClick={() => setGridType('none')} className={cn("p-3 rounded-xl transition-all", gridType === 'none' ? "bg-white/10 text-white" : "text-white/20 hover:text-white/40")} title="Sin Cuadrícula"><Square className="w-5 h-5" /></button>
-                <button onClick={() => setGridType('dots')} className={cn("p-3 rounded-xl transition-all", gridType === 'dots' ? "bg-white/10 text-white" : "text-white/20 hover:text-white/40")} title="Puntos"><div className="w-5 h-5 flex items-center justify-center font-black text-xs">.</div></button>
-                <button onClick={() => setGridType('lines')} className={cn("p-3 rounded-xl transition-all", gridType === 'lines' ? "bg-white/10 text-white" : "text-white/20 hover:text-white/40")} title="Líneas"><Grid3X3 className="w-5 h-5" /></button>
+            <div className={cn(
+                "fixed bottom-8 z-[200] flex gap-2 bg-[#0D0F14]/90 backdrop-blur-3xl border border-white/10 p-2 rounded-2xl shadow-2xl transition-all",
+                isMobile ? "right-4 scale-[0.6] origin-right bottom-4 p-1.5" : "right-[240px]"
+            )}>
+                <button onClick={() => setGridType('none')} className={cn("p-2 md:p-3 rounded-xl transition-all", gridType === 'none' ? "bg-white/10 text-white" : "text-white/20 hover:text-white/40")} title="Sin Cuadrícula"><Square className="w-5 h-5" /></button>
+                <button onClick={() => setGridType('dots')} className={cn("p-2 md:p-3 rounded-xl transition-all", gridType === 'dots' ? "bg-white/10 text-white" : "text-white/20 hover:text-white/40")} title="Puntos"><div className="w-5 h-5 flex items-center justify-center font-black text-xs">.</div></button>
+                <button onClick={() => setGridType('lines')} className={cn("p-2 md:p-3 rounded-xl transition-all", gridType === 'lines' ? "bg-white/10 text-white" : "text-white/20 hover:text-white/40")} title="Líneas"><Grid3X3 className="w-5 h-5" /></button>
+            </div>
+            <div className={cn("fixed bottom-8 left-8 z-[200] transition-all", isMobile && "left-4 bottom-4 scale-[0.6] origin-left")}>
+                <button onClick={() => router.push(`/nucleo/${entityId}`)} className="w-16 h-16 bg-[#0D0F14]/90 backdrop-blur-3xl border border-white/10 rounded-2xl flex items-center justify-center shadow-[0_0_50px_rgba(0,0,0,0.9)] hover:border-cyan-500/50 hover:scale-105 transition-all active:scale-95 group">
+                    <span className="text-white/40 group-hover:text-cyan-400 font-black text-3xl transition-colors tracking-tighter">N</span>
+                </button>
             </div>
 
-            <div className="fixed bottom-8 left-8 z-[200]"><button onClick={() => router.push(`/nucleo/${entityId}`)} className="w-16 h-16 bg-[#0D0F14]/90 backdrop-blur-3xl border border-white/10 rounded-2xl flex items-center justify-center shadow-[0_0_50px_rgba(0,0,0,0.9)] hover:border-cyan-500/50 hover:scale-105 transition-all active:scale-95 group"><span className="text-white/40 group-hover:text-cyan-400 font-black text-3xl transition-colors tracking-tighter">N</span></button></div>
-
             <div className="flex-1 w-full h-full relative z-0">
-                <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onNodeClick={(e, n) => (n.id.startsWith('layer-') || n.id === 'dept-title') && setSelectedNodeId(n.id)} onNodeDragStop={onNodeDragStop} nodeTypes={nodeTypes} className="bg-[#050505]" proOptions={{ hideAttribution: true }} minZoom={0.01} maxZoom={4} fitView fitViewOptions={{ padding: 0.4 }}>
+                <ReactFlow 
+                    nodes={nodes} 
+                    edges={edges} 
+                    onNodesChange={onNodesChange} 
+                    onEdgesChange={onEdgesChange} 
+                    onNodeClick={(e, n) => (n.id.startsWith('layer-') || n.id === 'dept-title' || n.type === 'windowNode') && setSelectedNodeId(n.id)} 
+                    onNodeDragStop={onNodeDragStop} 
+                    nodeTypes={nodeTypes} 
+                    className="bg-[#050505]" 
+                    proOptions={{ hideAttribution: true }} 
+                    minZoom={0.01} 
+                    maxZoom={4} 
+                    fitView 
+                    fitViewOptions={{ 
+                        padding: 0.2,
+                        nodes: nodes.filter(n => n.id === 'dept-title' || n.id.startsWith('layer-')),
+                        duration: 800
+                    }}
+                >
                     {gridType !== 'none' && <Background variant={gridType === 'dots' ? BackgroundVariant.Dots : BackgroundVariant.Lines} color="#ffffff" gap={PIXELS_PER_INCH} size={1} className="opacity-[0.03]" />}
                     <MiniMap style={{ backgroundColor: '#0D0F14', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }} maskColor="rgba(0, 0, 0, 0.8)" nodeColor={(n) => n.type === 'layerNode' ? '#06b6d4' : n.type === 'titleNode' ? '#ffffff' : '#ffffff05'} />
                     <Controls className="bg-[#0D0F14]/90 border-white/10 rounded-xl overflow-hidden" />

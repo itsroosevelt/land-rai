@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 export const WindowNode = ({ data, xPos, yPos }: NodeProps) => {
-    const [isMaximized, setIsMaximized] = useState(false);
+    const [isMaximized, setIsMaximized] = useState(data.initialMaximized || false);
     const [isMinimized, setIsMinimized] = useState(false);
     const [mounted, setMounted] = useState(false);
     const [isClosing, setIsClosing] = useState(false);
@@ -16,8 +16,33 @@ export const WindowNode = ({ data, xPos, yPos }: NodeProps) => {
         return () => setMounted(false);
     }, []);
 
+    useEffect(() => {
+        if (data.initialMaximized) {
+            setIsMaximized(true);
+        }
+    }, [data.initialMaximized]);
+
+    useEffect(() => {
+        if (isMaximized && data.url) {
+            window.history.replaceState(null, '', data.url);
+        } else if (!isMaximized && mounted) {
+            const pathParts = window.location.pathname.split('/');
+            const entityId = pathParts[2];
+            const role = new URLSearchParams(window.location.search).get('role') || 'ceo';
+            const workspaceUrl = `/nucleo/${entityId}/workspace?role=${role}`;
+            window.history.replaceState(null, '', workspaceUrl);
+        }
+    }, [isMaximized, data.url, mounted]);
+
     const handleClose = () => {
         setIsClosing(true);
+        if (isMaximized) {
+            const pathParts = window.location.pathname.split('/');
+            const entityId = pathParts[2];
+            const role = new URLSearchParams(window.location.search).get('role') || 'ceo';
+            const workspaceUrl = `/nucleo/${entityId}/workspace?role=${role}`;
+            window.history.replaceState(null, '', workspaceUrl);
+        }
         setTimeout(() => {
             data.onClose?.();
         }, 500);
@@ -68,9 +93,10 @@ export const WindowNode = ({ data, xPos, yPos }: NodeProps) => {
             )}
             style={isMaximized ? { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100dvh' } : {}}
         >
-            {/* Top Bar FIJA - Siempre visible */}
+            {/* Top Bar - Oculta en Maximizado hasta hacer Hover */}
             <div className={cn(
-                "w-full h-12 border-b border-white/5 bg-[#0D0F14]/90 backdrop-blur-md flex items-center px-4 justify-between cursor-grab active:cursor-grabbing shrink-0 z-50",
+                "w-full h-12 border-b border-white/5 bg-[#0D0F14]/90 backdrop-blur-md flex items-center px-4 justify-between cursor-grab active:cursor-grabbing shrink-0 z-50 transition-all duration-500",
+                isMaximized ? "absolute top-0 left-0 opacity-0 hover:opacity-100 -translate-y-2 hover:translate-y-0" : "relative",
                 "custom-drag-handle"
             )}>
                 {/* Traffic Lights - Mac Style Refined */}
@@ -103,10 +129,12 @@ export const WindowNode = ({ data, xPos, yPos }: NodeProps) => {
                     </button>
                 </div>
 
-                {/* Center Badge */}
-                <div className="flex items-center gap-3 px-4 py-1.5 bg-white/[0.03] rounded-full border border-white/10 shadow-[inset_0_1px_10px_rgba(255,255,255,0.02)]">
-                    {data.icon && <data.icon className="w-3.5 h-3.5 text-cyan-500 drop-shadow-[0_0_8px_rgba(6,182,212,0.4)]" />}
-                    <span className="text-white/90 font-medium tracking-[0.1em] uppercase text-[10px] whitespace-nowrap">
+                {/* Center Badge - Muestra la ruta técnica */}
+                <div className="flex items-center gap-2 px-4 py-1.5 bg-white/[0.03] rounded-full border border-white/10 shadow-[inset_0_1px_10px_rgba(255,255,255,0.02)]">
+                    <span className="text-white/20 font-mono text-[9px] tracking-widest uppercase">
+                        {data.url.split('/').slice(3, -1).join(' / ') || 'nucleo'} /
+                    </span>
+                    <span className="text-white/90 font-bold tracking-[0.1em] uppercase text-[10px] whitespace-nowrap">
                         {data.label}
                     </span>
                 </div>
@@ -127,12 +155,25 @@ export const WindowNode = ({ data, xPos, yPos }: NodeProps) => {
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
-                            window.open(data.url, '_blank');
+                            const pathParts = data.url.split('/');
+                            const entityId = pathParts[2];
+                            const role = pathParts[3] || 'ceo';
+                            // Pasamos el ID del layer para que se abra maximizado en la nueva pestaña
+                            const fullWorkspaceUrl = `/nucleo/${entityId}/workspace?role=${role}&maximize=${data.id}`;
+                            window.open(fullWorkspaceUrl, '_blank');
                         }}
                         className="p-1.5 hover:bg-white/5 rounded-lg transition-colors group"
-                        title="Nueva pestaña"
+                        title="Duplicar instancia Roosevelt"
                     >
                         <ExternalLink className="w-3.5 h-3.5 text-white/40 group-hover:text-cyan-400 transition-colors" />
+                    </button>
+                    <div className="w-px h-4 bg-white/10 mx-1" />
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); handleClose(); }}
+                        className="p-1.5 hover:bg-red-500/20 rounded-lg transition-colors group"
+                        title="Cerrar"
+                    >
+                        <X className="w-3.5 h-3.5 text-white/40 group-hover:text-red-500 transition-colors" />
                     </button>
                 </div>
             </div>
