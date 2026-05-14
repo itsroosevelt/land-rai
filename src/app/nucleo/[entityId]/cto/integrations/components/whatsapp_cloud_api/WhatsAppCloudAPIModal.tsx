@@ -408,7 +408,22 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                     {formErrors.wabaId && <p className="text-[8px] text-red-500 mt-1 font-bold italic pl-1">{formErrors.wabaId}</p>}
                 </div>
 
-                {/* Token removed per platform global config */}
+                <div className="space-y-2">
+                    <div className="flex justify-between px-1">
+                        <label className="text-[9px] font-black uppercase tracking-widest text-neutral-500">ACCESS TOKEN (PERMANENTE)</label>
+                        <a href="https://developers.facebook.com/apps/" target="_blank" rel="noreferrer" className="text-[8px] text-blue-500 font-bold uppercase italic tracking-tighter">GENERAR EN META</a>
+                    </div>
+                    <textarea
+                        placeholder="Ej: EAARnTi3ZAPNYBR..."
+                        value={waConfig.accessToken}
+                        onChange={(e) => {
+                            setWaConfig({ ...waConfig, accessToken: e.target.value });
+                            validateField('accessToken', e.target.value);
+                        }}
+                        className={`w-full h-24 bg-white/[0.02] border ${formErrors.accessToken ? 'border-red-500/50 bg-red-500/5' : 'border-white/10'} rounded-xl px-4 py-3 text-[10px] text-white focus:border-blue-500/50 transition-all outline-none font-mono resize-none`}
+                    />
+                    {formErrors.accessToken && <p className="text-[8px] text-red-500 mt-1 font-bold italic pl-1">{formErrors.accessToken}</p>}
+                </div>
             </div>
 
 
