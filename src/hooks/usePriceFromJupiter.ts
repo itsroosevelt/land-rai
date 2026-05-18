@@ -17,6 +17,13 @@ export function usePriceFromJupiter(tokenAddresses: string[], cacheDurationMs = 
   const cacheTimeRef = useRef<number>(0);
 
   useEffect(() => {
+    if (tokenAddresses.length === 0) {
+      setPrices({});
+      setLoading(false);
+      setSecondsRemaining(0);
+      return;
+    }
+
     const fetchPrices = async () => {
       const now = Date.now();
       const isCached = cacheTimeRef.current && (now - cacheTimeRef.current) < cacheDurationMs;

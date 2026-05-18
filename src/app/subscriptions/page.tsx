@@ -134,7 +134,7 @@ const plans = [
 export default function SubscriptionsPage() {
   const router = useRouter();
   const { currentUser, activeEntity, loading } = useAuth();
-  const { status: subscriptionStatus, plan, expiresAt } = useSubscriptionStatus();
+  const { status: subscriptionStatus, plan: activePlanId, expiresAt } = useSubscriptionStatus();
   const [selectedPlan, setSelectedPlan] = useState<typeof plans[number] | null>(null);
 
   // Use active entity from context
@@ -155,7 +155,7 @@ export default function SubscriptionsPage() {
                 <div className="flex items-center gap-3">
                   <CheckCircle className="w-5 h-5 text-green-400" />
                   <p className="text-sm font-medium text-green-300 tracking-wide">
-                    ✓ You have an active subscription ({plan}) valid until {expiresAt ? new Date(expiresAt).toLocaleDateString() : 'N/A'}
+                    ✓ You have an active subscription ({activePlanId}) valid until {expiresAt ? new Date(expiresAt).toLocaleDateString() : 'N/A'}
                   </p>
                 </div>
                 <Button
@@ -187,77 +187,89 @@ export default function SubscriptionsPage() {
             </div>
 
             <div className="grid gap-6 lg:grid-cols-3">
-              {plans.map((plan) => (
-                <article
-                  key={plan.id}
-                  className={`rounded-3xl border backdrop-blur-sm p-8 ${plan.accent} flex min-h-[420px] flex-col relative overflow-hidden transition-all duration-300 hover:border-white/20 ${
-                    plan.highlighted ? 'lg:scale-105 ring-2 ring-blue-500/50 shadow-lg shadow-blue-500/10' : ''
-                  }`}
-                >
-                  {plan.highlighted && (
-                    <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-blue-600/20 to-transparent h-px" />
-                  )}
-
-                  <div className="mb-8">
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="text-xs uppercase tracking-[0.35em] text-white/35 font-semibold">
-                        {plan.name}
-                      </p>
-                      {plan.id === 'pro' && (
-                        <span className="text-[10px] px-3 py-1 bg-blue-600/30 text-blue-200 rounded-full uppercase tracking-widest font-bold">
-                          Popular
-                        </span>
-                      )}
-                    </div>
-
-                    {!plan.isEnterprise && (
-                      <div className="mt-5 flex items-end gap-2 mb-5">
-                        <span className="text-5xl font-semibold tracking-tight text-white">
-                          {plan.price}
-                        </span>
-                        <span className="pb-2 text-sm uppercase tracking-[0.25em] text-white/35 font-semibold">
-                          / month
-                        </span>
-                      </div>
+              {plans.map((plan) => {
+                const isCurrentPlan = subscriptionStatus === 'active' && activePlanId === plan.id;
+                return (
+                  <article
+                    key={plan.id}
+                    className={`rounded-3xl border backdrop-blur-sm p-8 ${plan.accent} flex min-h-[420px] flex-col relative overflow-hidden transition-all duration-300 hover:border-white/20 ${
+                      plan.highlighted ? 'lg:scale-105 ring-2 ring-blue-500/50 shadow-lg shadow-blue-500/10' : ''
+                    } ${
+                      isCurrentPlan ? 'ring-2 ring-amber-500/60 shadow-lg shadow-amber-500/10 border-amber-500/30' : ''
+                    }`}
+                  >
+                    {plan.highlighted && (
+                      <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-blue-600/20 to-transparent h-px" />
                     )}
 
-                    <p className="text-sm leading-6 text-white/60 font-medium">{plan.description}</p>
-                  </div>
-
-                  <div className="mb-10 space-y-4">
-                    {plan.features.map((feature) => (
-                      <div
-                        key={feature}
-                        className="flex items-center gap-3 text-sm text-white/75 font-medium"
-                      >
-                        <div className="flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/5">
-                          <Check className="h-3.5 w-3.5" />
-                        </div>
-                        <span>{feature}</span>
+                    <div className="mb-8">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-xs uppercase tracking-[0.35em] text-white/35 font-semibold">
+                          {plan.name}
+                        </p>
+                        {plan.id === 'pro' && (
+                          <span className="text-[10px] px-3 py-1 bg-blue-600/30 text-blue-200 rounded-full uppercase tracking-widest font-bold">
+                            Popular
+                          </span>
+                        )}
                       </div>
-                    ))}
-                  </div>
 
-                  {plan.isEnterprise ? (
-                    <a
-                      href="mailto:info@rooseveltcorp.com?subject=Enterprise Plan Inquiry"
-                      className="mt-auto"
-                    >
-                      <Button className="w-full h-12 rounded-full bg-white/10 hover:bg-white/20 text-white border border-white/20 flex items-center justify-center gap-2 font-semibold tracking-wider text-xs">
-                        <Mail className="w-4 h-4" />
-                        Contact our team
+                      {!plan.isEnterprise && (
+                        <div className="mt-5 flex items-end gap-2 mb-5">
+                          <span className="text-5xl font-semibold tracking-tight text-white">
+                            {plan.price}
+                          </span>
+                          <span className="pb-2 text-sm uppercase tracking-[0.25em] text-white/35 font-semibold">
+                            / month
+                          </span>
+                        </div>
+                      )}
+
+                      <p className="text-sm leading-6 text-white/60 font-medium">{plan.description}</p>
+                    </div>
+
+                    <div className="mb-10 space-y-4">
+                      {plan.features.map((feature) => (
+                        <div
+                          key={feature}
+                          className="flex items-center gap-3 text-sm text-white/75 font-medium"
+                        >
+                          <div className="flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/5">
+                            <Check className="h-3.5 w-3.5" />
+                          </div>
+                          <span>{feature}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {plan.isEnterprise ? (
+                      <a
+                        href="mailto:info@rooseveltcorp.com?subject=Enterprise Plan Inquiry"
+                        className="mt-auto"
+                      >
+                        <Button className="w-full h-12 rounded-full bg-white/10 hover:bg-white/20 text-white border border-white/20 flex items-center justify-center gap-2 font-semibold tracking-wider text-xs">
+                          <Mail className="w-4 h-4" />
+                          Contact our team
+                        </Button>
+                      </a>
+                    ) : isCurrentPlan ? (
+                      <Button
+                        disabled
+                        className="mt-auto h-12 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold tracking-widest text-xs uppercase cursor-default"
+                      >
+                        Current Subscription
                       </Button>
-                    </a>
-                  ) : (
-                    <Button
-                      onClick={() => setSelectedPlan(plan as typeof plans[number])}
-                      className="mt-auto h-12 rounded-full bg-white text-black hover:bg-gray-100 font-semibold tracking-widest text-xs uppercase shadow-lg"
-                    >
-                      Get Started
-                    </Button>
-                  )}
-                </article>
-              ))}
+                    ) : (
+                      <Button
+                        onClick={() => setSelectedPlan(plan as typeof plans[number])}
+                        className="mt-auto h-12 rounded-full bg-white text-black hover:bg-gray-100 font-semibold tracking-widest text-xs uppercase shadow-lg"
+                      >
+                        Get Started
+                      </Button>
+                    )}
+                  </article>
+                );
+              })}
             </div>
 
             <div className="mt-16 max-w-2xl mx-auto text-center">
@@ -270,6 +282,7 @@ export default function SubscriptionsPage() {
                 Pro: <span className="text-green-400 font-bold">$74.99</span> (vs $99.99)
               </p>
             </div>
+
           </section>
 
           {selectedPlan && (

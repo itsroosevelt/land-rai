@@ -1,0 +1,53 @@
+export type SubscriptionPaymentMethod = 'sol' | 'usdc' | 'lxr' | 'usdt';
+
+export interface SubscriptionPaymentConfig {
+  method: SubscriptionPaymentMethod;
+  label: string;
+  mint: string | null;
+  decimals: number;
+}
+
+export const SUBSCRIPTION_TREASURY_WALLET =
+  process.env.NEXT_PUBLIC_TREASURY_WALLET || 'Ao8RqGikw3joMDo25nb3s3c7WcP6ouazJJnA1twirDAT';
+
+export const SUBSCRIPTION_RPC_URL =
+  process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+
+export const SOLANA_PAYMENT_CONFIG: Record<SubscriptionPaymentMethod, SubscriptionPaymentConfig> = {
+  sol: {
+    method: 'sol',
+    label: 'SOL',
+    mint: null,
+    decimals: 9,
+  },
+  usdc: {
+    method: 'usdc',
+    label: 'USDC',
+    mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+    decimals: 6,
+  },
+  usdt: {
+    method: 'usdt',
+    label: 'USDT',
+    mint: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+    decimals: 6,
+  },
+  lxr: {
+    method: 'lxr',
+    label: 'LXR',
+    mint: '7Qm6qUCXGZfGBYYFzq2kTbwTDah5r3d9DcPJHRT8Wdth',
+    decimals: 6,
+  },
+};
+
+export function getSubscriptionPaymentConfig(method: SubscriptionPaymentMethod): SubscriptionPaymentConfig {
+  return SOLANA_PAYMENT_CONFIG[method];
+}
+
+export function getSubscriptionCurrentDocPath(userId: string, entityId: string) {
+  return `users/${userId}/entities/${entityId}/subscriptions/current`;
+}
+
+export function getSubscriptionPaymentRequestsCollectionPath(userId: string, entityId: string) {
+  return `${getSubscriptionCurrentDocPath(userId, entityId)}/payment_requests`;
+}

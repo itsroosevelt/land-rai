@@ -38,7 +38,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             localStorage.setItem('roosevelt_active_entity', entityUrl);
         } else {
             const saved = localStorage.getItem('roosevelt_active_entity');
-            if (saved) setActiveEntity(saved);
+            if (saved) {
+                setActiveEntity(saved);
+            } else {
+                setActiveEntity('life');
+            }
         }
     }, [pathname]);
 

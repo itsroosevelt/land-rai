@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { Connection, PublicKey } from '@solana/web3.js';
+import { SUBSCRIPTION_RPC_URL, SUBSCRIPTION_TREASURY_WALLET } from '@/lib/subscriptions/payment-config';
 
 interface SubscriptionData {
   status: 'active' | 'pending' | 'expired' | null;
@@ -24,24 +26,141 @@ export function useSubscriptionStatus(): SubscriptionData & { loading: boolean }
 
   useEffect(() => {
     const checkSubscription = async () => {
-      if (!currentUser || !activeEntity) {
+      if (!currentUser) {
         setLoading(false);
         return;
       }
 
+      const entity = activeEntity || 'life';
+
       try {
-        // Check subscription in user's active entity
+        // 1. Check if the user already has an active subscription in Firestore
         const subscriptionRef = doc(
           db,
-          `users/${currentUser.uid}/entities/${activeEntity}/subscriptions/current`
+          `users/${currentUser.uid}/entities/${entity}/subscriptions/current`
         );
-        const docSnap = await getDoc(subscriptionRef);
+        let docSnap = await getDoc(subscriptionRef);
 
-        if (docSnap.exists()) {
-          const data = docSnap.data();
+        let data = docSnap.exists() ? docSnap.data() : null;
+        let isExpired = false;
+        
+        if (data) {
           const expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
-          const isExpired = expiresAt ? expiresAt < new Date() : false;
+          isExpired = expiresAt ? expiresAt < new Date() : false;
+        }
 
+        const isActive = data && data.status === 'active' && !isExpired;
+
+        // 2. If NOT active, check for any pending payment requests in the background!
+        if (!isActive) {
+          const requestsRef = collection(db, `users/${currentUser.uid}/entities/${entity}/paymentRequests`);
+          const q = query(requestsRef, where('status', '==', 'pending'));
+          const requestsSnap = await getDocs(q);
+
+          if (!requestsSnap.empty) {
+            const conn = new Connection(SUBSCRIPTION_RPC_URL, 'confirmed');
+
+            for (const reqDoc of requestsSnap.docs) {
+              const req = reqDoc.data();
+              if (!req.reference) continue;
+
+              try {
+                // Fetch signatures for this single-use reference key on the blockchain
+                const signatures = await conn.getSignaturesForAddress(new PublicKey(req.reference), { limit: 5 });
+
+                for (const sigInfo of signatures) {
+                  if (sigInfo.err) continue;
+
+                  // Fetch parsed transaction details
+                  const tx = await conn.getParsedTransaction(sigInfo.signature, {
+                    commitment: 'confirmed',
+                    maxSupportedTransactionVersion: 0,
+                  });
+
+                  if (tx && !tx.meta?.err) {
+                    const instructions = tx.transaction.message.instructions || [];
+                    const expectedRaw = String(req.expectedAmountRaw);
+                    const treasury = SUBSCRIPTION_TREASURY_WALLET;
+                    let matches = false;
+
+                    if (req.paymentMethod === 'sol') {
+                      matches = instructions.some((inst: any) => {
+                        if (inst.program === 'system') {
+                          const parsed = inst.parsed;
+                          return (
+                            parsed?.type === 'transfer' &&
+                            String(parsed?.info?.destination) === treasury &&
+                            String(parsed?.info?.lamports) === expectedRaw
+                          );
+                        }
+                        return false;
+                      });
+                    } else {
+                      // SPL Tokens (USDC, USDT, LXR)
+                      matches = instructions.some((inst: any) => {
+                        if (inst.program === 'spl-token' || inst.program === 'spl-token-2022') {
+                          const parsed = inst.parsed;
+                          if (parsed && (parsed.type === 'transfer' || parsed.type === 'transferChecked')) {
+                            const rawAmount =
+                              parsed.info?.tokenAmount?.amount ||
+                              parsed.info?.amount ||
+                              parsed.info?.tokenAmount?.uiAmountString;
+                            return String(rawAmount) === expectedRaw;
+                          }
+                        }
+                        return false;
+                      });
+                    }
+
+                    if (matches) {
+                      const paidAtIso = new Date().toISOString();
+                      const expiresAt = new Date();
+                      expiresAt.setDate(expiresAt.getDate() + 30);
+
+                      // Update payment request to paid
+                      await setDoc(reqDoc.ref, {
+                        status: 'paid',
+                        paymentSignature: sigInfo.signature,
+                        paidAt: paidAtIso,
+                        updatedAt: paidAtIso,
+                      }, { merge: true });
+
+                      // Save subscription!
+                      const newSubscriptionData = {
+                        status: 'active',
+                        plan: req.plan,
+                        priceUSD: req.planPriceUSD,
+                        paymentMethod: req.paymentMethod,
+                        paymentSignature: sigInfo.signature,
+                        activatedAt: paidAtIso,
+                        expiresAt: expiresAt.toISOString(),
+                        updatedAt: paidAtIso,
+                        billing: req.billingData || null,
+                      };
+
+                      await setDoc(subscriptionRef, newSubscriptionData, { merge: true });
+
+                      // Update state immediately
+                      setSubscriptionData({
+                        status: 'active',
+                        plan: req.plan,
+                        expiresAt: expiresAt.toISOString(),
+                        isExpired: false,
+                      });
+                      setLoading(false);
+                      return; // Exit immediately since subscription is verified and active!
+                    }
+                  }
+                }
+              } catch (err) {
+                console.error(`Error verifying payment request ${reqDoc.id}:`, err);
+              }
+            }
+          }
+        }
+
+        // 3. Fallback to reading the subscription directly if no background updates occurred
+        if (isActive) {
           setSubscriptionData({
             status: data.status || null,
             plan: data.plan || null,
