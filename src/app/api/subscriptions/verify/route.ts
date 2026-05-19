@@ -36,11 +36,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify the transaction went to the treasury wallet
+    // Verify transaction was successful on-chain
+    if (transaction.meta && transaction.meta.err) {
+      return NextResponse.json(
+        { error: 'Transaction failed on-chain' },
+        { status: 400 }
+      );
+    }
+
+    // Verify the transaction went to the treasury wallet or its token account
     const treasuryPublicKey = new PublicKey(TREASURY_WALLET);
+    let expectedDestination = treasuryPublicKey;
+
+    if (paymentMethod === 'lxr') {
+      const LXR_MINT = new PublicKey('7Qm6qUCXGZfGBYYFzq2kTbwTDah5r3d9DcPJHRT8Wdth');
+      const { getAssociatedTokenAddress } = await import('@solana/spl-token');
+      expectedDestination = await getAssociatedTokenAddress(LXR_MINT, treasuryPublicKey);
+    } else if (paymentMethod === 'usdc') {
+      const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
+      const { getAssociatedTokenAddress } = await import('@solana/spl-token');
+      expectedDestination = await getAssociatedTokenAddress(USDC_MINT, treasuryPublicKey);
+    }
+
     const transactionAccounts = transaction.transaction.message.getAccountKeys();
     const hasValidDestination = transactionAccounts.staticAccountKeys.some(
-      (key) => key.toString() === treasuryPublicKey.toString()
+      (key) => key.toString() === expectedDestination.toString()
     );
 
     if (!hasValidDestination) {
@@ -55,8 +75,8 @@ export async function POST(request: NextRequest) {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
 
-    // Save subscription to Firestore (respecting Molde Maestro multi-tenant structure)
-    await db.doc(`users/${userId}/entities/${entityId}/subscriptions/current`).set(
+    // Save subscription to Firestore (respecting global user-level structure)
+    await db.doc(`users/${userId}/subscriptions/current`).set(
       {
         status: 'active',
         plan: plan,

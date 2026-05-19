@@ -40,12 +40,12 @@ export default function CheckoutModal({ plan, onClose, entityId: propEntityId }:
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-[100vw] w-screen h-[100dvh] max-h-none bg-[#0a0a0a] border-none text-white sm:rounded-none p-0 overflow-hidden">
+      <DialogContent className="max-w-[100vw] w-screen h-[100dvh] max-h-none bg-[#0a0a0a] border-none text-white sm:rounded-none p-0 overflow-hidden no-scrollbar">
         <DialogTitle className="sr-only">Checkout - {plan.name}</DialogTitle>
 
-        <div className="flex flex-col lg:flex-row h-full">
+        <div className="flex flex-col lg:flex-row h-full overflow-y-auto lg:overflow-hidden no-scrollbar">
           {/* Left Column: Form & Summary */}
-          <div className="w-full lg:w-1/2 bg-[#111111] border-r border-white/5 p-6 lg:p-12 flex flex-col justify-start overflow-y-auto">
+          <div className="w-full lg:w-1/2 lg:h-full bg-[#111111] border-r border-white/5 p-6 lg:p-12 flex flex-col justify-start overflow-y-visible lg:overflow-y-auto no-scrollbar">
             <div className="max-w-[600px] w-full mx-auto">
               <div className="mb-6 flex items-center gap-3">
                 <div className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
@@ -100,7 +100,7 @@ export default function CheckoutModal({ plan, onClose, entityId: propEntityId }:
           </div>
 
           {/* Right Column: Payment Method */}
-          <div className="w-full lg:w-1/2 bg-black p-6 lg:p-12 overflow-y-auto">
+          <div className="w-full lg:w-1/2 lg:h-full bg-black p-6 lg:p-12 overflow-y-visible lg:overflow-y-auto no-scrollbar">
             <div className="max-w-[600px] w-full mx-auto">
               <div>
                 <h3 className="text-lg font-semibold tracking-wide text-white mb-4">Payment method</h3>

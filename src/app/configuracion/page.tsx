@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
+import {
     Users, Shield, User,
     ArrowLeft, Search, WalletCards, Home, Key, Network, ToggleLeft, Settings, FlaskConical, Zap, ChevronDown
 } from 'lucide-react';
@@ -21,7 +21,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage
 import { signOut } from 'firebase/auth';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { LogOut, X, Briefcase, Camera, Loader2, Save } from 'lucide-react';
+import { LogOut, X, Briefcase, Camera, Loader2, Save, ExternalLink, Copy, CheckCircle2, Calendar, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
 const SIDEBAR_ITEMS = [
@@ -36,12 +36,191 @@ const SIDEBAR_ITEMS = [
     { id: 'billing', label: "Wallet & subscriptions", icon: WalletCards, bg: "bg-[#FCAD70]", color: "text-[#5B2100]" },
 ];
 
+const ActiveSubCard = ({ details }: { details: any }) => {
+    const router = useRouter();
+    const expiresAtDate = details.expiresAt ? new Date(details.expiresAt) : null;
+    const expiresAtStr = expiresAtDate ? expiresAtDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : 'N/A';
+
+    // Calculate remaining days
+    const totalDays = 30;
+    const daysRemaining = expiresAtDate ? Math.max(0, Math.ceil((expiresAtDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))) : 0;
+    const daysElapsed = Math.max(0, totalDays - daysRemaining);
+    const progressPercent = Math.min(100, Math.max(0, (daysElapsed / totalDays) * 100));
+
+    // Plan features
+    const planName = details.plan || 'Plan';
+    const isPro = planName.toLowerCase().includes('pro');
+    const features = isPro
+        ? ['Acceso ilimitado a Bóvedas', 'Soporte prioritario 24/7', 'Módulos IA Avanzados (CTO, COO)', 'Multisig y Conexiones ilimitadas']
+        : ['1 Bóveda activa', 'Acceso a herramientas esenciales', 'Soporte base', 'Módulo financiero básico'];
+
+    const handleCopySignature = () => {
+        if (details.paymentSignature) {
+            navigator.clipboard.writeText(details.paymentSignature);
+            toast.success('Firma de pago copiada al portapapeles');
+        }
+    };
+
+    return (
+        <div className="w-full max-w-2xl bg-gradient-to-b from-[#1C1D21] to-[#121316] border border-white/5 rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden">
+            {/* Ambient Accent Light */}
+            <div className="absolute -top-24 -right-24 w-48 h-48 bg-emerald-500/10 blur-3xl rounded-full pointer-events-none" />
+
+            {/* Header: Plan & Status */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/5">
+                <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                        <ShieldCheck className="w-6 h-6 text-emerald-400" />
+                    </div>
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <h3 className="text-xl font-semibold tracking-wide text-white capitalize">{planName.replace('-monthly', '')} Plan</h3>
+                            <span className="px-2.5 py-0.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold uppercase tracking-wider rounded-full animate-pulse">
+                                Activo
+                            </span>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-0.5">Suscripción gestionada a través de Blockchain / Smart Contract</p>
+                    </div>
+                </div>
+                <div className="text-left sm:text-right">
+                    <span className="text-2xl font-bold tracking-tight text-white">
+                        {isPro ? '$99.99' : '$19.99'}
+                    </span>
+                    <span className="text-xs text-gray-400 uppercase tracking-widest font-semibold ml-1">/ mes</span>
+                </div>
+            </div>
+
+            {/* Subscription Progress Indicator */}
+            <div className="py-6 border-b border-white/5">
+                <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-emerald-400" />
+                        <span className="text-sm font-medium text-gray-200">Tiempo de Suscripción restante</span>
+                    </div>
+                    <span className="text-sm font-semibold text-emerald-400">{daysRemaining} días restantes</span>
+                </div>
+                <div className="w-full bg-[#202124] h-2.5 rounded-full overflow-hidden border border-white/5">
+                    <div
+                        className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-1000"
+                        style={{ width: `${100 - progressPercent}%` }}
+                    />
+                </div>
+                <div className="flex justify-between text-xs text-gray-400 mt-2.5 font-medium">
+                    <span>Activado: {details.activatedAt ? new Date(details.activatedAt).toLocaleDateString('es-ES') : 'N/A'}</span>
+                    <span>Vence el: <span className="text-gray-200 font-semibold">{expiresAtStr}</span></span>
+                </div>
+            </div>
+
+            {/* Payment & Transaction Credentials */}
+            <div className="py-6 border-b border-white/5 space-y-4">
+                <h4 className="text-xs font-bold text-white/40 uppercase tracking-widest">Detalles de la Transacción</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="bg-[#17181C] border border-white/5 p-4 rounded-2xl flex flex-col justify-between gap-1">
+                        <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Método de Pago</span>
+                        <span className="text-sm font-semibold text-white uppercase tracking-wider flex items-center gap-1.5 mt-1">
+                            Solana Network (LXR/SOL)
+                        </span>
+                    </div>
+                    <div className="bg-[#17181C] border border-white/5 p-4 rounded-2xl flex flex-col justify-between gap-1 relative group">
+                        <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Firma de Pago (Signature)</span>
+                        <div className="flex items-center justify-between gap-2 mt-1">
+                            <span className="text-xs text-gray-300 font-mono">
+                                {details.paymentSignature ? `${details.paymentSignature.slice(0, 8)}...${details.paymentSignature.slice(-8)}` : 'N/A'}
+                            </span>
+                            {details.paymentSignature && (
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        onClick={handleCopySignature}
+                                        className="p-1 hover:bg-white/5 rounded text-gray-400 hover:text-white transition-colors"
+                                        title="Copiar firma"
+                                    >
+                                        <Copy className="w-3.5 h-3.5" />
+                                    </button>
+                                    <a
+                                        href={`https://solscan.io/tx/${details.paymentSignature}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="p-1 hover:bg-white/5 rounded text-gray-400 hover:text-white transition-colors"
+                                        title="Ver en Solscan"
+                                    >
+                                        <ExternalLink className="w-3.5 h-3.5" />
+                                    </a>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Perks & Features */}
+            <div className="pt-6 space-y-4">
+                <h4 className="text-xs font-bold text-white/40 uppercase tracking-widest">Beneficios Incluidos</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {features.map((feature, i) => (
+                        <div key={i} className="flex items-start gap-2.5 text-sm text-gray-200">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                            <span className="leading-snug">{feature}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Change Plan Button */}
+            <div className="mt-8 flex justify-end">
+                <button
+                    onClick={() => router.push('/subscriptions')}
+                    className="px-6 py-3 border border-white/10 rounded-full text-xs font-semibold tracking-wider uppercase text-white hover:bg-white/5 transition-all active:scale-95"
+                >
+                    Cambiar / Cancelar Plan
+                </button>
+            </div>
+        </div>
+    );
+};
+
 export default function ConfigurationPage() {
     const router = useRouter();
     const { currentUser, activeEntity, setActiveEntity } = useAuth();
     const [activeTab, setActiveTab] = useState('billing');
     const [searchQuery, setSearchQuery] = useState('');
     const [entities, setEntities] = useState<any[]>([]);
+    const [subDetails, setSubDetails] = useState<any>(null);
+    const [loadingSub, setLoadingSub] = useState(true);
+
+    React.useEffect(() => {
+        const fetchSubDetails = async () => {
+            if (!currentUser || !activeEntity) return;
+            try {
+                const subRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/subscriptions/current`);
+                const subSnap = await getDoc(subRef);
+                if (subSnap.exists()) {
+                    setSubDetails(subSnap.data());
+                } else {
+                    setSubDetails(null);
+                }
+            } catch (err) {
+                console.error("Error fetching sub details:", err);
+            } finally {
+                setLoadingSub(false);
+            }
+        };
+        fetchSubDetails();
+    }, [currentUser, activeEntity]);
+
+    React.useEffect(() => {
+        setActiveEntity('life');
+        localStorage.setItem('roosevelt_active_entity', 'life');
+    }, [setActiveEntity]);
+
+    React.useEffect(() => {
+        if (entities.length > 0 && activeEntity) {
+            const currentEnt = entities.find(e => e.id.toLowerCase() === activeEntity.toLowerCase());
+            const isPersonal = activeEntity === 'life' || currentEnt?.type === 'persona';
+            if (!isPersonal && activeTab === 'billing') {
+                setActiveTab('profile');
+            }
+        }
+    }, [activeEntity, entities, activeTab]);
 
     // Expandable Wallet Modules
     const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({
@@ -84,7 +263,7 @@ export default function ConfigurationPage() {
 
             const rootRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}`);
             await updateDoc(rootRef, { logoUrl: url });
-            
+
             toast.success('Logo empresarial / Avatar actualizado');
         } catch (error) {
             console.error("Storage upload error", error);
@@ -133,8 +312,8 @@ export default function ConfigurationPage() {
     };
 
     return (
-        <div className="min-h-screen bg-black text-white selection:bg-blue-500/30 font-sans flex relative">
-            
+        <div className="h-screen overflow-hidden bg-black text-white selection:bg-blue-500/30 font-sans flex relative">
+
             {/* Ambient Background */}
             <div className="absolute inset-0 z-0 pointer-events-none">
                 <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-blue-600/5 blur-[120px] rounded-full mix-blend-screen" />
@@ -143,16 +322,16 @@ export default function ConfigurationPage() {
             </div>
 
             {/* Left Sidebar */}
-            <aside className="w-64 sm:w-72 h-dvh shrink-0 border-r border-white/5 bg-black/50 backdrop-blur-xl relative z-10 hidden md:flex flex-col">
+            <aside className="w-64 sm:w-72 h-full shrink-0 border-r border-white/5 bg-black/50 backdrop-blur-xl relative z-10 hidden md:flex flex-col">
                 <div className="p-6 flex items-center gap-3">
-                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-                      <Settings className="w-4 h-4 text-white" />
-                   </div>
-                   <h1 className="text-xl font-medium tracking-wide">Settings</h1>
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+                        <Settings className="w-4 h-4 text-white" />
+                    </div>
+                    <h1 className="text-xl font-medium tracking-wide">Settings</h1>
                 </div>
 
                 <div className="px-4 pb-4">
-                    <button 
+                    <button
                         onClick={() => router.push(`/nucleo/${activeEntity || 'gateway'}`)}
                         className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-xl transition-all font-medium"
                     >
@@ -162,7 +341,14 @@ export default function ConfigurationPage() {
                 </div>
 
                 <nav className="flex-1 px-3 space-y-1 overflow-y-auto no-scrollbar pb-6 mt-4">
-                    {SIDEBAR_ITEMS.map((item) => {
+                    {SIDEBAR_ITEMS.filter((item) => {
+                        if (item.id === 'billing') {
+                            const isPersonal = activeEntity === 'life' ||
+                                entities.find(e => e.id.toLowerCase() === activeEntity?.toLowerCase())?.type === 'persona';
+                            return isPersonal;
+                        }
+                        return true;
+                    }).map((item) => {
                         const isActive = activeTab === item.id;
                         return (
                             <button
@@ -174,11 +360,10 @@ export default function ConfigurationPage() {
                                         setActiveTab(item.id);
                                     }
                                 }}
-                                className={`w-full flex items-center gap-4 px-4 py-3 rounded-full transition-all text-[15px] font-medium ${
-                                    isActive 
-                                    ? 'bg-[#3C4043] text-white' 
-                                    : 'text-[#E8EAED] hover:bg-[#3C4043]/50'
-                                }`}
+                                className={`w-full flex items-center gap-4 px-4 py-3 rounded-full transition-all text-[15px] font-medium ${isActive
+                                        ? 'bg-[#3C4043] text-white'
+                                        : 'text-[#E8EAED] hover:bg-[#3C4043]/50'
+                                    }`}
                             >
                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${item.bg}`}>
                                     <item.icon className={`w-4 h-4 ${item.color} ${isActive ? 'opacity-100' : ''}`} />
@@ -191,7 +376,7 @@ export default function ConfigurationPage() {
             </aside>
 
             {/* Main Content Area */}
-            <main className="flex-1 h-dvh overflow-y-auto relative z-10">
+            <main className="flex-1 h-full overflow-y-auto relative z-10">
                 {/* Top Right Identity Switcher */}
                 <div className="absolute top-8 right-8 z-[2000]">
                     <DropdownMenu.Root>
@@ -208,8 +393,8 @@ export default function ConfigurationPage() {
                         </DropdownMenu.Trigger>
 
                         <DropdownMenu.Portal>
-                            <DropdownMenu.Content 
-                                align="end" 
+                            <DropdownMenu.Content
+                                align="end"
                                 sideOffset={12}
                                 className="w-[340px] bg-[#1A1C1E] border border-white/5 rounded-[2rem] shadow-[0_24px_48px_-12px_rgba(0,0,0,0.5)] backdrop-blur-3xl animate-in fade-in slide-in-from-top-4 duration-300 z-[3000] overflow-hidden p-0"
                             >
@@ -239,7 +424,7 @@ export default function ConfigurationPage() {
                                 <div className="max-h-[200px] overflow-y-auto no-scrollbar p-2">
                                     <p className="text-[9px] font-bold text-white/30 tracking-widest uppercase px-4 py-2">Switch Entity</p>
                                     {entities.map(ent => (
-                                        <DropdownMenu.Item 
+                                        <DropdownMenu.Item
                                             key={ent.id}
                                             onSelect={() => {
                                                 setActiveEntity(ent.id);
@@ -260,7 +445,7 @@ export default function ConfigurationPage() {
 
                                 {/* Footer Logout */}
                                 <div className="p-2 border-t border-white/5 bg-black/20">
-                                    <DropdownMenu.Item 
+                                    <DropdownMenu.Item
                                         onClick={handleLogout}
                                         className="w-full bg-white/[0.03] hover:bg-red-500/10 rounded-xl flex items-center gap-4 cursor-pointer outline-none transition-all px-4 py-3 group"
                                     >
@@ -274,46 +459,46 @@ export default function ConfigurationPage() {
                 </div>
 
                 <div className="max-w-5xl mx-auto px-6 py-12 md:py-20 lg:px-12">
-                     
-                     {/* Header Avatar & Search */}
-                     <div className="flex flex-col items-center mb-16">
+
+                    {/* Header Avatar & Search */}
+                    <div className="flex flex-col items-center mb-16">
                         <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleImageUpload} />
-                        <motion.div 
-                           onClick={() => fileInputRef.current?.click()}
-                           initial={{ scale: 0.9, opacity: 0 }}
-                           animate={{ scale: 1, opacity: 1 }}
-                           className={`w-24 h-24 rounded-full bg-gradient-to-br from-gray-800 to-gray-900 border border-white/10 p-1 mb-6 relative group cursor-pointer ${isUploadingPhoto ? 'animate-pulse' : ''}`}
+                        <motion.div
+                            onClick={() => fileInputRef.current?.click()}
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            className={`w-24 h-24 rounded-full bg-gradient-to-br from-gray-800 to-gray-900 border border-white/10 p-1 mb-6 relative group cursor-pointer ${isUploadingPhoto ? 'animate-pulse' : ''}`}
                         >
-                           <div className="w-full h-full rounded-full bg-black flex items-center justify-center overflow-hidden relative">
-                              {(() => {
-                                  const currentEnt = entities.find(e => e.id === activeEntity);
-                                  const photoUrl = currentEnt?.logoUrl || (currentEnt?.type === 'persona' ? currentUser?.photoURL : null);
-                                  
-                                  if (photoUrl) {
-                                      return <img src={photoUrl} alt="Avatar" className="w-full h-full object-cover" />;
-                                  }
-                                  return (
-                                      <div className="text-3xl font-light text-white/50 tracking-widest uppercase">
-                                          {currentEnt?.name?.[0] || 'E'}
-                                      </div>
-                                  );
-                              })()}
-                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
-                                  {isUploadingPhoto ? (
-                                      <Loader2 className="w-6 h-6 animate-spin text-white/80" />
-                                  ) : (
-                                      <span className="text-[10px] font-bold text-white/80 uppercase tracking-widest text-center px-2 leading-tight">Change<br/>Photo</span>
-                                  )}
-                              </div>
-                           </div>
+                            <div className="w-full h-full rounded-full bg-black flex items-center justify-center overflow-hidden relative">
+                                {(() => {
+                                    const currentEnt = entities.find(e => e.id === activeEntity);
+                                    const photoUrl = currentEnt?.logoUrl || (currentEnt?.type === 'persona' ? currentUser?.photoURL : null);
+
+                                    if (photoUrl) {
+                                        return <img src={photoUrl} alt="Avatar" className="w-full h-full object-cover" />;
+                                    }
+                                    return (
+                                        <div className="text-3xl font-light text-white/50 tracking-widest uppercase">
+                                            {currentEnt?.name?.[0] || 'E'}
+                                        </div>
+                                    );
+                                })()}
+                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
+                                    {isUploadingPhoto ? (
+                                        <Loader2 className="w-6 h-6 animate-spin text-white/80" />
+                                    ) : (
+                                        <span className="text-[10px] font-bold text-white/80 uppercase tracking-widest text-center px-2 leading-tight">Change<br />Photo</span>
+                                    )}
+                                </div>
+                            </div>
                         </motion.div>
-                        
+
                         <h2 className="text-3xl font-light mb-2 tracking-wide">
                             {entities.find(e => e.id === activeEntity)?.name || 'Cargando Entidad...'}
                         </h2>
                         <p className="text-[11px] uppercase tracking-[0.2em] text-blue-400 font-bold mb-10">
-                            {entities.find(e => e.id === activeEntity)?.type === 'persona' 
-                                ? currentUser?.email 
+                            {entities.find(e => e.id === activeEntity)?.type === 'persona'
+                                ? currentUser?.email
                                 : `BÓVEDA EMPRESARIAL · ${activeEntity}`
                             }
                         </p>
@@ -321,77 +506,77 @@ export default function ConfigurationPage() {
                         {/* Search Bar */}
                         <div className="w-full max-w-2xl relative group">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
-                            <input 
-                                type="text" 
+                            <input
+                                type="text"
                                 placeholder="Search settings, billing, or security..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-6 text-sm text-white focus:outline-none focus:border-blue-500/50 focus:bg-white/10 transition-all font-light placeholder:text-gray-600"
                             />
                         </div>
-                     </div>
+                    </div>
 
-                     {/* Dynamic Tab Content */}
-                     <AnimatePresence mode="wait">
-                         {activeTab === 'billing' && (
-                             <motion.div 
-                                 key="billing"
-                                 initial={{ opacity: 0, y: 20 }}
-                                 animate={{ opacity: 1, y: 0 }}
-                                 exit={{ opacity: 0, y: -20 }}
-                                 transition={{ duration: 0.3 }}
-                                 className="w-full max-w-4xl mx-auto space-y-8"
-                             >
-                                 <div className="mb-8">
-                                     <h3 className="text-xl font-medium text-white mb-2">Wallet & Subscriptions</h3>
-                                     <p className="text-sm text-gray-400 leading-relaxed font-light">
-                                         Manage your Web3 identity, organization access tokens, and decentralized payments.
-                                     </p>
-                                 </div>
+                    {/* Dynamic Tab Content */}
+                    <AnimatePresence mode="wait">
+                        {activeTab === 'billing' && (
+                            <motion.div
+                                key="billing"
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -20 }}
+                                transition={{ duration: 0.3 }}
+                                className="w-full max-w-4xl mx-auto space-y-8"
+                            >
+                                <div className="mb-8">
+                                    <h3 className="text-xl font-medium text-white mb-2">Wallet & Subscriptions</h3>
+                                    <p className="text-sm text-gray-400 leading-relaxed font-light">
+                                        Manage your Web3 identity, organization access tokens, and decentralized payments.
+                                    </p>
+                                </div>
 
-                                 <div className="flex flex-col gap-4">
-                                     
-                                     {/* Identity Connection (Phantom) */}
-                                     <div className="flex flex-col md:flex-row md:items-center justify-between p-6 rounded-[24px] bg-[#202124] hover:bg-[#2A2B2E] transition-colors border border-transparent hover:border-white/5 cursor-pointer">
+                                <div className="flex flex-col gap-4">
+
+                                    {/* Identity Connection (Phantom) */}
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between p-6 rounded-[24px] bg-[#202124] hover:bg-[#2A2B2E] transition-colors border border-transparent hover:border-white/5 cursor-pointer">
                                         <div className="flex items-start gap-5 mb-4 md:mb-0">
-                                           <div className="mt-1">
-                                              <WalletCards className="w-6 h-6 text-blue-400" />
-                                           </div>
-                                           <div>
-                                              <h4 className="text-[15px] font-medium text-white mb-1">Identity Connection</h4>
-                                              <p className="text-sm text-gray-400 leading-relaxed max-w-2xl">Connect your Solana Phantom Wallet to authenticate your decentralized identity. Your keys never leave your device.</p>
-                                           </div>
+                                            <div className="mt-1">
+                                                <WalletCards className="w-6 h-6 text-blue-400" />
+                                            </div>
+                                            <div>
+                                                <h4 className="text-[15px] font-medium text-white mb-1">Identity Connection</h4>
+                                                <p className="text-sm text-gray-400 leading-relaxed max-w-2xl">Connect your Solana Phantom Wallet to authenticate your decentralized identity. Your keys never leave your device.</p>
+                                            </div>
                                         </div>
                                         <div className="shrink-0 flex items-center md:pl-6">
                                             <div className="[&_.wallet-adapter-button]:!bg-transparent [&_.wallet-adapter-button]:!border [&_.wallet-adapter-button]:!border-blue-500/30 [&_.wallet-adapter-button]:hover:!bg-blue-500/10 [&_.wallet-adapter-button]:!rounded-full [&_.wallet-adapter-button]:!text-blue-400 [&_.wallet-adapter-button]:!font-sans [&_.wallet-adapter-button]:!font-medium [&_.wallet-adapter-button]:!text-sm [&_.wallet-adapter-button]:!h-10 [&_.wallet-adapter-button]:!px-6">
-                                               <WalletMultiButton />
+                                                <WalletMultiButton />
                                             </div>
                                         </div>
-                                     </div>
+                                    </div>
 
-                                     {/* Subscriptions */}
-                                     <div className="flex flex-col rounded-[24px] bg-[#202124] transition-colors border border-transparent hover:border-white/5 overflow-hidden">
-                                        <div 
-                                           onClick={() => setExpandedModules(p => ({...p, subscriptions: !p.subscriptions}))}
-                                           className="flex items-center justify-between p-6 cursor-pointer hover:bg-[#2A2B2E] transition-colors"
+                                    {/* Subscriptions */}
+                                    <div className="flex flex-col rounded-[24px] bg-[#202124] transition-colors border border-transparent hover:border-white/5 overflow-hidden">
+                                        <div
+                                            onClick={() => setExpandedModules(p => ({ ...p, subscriptions: !p.subscriptions }))}
+                                            className="flex items-center justify-between p-6 cursor-pointer hover:bg-[#2A2B2E] transition-colors"
                                         >
                                             <div className="flex items-start gap-5">
-                                               <div className="mt-1">
-                                                  <Zap className="w-6 h-6 text-green-400" />
-                                               </div>
-                                               <div>
-                                                  <h4 className="text-[15px] font-medium text-white mb-1">Active Subscriptions</h4>
-                                                  <p className="text-sm text-gray-400 leading-relaxed max-w-2xl">Manage your recurring payments for premium AI modules and SaaS Core access via Smart Contracts.</p>
-                                               </div>
+                                                <div className="mt-1">
+                                                    <Zap className="w-6 h-6 text-green-400" />
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-[15px] font-medium text-white mb-1">Active Subscriptions</h4>
+                                                    <p className="text-sm text-gray-400 leading-relaxed max-w-2xl">Manage your recurring payments for premium AI modules and SaaS Core access via Smart Contracts.</p>
+                                                </div>
                                             </div>
                                             <div className="px-4">
                                                 <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${expandedModules.subscriptions ? 'rotate-180' : ''}`} />
                                             </div>
                                         </div>
-                                        
+
                                         <AnimatePresence>
                                             {expandedModules.subscriptions && (
-                                                <motion.div 
+                                                <motion.div
                                                     initial={{ height: 0, opacity: 0 }}
                                                     animate={{ height: 'auto', opacity: 1 }}
                                                     exit={{ height: 0, opacity: 0 }}
@@ -400,28 +585,38 @@ export default function ConfigurationPage() {
                                                     <div className="p-6 pt-0 md:pl-[84px]">
                                                         {/* We customize the internal SubscriptionPayment component through CSS override to look as clean as possible */}
                                                         <div className="w-full max-w-2xl [&>div]:!m-0 [&>div]:!bg-[#1A1C1E] [&>div]:!border-white/5 [&>div]:!rounded-2xl [&>div]:!p-6 [&>div]:!shadow-none">
-                                                            <SubscriptionPayment />
+                                                            {loadingSub ? (
+                                                                <div className="flex items-center gap-3 text-gray-400 py-4">
+                                                                    <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+                                                                    <span className="text-sm font-medium">Cargando detalles de suscripción...</span>
+                                                                </div>
+                                                            ) : subDetails && subDetails.status === 'active' &&
+                                                                (subDetails.expiresAt ? new Date(subDetails.expiresAt) > new Date() : false) ? (
+                                                                <ActiveSubCard details={subDetails} />
+                                                            ) : (
+                                                                <SubscriptionPayment />
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </motion.div>
                                             )}
                                         </AnimatePresence>
-                                     </div>
+                                    </div>
 
-                                     {/* Jupiter Swap */}
-                                     <div className="flex flex-col rounded-[24px] bg-[#202124] transition-colors border border-transparent hover:border-white/5 overflow-hidden">
-                                        <div 
-                                           onClick={() => setExpandedModules(p => ({...p, jupiter: !p.jupiter}))}
-                                           className="flex items-center justify-between p-6 cursor-pointer hover:bg-[#2A2B2E] transition-colors"
+                                    {/* Jupiter Swap */}
+                                    <div className="flex flex-col rounded-[24px] bg-[#202124] transition-colors border border-transparent hover:border-white/5 overflow-hidden">
+                                        <div
+                                            onClick={() => setExpandedModules(p => ({ ...p, jupiter: !p.jupiter }))}
+                                            className="flex items-center justify-between p-6 cursor-pointer hover:bg-[#2A2B2E] transition-colors"
                                         >
                                             <div className="flex items-start gap-5">
-                                               <div className="mt-1">
-                                                  <Network className="w-6 h-6 text-purple-400" />
-                                               </div>
-                                               <div>
-                                                  <h4 className="text-[15px] font-medium text-white mb-1">Liquidity Swap (Jupiter)</h4>
-                                                  <p className="text-sm text-gray-400 leading-relaxed max-w-2xl">Convierte liquidez entre SOL y USDC directamente aquí utilizando el agregador descentralizado Jupiter.</p>
-                                               </div>
+                                                <div className="mt-1">
+                                                    <Network className="w-6 h-6 text-purple-400" />
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-[15px] font-medium text-white mb-1">Liquidity Swap (Jupiter)</h4>
+                                                    <p className="text-sm text-gray-400 leading-relaxed max-w-2xl">Convierte liquidez entre SOL y USDC directamente aquí utilizando el agregador descentralizado Jupiter.</p>
+                                                </div>
                                             </div>
                                             <div className="px-4">
                                                 <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${expandedModules.jupiter ? 'rotate-180' : ''}`} />
@@ -430,7 +625,7 @@ export default function ConfigurationPage() {
 
                                         <AnimatePresence>
                                             {expandedModules.jupiter && (
-                                                <motion.div 
+                                                <motion.div
                                                     initial={{ height: 0, opacity: 0 }}
                                                     animate={{ height: 'auto', opacity: 1 }}
                                                     exit={{ height: 0, opacity: 0 }}
@@ -444,142 +639,142 @@ export default function ConfigurationPage() {
                                                 </motion.div>
                                             )}
                                         </AnimatePresence>
-                                     </div>
+                                    </div>
 
-                                     {/* Stripe Bridge Placeholder */}
-                                     <div className="flex flex-col md:flex-row md:items-center justify-between p-6 rounded-[24px] bg-[#202124] border border-transparent opacity-60">
+                                    {/* Stripe Bridge Placeholder */}
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between p-6 rounded-[24px] bg-[#202124] border border-transparent opacity-60">
                                         <div className="flex items-start gap-5 mb-4 md:mb-0">
-                                           <div className="mt-1">
-                                              <Shield className="w-6 h-6 text-gray-400" />
-                                           </div>
-                                           <div>
-                                              <h4 className="text-[15px] font-medium text-white mb-1">Stripe Bridge</h4>
-                                              <p className="text-sm text-gray-400 leading-relaxed max-w-2xl">Fiat-to-crypto bridging capabilities. Purchase USDC directly with your credit card.</p>
-                                           </div>
+                                            <div className="mt-1">
+                                                <Shield className="w-6 h-6 text-gray-400" />
+                                            </div>
+                                            <div>
+                                                <h4 className="text-[15px] font-medium text-white mb-1">Stripe Bridge</h4>
+                                                <p className="text-sm text-gray-400 leading-relaxed max-w-2xl">Fiat-to-crypto bridging capabilities. Purchase USDC directly with your credit card.</p>
+                                            </div>
                                         </div>
                                         <div className="shrink-0 md:pl-6">
                                             <span className="px-4 py-2 border border-white/10 rounded-full text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-white/5">
                                                 Coming Soon
                                             </span>
                                         </div>
-                                     </div>
-                                     
-                                     {/* Squads Multisig Placeholder */}
-                                     <div className="flex flex-col md:flex-row md:items-center justify-between p-6 rounded-[24px] bg-[#202124] border border-transparent opacity-60">
+                                    </div>
+
+                                    {/* Squads Multisig Placeholder */}
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between p-6 rounded-[24px] bg-[#202124] border border-transparent opacity-60">
                                         <div className="flex items-start gap-5 mb-4 md:mb-0">
-                                           <div className="mt-1">
-                                              <Users className="w-6 h-6 text-gray-400" />
-                                           </div>
-                                           <div>
-                                              <h4 className="text-[15px] font-medium text-white mb-1">Squads Multisig Treasury</h4>
-                                              <p className="text-sm text-gray-400 leading-relaxed max-w-2xl">Manage corporate treasury and enforce multi-signature authentication.</p>
-                                           </div>
+                                            <div className="mt-1">
+                                                <Users className="w-6 h-6 text-gray-400" />
+                                            </div>
+                                            <div>
+                                                <h4 className="text-[15px] font-medium text-white mb-1">Squads Multisig Treasury</h4>
+                                                <p className="text-sm text-gray-400 leading-relaxed max-w-2xl">Manage corporate treasury and enforce multi-signature authentication.</p>
+                                            </div>
                                         </div>
                                         <div className="shrink-0 md:pl-6">
                                             <span className="px-4 py-2 border border-white/10 rounded-full text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-white/5">
                                                 Coming Soon
                                             </span>
                                         </div>
-                                     </div>
-                                 </div>
-                             </motion.div>
-                         )}
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
 
-                         {activeTab === 'profile' && (
-                             <motion.div 
-                                 key="profile"
-                                 initial={{ opacity: 0, y: 20 }}
-                                 animate={{ opacity: 1, y: 0 }}
-                                 exit={{ opacity: 0, y: -20 }}
-                                 transition={{ duration: 0.3 }}
-                                 className="w-full max-w-4xl mx-auto space-y-8"
-                             >
-                                 <div className="mb-8">
-                                     <h3 className="text-xl font-medium text-white mb-2">Personal & Business Info</h3>
-                                     <p className="text-sm text-gray-400 leading-relaxed font-light">
-                                         Administra los datos privados de la identidad actual: <span className="text-white font-medium">{entities.find(e => e.id === activeEntity)?.name}</span>. Todo se guarda seguro en su sub-bóveda exclusiva.
-                                     </p>
-                                 </div>
+                        {activeTab === 'profile' && (
+                            <motion.div
+                                key="profile"
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -20 }}
+                                transition={{ duration: 0.3 }}
+                                className="w-full max-w-4xl mx-auto space-y-8"
+                            >
+                                <div className="mb-8">
+                                    <h3 className="text-xl font-medium text-white mb-2">Personal & Business Info</h3>
+                                    <p className="text-sm text-gray-400 leading-relaxed font-light">
+                                        Administra los datos privados de la identidad actual: <span className="text-white font-medium">{entities.find(e => e.id === activeEntity)?.name}</span>. Todo se guarda seguro en su sub-bóveda exclusiva.
+                                    </p>
+                                </div>
 
-                                 <form onSubmit={handleSaveProfile} className="space-y-6">
-                                     <div className="p-8 rounded-3xl bg-white/5 border border-white/10 backdrop-blur-xl space-y-8">
-                                         
-                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                             <div className="space-y-2">
-                                                 <label className="text-xs font-bold uppercase tracking-widest text-gray-400">Email de Contacto Privado</label>
-                                                 <input 
-                                                     type="email"
-                                                     value={profileData.contactEmail}
-                                                     onChange={e => setProfileData({...profileData, contactEmail: e.target.value})}
-                                                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-4 text-sm focus:border-blue-500/50 focus:outline-none transition-colors"
-                                                     placeholder="ceo@empresa.com"
-                                                 />
-                                             </div>
-                                             
-                                             <div className="space-y-2">
-                                                 <label className="text-xs font-bold uppercase tracking-widest text-gray-400">Teléfono (WhatsApp/Llamadas)</label>
-                                                 <input 
-                                                     type="tel"
-                                                     value={profileData.phone}
-                                                     onChange={e => setProfileData({...profileData, phone: e.target.value})}
-                                                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-4 text-sm focus:border-blue-500/50 focus:outline-none transition-colors"
-                                                     placeholder="+1 (555) 000-0000"
-                                                 />
-                                             </div>
-                                         </div>
+                                <form onSubmit={handleSaveProfile} className="space-y-6">
+                                    <div className="p-8 rounded-3xl bg-white/5 border border-white/10 backdrop-blur-xl space-y-8">
 
-                                         <div className="space-y-2">
-                                             <label className="text-xs font-bold uppercase tracking-widest text-gray-400">Website Oficial</label>
-                                             <input 
-                                                 type="url"
-                                                 value={profileData.website}
-                                                 onChange={e => setProfileData({...profileData, website: e.target.value})}
-                                                 className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-4 text-sm focus:border-blue-500/50 focus:outline-none transition-colors"
-                                                 placeholder="https://roosevelt.system"
-                                             />
-                                         </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold uppercase tracking-widest text-gray-400">Email de Contacto Privado</label>
+                                                <input
+                                                    type="email"
+                                                    value={profileData.contactEmail}
+                                                    onChange={e => setProfileData({ ...profileData, contactEmail: e.target.value })}
+                                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-4 text-sm focus:border-blue-500/50 focus:outline-none transition-colors"
+                                                    placeholder="ceo@empresa.com"
+                                                />
+                                            </div>
 
-                                         <div className="space-y-2">
-                                             <label className="text-xs font-bold uppercase tracking-widest text-gray-400">Dirección de Operaciones</label>
-                                             <textarea 
-                                                 rows={3}
-                                                 value={profileData.address}
-                                                 onChange={e => setProfileData({...profileData, address: e.target.value})}
-                                                 className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-4 text-sm focus:border-blue-500/50 focus:outline-none transition-colors resize-none"
-                                                 placeholder="123 Financial District..."
-                                             />
-                                         </div>
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold uppercase tracking-widest text-gray-400">Teléfono (WhatsApp/Llamadas)</label>
+                                                <input
+                                                    type="tel"
+                                                    value={profileData.phone}
+                                                    onChange={e => setProfileData({ ...profileData, phone: e.target.value })}
+                                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-4 text-sm focus:border-blue-500/50 focus:outline-none transition-colors"
+                                                    placeholder="+1 (555) 000-0000"
+                                                />
+                                            </div>
+                                        </div>
 
-                                     </div>
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-bold uppercase tracking-widest text-gray-400">Website Oficial</label>
+                                            <input
+                                                type="url"
+                                                value={profileData.website}
+                                                onChange={e => setProfileData({ ...profileData, website: e.target.value })}
+                                                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-4 text-sm focus:border-blue-500/50 focus:outline-none transition-colors"
+                                                placeholder="https://roosevelt.system"
+                                            />
+                                        </div>
 
-                                     <div className="flex justify-end">
-                                         <button 
-                                             type="submit"
-                                             disabled={isSavingProfile}
-                                             className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium px-8 py-4 rounded-xl shadow-lg shadow-blue-500/20 transition-all flex items-center gap-2"
-                                         >
-                                             {isSavingProfile ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                                             <span>{isSavingProfile ? 'Sincronizando...' : 'Guardar Información'}</span>
-                                         </button>
-                                     </div>
-                                 </form>
-                             </motion.div>
-                         )}
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-bold uppercase tracking-widest text-gray-400">Dirección de Operaciones</label>
+                                            <textarea
+                                                rows={3}
+                                                value={profileData.address}
+                                                onChange={e => setProfileData({ ...profileData, address: e.target.value })}
+                                                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-4 text-sm focus:border-blue-500/50 focus:outline-none transition-colors resize-none"
+                                                placeholder="123 Financial District..."
+                                            />
+                                        </div>
 
-                         {activeTab !== 'billing' && activeTab !== 'profile' && (
-                             <motion.div 
-                                 key="placeholder"
-                                 initial={{ opacity: 0 }}
-                                 animate={{ opacity: 1 }}
-                                 exit={{ opacity: 0 }}
-                                 className="w-full max-w-4xl mx-auto flex flex-col items-center justify-center py-20 opacity-50"
-                             >
-                                 <FlaskConical className="w-12 h-12 text-gray-500 mb-6" />
-                                 <h3 className="text-lg font-medium text-gray-400 tracking-wide">Section under construction</h3>
-                                 <p className="text-sm text-gray-600 mt-2 font-light">The `{activeTab}` settings module is currently being built.</p>
-                             </motion.div>
-                         )}
-                     </AnimatePresence>
+                                    </div>
+
+                                    <div className="flex justify-end">
+                                        <button
+                                            type="submit"
+                                            disabled={isSavingProfile}
+                                            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium px-8 py-4 rounded-xl shadow-lg shadow-blue-500/20 transition-all flex items-center gap-2"
+                                        >
+                                            {isSavingProfile ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                                            <span>{isSavingProfile ? 'Sincronizando...' : 'Guardar Información'}</span>
+                                        </button>
+                                    </div>
+                                </form>
+                            </motion.div>
+                        )}
+
+                        {activeTab !== 'billing' && activeTab !== 'profile' && (
+                            <motion.div
+                                key="placeholder"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="w-full max-w-4xl mx-auto flex flex-col items-center justify-center py-20 opacity-50"
+                            >
+                                <FlaskConical className="w-12 h-12 text-gray-500 mb-6" />
+                                <h3 className="text-lg font-medium text-gray-400 tracking-wide">Section under construction</h3>
+                                <p className="text-sm text-gray-600 mt-2 font-light">The `{activeTab}` settings module is currently being built.</p>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
                 </div>
             </main>

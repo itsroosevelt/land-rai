@@ -9,7 +9,8 @@ import {
     Plus, X, LogOut, Briefcase, Settings, Edit2, 
     Trash2, Archive, RotateCcw, AlertTriangle,
     User as UserIcon, Eye, EyeOff, Moon, HelpCircle, 
-    BookOpen, Users, Home, ChevronRight, Camera
+    BookOpen, Users, Home, ChevronRight, Camera,
+    CreditCard
 } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Button } from '@/components/ui/button';
@@ -175,39 +176,39 @@ export default function NucleoPage() {
                         <DropdownMenu.Content 
                             align="end" 
                             sideOffset={12}
-                            className="w-[calc(100vw-32px)] md:w-[400px] bg-[#1A1C1E] border border-white/5 rounded-[2rem] md:rounded-[2.5rem] shadow-[0_24px_48px_-12px_rgba(0,0,0,0.5)] backdrop-blur-3xl animate-in fade-in slide-in-from-top-4 duration-300 z-[2000] overflow-hidden p-0"
+                            className="w-[calc(100vw-32px)] md:w-[340px] bg-[#1A1C1E] border border-white/5 rounded-[2rem] shadow-[0_24px_48px_-12px_rgba(0,0,0,0.5)] backdrop-blur-3xl animate-in fade-in slide-in-from-top-4 duration-300 z-[2000] overflow-hidden p-0"
                         >
                             {/* Header: Email & Close */}
-                            <div className="flex justify-between items-center px-6 pt-6 mb-2 md:mb-4">
+                            <div className="flex justify-between items-center px-5 pt-5 mb-1 md:mb-2">
                                 <div className="flex-1 text-center">
-                                    <p className="text-[10px] md:text-[11px] font-bold text-white/40 tracking-wider lowercase">{currentUser.email}</p>
+                                    <p className="text-[9px] md:text-[10px] font-bold text-white/40 tracking-wider lowercase">{currentUser.email}</p>
                                 </div>
                                 <DropdownMenu.Item className="focus:outline-none cursor-pointer">
-                                    <X className="w-5 h-5 text-white/40 hover:text-white transition-colors" />
+                                    <X className="w-4 h-4 text-white/40 hover:text-white transition-colors" />
                                 </DropdownMenu.Item>
                             </div>
 
                             {/* Main Identity Area */}
-                            <div className="flex flex-col items-center px-6 md:px-10 pb-4 md:pb-8 text-center">
-                                <div className="relative mb-4 md:mb-6 group cursor-pointer" onClick={() => router.push('/perfil')}>
-                                    <Avatar className="w-20 h-20 md:w-24 md:h-24 border border-white/10 shadow-2xl">
+                            <div className="flex flex-col items-center px-5 pb-3 md:pb-5 text-center">
+                                <div className="relative mb-3 md:mb-4 group cursor-pointer" onClick={() => router.push('/perfil')}>
+                                    <Avatar className="w-16 h-16 md:w-20 md:h-20 border border-white/10 shadow-2xl">
                                         <AvatarImage src={currentUser.photoURL || ''} />
-                                        <AvatarFallback className="bg-neutral-800 text-xl md:text-2xl font-bold">
+                                        <AvatarFallback className="bg-neutral-800 text-lg md:text-xl font-bold">
                                             {currentUser.displayName?.[0] || 'U'}
                                         </AvatarFallback>
                                     </Avatar>
                                     <div className="absolute bottom-0 right-0 p-1 bg-[#2D2F31] border border-[#1A1C1E] rounded-full shadow-lg group-hover:scale-110 transition-transform">
-                                        <Camera className="w-3.5 h-3.5 text-white/60" />
+                                        <Camera className="w-3 h-3 text-white/60" />
                                     </div>
                                 </div>
                                 
-                                <h3 className="text-xl md:text-2xl font-light text-white mb-4 md:mb-6">Hi, {currentUser.displayName?.split(' ')[0] || 'Luxor'}!</h3>
+                                <h3 className="text-lg md:text-xl font-light text-white mb-3 md:mb-4">Hi, {currentUser.displayName?.split(' ')[0] || 'Luxor'}!</h3>
                                 
                                 <button 
                                     onClick={() => router.push('/configuracion')}
-                                    className="px-6 md:px-8 py-2.5 md:py-3.5 border border-white/10 rounded-full text-[10px] md:text-xs font-bold text-blue-400 hover:bg-blue-500/5 transition-all mb-4 md:mb-8 w-full max-w-[280px]"
+                                    className="px-5 py-2 md:py-2.5 border border-white/10 rounded-full text-[9px] md:text-[10px] font-bold text-blue-400 hover:bg-blue-500/5 transition-all mb-3 md:mb-6 w-full max-w-[240px]"
                                 >
-                                    Manage your Roosevelt Account
+                                     Manage your Roosevelt Account
                                 </button>
                             </div>
 
@@ -217,6 +218,7 @@ export default function NucleoPage() {
                                     {[
                                         { label: "Profile", icon: UserIcon, href: "/perfil" },
                                         { label: "Settings", icon: Settings, href: "/configuracion" },
+                                        { label: "Subscriptions", icon: CreditCard, href: "/subscriptions" },
                                         { label: "Appearance", icon: Moon, href: "#" },
                                         { label: "Support", icon: HelpCircle, href: "#" },
                                         { label: "Docs", icon: BookOpen, href: "#" },

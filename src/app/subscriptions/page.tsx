@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, Mail, CheckCircle, ArrowRight, LogOut } from 'lucide-react';
+import { Check, Mail, CheckCircle, ArrowRight, LogOut, Clock, Wallet } from 'lucide-react';
 import { signOut } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -136,11 +137,43 @@ export default function SubscriptionsPage() {
   const { currentUser, activeEntity, loading } = useAuth();
   const { status: subscriptionStatus, plan: activePlanId, expiresAt } = useSubscriptionStatus();
   const [selectedPlan, setSelectedPlan] = useState<typeof plans[number] | null>(null);
+  const [hasHistory, setHasHistory] = useState(false);
+
+  useEffect(() => {
+    const checkHistory = async () => {
+      if (!currentUser) return;
+      try {
+        // 1. Check if current subscription exists (which indicates a previous payment)
+        const subRef = doc(db, `users/${currentUser.uid}/subscriptions/current`);
+        const subSnap = await getDoc(subRef);
+        if (subSnap.exists()) {
+          setHasHistory(true);
+          return;
+        }
+
+        // 2. Or check if there are any paid payment requests
+        const requestsRef = collection(db, `users/${currentUser.uid}/paymentRequests`);
+        const q = query(requestsRef, where('status', '==', 'paid'));
+        const reqSnap = await getDocs(q);
+        if (!reqSnap.empty) {
+          setHasHistory(true);
+        }
+      } catch (err) {
+        console.error('Error checking history:', err);
+      }
+    };
+
+    checkHistory();
+  }, [currentUser, activeEntity]);
 
   // Use active entity from context
   const entityId = activeEntity;
 
   const hasActiveSubscription = subscriptionStatus === 'active';
+  const currentPlan = plans.find(p => p.id === activePlanId?.toLowerCase());
+  const currentPlanPrice = currentPlan ? currentPlan.priceUSD : 0;
+
+  const plansToRender = plans;
 
   return (
     <ProtectedRoute>
@@ -150,17 +183,24 @@ export default function SubscriptionsPage() {
         {/* We need relative z-[10] on the content so it stays above the fixed particles background */}
         <div className="relative z-[10]">
           {hasActiveSubscription && (
-            <div className="bg-green-600/10 border-b border-green-600/30 px-6 py-4 backdrop-blur-md">
-              <div className="mx-auto max-w-7xl flex items-center justify-between">
+            <div className="relative z-[50] bg-gradient-to-r from-emerald-950/30 via-emerald-900/20 to-emerald-950/30 border-b border-emerald-500/20 px-6 py-3.5 backdrop-blur-xl shadow-lg shadow-emerald-950/20">
+              <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <CheckCircle className="w-5 h-5 text-green-400" />
-                  <p className="text-sm font-medium text-green-300 tracking-wide">
-                    ✓ You have an active subscription ({activePlanId}) valid until {expiresAt ? new Date(expiresAt).toLocaleDateString() : 'N/A'}
-                  </p>
+                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/30 animate-pulse">
+                    <CheckCircle className="w-4.5 h-4.5 text-emerald-400" />
+                  </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                    <span className="text-[10px] uppercase tracking-widest text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 w-fit">
+                      Active: {activePlanId}
+                    </span>
+                    <p className="text-sm font-medium text-emerald-100/90 tracking-wide">
+                      Your subscription is active and valid until <span className="text-emerald-300 font-semibold">{expiresAt ? new Date(expiresAt).toLocaleDateString() : 'N/A'}</span>
+                    </p>
+                  </div>
                 </div>
                 <Button
                   onClick={() => router.push('/nucleo')}
-                  className="bg-green-600 hover:bg-green-700 text-white rounded-full h-10 font-semibold tracking-wider text-xs"
+                  className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-black font-bold tracking-wider text-xs rounded-full h-9 px-6 transition-all duration-300 shadow-md shadow-emerald-500/20"
                 >
                   Go to Dashboard
                 </Button>
@@ -169,6 +209,20 @@ export default function SubscriptionsPage() {
           )}
 
           <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col justify-center px-6 py-16 sm:px-10 lg:px-12 relative z-[10]">
+            {/* Top Right Wallet Button */}
+            {hasHistory && (
+              <div className="absolute top-8 right-6 sm:right-10 lg:right-12 z-[40]">
+                <Button
+                  onClick={() => router.push('/configuracion')}
+                  variant="outline"
+                  className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white rounded-full flex items-center gap-2 h-10 px-5 text-xs font-semibold tracking-wider uppercase transition-all duration-300 shadow-md backdrop-blur-sm"
+                >
+                  <Wallet className="w-3.5 h-3.5" />
+                  Wallet
+                </Button>
+              </div>
+            )}
+
             <div className="mx-auto mb-14 max-w-2xl text-center">
               <p className="mb-4 text-[11px] uppercase tracking-[0.45em] text-white/40 font-semibold">
                 Subscription
@@ -186,19 +240,22 @@ export default function SubscriptionsPage() {
               ) : null}
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-3">
-              {plans.map((plan) => {
-                const isCurrentPlan = subscriptionStatus === 'active' && activePlanId === plan.id;
+            <div className={`grid gap-6 ${hasActiveSubscription ? 'max-w-md mx-auto grid-cols-1 w-full' : 'lg:grid-cols-3'}`}>
+              {plansToRender.map((plan) => {
+                const isCurrentPlan = subscriptionStatus === 'active' && activePlanId?.toLowerCase() === plan.id.toLowerCase();
                 return (
                   <article
                     key={plan.id}
                     className={`rounded-3xl border backdrop-blur-sm p-8 ${plan.accent} flex min-h-[420px] flex-col relative overflow-hidden transition-all duration-300 hover:border-white/20 ${
-                      plan.highlighted ? 'lg:scale-105 ring-2 ring-blue-500/50 shadow-lg shadow-blue-500/10' : ''
+                      plan.highlighted && !isCurrentPlan ? 'lg:scale-105 ring-2 ring-blue-500/50 shadow-lg shadow-blue-500/10' : ''
                     } ${
-                      isCurrentPlan ? 'ring-2 ring-amber-500/60 shadow-lg shadow-amber-500/10 border-amber-500/30' : ''
+                      isCurrentPlan ? 'lg:scale-105 ring-2 ring-emerald-500/80 shadow-2xl shadow-emerald-500/20 border-emerald-500/40 bg-gradient-to-b from-emerald-950/15 via-black/40 to-black/80' : ''
                     }`}
                   >
-                    {plan.highlighted && (
+                    {isCurrentPlan && (
+                      <div className="absolute -top-12 -left-12 w-32 h-32 bg-emerald-500/20 blur-3xl rounded-full pointer-events-none" />
+                    )}
+                    {plan.highlighted && !isCurrentPlan && (
                       <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-blue-600/20 to-transparent h-px" />
                     )}
 
@@ -207,7 +264,11 @@ export default function SubscriptionsPage() {
                         <p className="text-xs uppercase tracking-[0.35em] text-white/35 font-semibold">
                           {plan.name}
                         </p>
-                        {plan.id === 'pro' && (
+                        {isCurrentPlan ? (
+                          <span className="text-[10px] px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full uppercase tracking-widest font-bold animate-pulse">
+                            Active Plan
+                          </span>
+                        ) : plan.id === 'pro' && (
                           <span className="text-[10px] px-3 py-1 bg-blue-600/30 text-blue-200 rounded-full uppercase tracking-widest font-bold">
                             Popular
                           </span>
@@ -255,16 +316,27 @@ export default function SubscriptionsPage() {
                     ) : isCurrentPlan ? (
                       <Button
                         disabled
-                        className="mt-auto h-12 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold tracking-widest text-xs uppercase cursor-default"
+                        className="mt-auto h-12 rounded-full bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 font-bold tracking-widest text-xs uppercase cursor-default flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50"
                       >
-                        Current Subscription
+                        <CheckCircle className="w-4 h-4 text-emerald-400" />
+                        Current Plan
                       </Button>
                     ) : (
                       <Button
                         onClick={() => setSelectedPlan(plan as typeof plans[number])}
-                        className="mt-auto h-12 rounded-full bg-white text-black hover:bg-gray-100 font-semibold tracking-widest text-xs uppercase shadow-lg"
+                        className={`mt-auto h-12 rounded-full font-semibold tracking-widest text-xs uppercase shadow-lg transition-all duration-300 ${
+                          hasActiveSubscription 
+                            ? plan.priceUSD > currentPlanPrice
+                              ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-900/20 animate-pulse' 
+                              : 'bg-white/10 hover:bg-white/20 text-white border border-white/10'
+                            : 'bg-white text-black hover:bg-gray-100'
+                        }`}
                       >
-                        Get Started
+                        {hasActiveSubscription 
+                          ? plan.priceUSD > currentPlanPrice 
+                            ? 'Upgrade to ' + plan.name 
+                            : 'Get Started' 
+                          : 'Get Started'}
                       </Button>
                     )}
                   </article>

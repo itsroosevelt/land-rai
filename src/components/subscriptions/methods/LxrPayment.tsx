@@ -47,7 +47,8 @@ export default function LxrPayment({
   const treasuryWallet = process.env.NEXT_PUBLIC_TREASURY_WALLET;
 
   const { prices, loading: loadingPrice, secondsRemaining } = usePriceFromJupiter([LXR_MINT], 30000);
-  const lxrPrice = prices[LXR_MINT];
+  // Fallback to 1.0 USD per LXR if Jupiter doesn't index this custom token
+  const lxrPrice = prices[LXR_MINT] || 1.0;
   const lxrAmount = lxrPrice ? priceUSD / lxrPrice : null;
 
   const handlePayment = async () => {

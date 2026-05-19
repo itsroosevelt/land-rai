@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Connection, PublicKey } from '@solana/web3.js';
+import { getAssociatedTokenAddressSync } from '@solana/spl-token';
 import { SUBSCRIPTION_RPC_URL, SUBSCRIPTION_TREASURY_WALLET } from '@/lib/subscriptions/payment-config';
 
 interface SubscriptionData {
@@ -37,7 +38,7 @@ export function useSubscriptionStatus(): SubscriptionData & { loading: boolean }
         // 1. Check if the user already has an active subscription in Firestore
         const subscriptionRef = doc(
           db,
-          `users/${currentUser.uid}/entities/${entity}/subscriptions/current`
+          `users/${currentUser.uid}/subscriptions/current`
         );
         let docSnap = await getDoc(subscriptionRef);
 
@@ -53,7 +54,7 @@ export function useSubscriptionStatus(): SubscriptionData & { loading: boolean }
 
         // 2. If NOT active, check for any pending payment requests in the background!
         if (!isActive) {
-          const requestsRef = collection(db, `users/${currentUser.uid}/entities/${entity}/paymentRequests`);
+          const requestsRef = collection(db, `users/${currentUser.uid}/paymentRequests`);
           const q = query(requestsRef, where('status', '==', 'pending'));
           const requestsSnap = await getDocs(q);
 
@@ -78,7 +79,10 @@ export function useSubscriptionStatus(): SubscriptionData & { loading: boolean }
                   });
 
                   if (tx && !tx.meta?.err) {
-                    const instructions = tx.transaction.message.instructions || [];
+                    const outerInstructions = tx.transaction.message.instructions || [];
+                    const innerInstructions = (tx.meta?.innerInstructions || []).flatMap((group: any) => group.instructions || []);
+                    const instructions = [...outerInstructions, ...innerInstructions];
+
                     const expectedRaw = String(req.expectedAmountRaw);
                     const treasury = SUBSCRIPTION_TREASURY_WALLET;
                     let matches = false;
@@ -97,6 +101,20 @@ export function useSubscriptionStatus(): SubscriptionData & { loading: boolean }
                       });
                     } else {
                       // SPL Tokens (USDC, USDT, LXR)
+                      const tokenMint = req.tokenMint;
+                      let recipientAta: string | null = null;
+                      if (tokenMint) {
+                        try {
+                          recipientAta = getAssociatedTokenAddressSync(
+                            new PublicKey(tokenMint),
+                            new PublicKey(treasury),
+                            true
+                          ).toBase58();
+                        } catch (e) {
+                          console.error('Error calculating recipient ATA in background listener:', e);
+                        }
+                      }
+
                       matches = instructions.some((inst: any) => {
                         if (inst.program === 'spl-token' || inst.program === 'spl-token-2022') {
                           const parsed = inst.parsed;
@@ -105,7 +123,11 @@ export function useSubscriptionStatus(): SubscriptionData & { loading: boolean }
                               parsed.info?.tokenAmount?.amount ||
                               parsed.info?.amount ||
                               parsed.info?.tokenAmount?.uiAmountString;
-                            return String(rawAmount) === expectedRaw;
+                            
+                            const destinationMatches = !recipientAta || String(parsed.info?.destination) === recipientAta;
+                            const mintMatches = !tokenMint || !parsed.info?.mint || String(parsed.info.mint) === tokenMint;
+
+                            return String(rawAmount) === expectedRaw && destinationMatches && mintMatches;
                           }
                         }
                         return false;

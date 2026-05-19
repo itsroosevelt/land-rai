@@ -62,7 +62,7 @@ export default function SubscriptionPayment() {
       // Usando el entityId y userId respetando el aislamiento total multitenant "Molde Único"
       const subscriptionRef = doc(
         db, 
-        `users/${currentUser.uid}/entities/${activeEntity}/subscriptions/current`
+        `users/${currentUser.uid}/subscriptions/current`
       );
 
       await setDoc(subscriptionRef, {

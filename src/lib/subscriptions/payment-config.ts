@@ -44,10 +44,10 @@ export function getSubscriptionPaymentConfig(method: SubscriptionPaymentMethod):
   return SOLANA_PAYMENT_CONFIG[method];
 }
 
-export function getSubscriptionCurrentDocPath(userId: string, entityId: string) {
-  return `users/${userId}/entities/${entityId}/subscriptions/current`;
+export function getSubscriptionCurrentDocPath(userId: string, _entityId?: string) {
+  return `users/${userId}/subscriptions/current`;
 }
 
-export function getSubscriptionPaymentRequestsCollectionPath(userId: string, entityId: string) {
-  return `${getSubscriptionCurrentDocPath(userId, entityId)}/payment_requests`;
+export function getSubscriptionPaymentRequestsCollectionPath(userId: string, _entityId?: string) {
+  return `users/${userId}/paymentRequests`;
 }

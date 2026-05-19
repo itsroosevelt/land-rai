@@ -127,8 +127,29 @@ export default function QrTokenPayment({
     );
   };
 
+  const getAllInstructions = (transaction: any) => {
+    const list: any[] = [];
+    if (!transaction) return list;
+    
+    // Add outer instructions
+    const outer = transaction?.transaction?.message?.instructions || [];
+    outer.forEach((inst: any) => {
+      list.push(inst);
+    });
+
+    // Add inner instructions
+    const innerGroups = transaction?.meta?.innerInstructions || [];
+    innerGroups.forEach((group: any) => {
+      (group.instructions || []).forEach((inst: any) => {
+        list.push(inst);
+      });
+    });
+
+    return list;
+  };
+
   const verifySolTransfer = (transaction: any) => {
-    const instructions = transaction?.transaction?.message?.instructions || [];
+    const instructions = getAllInstructions(transaction);
 
     return instructions.some((instruction: any) => {
       if (instruction.program !== 'system') {
@@ -155,7 +176,7 @@ export default function QrTokenPayment({
       true
     ).toBase58();
 
-    const instructions = transaction?.transaction?.message?.instructions || [];
+    const instructions = getAllInstructions(transaction);
 
     return instructions.some((instruction: any) => {
       if (instruction.program !== 'spl-token' && instruction.program !== 'spl-token-2022') {
