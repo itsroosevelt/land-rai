@@ -97,7 +97,8 @@ function verifySplTransfer(transaction: ParsedTransactionWithMeta, order: Subscr
 
   const recipientAta = getAssociatedTokenAddressSync(
     new PublicKey(order.tokenMint),
-    new PublicKey(order.recipientWallet)
+    new PublicKey(order.recipientWallet),
+    true
   ).toBase58();
 
   const instructions = getParsedInstructions(transaction);
@@ -230,6 +231,18 @@ export async function resolvePaymentOrderStatus(order: SubscriptionPaymentOrder)
     return order;
   }
 
+  // Always check the blockchain first — a user may pay after the QR timer shows expired.
+  const payment = await findMatchingPayment(order);
+  if (payment) {
+    await activateSubscriptionFromOrder(order, payment.signature);
+    return {
+      ...order,
+      status: 'paid' as const,
+      paymentSignature: payment.signature,
+      paidAt: new Date().toISOString(),
+    };
+  }
+
   if (order.status === 'expired' || isExpired(order.expiresAt)) {
     await markOrderExpired(order);
     return {
@@ -238,19 +251,22 @@ export async function resolvePaymentOrderStatus(order: SubscriptionPaymentOrder)
     };
   }
 
-  const payment = await findMatchingPayment(order);
-  if (!payment) {
-    return order;
+  return order;
+}
+
+export async function recoverUserPaymentOrders(userId: string, entityId: string) {
+  const collectionPath = getSubscriptionPaymentRequestsCollectionPath(userId, entityId);
+  const snapshot = await db.collection(collectionPath).where('status', 'in', ['pending', 'expired']).get();
+
+  const results: Array<{ requestId: string; status: SubscriptionPaymentStatus }> = [];
+
+  for (const docSnap of snapshot.docs) {
+    const order = docSnap.data() as SubscriptionPaymentOrder;
+    const resolved = await resolvePaymentOrderStatus(order);
+    results.push({ requestId: resolved.requestId, status: resolved.status });
   }
 
-  await activateSubscriptionFromOrder(order, payment.signature);
-
-  return {
-    ...order,
-    status: 'paid' as const,
-    paymentSignature: payment.signature,
-    paidAt: new Date().toISOString(),
-  };
+  return results;
 }
 
 export function validatePaymentOrderPayload(order: {

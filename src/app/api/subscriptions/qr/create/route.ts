@@ -8,8 +8,7 @@ import {
 } from '@/lib/subscriptions/payment-config';
 import { encodeSolanaPayUrl } from '@/lib/subscriptions/solana-pay';
 import { validatePaymentOrderPayload } from '@/lib/subscriptions/qr-payment';
-
-const QR_EXPIRATION_MINUTES = 15;
+import { SUBSCRIPTION_QR_EXPIRATION_MINUTES } from '@/lib/subscriptions/payment-config';
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,7 +40,7 @@ export async function POST(request: NextRequest) {
     const requestId = db.collection(collectionPath).doc().id;
     const reference = Keypair.generate().publicKey.toBase58();
     const createdAt = new Date();
-    const expiresAt = new Date(createdAt.getTime() + QR_EXPIRATION_MINUTES * 60 * 1000);
+    const expiresAt = new Date(createdAt.getTime() + SUBSCRIPTION_QR_EXPIRATION_MINUTES * 60 * 1000);
 
     const qrUrl = encodeSolanaPayUrl({
       recipient: SUBSCRIPTION_TREASURY_WALLET,

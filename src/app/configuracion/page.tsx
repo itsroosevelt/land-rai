@@ -1,17 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Users, Shield, User,
-    ArrowLeft, Search, WalletCards, Home, Key, Network, ToggleLeft, Settings, FlaskConical, Zap, ChevronDown
+    ArrowLeft, Search, Home, Key, Network, ToggleLeft, Settings, FlaskConical,
+    WalletCards, Zap, ChevronDown, CreditCard
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
-// Solana & Web3 Imports
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import SubscriptionPayment from '@/components/solana/SubscriptionPayment';
-import JupiterTerminalForm from '@/components/solana/JupiterTerminalForm';
 import { useAuth } from '@/contexts/AuthContext';
 
 // Entity Switcher Imports
@@ -33,8 +30,18 @@ const SIDEBAR_ITEMS = [
     { id: 'third-party', label: "Third-party apps & services", icon: Network, bg: "bg-[#6CC6EB]", color: "text-[#004A70]" },
     { id: 'privacy', label: "Data & privacy", icon: ToggleLeft, bg: "bg-[#C589E8]", color: "text-[#491671]" },
     { id: 'team', label: "People & sharing", icon: Users, bg: "bg-[#F88CCF]", color: "text-[#630043]" },
-    { id: 'billing', label: "Wallet & subscriptions", icon: WalletCards, bg: "bg-[#FCAD70]", color: "text-[#5B2100]" },
+    { id: 'billing', label: "Subscriptions", icon: WalletCards, bg: "bg-[#FCAD70]", color: "text-[#5B2100]" },
 ];
+
+const normalizePlanName = (plan: string | null, priceUSD: number | null) => {
+    const normalized = plan ? plan.toLowerCase() : '';
+    if (normalized.includes('pro')) return 'pro';
+    if (normalized.includes('starter')) return 'starter';
+    if (normalized.includes('enterprise')) return 'enterprise';
+    if (priceUSD === 19.99) return 'starter';
+    if (priceUSD === 99.99) return 'pro';
+    return normalized || 'plan';
+};
 
 const ActiveSubCard = ({ details }: { details: any }) => {
     const router = useRouter();
@@ -47,9 +54,10 @@ const ActiveSubCard = ({ details }: { details: any }) => {
     const daysElapsed = Math.max(0, totalDays - daysRemaining);
     const progressPercent = Math.min(100, Math.max(0, (daysElapsed / totalDays) * 100));
 
-    // Plan features
-    const planName = details.plan || 'Plan';
+    const normalizedPlan = normalizePlanName(details.plan || null, typeof details.priceUSD === 'number' ? details.priceUSD : null);
+    const planName = normalizedPlan === 'plan' ? (details.plan || 'Plan') : normalizedPlan;
     const isPro = planName.toLowerCase().includes('pro');
+    const displayPrice = typeof details.priceUSD === 'number' ? details.priceUSD : isPro ? 99.99 : 19.99;
     const features = isPro
         ? ['Acceso ilimitado a Bóvedas', 'Soporte prioritario 24/7', 'Módulos IA Avanzados (CTO, COO)', 'Multisig y Conexiones ilimitadas']
         : ['1 Bóveda activa', 'Acceso a herramientas esenciales', 'Soporte base', 'Módulo financiero básico'];
@@ -84,7 +92,7 @@ const ActiveSubCard = ({ details }: { details: any }) => {
                 </div>
                 <div className="text-left sm:text-right">
                     <span className="text-2xl font-bold tracking-tight text-white">
-                        {isPro ? '$99.99' : '$19.99'}
+                        ${displayPrice.toFixed(2)}
                     </span>
                     <span className="text-xs text-gray-400 uppercase tracking-widest font-semibold ml-1">/ mes</span>
                 </div>
@@ -178,8 +186,13 @@ const ActiveSubCard = ({ details }: { details: any }) => {
     );
 };
 
-export default function ConfigurationPage() {
+const CONFIG_TAB_IDS = new Set(
+    SIDEBAR_ITEMS.map((item) => item.id).filter((id) => id !== 'public-profile' && id !== 'home')
+);
+
+function ConfigurationPageContent() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { currentUser, activeEntity, setActiveEntity } = useAuth();
     const [activeTab, setActiveTab] = useState('billing');
     const [searchQuery, setSearchQuery] = useState('');
@@ -191,10 +204,19 @@ export default function ConfigurationPage() {
         const fetchSubDetails = async () => {
             if (!currentUser || !activeEntity) return;
             try {
-                const subRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/subscriptions/current`);
-                const subSnap = await getDoc(subRef);
-                if (subSnap.exists()) {
-                    setSubDetails(subSnap.data());
+                const entitySubRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/subscriptions/current`);
+                const entitySubSnap = await getDoc(entitySubRef);
+
+                if (entitySubSnap.exists()) {
+                    setSubDetails(entitySubSnap.data());
+                    return;
+                }
+
+                const globalSubRef = doc(db, `users/${currentUser.uid}/subscriptions/current`);
+                const globalSubSnap = await getDoc(globalSubRef);
+
+                if (globalSubSnap.exists()) {
+                    setSubDetails(globalSubSnap.data());
                 } else {
                     setSubDetails(null);
                 }
@@ -213,6 +235,13 @@ export default function ConfigurationPage() {
     }, [setActiveEntity]);
 
     React.useEffect(() => {
+        const tab = searchParams.get('tab');
+        if (tab && CONFIG_TAB_IDS.has(tab)) {
+            setActiveTab(tab);
+        }
+    }, [searchParams]);
+
+    React.useEffect(() => {
         if (entities.length > 0 && activeEntity) {
             const currentEnt = entities.find(e => e.id.toLowerCase() === activeEntity.toLowerCase());
             const isPersonal = activeEntity === 'life' || currentEnt?.type === 'persona';
@@ -222,11 +251,14 @@ export default function ConfigurationPage() {
         }
     }, [activeEntity, entities, activeTab]);
 
-    // Expandable Wallet Modules
     const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({
-        subscriptions: false,
-        jupiter: false
+        subscriptions: true,
     });
+
+    const hasActiveSubscription =
+        !!subDetails &&
+        subDetails.status === 'active' &&
+        (subDetails.expiresAt ? new Date(subDetails.expiresAt) > new Date() : true);
 
     // Profile Settings State
     const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -416,7 +448,7 @@ export default function ConfigurationPage() {
                                             </AvatarFallback>
                                         </Avatar>
                                     </div>
-                                    <h3 className="text-xl font-light text-white mb-2">Hi, {currentUser?.displayName?.split(' ')[0] || 'Luxor'}!</h3>
+                                    <h3 className="text-xl font-light text-white mb-2">Hi, {currentUser?.displayName?.split(' ')[0] || 'there'}!</h3>
                                     <p className="text-xs text-blue-400 font-medium">Active Entity: {entities.find(e => e.id === activeEntity)?.name || activeEntity}</p>
                                 </div>
 
@@ -528,36 +560,20 @@ export default function ConfigurationPage() {
                                 className="w-full max-w-4xl mx-auto space-y-8"
                             >
                                 <div className="mb-8">
-                                    <h3 className="text-xl font-medium text-white mb-2">Wallet & Subscriptions</h3>
+                                    <h3 className="text-xl font-medium text-white mb-2">Subscriptions</h3>
                                     <p className="text-sm text-gray-400 leading-relaxed font-light">
-                                        Manage your Web3 identity, organization access tokens, and decentralized payments.
+                                        View and manage your Roosevelt plan. Payments are handled on the subscriptions page.
                                     </p>
                                 </div>
 
                                 <div className="flex flex-col gap-4">
 
-                                    {/* Identity Connection (Phantom) */}
-                                    <div className="flex flex-col md:flex-row md:items-center justify-between p-6 rounded-[24px] bg-[#202124] hover:bg-[#2A2B2E] transition-colors border border-transparent hover:border-white/5 cursor-pointer">
-                                        <div className="flex items-start gap-5 mb-4 md:mb-0">
-                                            <div className="mt-1">
-                                                <WalletCards className="w-6 h-6 text-blue-400" />
-                                            </div>
-                                            <div>
-                                                <h4 className="text-[15px] font-medium text-white mb-1">Identity Connection</h4>
-                                                <p className="text-sm text-gray-400 leading-relaxed max-w-2xl">Connect your Solana Phantom Wallet to authenticate your decentralized identity. Your keys never leave your device.</p>
-                                            </div>
-                                        </div>
-                                        <div className="shrink-0 flex items-center md:pl-6">
-                                            <div className="[&_.wallet-adapter-button]:!bg-transparent [&_.wallet-adapter-button]:!border [&_.wallet-adapter-button]:!border-blue-500/30 [&_.wallet-adapter-button]:hover:!bg-blue-500/10 [&_.wallet-adapter-button]:!rounded-full [&_.wallet-adapter-button]:!text-blue-400 [&_.wallet-adapter-button]:!font-sans [&_.wallet-adapter-button]:!font-medium [&_.wallet-adapter-button]:!text-sm [&_.wallet-adapter-button]:!h-10 [&_.wallet-adapter-button]:!px-6">
-                                                <WalletMultiButton />
-                                            </div>
-                                        </div>
-                                    </div>
-
                                     {/* Subscriptions */}
                                     <div className="flex flex-col rounded-[24px] bg-[#202124] transition-colors border border-transparent hover:border-white/5 overflow-hidden">
                                         <div
-                                            onClick={() => setExpandedModules(p => ({ ...p, subscriptions: !p.subscriptions }))}
+                                            onClick={() => {
+                                                setExpandedModules((p) => ({ ...p, subscriptions: !p.subscriptions }));
+                                            }}
                                             className="flex items-center justify-between p-6 cursor-pointer hover:bg-[#2A2B2E] transition-colors"
                                         >
                                             <div className="flex items-start gap-5">
@@ -566,10 +582,19 @@ export default function ConfigurationPage() {
                                                 </div>
                                                 <div>
                                                     <h4 className="text-[15px] font-medium text-white mb-1">Active Subscriptions</h4>
-                                                    <p className="text-sm text-gray-400 leading-relaxed max-w-2xl">Manage your recurring payments for premium AI modules and SaaS Core access via Smart Contracts.</p>
+                                                    <p className="text-sm text-gray-400 leading-relaxed max-w-2xl">
+                                                        {hasActiveSubscription
+                                                            ? 'Your current plan and billing period.'
+                                                            : 'Activate a plan to unlock premium modules.'}
+                                                    </p>
                                                 </div>
                                             </div>
-                                            <div className="px-4">
+                                            <div className="px-4 flex items-center gap-3">
+                                                {!loadingSub && !hasActiveSubscription && (
+                                                    <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">
+                                                        Activate
+                                                    </span>
+                                                )}
                                                 <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${expandedModules.subscriptions ? 'rotate-180' : ''}`} />
                                             </div>
                                         </div>
@@ -583,98 +608,33 @@ export default function ConfigurationPage() {
                                                     className="overflow-hidden"
                                                 >
                                                     <div className="p-6 pt-0 md:pl-[84px]">
-                                                        {/* We customize the internal SubscriptionPayment component through CSS override to look as clean as possible */}
-                                                        <div className="w-full max-w-2xl [&>div]:!m-0 [&>div]:!bg-[#1A1C1E] [&>div]:!border-white/5 [&>div]:!rounded-2xl [&>div]:!p-6 [&>div]:!shadow-none">
-                                                            {loadingSub ? (
+                                                        {loadingSub ? (
                                                                 <div className="flex items-center gap-3 text-gray-400 py-4">
                                                                     <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
                                                                     <span className="text-sm font-medium">Cargando detalles de suscripción...</span>
                                                                 </div>
-                                                            ) : subDetails && subDetails.status === 'active' &&
-                                                                (subDetails.expiresAt ? new Date(subDetails.expiresAt) > new Date() : false) ? (
+                                                            ) : hasActiveSubscription ? (
                                                                 <ActiveSubCard details={subDetails} />
                                                             ) : (
-                                                                <SubscriptionPayment />
+                                                                <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-[#1A1C1E] p-8 text-center">
+                                                                    <CreditCard className="w-10 h-10 text-blue-400 mx-auto mb-4" />
+                                                                    <h4 className="text-lg font-medium text-white mb-2">No hay suscripción activa</h4>
+                                                                    <p className="text-sm text-gray-400 mb-6">
+                                                                        Elige un plan en la página de suscripciones para activar tu acceso.
+                                                                    </p>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => router.push('/subscriptions')}
+                                                                        className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-full transition-all"
+                                                                    >
+                                                                        Ir a suscripciones
+                                                                    </button>
+                                                                </div>
                                                             )}
-                                                        </div>
                                                     </div>
                                                 </motion.div>
                                             )}
                                         </AnimatePresence>
-                                    </div>
-
-                                    {/* Jupiter Swap */}
-                                    <div className="flex flex-col rounded-[24px] bg-[#202124] transition-colors border border-transparent hover:border-white/5 overflow-hidden">
-                                        <div
-                                            onClick={() => setExpandedModules(p => ({ ...p, jupiter: !p.jupiter }))}
-                                            className="flex items-center justify-between p-6 cursor-pointer hover:bg-[#2A2B2E] transition-colors"
-                                        >
-                                            <div className="flex items-start gap-5">
-                                                <div className="mt-1">
-                                                    <Network className="w-6 h-6 text-purple-400" />
-                                                </div>
-                                                <div>
-                                                    <h4 className="text-[15px] font-medium text-white mb-1">Liquidity Swap (Jupiter)</h4>
-                                                    <p className="text-sm text-gray-400 leading-relaxed max-w-2xl">Convierte liquidez entre SOL y USDC directamente aquí utilizando el agregador descentralizado Jupiter.</p>
-                                                </div>
-                                            </div>
-                                            <div className="px-4">
-                                                <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${expandedModules.jupiter ? 'rotate-180' : ''}`} />
-                                            </div>
-                                        </div>
-
-                                        <AnimatePresence>
-                                            {expandedModules.jupiter && (
-                                                <motion.div
-                                                    initial={{ height: 0, opacity: 0 }}
-                                                    animate={{ height: 'auto', opacity: 1 }}
-                                                    exit={{ height: 0, opacity: 0 }}
-                                                    className="overflow-hidden"
-                                                >
-                                                    <div className="p-6 pt-0 md:pl-[84px] flex items-center">
-                                                        <div className="w-full max-w-md [&>div]:!m-0 [&>div]:!mt-0 [&>div]:!bg-[#1A1C1E] [&>div]:!border-white/5 [&>div]:!rounded-2xl [&>div]:!p-0 [&>div]:!shadow-none [&>div]:overflow-hidden">
-                                                            <JupiterTerminalForm />
-                                                        </div>
-                                                    </div>
-                                                </motion.div>
-                                            )}
-                                        </AnimatePresence>
-                                    </div>
-
-                                    {/* Stripe Bridge Placeholder */}
-                                    <div className="flex flex-col md:flex-row md:items-center justify-between p-6 rounded-[24px] bg-[#202124] border border-transparent opacity-60">
-                                        <div className="flex items-start gap-5 mb-4 md:mb-0">
-                                            <div className="mt-1">
-                                                <Shield className="w-6 h-6 text-gray-400" />
-                                            </div>
-                                            <div>
-                                                <h4 className="text-[15px] font-medium text-white mb-1">Stripe Bridge</h4>
-                                                <p className="text-sm text-gray-400 leading-relaxed max-w-2xl">Fiat-to-crypto bridging capabilities. Purchase USDC directly with your credit card.</p>
-                                            </div>
-                                        </div>
-                                        <div className="shrink-0 md:pl-6">
-                                            <span className="px-4 py-2 border border-white/10 rounded-full text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-white/5">
-                                                Coming Soon
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    {/* Squads Multisig Placeholder */}
-                                    <div className="flex flex-col md:flex-row md:items-center justify-between p-6 rounded-[24px] bg-[#202124] border border-transparent opacity-60">
-                                        <div className="flex items-start gap-5 mb-4 md:mb-0">
-                                            <div className="mt-1">
-                                                <Users className="w-6 h-6 text-gray-400" />
-                                            </div>
-                                            <div>
-                                                <h4 className="text-[15px] font-medium text-white mb-1">Squads Multisig Treasury</h4>
-                                                <p className="text-sm text-gray-400 leading-relaxed max-w-2xl">Manage corporate treasury and enforce multi-signature authentication.</p>
-                                            </div>
-                                        </div>
-                                        <div className="shrink-0 md:pl-6">
-                                            <span className="px-4 py-2 border border-white/10 rounded-full text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-white/5">
-                                                Coming Soon
-                                            </span>
-                                        </div>
                                     </div>
                                 </div>
                             </motion.div>
@@ -779,5 +739,13 @@ export default function ConfigurationPage() {
                 </div>
             </main>
         </div>
+    );
+}
+
+export default function ConfigurationPage() {
+    return (
+        <Suspense fallback={<motion.div className="h-screen bg-black" />}>
+            <ConfigurationPageContent />
+        </Suspense>
     );
 }

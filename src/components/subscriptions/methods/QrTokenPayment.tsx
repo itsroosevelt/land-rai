@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { collection, doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { QRCodeSVG } from 'qrcode.react';
 import { getAssociatedTokenAddressSync } from '@solana/spl-token';
-import { Connection, Keypair, PublicKey } from '@solana/web3.js';
+import { Connection, PublicKey } from '@solana/web3.js';
 import { AlertCircle, CheckCircle2, Clock, Loader2, RefreshCw, Smartphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -19,7 +19,6 @@ import {
   SUBSCRIPTION_TREASURY_WALLET,
   type SubscriptionPaymentMethod,
 } from '@/lib/subscriptions/payment-config';
-import { encodeSolanaPayUrl } from '@/lib/subscriptions/solana-pay';
 
 interface QrTokenPaymentProps {
   plan: string;
@@ -210,9 +209,53 @@ export default function QrTokenPayment({
 
     let cancelled = false;
 
+    const pollServerStatus = async () => {
+      const params = new URLSearchParams({
+        userId,
+        entityId,
+        requestId: paymentRequest.requestId,
+      });
+      const response = await fetch(`/api/subscriptions/qr/status?${params.toString()}`);
+      if (!response.ok) return null;
+      return response.json() as Promise<{ status: string; paymentSignature?: string | null }>;
+    };
+
     const pollStatus = async () => {
       try {
+        const serverStatus = await pollServerStatus();
+        if (serverStatus?.status === 'paid') {
+          if (!cancelled) {
+            setPaymentRequest((current) =>
+              current ? { ...current, status: 'paid', paymentSignature: serverStatus.paymentSignature } : current
+            );
+            toast.success('Payment confirmed on Solana. Activating subscription...');
+            onSuccess();
+          }
+          return;
+        }
+
         if (Date.now() > new Date(paymentRequest.expiresAt).getTime()) {
+          const recoverResponse = await fetch('/api/subscriptions/recover', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId,
+              entityId,
+              requestId: paymentRequest.requestId,
+            }),
+          });
+
+          if (recoverResponse.ok) {
+            const recoverData = await recoverResponse.json();
+            if (recoverData.success) {
+              if (!cancelled) {
+                toast.success('Payment found and subscription activated.');
+                onSuccess();
+              }
+              return;
+            }
+          }
+
           await setDoc(
             getPaymentRequestDocRef(paymentRequest.requestId),
             {
@@ -362,48 +405,33 @@ export default function QrTokenPayment({
 
     setIsProcessing(true);
     try {
-      const collectionRef = collection(db, getSubscriptionPaymentRequestsCollectionPath(userId, entityId));
-      const requestId = doc(collectionRef).id;
-      const reference = Keypair.generate().publicKey.toBase58();
-      const createdAt = new Date();
-      const expiresAt = new Date(createdAt.getTime() + 15 * 60 * 1000);
-
-      const qrUrl = encodeSolanaPayUrl({
-        recipient: SUBSCRIPTION_TREASURY_WALLET,
-        amount: preciseAmount.uiAmount,
-        splToken: config.mint,
-        reference,
-        label: `Roosevelt ${String(plan).toUpperCase()} Subscription`,
-        message: 'Scan with Phantom to complete your subscription payment',
-        memo: `subscription:${requestId}`,
+      const response = await fetch('/api/subscriptions/qr/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          entityId,
+          plan,
+          paymentMethod,
+          planPriceUSD: priceUSD,
+          expectedAmountUi: preciseAmount.uiAmount,
+          expectedAmountRaw: preciseAmount.rawAmount,
+          billingData: billingData || null,
+        }),
       });
 
-      await setDoc(getPaymentRequestDocRef(requestId), {
-        requestId,
-        userId,
-        entityId,
-        plan,
-        paymentMethod,
-        recipientWallet: SUBSCRIPTION_TREASURY_WALLET,
-        reference,
-        status: 'pending',
-        qrUrl,
-        planPriceUSD: Number(priceUSD),
-        expectedAmountUi: preciseAmount.uiAmount,
-        expectedAmountRaw: preciseAmount.rawAmount,
-        tokenDecimals: config.decimals,
-        tokenMint: config.mint,
-        billingData: billingData || null,
-        createdAt: createdAt.toISOString(),
-        updatedAt: createdAt.toISOString(),
-        expiresAt: expiresAt.toISOString(),
-      });
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error || 'Unable to create payment QR on server');
+      }
+
+      const created = await response.json();
 
       setPaymentRequest({
-        requestId,
-        qrUrl,
-        expiresAt: expiresAt.toISOString(),
-        reference,
+        requestId: created.requestId,
+        qrUrl: created.qrUrl,
+        expiresAt: created.expiresAt,
+        reference: created.reference,
         status: 'pending',
         paymentSignature: null,
       });

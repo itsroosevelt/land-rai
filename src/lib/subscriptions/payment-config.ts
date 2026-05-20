@@ -13,6 +13,9 @@ export const SUBSCRIPTION_TREASURY_WALLET =
 export const SUBSCRIPTION_RPC_URL =
   process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 
+/** How long a QR checkout session stays open before showing as expired */
+export const SUBSCRIPTION_QR_EXPIRATION_MINUTES = 60;
+
 export const SOLANA_PAYMENT_CONFIG: Record<SubscriptionPaymentMethod, SubscriptionPaymentConfig> = {
   sol: {
     method: 'sol',

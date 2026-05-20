@@ -218,7 +218,7 @@ export default function NucleoPage() {
                                     {[
                                         { label: "Profile", icon: UserIcon, href: "/perfil" },
                                         { label: "Settings", icon: Settings, href: "/configuracion" },
-                                        { label: "Subscriptions", icon: CreditCard, href: "/subscriptions" },
+                                        { label: "Subscriptions", icon: CreditCard, href: "/configuracion?tab=billing" },
                                         { label: "Appearance", icon: Moon, href: "#" },
                                         { label: "Support", icon: HelpCircle, href: "#" },
                                         { label: "Docs", icon: BookOpen, href: "#" },

@@ -2,11 +2,43 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, getDocs, type DocumentData, type DocumentReference } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { getAssociatedTokenAddressSync } from '@solana/spl-token';
 import { SUBSCRIPTION_RPC_URL, SUBSCRIPTION_TREASURY_WALLET } from '@/lib/subscriptions/payment-config';
+
+const normalizePlanId = (plan?: string | null, priceUSD?: number | null) => {
+  if (!plan && priceUSD == null) return null;
+  const normalized = plan ? plan.toLowerCase() : '';
+
+  if (normalized.includes('pro')) return 'pro';
+  if (normalized.includes('starter')) return 'starter';
+  if (normalized.includes('enterprise')) return 'enterprise';
+
+  if (priceUSD === 19.99) return 'starter';
+  if (priceUSD === 99.99) return 'pro';
+
+  return normalized || null;
+};
+
+const getSubscriptionSnapshot = async (userId: string, entityId: string | null) => {
+  const refs: DocumentReference<DocumentData>[] = [];
+  if (entityId) {
+    refs.push(doc(db, `users/${userId}/entities/${entityId}/subscriptions/current`));
+  }
+  refs.push(doc(db, `users/${userId}/subscriptions/current`));
+
+  const snapshots = await Promise.all(refs.map((subscriptionRef) => getDoc(subscriptionRef)));
+  const activeSnapshot = snapshots.find((snapshot) => snapshot.exists() && snapshot.data()?.status === 'active');
+  if (activeSnapshot) {
+    return activeSnapshot;
+  }
+  const existingSnapshot = snapshots.find((snapshot) => snapshot.exists());
+  return existingSnapshot || null;
+
+  return null;
+};
 
 interface SubscriptionData {
   status: 'active' | 'pending' | 'expired' | null;
@@ -33,29 +65,57 @@ export function useSubscriptionStatus(): SubscriptionData & { loading: boolean }
       }
 
       const entity = activeEntity || 'life';
+      const globalSubRef = doc(db, `users/${currentUser.uid}/subscriptions/current`);
 
       try {
-        // 1. Check if the user already has an active subscription in Firestore
-        const subscriptionRef = doc(
-          db,
-          `users/${currentUser.uid}/subscriptions/current`
-        );
-        let docSnap = await getDoc(subscriptionRef);
-
-        let data = docSnap.exists() ? docSnap.data() : null;
+        // 1. Check subscription state in the current entity first, then fallback to the global subscription document.
+        const snapshot = await getSubscriptionSnapshot(currentUser.uid, entity);
+        const subscriptionRef = snapshot?.ref || globalSubRef;
+        let data = snapshot?.exists() ? (snapshot.data() as Record<string, any>) : null;
         let isExpired = false;
-        
+        let normalizedPlan: string | null = null;
+
         if (data) {
           const expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
           isExpired = expiresAt ? expiresAt < new Date() : false;
+          normalizedPlan = normalizePlanId(data.plan, data.priceUSD || null);
         }
 
         const isActive = data && data.status === 'active' && !isExpired;
 
-        // 2. If NOT active, check for any pending payment requests in the background!
+        // 2. If NOT active, run server recovery then check payment requests on-chain
         if (!isActive) {
+          try {
+            await fetch('/api/subscriptions/recover', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                userId: currentUser.uid,
+                entityId: entity,
+              }),
+            });
+            const recoveredSnap = await getDoc(subscriptionRef);
+            if (recoveredSnap.exists() && recoveredSnap.data()?.status === 'active') {
+              const recovered = recoveredSnap.data() as Record<string, any>;
+              const expiresAt = recovered.expiresAt ? new Date(recovered.expiresAt) : null;
+              const recoveredExpired = expiresAt ? expiresAt < new Date() : false;
+              if (!recoveredExpired) {
+                setSubscriptionData({
+                  status: 'active',
+                  plan: normalizePlanId(recovered.plan, recovered.priceUSD || null),
+                  expiresAt: recovered.expiresAt || null,
+                  isExpired: false,
+                });
+                setLoading(false);
+                return;
+              }
+            }
+          } catch (recoverErr) {
+            console.error('Subscription recover API failed:', recoverErr);
+          }
+
           const requestsRef = collection(db, `users/${currentUser.uid}/paymentRequests`);
-          const q = query(requestsRef, where('status', '==', 'pending'));
+          const q = query(requestsRef, where('status', 'in', ['pending', 'expired']));
           const requestsSnap = await getDocs(q);
 
           if (!requestsSnap.empty) {
@@ -165,7 +225,7 @@ export function useSubscriptionStatus(): SubscriptionData & { loading: boolean }
                       // Update state immediately
                       setSubscriptionData({
                         status: 'active',
-                        plan: req.plan,
+                        plan: normalizePlanId(req.plan, req.planPriceUSD),
                         expiresAt: expiresAt.toISOString(),
                         isExpired: false,
                       });
@@ -185,7 +245,7 @@ export function useSubscriptionStatus(): SubscriptionData & { loading: boolean }
         if (isActive) {
           setSubscriptionData({
             status: data.status || null,
-            plan: data.plan || null,
+            plan: normalizedPlan,
             expiresAt: data.expiresAt || null,
             isExpired,
           });

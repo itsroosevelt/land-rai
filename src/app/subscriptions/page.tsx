@@ -173,7 +173,7 @@ export default function SubscriptionsPage() {
   const currentPlan = plans.find(p => p.id === activePlanId?.toLowerCase());
   const currentPlanPrice = currentPlan ? currentPlan.priceUSD : 0;
 
-  const plansToRender = plans;
+  const plansToRender = hasActiveSubscription && currentPlan ? [currentPlan] : plans;
 
   return (
     <ProtectedRoute>
