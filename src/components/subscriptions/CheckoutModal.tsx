@@ -16,8 +16,16 @@ interface CheckoutModalProps {
     name: string;
     price: string;
     priceUSD: number;
+    chargeUSD?: number;
+    catalogPriceUSD?: number;
     lxrPrice?: string;
     lxrPriceUSD?: number;
+    lxrChargeUSD?: number;
+    upgradeQuote?: {
+      unusedCreditUSD: number;
+      daysRemaining: number;
+      fullTargetPriceUSD: number;
+    } | null;
     features: string[];
   };
   onClose: () => void;
@@ -32,6 +40,10 @@ export default function CheckoutModal({ plan, onClose, entityId: propEntityId }:
   const [isBillingValid, setIsBillingValid] = useState(false);
 
   const entityId = propEntityId || activeEntity || 'life';
+  const chargeUSD = plan.chargeUSD ?? plan.priceUSD;
+  const catalogUSD = plan.catalogPriceUSD ?? plan.priceUSD;
+  const lxrChargeUSD = plan.lxrChargeUSD ?? plan.lxrPriceUSD ?? chargeUSD;
+  const isUpgrade = !!plan.upgradeQuote;
 
   const handleSuccess = () => {
     onClose();
@@ -68,18 +80,27 @@ export default function CheckoutModal({ plan, onClose, entityId: propEntityId }:
               <div className="pt-6 border-t border-white/10">
                 <p className="text-xs font-medium text-white/60 mb-1.5">Pay Roosevelt</p>
                 <h2 className="text-3xl font-semibold tracking-tight text-white mb-6">
-                  USD {plan.priceUSD.toFixed(2)}
+                  USD {chargeUSD.toFixed(2)}
                 </h2>
 
                 <div className="space-y-2">
                   <div className="flex justify-between items-center py-2.5 border-b border-white/10">
                     <span className="text-xs font-medium text-white/90">{plan.name} Plan</span>
-                    <span className="text-xs font-semibold text-white">USD {plan.priceUSD.toFixed(2)}</span>
+                    <span className="text-xs font-semibold text-white">USD {catalogUSD.toFixed(2)}</span>
                   </div>
+
+                  {plan.upgradeQuote ? (
+                    <div className="flex justify-between items-center py-2.5 border-b border-white/10 text-emerald-400/90">
+                      <span className="text-xs font-medium">Crédito plan actual</span>
+                      <span className="text-xs font-semibold">
+                        − USD {plan.upgradeQuote.unusedCreditUSD.toFixed(2)}
+                      </span>
+                    </div>
+                  ) : null}
                   
                   <div className="flex justify-between items-center py-2.5 border-b border-white/10">
                     <span className="text-xs font-medium text-white/90">Subtotal</span>
-                    <span className="text-xs font-semibold text-white">USD {plan.priceUSD.toFixed(2)}</span>
+                    <span className="text-xs font-semibold text-white">USD {chargeUSD.toFixed(2)}</span>
                   </div>
 
                   <div className="flex justify-between items-center py-2.5 border-b border-white/10">
@@ -92,7 +113,7 @@ export default function CheckoutModal({ plan, onClose, entityId: propEntityId }:
 
                   <div className="flex justify-between items-center py-2 mt-1">
                     <span className="text-sm font-semibold text-white">Total due</span>
-                    <span className="text-sm font-semibold text-white">USD {plan.priceUSD.toFixed(2)}</span>
+                    <span className="text-sm font-semibold text-white">USD {chargeUSD.toFixed(2)}</span>
                   </div>
                 </div>
               </div>
@@ -165,7 +186,8 @@ export default function CheckoutModal({ plan, onClose, entityId: propEntityId }:
                         <TabsContent value="lxr">
                           <QrTokenPayment
                             plan={plan.id}
-                            priceUSD={plan.lxrPriceUSD || plan.priceUSD}
+                            priceUSD={lxrChargeUSD}
+                            catalogPriceUSD={catalogUSD}
                             paymentMethod="lxr"
                             isProcessing={isProcessing}
                             setIsProcessing={setIsProcessing}
@@ -174,6 +196,7 @@ export default function CheckoutModal({ plan, onClose, entityId: propEntityId }:
                             entityId={entityId}
                             billingData={billingData}
                             isBillingValid={isBillingValid}
+                            isUpgrade={isUpgrade}
                             discountLabel={`Save ${((plan.priceUSD - (plan.lxrPriceUSD || plan.priceUSD)) / plan.priceUSD * 100).toFixed(0)}% by paying with LXR`}
                           />
                         </TabsContent>
@@ -181,7 +204,9 @@ export default function CheckoutModal({ plan, onClose, entityId: propEntityId }:
                         <TabsContent value="usdc">
                           <QrTokenPayment
                             plan={plan.id}
-                            priceUSD={plan.priceUSD}
+                            priceUSD={chargeUSD}
+                            catalogPriceUSD={catalogUSD}
+                            isUpgrade={isUpgrade}
                             paymentMethod="usdc"
                             isProcessing={isProcessing}
                             setIsProcessing={setIsProcessing}
@@ -196,7 +221,9 @@ export default function CheckoutModal({ plan, onClose, entityId: propEntityId }:
                         <TabsContent value="usdt">
                           <QrTokenPayment
                             plan={plan.id}
-                            priceUSD={plan.priceUSD}
+                            priceUSD={chargeUSD}
+                            catalogPriceUSD={catalogUSD}
+                            isUpgrade={isUpgrade}
                             paymentMethod="usdt"
                             isProcessing={isProcessing}
                             setIsProcessing={setIsProcessing}
@@ -211,7 +238,9 @@ export default function CheckoutModal({ plan, onClose, entityId: propEntityId }:
                         <TabsContent value="sol">
                           <QrTokenPayment
                             plan={plan.id}
-                            priceUSD={plan.priceUSD}
+                            priceUSD={chargeUSD}
+                            catalogPriceUSD={catalogUSD}
+                            isUpgrade={isUpgrade}
                             paymentMethod="sol"
                             isProcessing={isProcessing}
                             setIsProcessing={setIsProcessing}

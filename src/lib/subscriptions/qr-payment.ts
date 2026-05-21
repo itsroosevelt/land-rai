@@ -22,6 +22,10 @@ export interface SubscriptionPaymentOrder {
   status: SubscriptionPaymentStatus;
   qrUrl: string;
   planPriceUSD: number;
+  chargeUSD?: number;
+  priorCreditUSD?: number;
+  isUpgrade?: boolean;
+  priorPlan?: string | null;
   expectedAmountUi: string;
   expectedAmountRaw: string;
   tokenDecimals: number;
@@ -181,8 +185,22 @@ export async function markOrderExpired(order: SubscriptionPaymentOrder) {
 
 export async function activateSubscriptionFromOrder(order: SubscriptionPaymentOrder, signature: string) {
   const now = new Date();
-  const expiresAt = new Date(now);
-  expiresAt.setDate(expiresAt.getDate() + 30);
+  const subRef = db.doc(getSubscriptionCurrentDocPath(order.userId, order.entityId));
+  const existingSnap = order.isUpgrade ? await subRef.get() : null;
+  const existing = existingSnap?.exists ? existingSnap.data() : null;
+
+  let expiresAtIso: string;
+  let activatedAtIso: string;
+
+  if (order.isUpgrade && existing?.expiresAt) {
+    expiresAtIso = String(existing.expiresAt);
+    activatedAtIso = String(existing.activatedAt || existing.updatedAt || now.toISOString());
+  } else {
+    const expiresAt = new Date(now);
+    expiresAt.setDate(expiresAt.getDate() + 30);
+    expiresAtIso = expiresAt.toISOString();
+    activatedAtIso = now.toISOString();
+  }
 
   await getPaymentRequestDocRef(order.userId, order.entityId, order.requestId).set(
     {
@@ -194,17 +212,26 @@ export async function activateSubscriptionFromOrder(order: SubscriptionPaymentOr
     { merge: true }
   );
 
-  await db.doc(getSubscriptionCurrentDocPath(order.userId, order.entityId)).set(
+  await subRef.set(
     {
       status: 'active',
       plan: order.plan,
       priceUSD: order.planPriceUSD,
       paymentMethod: order.paymentMethod,
       paymentSignature: signature,
-      activatedAt: now.toISOString(),
-      expiresAt: expiresAt.toISOString(),
+      activatedAt: activatedAtIso,
+      expiresAt: expiresAtIso,
       updatedAt: now.toISOString(),
+      cancelAtPeriodEnd: false,
+      cancelledAt: null,
       billing: order.billingData || null,
+      ...(order.isUpgrade
+        ? {
+            lastUpgradeAt: now.toISOString(),
+            lastUpgradeChargeUSD: order.chargeUSD ?? order.planPriceUSD,
+            priorCreditApplied: order.priorCreditUSD ?? 0,
+          }
+        : {}),
     },
     { merge: true }
   );

@@ -9,6 +9,11 @@ import {
 import { encodeSolanaPayUrl } from '@/lib/subscriptions/solana-pay';
 import { validatePaymentOrderPayload } from '@/lib/subscriptions/qr-payment';
 import { SUBSCRIPTION_QR_EXPIRATION_MINUTES } from '@/lib/subscriptions/payment-config';
+import {
+  assertClientChargeMatchesServer,
+  resolveUpgradeChargeForUser,
+} from '@/lib/subscriptions/upgrade-pricing-server';
+import { PLAN_CATALOG_USD } from '@/lib/subscriptions/upgrade-pricing';
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,14 +23,49 @@ export async function POST(request: NextRequest) {
       plan,
       paymentMethod,
       planPriceUSD,
+      chargeUSD,
       expectedAmountUi,
       expectedAmountRaw,
       billingData,
     } = await request.json();
 
-    if (!userId || !entityId || !plan || !paymentMethod || !planPriceUSD || !expectedAmountUi || !expectedAmountRaw) {
+    if (!userId || !entityId || !plan || !paymentMethod || !expectedAmountUi || !expectedAmountRaw) {
       return NextResponse.json(
-        { error: 'Missing required fields (userId, entityId, plan, paymentMethod, planPriceUSD, expectedAmountUi, expectedAmountRaw)' },
+        { error: 'Missing required fields (userId, entityId, plan, paymentMethod, expectedAmountUi, expectedAmountRaw)' },
+        { status: 400 }
+      );
+    }
+
+    const planKey = String(plan).toLowerCase();
+    const catalogPlanPriceUSD = PLAN_CATALOG_USD[planKey];
+    if (!catalogPlanPriceUSD) {
+      return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });
+    }
+
+    const useLxr = paymentMethod === 'lxr';
+    const resolved = await resolveUpgradeChargeForUser({
+      userId,
+      targetPlanId: planKey,
+      useLxr,
+    });
+
+    const serverChargeUSD = resolved.hasActive ? resolved.chargeUSD : catalogPlanPriceUSD;
+    const clientChargeUSD =
+      typeof chargeUSD === 'number' ? chargeUSD : Number(chargeUSD ?? planPriceUSD ?? catalogPlanPriceUSD);
+
+    if (!assertClientChargeMatchesServer(clientChargeUSD, serverChargeUSD)) {
+      return NextResponse.json(
+        {
+          error: 'Charge amount mismatch. Refresh checkout and try again.',
+          expectedChargeUSD: serverChargeUSD,
+        },
+        { status: 400 }
+      );
+    }
+
+    if (serverChargeUSD <= 0) {
+      return NextResponse.json(
+        { error: 'No payment required. Use upgrade endpoint.', chargeUSD: 0 },
         { status: 400 }
       );
     }
@@ -62,7 +102,12 @@ export async function POST(request: NextRequest) {
       reference,
       status: 'pending',
       qrUrl,
-      planPriceUSD: Number(planPriceUSD),
+      planPriceUSD: catalogPlanPriceUSD,
+      chargeUSD: serverChargeUSD,
+      priorCreditUSD:
+        resolved.hasActive && resolved.quote ? resolved.quote.unusedCreditUSD : 0,
+      isUpgrade: resolved.hasActive,
+      priorPlan: resolved.hasActive ? resolved.currentPlan : null,
       expectedAmountUi: String(expectedAmountUi),
       expectedAmountRaw: String(expectedAmountRaw),
       tokenDecimals: config.decimals,

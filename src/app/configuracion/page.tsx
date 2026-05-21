@@ -20,6 +20,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { LogOut, X, Briefcase, Camera, Loader2, Save, ExternalLink, Copy, CheckCircle2, Calendar, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import CancelRenewalButton from '@/components/subscriptions/CancelRenewalButton';
 
 const SIDEBAR_ITEMS = [
     { id: 'public-profile', label: "View Public Profile", icon: User, bg: "bg-white/10", color: "text-white", href: "/perfil" },
@@ -43,7 +44,15 @@ const normalizePlanName = (plan: string | null, priceUSD: number | null) => {
     return normalized || 'plan';
 };
 
-const ActiveSubCard = ({ details }: { details: any }) => {
+const ActiveSubCard = ({
+    details,
+    userId,
+    onSubscriptionChange,
+}: {
+    details: any;
+    userId: string;
+    onSubscriptionChange: () => void;
+}) => {
     const router = useRouter();
     const expiresAtDate = details.expiresAt ? new Date(details.expiresAt) : null;
     const expiresAtStr = expiresAtDate ? expiresAtDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : 'N/A';
@@ -56,7 +65,11 @@ const ActiveSubCard = ({ details }: { details: any }) => {
 
     const normalizedPlan = normalizePlanName(details.plan || null, typeof details.priceUSD === 'number' ? details.priceUSD : null);
     const planName = normalizedPlan === 'plan' ? (details.plan || 'Plan') : normalizedPlan;
+    const isEnterprise = planName.toLowerCase().includes('enterprise');
     const isPro = planName.toLowerCase().includes('pro');
+    const cancelAtPeriodEnd = !!details.cancelAtPeriodEnd;
+    const canUpgrade = !isEnterprise;
+
     const displayPrice = typeof details.priceUSD === 'number' ? details.priceUSD : isPro ? 99.99 : 19.99;
     const features = isPro
         ? ['Acceso ilimitado a Bóvedas', 'Soporte prioritario 24/7', 'Módulos IA Avanzados (CTO, COO)', 'Multisig y Conexiones ilimitadas']
@@ -86,6 +99,11 @@ const ActiveSubCard = ({ details }: { details: any }) => {
                             <span className="px-2.5 py-0.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold uppercase tracking-wider rounded-full animate-pulse">
                                 Activo
                             </span>
+                            {cancelAtPeriodEnd && (
+                                <span className="px-2.5 py-0.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[10px] font-bold uppercase tracking-wider rounded-full">
+                                    Sin renovación
+                                </span>
+                            )}
                         </div>
                         <p className="text-xs text-gray-400 mt-0.5">Suscripción gestionada a través de Blockchain / Smart Contract</p>
                     </div>
@@ -173,14 +191,36 @@ const ActiveSubCard = ({ details }: { details: any }) => {
                 </div>
             </div>
 
-            {/* Change Plan Button */}
-            <div className="mt-8 flex justify-end">
-                <button
-                    onClick={() => router.push('/subscriptions')}
-                    className="px-6 py-3 border border-white/10 rounded-full text-xs font-semibold tracking-wider uppercase text-white hover:bg-white/5 transition-all active:scale-95"
-                >
-                    Cambiar / Cancelar Plan
-                </button>
+            {cancelAtPeriodEnd && (
+                <p className="mt-6 text-xs text-amber-300/80 leading-relaxed">
+                    Renovación cancelada. Acceso hasta el vencimiento. Los pagos en blockchain no se reembolsan.
+                </p>
+            )}
+
+            <div className="mt-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-4 border-t border-white/5">
+                <div className="text-xs text-white/40 max-w-sm">
+                    {canUpgrade
+                        ? 'Para subir a Pro o Enterprise: elige el plan y paga con Phantom.'
+                        : 'Gestiona tu plan desde suscripciones.'}
+                </div>
+                <div className="flex flex-wrap gap-2 justify-end">
+                    {canUpgrade && (
+                        <button
+                            type="button"
+                            onClick={() => router.push('/subscriptions/upgrade')}
+                            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-full text-xs font-semibold uppercase tracking-wider text-white transition-all"
+                        >
+                            Cambiar plan
+                        </button>
+                    )}
+                    {!cancelAtPeriodEnd && (
+                        <CancelRenewalButton
+                            userId={userId}
+                            expiresAt={details.expiresAt}
+                            onSuccess={onSubscriptionChange}
+                        />
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -193,41 +233,47 @@ const CONFIG_TAB_IDS = new Set(
 function ConfigurationPageContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const { currentUser, activeEntity, setActiveEntity } = useAuth();
+    const { currentUser, loading: authLoading, activeEntity, setActiveEntity } = useAuth();
     const [activeTab, setActiveTab] = useState('billing');
     const [searchQuery, setSearchQuery] = useState('');
     const [entities, setEntities] = useState<any[]>([]);
     const [subDetails, setSubDetails] = useState<any>(null);
     const [loadingSub, setLoadingSub] = useState(true);
 
-    React.useEffect(() => {
-        const fetchSubDetails = async () => {
-            if (!currentUser || !activeEntity) return;
-            try {
-                const entitySubRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/subscriptions/current`);
-                const entitySubSnap = await getDoc(entitySubRef);
+    const fetchSubDetails = React.useCallback(async () => {
+        if (!currentUser || !activeEntity) return;
+        setLoadingSub(true);
+        try {
+            const entitySubRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/subscriptions/current`);
+            const entitySubSnap = await getDoc(entitySubRef);
 
-                if (entitySubSnap.exists()) {
-                    setSubDetails(entitySubSnap.data());
-                    return;
-                }
-
-                const globalSubRef = doc(db, `users/${currentUser.uid}/subscriptions/current`);
-                const globalSubSnap = await getDoc(globalSubRef);
-
-                if (globalSubSnap.exists()) {
-                    setSubDetails(globalSubSnap.data());
-                } else {
-                    setSubDetails(null);
-                }
-            } catch (err) {
-                console.error("Error fetching sub details:", err);
-            } finally {
-                setLoadingSub(false);
+            if (entitySubSnap.exists()) {
+                setSubDetails(entitySubSnap.data());
+                return;
             }
-        };
-        fetchSubDetails();
+
+            const globalSubRef = doc(db, `users/${currentUser.uid}/subscriptions/current`);
+            const globalSubSnap = await getDoc(globalSubRef);
+
+            if (globalSubSnap.exists()) {
+                setSubDetails(globalSubSnap.data());
+            } else {
+                setSubDetails(null);
+            }
+        } catch (err) {
+            console.error('Error fetching sub details:', err);
+        } finally {
+            setLoadingSub(false);
+        }
     }, [currentUser, activeEntity]);
+
+    React.useEffect(() => {
+        if (!authLoading && !currentUser) {
+            router.replace('/login');
+            return;
+        }
+        fetchSubDetails();
+    }, [fetchSubDetails, authLoading, currentUser, router]);
 
     React.useEffect(() => {
         setActiveEntity('life');
@@ -342,6 +388,16 @@ function ConfigurationPageContent() {
         await signOut(auth);
         router.push('/login');
     };
+
+    if (authLoading || !currentUser) {
+        return (
+            <div className="h-screen bg-black flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+            </div>
+        );
+    }
+
+    const userId = currentUser.uid;
 
     return (
         <div className="h-screen overflow-hidden bg-black text-white selection:bg-blue-500/30 font-sans flex relative">
@@ -613,8 +669,12 @@ function ConfigurationPageContent() {
                                                                     <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
                                                                     <span className="text-sm font-medium">Cargando detalles de suscripción...</span>
                                                                 </div>
-                                                            ) : hasActiveSubscription ? (
-                                                                <ActiveSubCard details={subDetails} />
+                                                            ) : hasActiveSubscription && userId ? (
+                                                                <ActiveSubCard
+                                                                    details={subDetails}
+                                                                    userId={userId}
+                                                                    onSubscriptionChange={fetchSubDetails}
+                                                                />
                                                             ) : (
                                                                 <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-[#1A1C1E] p-8 text-center">
                                                                     <CreditCard className="w-10 h-10 text-blue-400 mx-auto mb-4" />

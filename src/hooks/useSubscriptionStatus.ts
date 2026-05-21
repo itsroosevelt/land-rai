@@ -44,7 +44,10 @@ interface SubscriptionData {
   status: 'active' | 'pending' | 'expired' | null;
   plan: string | null;
   expiresAt: string | null;
+  priceUSD: number | null;
+  activatedAt: string | null;
   isExpired: boolean;
+  cancelAtPeriodEnd: boolean;
 }
 
 export function useSubscriptionStatus(): SubscriptionData & { loading: boolean } {
@@ -53,7 +56,10 @@ export function useSubscriptionStatus(): SubscriptionData & { loading: boolean }
     status: null,
     plan: null,
     expiresAt: null,
+    priceUSD: null,
+    activatedAt: null,
     isExpired: false,
+    cancelAtPeriodEnd: false,
   });
   const [loading, setLoading] = useState(true);
 
@@ -104,7 +110,10 @@ export function useSubscriptionStatus(): SubscriptionData & { loading: boolean }
                   status: 'active',
                   plan: normalizePlanId(recovered.plan, recovered.priceUSD || null),
                   expiresAt: recovered.expiresAt || null,
+                  priceUSD: typeof recovered.priceUSD === 'number' ? recovered.priceUSD : null,
+                  activatedAt: recovered.activatedAt || null,
                   isExpired: false,
+                  cancelAtPeriodEnd: !!recovered.cancelAtPeriodEnd,
                 });
                 setLoading(false);
                 return;
@@ -227,7 +236,10 @@ export function useSubscriptionStatus(): SubscriptionData & { loading: boolean }
                         status: 'active',
                         plan: normalizePlanId(req.plan, req.planPriceUSD),
                         expiresAt: expiresAt.toISOString(),
+                        priceUSD: typeof req.planPriceUSD === 'number' ? req.planPriceUSD : null,
+                        activatedAt: paidAtIso,
                         isExpired: false,
+                        cancelAtPeriodEnd: false,
                       });
                       setLoading(false);
                       return; // Exit immediately since subscription is verified and active!
@@ -247,14 +259,20 @@ export function useSubscriptionStatus(): SubscriptionData & { loading: boolean }
             status: data.status || null,
             plan: normalizedPlan,
             expiresAt: data.expiresAt || null,
+            priceUSD: typeof data.priceUSD === 'number' ? data.priceUSD : null,
+            activatedAt: data.activatedAt || null,
             isExpired,
+            cancelAtPeriodEnd: !!data.cancelAtPeriodEnd,
           });
         } else {
           setSubscriptionData({
             status: null,
             plan: null,
             expiresAt: null,
+            priceUSD: null,
+            activatedAt: null,
             isExpired: false,
+            cancelAtPeriodEnd: false,
           });
         }
       } catch (error) {
@@ -263,7 +281,10 @@ export function useSubscriptionStatus(): SubscriptionData & { loading: boolean }
           status: null,
           plan: null,
           expiresAt: null,
+          priceUSD: null,
+          activatedAt: null,
           isExpired: false,
+          cancelAtPeriodEnd: false,
         });
       } finally {
         setLoading(false);

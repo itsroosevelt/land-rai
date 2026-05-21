@@ -9,7 +9,7 @@ import {
     Plus, X, LogOut, Briefcase, Settings, Edit2, 
     Trash2, Archive, RotateCcw, AlertTriangle,
     User as UserIcon, Eye, EyeOff, Moon, HelpCircle, 
-    BookOpen, Users, Home, ChevronRight, Camera,
+    BookOpen, Users, Home, Camera,
     CreditCard
 } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -173,12 +173,11 @@ export default function NucleoPage() {
                     </DropdownMenu.Trigger>
 
                     <DropdownMenu.Portal>
-                        <DropdownMenu.Content 
-                            align="end" 
+                        <DropdownMenu.Content
+                            align="end"
                             sideOffset={12}
                             className="w-[calc(100vw-32px)] md:w-[340px] bg-[#1A1C1E] border border-white/5 rounded-[2rem] shadow-[0_24px_48px_-12px_rgba(0,0,0,0.5)] backdrop-blur-3xl animate-in fade-in slide-in-from-top-4 duration-300 z-[2000] overflow-hidden p-0"
                         >
-                            {/* Header: Email & Close */}
                             <div className="flex justify-between items-center px-5 pt-5 mb-1 md:mb-2">
                                 <div className="flex-1 text-center">
                                     <p className="text-[9px] md:text-[10px] font-bold text-white/40 tracking-wider lowercase">{currentUser.email}</p>
@@ -188,7 +187,6 @@ export default function NucleoPage() {
                                 </DropdownMenu.Item>
                             </div>
 
-                            {/* Main Identity Area */}
                             <div className="flex flex-col items-center px-5 pb-3 md:pb-5 text-center">
                                 <div className="relative mb-3 md:mb-4 group cursor-pointer" onClick={() => router.push('/perfil')}>
                                     <Avatar className="w-16 h-16 md:w-20 md:h-20 border border-white/10 shadow-2xl">
@@ -201,18 +199,18 @@ export default function NucleoPage() {
                                         <Camera className="w-3 h-3 text-white/60" />
                                     </div>
                                 </div>
-                                
+
                                 <h3 className="text-lg md:text-xl font-light text-white mb-3 md:mb-4">Hi, {currentUser.displayName?.split(' ')[0] || 'Luxor'}!</h3>
-                                
-                                <button 
+
+                                <button
+                                    type="button"
                                     onClick={() => router.push('/configuracion')}
                                     className="px-5 py-2 md:py-2.5 border border-white/10 rounded-full text-[9px] md:text-[10px] font-bold text-blue-400 hover:bg-blue-500/5 transition-all mb-3 md:mb-6 w-full max-w-[240px]"
                                 >
-                                     Manage your Roosevelt Account
+                                    Manage your Roosevelt Account
                                 </button>
                             </div>
 
-                            {/* Grid Navigation Section (Prior Items) */}
                             <div className="bg-black/20 p-3 md:p-4 border-y border-white/5">
                                 <div className="grid grid-cols-3 gap-1 md:gap-2">
                                     {[
@@ -222,9 +220,9 @@ export default function NucleoPage() {
                                         { label: "Appearance", icon: Moon, href: "#" },
                                         { label: "Support", icon: HelpCircle, href: "#" },
                                         { label: "Docs", icon: BookOpen, href: "#" },
-                                        { label: "Home", icon: Home, href: "/nucleo" }
+                                        { label: "Home", icon: Home, href: "/nucleo" },
                                     ].map((item) => (
-                                        <DropdownMenu.Item 
+                                        <DropdownMenu.Item
                                             key={item.label}
                                             onClick={() => router.push(item.href)}
                                             className="flex flex-col items-center gap-1.5 md:gap-2 p-2 md:p-3 rounded-xl md:rounded-2xl hover:bg-white/5 cursor-pointer outline-none transition-all group"
@@ -236,14 +234,13 @@ export default function NucleoPage() {
                                 </div>
                             </div>
 
-                            {/* Footer Actions: Add & Sign Out */}
                             <div className="p-3 md:p-4 flex gap-2 h-16 md:h-20">
                                 <DropdownMenu.Item className="flex-1 bg-white/[0.03] hover:bg-white/[0.08] rounded-l-2xl md:rounded-l-[1.5rem] rounded-r-md md:rounded-r-lg flex items-center justify-center gap-3 md:gap-4 cursor-pointer outline-none transition-all group">
                                     <Plus className="w-4 h-4 md:w-5 md:h-5 text-white/40 group-hover:text-white" />
                                     <span className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] text-white/60 group-hover:text-white">Add account</span>
                                 </DropdownMenu.Item>
 
-                                <DropdownMenu.Item 
+                                <DropdownMenu.Item
                                     onClick={handleLogout}
                                     className="flex-1 bg-white/[0.03] hover:bg-red-500/10 rounded-r-2xl md:rounded-r-[1.5rem] rounded-l-md md:rounded-l-lg flex items-center justify-center gap-3 md:gap-4 cursor-pointer outline-none transition-all group"
                                 >
@@ -252,7 +249,6 @@ export default function NucleoPage() {
                                 </DropdownMenu.Item>
                             </div>
 
-                            {/* Privacy Policy Footer */}
                             <div className="py-3 md:py-4 text-center">
                                 <p className="text-[8px] md:text-[9px] font-bold text-white/10 uppercase tracking-widest cursor-default">
                                     Privacy Policy • Terms of Service

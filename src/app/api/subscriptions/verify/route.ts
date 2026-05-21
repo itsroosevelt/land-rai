@@ -40,6 +40,8 @@ export async function POST(request: NextRequest) {
         activatedAt: activatedAt,
         expiresAt: expiresAt.toISOString(),
         updatedAt: activatedAt,
+        cancelAtPeriodEnd: false,
+        cancelledAt: null,
         ...(billingData && { billing: billingData }),
       },
       { merge: true }

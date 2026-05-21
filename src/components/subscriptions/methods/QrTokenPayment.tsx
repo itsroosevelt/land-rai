@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { QRCodeSVG } from 'qrcode.react';
 import { getAssociatedTokenAddressSync } from '@solana/spl-token';
 import { Connection, PublicKey } from '@solana/web3.js';
@@ -23,6 +23,7 @@ import {
 interface QrTokenPaymentProps {
   plan: string;
   priceUSD: number;
+  catalogPriceUSD?: number;
   paymentMethod: SubscriptionPaymentMethod;
   isProcessing: boolean;
   setIsProcessing: (value: boolean) => void;
@@ -32,6 +33,7 @@ interface QrTokenPaymentProps {
   billingData: BillingData | null;
   isBillingValid: boolean;
   discountLabel?: string;
+  isUpgrade?: boolean;
 }
 
 interface PaymentRequestState {
@@ -57,6 +59,7 @@ function toUiAndRawAmount(value: number, decimals: number) {
 export default function QrTokenPayment({
   plan,
   priceUSD,
+  catalogPriceUSD,
   paymentMethod,
   isProcessing,
   setIsProcessing,
@@ -66,6 +69,7 @@ export default function QrTokenPayment({
   billingData,
   isBillingValid,
   discountLabel,
+  isUpgrade = false,
 }: QrTokenPaymentProps) {
   const config = useMemo(() => getSubscriptionPaymentConfig(paymentMethod), [paymentMethod]);
   const needsPriceFeed = paymentMethod !== 'usdc' && paymentMethod !== 'usdt';
@@ -105,21 +109,39 @@ export default function QrTokenPayment({
   const getPaymentRequestDocRef = (requestId: string) =>
     doc(db, `${getSubscriptionPaymentRequestsCollectionPath(userId, entityId)}/${requestId}`);
 
+  const catalogUsd = catalogPriceUSD ?? priceUSD;
+
   const activateSubscription = async (signature: string, paidAtIso: string) => {
-    const expiresAt = new Date(new Date(paidAtIso).getTime());
-    expiresAt.setDate(expiresAt.getDate() + 30);
+    const subRef = doc(db, getSubscriptionCurrentDocPath(userId, entityId));
+    const existingSnap = isUpgrade ? await getDoc(subRef) : null;
+    const existing = existingSnap?.exists() ? existingSnap.data() : null;
+
+    let expiresAtIso: string;
+    let activatedAtIso: string;
+
+    if (isUpgrade && existing?.expiresAt) {
+      expiresAtIso = String(existing.expiresAt);
+      activatedAtIso = String(existing.activatedAt || paidAtIso);
+    } else {
+      const expiresAt = new Date(new Date(paidAtIso).getTime());
+      expiresAt.setDate(expiresAt.getDate() + 30);
+      expiresAtIso = expiresAt.toISOString();
+      activatedAtIso = paidAtIso;
+    }
 
     await setDoc(
-      doc(db, getSubscriptionCurrentDocPath(userId, entityId)),
+      subRef,
       {
         status: 'active',
         plan,
-        priceUSD: priceUSD,
+        priceUSD: catalogUsd,
         paymentMethod,
         paymentSignature: signature,
-        activatedAt: paidAtIso,
-        expiresAt: expiresAt.toISOString(),
+        activatedAt: activatedAtIso,
+        expiresAt: expiresAtIso,
         updatedAt: paidAtIso,
+        cancelAtPeriodEnd: false,
+        cancelledAt: null,
         billing: billingData || null,
       },
       { merge: true }
@@ -396,6 +418,13 @@ export default function QrTokenPayment({
       return;
     }
 
+    if (priceUSD <= 0) {
+      if (!auto) {
+        toast.error('No payment required for this upgrade');
+      }
+      return;
+    }
+
     if (!preciseAmount) {
       if (!auto) {
         toast.error(`Unable to calculate the ${config.label} payment amount`);
@@ -413,7 +442,8 @@ export default function QrTokenPayment({
           entityId,
           plan,
           paymentMethod,
-          planPriceUSD: priceUSD,
+          planPriceUSD: catalogUsd,
+          chargeUSD: priceUSD,
           expectedAmountUi: preciseAmount.uiAmount,
           expectedAmountRaw: preciseAmount.rawAmount,
           billingData: billingData || null,
