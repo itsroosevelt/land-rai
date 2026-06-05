@@ -35,6 +35,14 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
     const [showGuide, setShowGuide] = useState(false);
     const [clickCount, setClickCount] = useState(0);
     const [devMode, setDevMode] = useState(false);
+    const [webhookMeta, setWebhookMeta] = useState<{
+        verifyToken: string;
+        globalWebhookUrl: string;
+        tenantWebhookUrl: string;
+        recommendedCallbackUrl: string;
+        recommendedVerifyToken: string;
+    } | null>(null);
+    const [savingVerifyToken, setSavingVerifyToken] = useState(false);
 
 
     const [waConfig, setWaConfig] = useState({
@@ -142,7 +150,43 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
         };
     }, [isOpen, currentUser, activeEntity]);
 
+    useEffect(() => {
+        if (!isOpen || !currentUser?.uid || !activeEntity || step !== 4) return;
+
+        const loadWebhookMeta = async () => {
+            try {
+                const res = await fetch(
+                    `/api/whatsapp/webhook-config?userId=${encodeURIComponent(currentUser.uid)}&entityId=${encodeURIComponent(activeEntity)}&origin=${encodeURIComponent(window.location.origin)}`
+                );
+                const data = await res.json();
+                if (!res.ok) return;
+                setWebhookMeta({
+                    verifyToken: data.tenant?.verifyToken || data.verifyToken,
+                    globalWebhookUrl: data.globalWebhookUrl,
+                    tenantWebhookUrl: data.tenantWebhookUrl,
+                    recommendedCallbackUrl: data.recommended?.callbackUrl,
+                    recommendedVerifyToken: data.recommended?.verifyToken,
+                });
+                if (data.tenant?.verifyToken) {
+                    setWaConfig((prev) => ({ ...prev, verifyToken: data.tenant.verifyToken }));
+                }
+            } catch (e) {
+                console.error('[WhatsApp] webhook-config load failed', e);
+            }
+        };
+
+        loadWebhookMeta();
+    }, [isOpen, currentUser?.uid, activeEntity, step]);
+
     if (!activeIntegration || activeIntegration.id !== 'whatsapp') return null;
+
+    const tenantWebhookUrl = webhookMeta?.tenantWebhookUrl
+        || (currentUser?.uid && activeEntity
+            ? `${typeof window !== 'undefined' ? window.location.origin : 'https://www.byroosevelt.com'}/api/whatsapp/webhook?u=${currentUser.uid}&e=${activeEntity}`
+            : null);
+    const globalWebhookUrl = webhookMeta?.globalWebhookUrl
+        || `${typeof window !== 'undefined' ? window.location.origin : 'https://www.byroosevelt.com'}/api/whatsapp/webhook`;
+    const displayVerifyToken = waConfig.verifyToken || webhookMeta?.verifyToken || webhookMeta?.recommendedVerifyToken || 'vg37e';
 
     const saveWhatsAppConfig = async () => {
         if (!currentUser || !activeEntity) return;
@@ -189,6 +233,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
             const configRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/integrations/whatsapp`);
             await setDoc(configRef, {
                 ...waConfig,
+                verifyToken: (waConfig.verifyToken || 'vg37e').trim(),
                 status: 'Connected',
                 provider: 'whatsapp',
                 updatedAt: new Date(),
@@ -276,10 +321,20 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                                             phoneNumberId: phoneNumberId,
                                             wabaId: wabaId,
                                             displayPhoneNumber: displayPhoneNumber,
+                                            verifyToken: waConfig.verifyToken,
                                             updatedAt: new Date(),
                                         };
 
                                         await setDoc(configRef, configDoc, { merge: true });
+                                        await fetch('/api/whatsapp/validate-phone-id', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                                phoneNumberId,
+                                                userId: currentUser?.uid,
+                                                entityId: activeEntity,
+                                            }),
+                                        });
                                         toast.success("¡Vinculación oficial completada!", { id: "meta-auth" });
                                         setStep(4);
                                     } catch (err) {
@@ -802,6 +857,76 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                                                     <p className="text-2xl font-light text-white tracking-widest">{waConfig.displayPhoneNumber || "S/N"}</p>
                                                 </div>
                                                 <div className="p-4 bg-green-500/5 border border-green-500/10 rounded-2xl"><ShieldCheck className="w-6 h-6 text-green-500/40" /></div>
+                                            </div>
+
+                                            <div className="p-5 bg-amber-500/5 border border-amber-500/20 rounded-2xl text-left space-y-2">
+                                                <p className="text-[9px] text-amber-200/90 font-bold uppercase tracking-widest">Meta Developer Console</p>
+                                                <p className="text-[10px] text-white/50 leading-relaxed">
+                                                    Desactiva <strong className="text-white/70">“Adjunta un certificado de cliente”</strong> antes de verificar. Ese switch suele causar el error rojo si el servidor no está configurado para certificados.
+                                                </p>
+                                            </div>
+
+                                            <div className="p-5 bg-white/[0.03] border border-emerald-500/20 rounded-2xl text-left space-y-3">
+                                                <span className="text-[9px] uppercase tracking-[0.2em] text-emerald-400/80 font-bold">Opción recomendada (copiar en Meta)</span>
+                                                <p className="text-[10px] text-white/50 font-mono break-all leading-relaxed">{globalWebhookUrl}</p>
+                                                <p className="text-[9px] text-white/40">Verify token: <span className="text-white/80 font-mono">{webhookMeta?.recommendedVerifyToken || 'vg37e'}</span></p>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        navigator.clipboard.writeText(globalWebhookUrl);
+                                                        toast.success('URL global copiada');
+                                                    }}
+                                                    className="w-full px-3 py-2 rounded-lg bg-emerald-600/20 border border-emerald-500/30 text-[9px] font-bold uppercase tracking-widest text-emerald-100"
+                                                >
+                                                    <Copy className="w-3 h-3 inline mr-1" /> Copiar URL recomendada
+                                                </button>
+                                            </div>
+
+                                            <div className="p-5 bg-white/[0.03] border border-white/10 rounded-2xl text-left space-y-3">
+                                                <span className="text-[9px] uppercase tracking-[0.2em] text-white/40 font-bold">Token personalizado (opcional)</span>
+                                                <input
+                                                    type="text"
+                                                    value={waConfig.verifyToken}
+                                                    onChange={(e) => setWaConfig({ ...waConfig, verifyToken: e.target.value.trim() })}
+                                                    className="w-full h-10 bg-white/[0.02] border border-white/10 rounded-xl px-3 text-xs text-white font-mono"
+                                                    placeholder="vg37e"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    disabled={savingVerifyToken || !currentUser?.uid}
+                                                    onClick={async () => {
+                                                        if (!currentUser?.uid || !activeEntity) return;
+                                                        setSavingVerifyToken(true);
+                                                        try {
+                                                            const res = await fetch('/api/whatsapp/webhook-config', {
+                                                                method: 'POST',
+                                                                headers: { 'Content-Type': 'application/json' },
+                                                                body: JSON.stringify({
+                                                                    userId: currentUser.uid,
+                                                                    entityId: activeEntity,
+                                                                    verifyToken: waConfig.verifyToken || 'vg37e',
+                                                                }),
+                                                            });
+                                                            const data = await res.json();
+                                                            if (!res.ok) throw new Error(data.error || 'Error');
+                                                            toast.success('Token guardado. Úsalo igual en Meta.');
+                                                        } catch (err: any) {
+                                                            toast.error(err.message || 'No se pudo guardar');
+                                                        } finally {
+                                                            setSavingVerifyToken(false);
+                                                        }
+                                                    }}
+                                                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-[9px] font-bold uppercase tracking-widest text-white/70 disabled:opacity-40"
+                                                >
+                                                    {savingVerifyToken ? 'Guardando...' : 'Guardar token en Roosevelt'}
+                                                </button>
+                                                {tenantWebhookUrl && (
+                                                    <>
+                                                        <p className="text-[9px] text-white/30 pt-2">URL por tenant (solo si usas token personalizado arriba):</p>
+                                                        <p className="text-[10px] text-white/40 font-mono break-all">{tenantWebhookUrl}</p>
+                                                        <p className="text-[9px] text-red-300/80">Nunca uses “TU_UID” — debe ser tu UID real de Firebase ({currentUser?.uid?.slice(0, 8)}…).</p>
+                                                    </>
+                                                )}
                                             </div>
 
                                             <div className="flex items-center gap-4 pt-10">

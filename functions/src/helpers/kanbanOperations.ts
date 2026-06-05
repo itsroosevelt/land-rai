@@ -52,21 +52,37 @@ export async function handleKanbanUpdateOmni(message: UnifiedMessage, userId?: s
     }
 
     const existingCard = cardSearchSnap.docs.find(d => d.ref.path.startsWith(vaultPath + '/'));
+    const cleanWhatsAppId = source_platform === 'whatsapp'
+        ? String(external_id || '').replace(/\D/g, '')
+        : null;
+
+    const rawMeta = message.platform_metadata as { id?: string } | undefined;
+    const queueItem = {
+        text: message_text || '',
+        messageId: rawMeta?.id || `fn_${Date.now()}`,
+        platform: source_platform,
+        from: external_id,
+        timestamp: Date.now(),
+    };
 
     if (existingCard) {
         cardRef = existingCard.ref;
         await cardRef.update({
-            [`platform_ids.${source_platform}`]: external_id, // Ensure mapping exists
+            [`platform_ids.${source_platform}`]: external_id,
+            ...(cleanWhatsAppId ? { contactNumberClean: cleanWhatsAppId, contactNumber: external_id } : {}),
             lastMessage: message_text || `[${message_type.toUpperCase()}]`,
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             unreadCount: admin.firestore.FieldValue.increment(1),
+            status: 'open',
+            primary_channel: source_platform,
             messages: admin.firestore.FieldValue.arrayUnion({
                 sender: 'user',
                 text: message_text,
                 type: message_type,
                 timestamp: message.timestamp || new Date(),
                 platform: source_platform
-            })
+            }),
+            'botState.messageQueue': admin.firestore.FieldValue.arrayUnion(queueItem),
         });
     } else {
         // 3. CREATE NEW CARD IN THE REAL GROUP
@@ -74,13 +90,17 @@ export async function handleKanbanUpdateOmni(message: UnifiedMessage, userId?: s
         await cardRef.set({
             contactName: message.contact_name || 'Nuevo Contacto',
             contactNumber: source_platform === 'whatsapp' ? external_id : null,
+            ...(cleanWhatsAppId ? { contactNumberClean: cleanWhatsAppId } : {}),
             platform_ids: { [source_platform]: external_id },
             lastMessage: message_text || `[${message_type.toUpperCase()}]`,
-            source: source_platform,
+            source: source_platform === 'whatsapp' ? 'WHATSAPP' : source_platform,
+            primary_channel: source_platform,
             groupId: inboxGroupId,
+            status: 'open',
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             unreadCount: 1,
+            botState: { messageQueue: [queueItem], status: 'active' },
             messages: [{
                 sender: 'user',
                 text: message_text,

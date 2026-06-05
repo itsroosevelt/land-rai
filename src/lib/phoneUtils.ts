@@ -5,16 +5,26 @@
 export const normalizePhoneNumber = (phone: string): string => {
     if (!phone) return '';
 
-    // Remove all non-digit characters
-    let clean = phone.replace(/\D/g, '');
+    const trimmed = phone.trim();
+    if (trimmed.startsWith('+')) {
+        const digits = trimmed.replace(/\D/g, '');
+        return digits ? `+${digits}` : '';
+    }
 
-    // If it already starts with a potential country code (e.g., 593), make sure it has the plus
-    // This is a bit naive but covers the most common case for this app
-    if (clean.length > 10 && (clean.startsWith('593') || clean.startsWith('1'))) {
+    let clean = trimmed.replace(/\D/g, '');
+    if (!clean) return '';
+
+    // International numbers from Meta/WhatsApp already include country code (>10 digits).
+    if (clean.length > 10) {
         return `+${clean}`;
     }
 
-    // If it's a local Ecuador number (9 or 10 digits starting with 0 or 9)
+    // North America without leading country digit in some legacy imports.
+    if (clean.length === 10 && clean.startsWith('1') === false) {
+        return `+1${clean}`;
+    }
+
+    // Ecuador local numbers only when clearly local length (avoid mis-tagging foreign short codes).
     if (clean.length >= 9 && clean.length <= 10) {
         if (clean.startsWith('0')) {
             clean = clean.substring(1);
@@ -22,6 +32,6 @@ export const normalizePhoneNumber = (phone: string): string => {
         return `+593${clean}`;
     }
 
-    return clean ? `+${clean}` : '';
+    return `+${clean}`;
 };
 

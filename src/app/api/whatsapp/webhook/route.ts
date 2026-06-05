@@ -2,8 +2,13 @@ import { NextResponse } from 'next/server';
 import { db, admin } from '@/lib/firebase-admin';
 import fs from 'fs';
 import path from 'path';
-import { sendWhatsAppMessage } from '@/lib/sendProviders';
 import { processChatbotFlow } from '@/lib/chatbotEngine';
+import { extractWhatsAppInboundText } from '@/lib/whatsappInbound';
+import {
+    cleanWhatsAppSenderId,
+    phoneLookupVariants,
+    resolveWhatsAppTenant,
+} from '@/lib/whatsappTenant';
 
 const DEBUG_FILE = '/tmp/webhook.log';
 
@@ -27,28 +32,39 @@ export async function GET(req: Request) {
 
     const userId = searchParams.get('u');
     const entityId = searchParams.get('e');
-    let expectedToken = process.env.kamban_VERIFY_TOKEN || 'vg37e';
+    const incomingToken = (token || '').trim();
+    let expectedToken = (
+        process.env.kamban_VERIFY_TOKEN ||
+        process.env.WHATSAPP_VERIFY_TOKEN ||
+        'vg37e'
+    ).trim();
+
+    const hasValidTenantParams =
+        !!userId &&
+        !!entityId &&
+        !userId.includes('TU_UID') &&
+        userId.length >= 10;
 
     // MULTI-TENANT VERIFICATION: If IDs are in URL, we check the tenant's specific token
-    if (userId && entityId) {
+    if (hasValidTenantParams) {
         try {
             const [publicSnap, internalSnap] = await Promise.all([
                 db.doc(`users/${userId}/entities/${entityId}/integrations/whatsapp`).get(),
                 db.doc(`users/${userId}/entities/${entityId}/integrations/whatsapp_internal`).get()
             ]);
 
-            const tenantToken = publicSnap.data()?.verifyToken || internalSnap.data()?.verifyToken;
+            const tenantToken = (publicSnap.data()?.verifyToken || internalSnap.data()?.verifyToken || '').trim();
             if (tenantToken) expectedToken = tenantToken;
         } catch (err) {
             debugLog(`[GET] Error loading tenant token: ${err}`);
         }
     }
 
-    if (mode === 'subscribe' && token === expectedToken) {
+    if (mode === 'subscribe' && incomingToken === expectedToken) {
         debugLog(`Verification successful (GET) | Tenant: ${entityId || 'Global'}`);
         return new Response(challenge, { status: 200 });
     }
-    debugLog(`Verification failed (GET) | Expected: ${expectedToken}, Got: ${token}`);
+    debugLog(`Verification failed (GET) | Expected: ${expectedToken}, Got: ${incomingToken} | TenantParams: ${hasValidTenantParams}`);
     return new Response('Forbidden', { status: 403 });
 }
 
@@ -77,55 +93,30 @@ export async function POST(req: Request) {
         // 1. TENANT IDENTIFICATION (Optimized O(1) Indexed Lookup)
         debugLog(`[POST] Searching tenant for Phone ID: ${recipientPhoneNumberId}`);
 
-        let userId = searchParams.get('u');
-        let entityId = searchParams.get('e');
+        const tenant = await resolveWhatsAppTenant(
+            recipientPhoneNumberId,
+            searchParams.get('u'),
+            searchParams.get('e')
+        );
 
-        if (!userId || !entityId) {
-            // Rule 4: Isolated Data Vault - Search across all entity integrations
-            const tenantSnap = await db.collectionGroup('integrations')
-                .where('phoneNumberId', '==', recipientPhoneNumberId)
-                .limit(1)
-                .get();
-            
-            if (!tenantSnap.empty) {
-                const pathParts = tenantSnap.docs[0].ref.path.split('/');
-                // Dynamic path resolution: users/{uid}/entities/{eid}/integrations/whatsapp
-                const uIdx = pathParts.indexOf('users');
-                const eIdx = pathParts.indexOf('entities');
-                if (uIdx !== -1 && eIdx !== -1) {
-                    userId = pathParts[uIdx + 1];
-                    entityId = pathParts[eIdx + 1];
-                }
-            }
+        if (!tenant) {
+            debugLog(`[POST] ❌ ABORT: Could not resolve tenant for Phone ID ${recipientPhoneNumberId}`);
+            return NextResponse.json({ success: true, ignored: 'tenant_not_mapped' });
         }
 
-        if (userId && entityId) {
-            debugLog(`[POST] Tenant Discovery Success: User=${userId}, Entity=${entityId}`);
-            
-            // EMERGENCY LOG TO ENTITY BÓVEDA (Rule 5 & 7)
-            try {
-                await db.collection(`users/${userId}/entities/${entityId}/system_logs`).add({
-                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                    type: 'whatsapp_webhook',
-                    phoneId: recipientPhoneNumberId || 'unknown',
-                    payload_type: value?.messages ? 'message' : (value?.statuses ? 'status' : 'other'),
-                    raw: JSON.stringify(body).substring(0, 1500)
-                });
-            } catch (e) {}
-        } else {
-            // BACKUP SEARCH: try a legacy system mapping if it exists
-            const mappingRef = db.doc(`system_mappings/whatsapp_numbers/numbers/${recipientPhoneNumberId}`);
-            const mappingDoc = await mappingRef.get();
-            if (mappingDoc.exists) {
-                const legacy = mappingDoc.data() as { userId: string, entityId: string };
-                userId = legacy.userId;
-                entityId = legacy.entityId;
-                debugLog(`[POST] Found via legacy mapping: User=${userId}, Entity=${entityId}`);
-            } else {
-                debugLog(`[POST] ❌ ABORT: Could not resolve tenant for Phone ID ${recipientPhoneNumberId} (No mapping and no URL params).`);
-                return NextResponse.json({ success: false, error: 'Tenant not mapped' });
-            }
-        }
+        const userId = tenant.userId;
+        const entityId = tenant.entityId;
+        debugLog(`[POST] Tenant Discovery Success: User=${userId}, Entity=${entityId}`);
+
+        try {
+            await db.collection(`users/${userId}/entities/${entityId}/system_logs`).add({
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                type: 'whatsapp_webhook',
+                phoneId: recipientPhoneNumberId || 'unknown',
+                payload_type: value?.messages ? 'message' : (value?.statuses ? 'status' : 'other'),
+                raw: JSON.stringify(body).substring(0, 1500)
+            });
+        } catch (e) {}
 
         // Base path for this specific tenant's entity
         const entityPath = `users/${userId}/entities/${entityId}`;
@@ -182,23 +173,13 @@ export async function POST(req: Request) {
             }
 
             const from = message.from;
-            let text = message.text?.body || '';
-
-            // Handle interactive/button responses
-            if (message.type === 'interactive') {
-                const interactive = message.interactive;
-                text = interactive?.button_reply?.id || interactive?.list_reply?.id || interactive?.button_reply?.title || interactive?.list_reply?.title;
-            } else if (message.type === 'button') {
-                text = message.button?.payload || message.button?.text;
-            } else if (message.type === 'image' || message.type === 'document' || message.type === 'video') {
-                text = `[Archivo ${message.type}]`;
-            }
+            const { text, shouldProcess } = extractWhatsAppInboundText(message);
 
             const messageId = message.id;
             debugLog(`[POST] Message from ${from}: "${text}" (Tenant: ${entityId})`);
 
-            if (from && text) {
-                const cleanFrom = from.replace(/\D/g, '');
+            if (from && shouldProcess) {
+                const cleanFrom = cleanWhatsAppSenderId(from);
                 
                 // Strict Validation: Prevent blank/ghost records if Meta API hallucinates
                 if (!cleanFrom || cleanFrom.length < 5) {
@@ -212,14 +193,20 @@ export async function POST(req: Request) {
                 let existingContactId: string | null = null;
                 let existingContactName: string | null = null;
 
-                const contactSnap = await db.collection(`${entityPath}/contacts`)
-                    .where('phone', '==', `+${cleanFrom}`)
-                    .limit(1)
-                    .get();
+                let contactDoc: { id: string; data: () => Record<string, any> } | null = null;
+                for (const phoneVariant of phoneLookupVariants(cleanFrom)) {
+                    const snap = await db.collection(`${entityPath}/contacts`)
+                        .where('phone', '==', phoneVariant)
+                        .limit(1)
+                        .get();
+                    if (!snap.empty) {
+                        contactDoc = snap.docs[0];
+                        break;
+                    }
+                }
 
-                if (!contactSnap.empty) {
-                    const contactDoc = contactSnap.docs[0];
-                    const contactData = contactDoc.data();
+                if (contactDoc) {
+                    const contactData = contactDoc.data() || {};
                     existingContactId = contactDoc.id;
                     existingContactName = contactData.name || contactData.contactName || contactData.firstName || null;
                     targetGroupId = contactData.kanbanGroupId;
@@ -250,15 +237,18 @@ export async function POST(req: Request) {
                     const groupsSnapshot = await groupsRef.get();
 
                     for (const groupDoc of groupsSnapshot.docs) {
-                        const cardsSnapshot = await groupDoc.ref.collection('cards')
-                            .where('contactNumberClean', '==', cleanFrom)
-                            .orderBy('updatedAt', 'desc')
-                            .limit(1)
-                            .get();
+                        try {
+                            const cardsSnapshot = await groupDoc.ref.collection('cards')
+                                .where('contactNumberClean', '==', cleanFrom)
+                                .limit(5)
+                                .get();
 
-                        cardsSnapshot.forEach(doc => {
-                            allMatches.push({ doc, groupId: groupDoc.id });
-                        });
+                            cardsSnapshot.forEach(doc => {
+                                allMatches.push({ doc, groupId: groupDoc.id });
+                            });
+                        } catch (searchErr: any) {
+                            debugLog(`[POST] Card search skipped in group ${groupDoc.id}: ${searchErr.message}`);
+                        }
                     }
 
                     if (allMatches.length > 0) {

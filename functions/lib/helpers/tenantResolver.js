@@ -62,11 +62,53 @@ async function resolveTenant(platform, platformId, secondaryId) {
                 return { userId, entityId };
             }
         }
+        // Alternate field name used by some Meta setups
+        if (platform === 'whatsapp') {
+            for (const id of [platformId, Number(platformId)]) {
+                if (id === undefined || (typeof id === 'number' && Number.isNaN(id)))
+                    continue;
+                try {
+                    const altSnap = await db.collectionGroup("integrations")
+                        .where("phone_number_id", "==", id)
+                        .limit(1)
+                        .get();
+                    if (!altSnap.empty) {
+                        const pathParts = altSnap.docs[0].ref.path.split('/');
+                        const userId = pathParts[1];
+                        const entityId = pathParts[3];
+                        if (userId && entityId) {
+                            functions.logger.info(`[Tenant Resolver] ✅ Resolved via phone_number_id: ${userId}/${entityId}`);
+                            return { userId, entityId };
+                        }
+                    }
+                }
+                catch (altErr) {
+                    functions.logger.warn(`[Tenant Resolver] phone_number_id lookup skipped: ${altErr.message}`);
+                }
+            }
+        }
     }
     catch (error) {
         functions.logger.warn(`[Tenant Resolver] ⚠️ Vault query skipped (index building?): ${error.message}`);
     }
-    // 2. FINAL STATUS
+    // 2. LEGACY GLOBAL MAPPING (WhatsApp phone_number_id → tenant)
+    if (platform === 'whatsapp' && platformId) {
+        try {
+            const mappingRef = db.doc(`system_mappings/whatsapp_numbers/numbers/${platformId}`);
+            const mappingDoc = await mappingRef.get();
+            if (mappingDoc.exists) {
+                const data = mappingDoc.data();
+                if ((data === null || data === void 0 ? void 0 : data.userId) && (data === null || data === void 0 ? void 0 : data.entityId)) {
+                    functions.logger.info(`[Tenant Resolver] ✅ Resolved via system_mappings for ${platformId}`);
+                    return { userId: data.userId, entityId: data.entityId };
+                }
+            }
+        }
+        catch (mapErr) {
+            functions.logger.warn(`[Tenant Resolver] system_mappings lookup failed: ${mapErr.message}`);
+        }
+    }
+    // 3. FINAL STATUS
     functions.logger.warn(`[Tenant Resolver] ❌ Final: UNRESOLVED for ${platform}:${platformId}`);
     return null;
 }

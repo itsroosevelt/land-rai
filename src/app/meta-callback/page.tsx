@@ -57,6 +57,18 @@ export default function MetaCallbackPage() {
                     updatedAt: new Date(),
                 }, { merge: true });
 
+                if (phoneNumberIdFromMeta) {
+                    await fetch('/api/whatsapp/validate-phone-id', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            phoneNumberId: phoneNumberIdFromMeta,
+                            userId: currentUser.uid,
+                            entityId: activeEntity,
+                        }),
+                    });
+                }
+
                 setStatus('success');
                 setMessage('¡WhatsApp conectado correctamente! Ya puedes cerrar esta ventana.');
                 

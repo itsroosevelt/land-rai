@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
+import { registerWhatsAppTenantMapping } from '@/lib/whatsappTenant';
 
 export async function POST(req: Request) {
     try {
@@ -40,6 +41,10 @@ export async function POST(req: Request) {
                     console.error(`[Validation] ⚠️ Skipping global check for ${collName}/${fieldName} due to missing index.`);
                 }
             }
+        }
+
+        if (userId && entityId) {
+            await registerWhatsAppTenantMapping(String(phoneNumberId), userId, entityId);
         }
 
         console.log(`[Validation] ✅ Phone ID ${phoneNumberId} is valid for ${currentEntityPath}`);
