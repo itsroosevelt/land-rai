@@ -22,6 +22,16 @@ export interface ChatbotContext {
 
 const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
 
+function dedupeQueueItems(queue: any[]): any[] {
+    const seen = new Set<string>();
+    return (queue || []).filter((item) => {
+        const id = String(item?.messageId || '').trim();
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+    });
+}
+
 /**
  * Sequential Chatbot Engine Runner
  * Implements a FIFO queue consumer pattern to prevent race conditions and duplicate responses.
@@ -71,13 +81,23 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
 
         if (!canExecute) return;
 
+        // Trim stale/duplicate queue entries before consuming (prevents old messages re-firing prompts).
+        const preRunSnap = await cardRef.get();
+        const preRunQueue = dedupeQueueItems(preRunSnap.data()?.botState?.messageQueue || []);
+        if (preRunQueue.length > 5) {
+            const trimmed = preRunQueue.slice(-5);
+            await cardRef.update({ 'botState.messageQueue': trimmed });
+            console.log(`[ChatbotEngine] 🧹 Trimmed message queue from ${preRunQueue.length} to ${trimmed.length}`);
+        }
+
         // --- 2. THE CONSUMER LOOP ---
+        const processedInRunner = new Set<string>();
         let queueHasItems = true;
         while (queueHasItems) {
             const snap = await cardRef.get();
             const cardData = snap.data() || {};
             const bState = cardData.botState || {};
-            const queue = bState.messageQueue || [];
+            const queue = dedupeQueueItems(bState.messageQueue || []);
 
             if (queue.length === 0) {
                 queueHasItems = false;
@@ -86,10 +106,23 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
 
             // Consume first item (FIFO)
             const currentMsg = queue[0];
-            const msgId = currentMsg.messageId;
+            const msgId = String(currentMsg.messageId || '').trim();
             const msgText = String(currentMsg.text || '').trim();
             const msgPlatform = currentMsg.platform || platform;
             const msgFrom = currentMsg.from || from;
+
+            // Skip duplicate deliveries (Meta retries / double webhook hits).
+            if (msgId && (processedInRunner.has(msgId) || bState.lastProcessedMessageId === msgId)) {
+                console.log(`[ChatbotEngine] ⏭️ Skipping duplicate queue item [${msgId}]`);
+                await db.runTransaction(async (transaction) => {
+                    transaction.update(cardRef, {
+                        'botState.messageQueue': admin.firestore.FieldValue.arrayRemove(currentMsg),
+                    });
+                });
+                continue;
+            }
+
+            if (msgId) processedInRunner.add(msgId);
 
             console.log(`[ChatbotEngine] 🧵 Processing Queue Item [${msgId}]: "${msgText.substring(0, 30)}"`);
 
@@ -108,6 +141,7 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                 await db.runTransaction(async (transaction) => {
                     transaction.update(cardRef, {
                         'botState.messageQueue': admin.firestore.FieldValue.arrayRemove(currentMsg),
+                        'botState.lastProcessedMessageId': msgId || null,
                         botLock: admin.firestore.FieldValue.serverTimestamp() // Refresh lock
                     });
                 });
@@ -174,13 +208,17 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     const isMenu = /^(menu|opciones|ayuda|help)/i.test(normalizedInput);
     const isStop = /^(detener|stop|salir|chau|adios)/i.test(normalizedInput);
     const isStartTrigger = /^(hola|hi|buenas|inicio|start|buen(as)?\s*(dias|tardes|noches)|que\s*tal|saludos)/i.test(normalizedInput);
+
+    // If the bot is waiting for an answer, greetings are part of the reply — not a new session.
+    const wasWaitingForInput = !!cardData.botState?.waitingForInput;
+    const shouldApplyStartTrigger = isStartTrigger && !wasWaitingForInput;
     
     const isCommand = isReset || isMenu || isStop;
 
     const sessionVars = {
-        nombre: (isStartTrigger || isReset) ? 'Usuario' : (cardData.contactName || 'Usuario'),
-        name: (isStartTrigger || isReset) ? 'Usuario' : (cardData.contactName || 'Usuario'),
-        first_name: ((isStartTrigger || isReset) ? 'Usuario' : (cardData.contactName || 'Usuario')).split(' ')[0],
+        nombre: (isReset || shouldApplyStartTrigger) ? 'Usuario' : (cardData.contactName || 'Usuario'),
+        name: (isReset || shouldApplyStartTrigger) ? 'Usuario' : (cardData.contactName || 'Usuario'),
+        first_name: ((isReset || shouldApplyStartTrigger) ? 'Usuario' : (cardData.contactName || 'Usuario')).split(' ')[0],
         ...(cardData.customFields || {}),
         ...(cardData.variables || {})
     };
@@ -206,7 +244,8 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     };
 
     // --- B. MASTER BYPASS (Reset/Trigger Override) ---
-    if (isReset || isMenu || isStartTrigger) {
+    // Never treat greetings as a restart while waiting for user input (prevents question loops).
+    if (isReset || isMenu || shouldApplyStartTrigger) {
         console.log(`[ChatbotEngine] 🧹 Master Bypass [${isReset ? 'RESET' : isMenu ? 'MENU' : 'START'}] for card ${cardRef.id}`);
         
         // Atomic wipe + Status reset (Rule 4: Root Isolation)
@@ -214,20 +253,22 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             'botState.status': 'active',
             'botState.waitingForInput': false,
             'botState.currentNodeId': null,
-            customFields: {}
         };
 
-        // If it's a hard reset, we clear the queue to prevent "echoes" of previous flow messages
+        // Only wipe captured variables on explicit hard reset — not on "hola" to start.
         if (isReset) {
+            resetPayload.customFields = {};
             resetPayload['botState.messageQueue'] = [];
-            resetPayload['botState.lastProcessedMessageId'] = null; // Allow re-processing if needed
+            resetPayload['botState.lastProcessedMessageId'] = null;
         }
 
         await cardRef.update(resetPayload);
         
         // Sync local cardData for current cycle execution
         cardData.botState = { ...(cardData.botState || {}), status: 'active', waitingForInput: false, currentNodeId: null };
-        cardData.customFields = {};
+        if (isReset) {
+            cardData.customFields = {};
+        }
         
         if (isReset) {
             if (isExplicitReset) {
@@ -342,7 +383,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         // This prevents capturing "Reiniciar" or "Hola" as answers to questions.
         // MOD: Solo bloqueamos si es un Reset explícito o si NO estamos esperando entrada (flujo inicial).
         // Si estamos esperando entrada (waitingForInput), permitimos que pase para que el 'cleanInput' haga su trabajo.
-        if (isReset || (isStartTrigger && !waitingForInput)) {
+        if (isReset || shouldApplyStartTrigger) {
             console.log(`[ChatbotEngine] 🛡️ Trigger message [${isReset?'RESET':'START'}] blocked from captureInputNode to prevent auto-fill.`);
         } else {
             const node = flow.nodes.find((n: any) => n.id === currentNodeId);
@@ -399,24 +440,25 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
 
                 // 3. SUCCESS HANDLING
                 console.log(`[ChatbotEngine] ✅ Captured & Validated ${varName}: ${extracted}`);
-                const updatePayload: any = { [`customFields.${varName}`]: extracted, 'botState.waitingForInput': false };
                 
                 if (isName) {
-                    // We NO LONGER modify contactName here per user request. The name assigned in Kanban is permanent.
                     sessionVars.nombre = extracted;
                     sessionVars.name = extracted;
                 }
                 sessionVars[varName] = extracted;
-                await cardRef.update(updatePayload);
 
                 // Find next node (Universal Connector)
                 const next = resolveDefaultNextEdge(flow.edges, node.id);
-                
-                if (next) {
-                    currentNodeId = next.target;
-                } else {
-                    currentNodeId = null;
-                }
+                const nextId = next?.target || null;
+
+                const updatePayload: any = {
+                    [`customFields.${varName}`]: extracted,
+                    'botState.waitingForInput': false,
+                    'botState.currentNodeId': nextId,
+                };
+                await cardRef.update(updatePayload);
+
+                currentNodeId = nextId;
             } else if (node?.type === 'quickReplyNode') {
                 const buttons = sanitizeFlowButtons(node.data?.buttons || []);
                 const resolution = resolveQuickReplyEdge(flow.edges, node.id, buttons, text);
@@ -497,6 +539,18 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
              const start = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
              currentNodeId = start ? start.id : null;
              console.log(`[ChatbotEngine] 🆕 Starting/Restarting flow at node ${currentNodeId}`);
+        }
+    }
+
+    // If we're already waiting on a prompt node, do NOT re-send it in the forward loop.
+    const preLoopSnap = await cardRef.get();
+    const preLoopState = preLoopSnap.data()?.botState || {};
+    if (preLoopState.waitingForInput && preLoopState.currentNodeId) {
+        const waitingNode = flow.nodes.find((n: any) => n.id === preLoopState.currentNodeId);
+        const isWaitNode = ['captureInputNode', 'quickReplyNode', 'listMessageNode'].includes(waitingNode?.type || '');
+        if (isWaitNode && String(preLoopState.currentNodeId) === String(currentNodeId)) {
+            console.log(`[ChatbotEngine] 🛑 Already waiting on node ${currentNodeId} — skipping duplicate prompt send.`);
+            return;
         }
     }
 

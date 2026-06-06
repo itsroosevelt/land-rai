@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db, admin } from '@/lib/firebase-admin';
 import { processChatbotFlow } from '@/lib/chatbotEngine';
+import { buildBotQueueItem, createQueuedBotState, isDuplicateQueueMessage } from '@/lib/botQueue';
 
 import fs from 'fs';
 
@@ -239,16 +240,25 @@ export async function POST(req: Request) {
         let groupId: string | null = targetGroupId || null;
 
         if (targetCardDoc && targetGroupId) {
-            const queueItem = { text: botInputText || text || '', messageId, platform: provider, from: senderId, timestamp: Date.now() };
+            const queueItem = buildBotQueueItem({
+                text: botInputText || text || '',
+                messageId: messageId || `meta_${Date.now()}`,
+                platform: provider,
+                from: senderId,
+            });
+            const alreadyQueued = isDuplicateQueueMessage(targetCardDoc.data(), messageId);
             const cardUpdate: any = {
                 lastMessage: text.length > 40 ? text.substring(0, 37) + '...' : text,
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 unreadCount: admin.firestore.FieldValue.increment(1),
                 messages: admin.firestore.FieldValue.arrayUnion(newMessage),
-                'botState.messageQueue': admin.firestore.FieldValue.arrayUnion(queueItem),
+                'botState.engine': 'queue',
                 status: 'open',
                 [`platform_ids.${provider.toLowerCase()}`]: senderId
             };
+            if (!alreadyQueued) {
+                cardUpdate['botState.messageQueue'] = admin.firestore.FieldValue.arrayUnion(queueItem);
+            }
             if (!targetCardDoc.data()?.contactName || isGenericProfileName(targetCardDoc.data()?.contactName)) cardUpdate.contactName = finalResolvedName;
 
             await targetCardDoc.ref.update(cardUpdate);
@@ -266,7 +276,12 @@ export async function POST(req: Request) {
 
             const newCardRef = db.collection(`${entityPath}/kanban-groups/${destinationGroupId}/cards`).doc();
             const contactIdToUse = existingContactId || `c_${Date.now().toString().slice(-8)}`;
-            const queueItem = { text: botInputText || text || '', messageId, platform: provider, from: senderId, timestamp: Date.now() };
+            const queueItem = buildBotQueueItem({
+                text: botInputText || text || '',
+                messageId: messageId || `meta_${Date.now()}`,
+                platform: provider,
+                from: senderId,
+            });
 
             await newCardRef.set({
                 id: newCardRef.id,
@@ -278,7 +293,7 @@ export async function POST(req: Request) {
                 updatedAt: admin.firestore.Timestamp.now(),
                 createdAt: admin.firestore.Timestamp.now(),
                 messages: [newMessage],
-                botState: { messageQueue: [queueItem], status: 'active' },
+                botState: createQueuedBotState(queueItem),
                 unreadCount: 1,
                 status: 'open',
                 source: provider.toUpperCase(),

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db, admin } from '@/lib/firebase-admin';
 import { processChatbotFlow } from '@/lib/chatbotEngine';
+import { buildBotQueueItem, createQueuedBotState, isDuplicateQueueMessage } from '@/lib/botQueue';
 import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
@@ -131,27 +132,30 @@ export async function POST(req: Request) {
             platform: 'x_twitter'
         };
 
-        const queueItem = {
+        const queueItem = buildBotQueueItem({
             text: text,
-            messageId: messageId,
+            messageId: messageId || `x_${Date.now()}`,
             platform: 'x_twitter',
             from: senderId,
-            timestamp: Date.now()
-        };
+        });
 
         if (targetCardDoc && targetGroupId) {
-            // Update existing
-            await targetCardDoc.ref.update({
+            const alreadyQueued = isDuplicateQueueMessage(targetCardDoc.data(), messageId);
+            const cardUpdate: Record<string, any> = {
                 contactName: resolvedName,
                 lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 unreadCount: admin.firestore.FieldValue.increment(1),
                 messages: admin.firestore.FieldValue.arrayUnion(newMessage),
-                'botState.messageQueue': admin.firestore.FieldValue.arrayUnion(queueItem),
+                'botState.engine': 'queue',
                 status: 'open',
                 source: 'TWITTER',
                 channel: 'twitter'
-            });
+            };
+            if (!alreadyQueued) {
+                cardUpdate['botState.messageQueue'] = admin.firestore.FieldValue.arrayUnion(queueItem);
+            }
+            await targetCardDoc.ref.update(cardUpdate);
         } else {
             // Create New
             const groupsRef = db.collection(`${entityPath}/kanban-groups`);
@@ -172,8 +176,7 @@ export async function POST(req: Request) {
                 updatedAt: admin.firestore.Timestamp.now(),
                 createdAt: admin.firestore.Timestamp.now(),
                 messages: [newMessage],
-                'botState.messageQueue': [queueItem],
-                'botState.status': 'active',
+                botState: createQueuedBotState(queueItem),
                 unreadCount: 1,
                 status: 'open',
                 source: 'TWITTER',

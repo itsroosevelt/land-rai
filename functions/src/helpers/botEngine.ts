@@ -349,6 +349,21 @@ export async function tryTriggerBot(
     const cardSnap = await cardRef.get();
     const cardData = { id: cardRef.id, ...cardSnap.data() } as any;
 
+    // Next.js queue engine owns bot execution for this card — avoid duplicate WhatsApp replies.
+    if (cardData.botState?.engine === 'queue') {
+        functions.logger.info(`[Bot Engine] Skipping legacy engine for ${externalId} — queue engine active.`);
+        await logBotTrace(userId, entityId, {
+            step: 'engine_skip', status: 'info', platform, externalId,
+            details: 'Queue engine active on card; legacy botEngine skipped to prevent duplicate prompts.'
+        });
+        return;
+    }
+
+    if (messageId && cardData.botState?.lastProcessedMessageId === messageId) {
+        functions.logger.info(`[Bot Engine] Skipping duplicate message ${messageId} for ${externalId}`);
+        return;
+    }
+
     const now = new Date();
     const FORTY_EIGHT_HOURS_IN_MS = 48 * 60 * 60 * 1000;
     const ONE_HOUR_IN_MS = 60 * 60 * 1000;

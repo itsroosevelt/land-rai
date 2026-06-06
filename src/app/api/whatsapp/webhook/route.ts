@@ -3,6 +3,7 @@ import { db, admin } from '@/lib/firebase-admin';
 import fs from 'fs';
 import path from 'path';
 import { processChatbotFlow } from '@/lib/chatbotEngine';
+import { buildBotQueueItem, createQueuedBotState, isDuplicateQueueMessage } from '@/lib/botQueue';
 import { extractWhatsAppInboundText } from '@/lib/whatsappInbound';
 import {
     cleanWhatsAppSenderId,
@@ -277,26 +278,36 @@ export async function POST(req: Request) {
                 let cardId = targetCardDoc?.id;
                 let groupId = targetGroupId;
 
-                const queueItem = {
+                const queueItem = buildBotQueueItem({
                     text: text || '',
                     messageId: messageId || `wa_${Date.now()}`,
                     platform: 'whatsapp',
                     from: from,
-                    timestamp: Date.now()
-                };
+                });
 
                 if (targetCardDoc && targetGroupId) {
                     cardId = targetCardDoc.id;
                     groupId = targetGroupId;
 
-                    await targetCardDoc.ref.update({
+                    const existingCardData = targetCardDoc.data() || {};
+                    const alreadyQueued = isDuplicateQueueMessage(existingCardData, messageId);
+
+                    const cardUpdate: Record<string, any> = {
                         lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
                         updatedAt: new Date(),
                         unreadCount: admin.firestore.FieldValue.increment(1),
                         messages: admin.firestore.FieldValue.arrayUnion(newMessage),
-                        'botState.messageQueue': admin.firestore.FieldValue.arrayUnion(queueItem),
+                        'botState.engine': 'queue',
                         status: 'open'
-                    });
+                    };
+
+                    if (!alreadyQueued) {
+                        cardUpdate['botState.messageQueue'] = admin.firestore.FieldValue.arrayUnion(queueItem);
+                    } else {
+                        debugLog(`[POST] Duplicate WhatsApp message ${messageId} ignored for queue on card ${cardId}`);
+                    }
+
+                    await targetCardDoc.ref.update(cardUpdate);
                 } else {
                     // Create NEW card
                     let destinationGroupId = targetGroupId;
@@ -344,14 +355,6 @@ export async function POST(req: Request) {
 
                         const finalContactName = value.contacts?.[0]?.profile?.name || existingContactName || from;
 
-                        const queueItem = {
-                            text: text || '',
-                            messageId: messageId || `wa_${Date.now()}`,
-                            platform: 'whatsapp',
-                            from: from,
-                            timestamp: Date.now()
-                        };
-
                         await newCardRef.set({
                             crmId: numericId,
                             contactName: finalContactName,
@@ -361,7 +364,7 @@ export async function POST(req: Request) {
                             updatedAt: new Date(),
                             createdAt: new Date(),
                             messages: [newMessage],
-                            botState: { messageQueue: [queueItem], status: 'active' },
+                            botState: createQueuedBotState(queueItem),
                             unreadCount: 1,
                             status: 'open',
                             source: 'WHATSAPP',

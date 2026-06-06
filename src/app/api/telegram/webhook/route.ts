@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db, admin } from '@/lib/firebase-admin';
 import { processChatbotFlow } from '@/lib/chatbotEngine';
+import { buildBotQueueItem, createQueuedBotState, isDuplicateQueueMessage } from '@/lib/botQueue';
 
 export async function POST(req: Request) {
     const { searchParams } = new URL(req.url);
@@ -81,23 +82,30 @@ export async function POST(req: Request) {
             messageId: messageId
         };
 
-        const queueItem = {
+        const queueItem = buildBotQueueItem({
             text: text || '',
-            from: chatId,
+            messageId: messageId || `tg_${Date.now()}`,
             platform: 'telegram',
-            timestamp: Date.now(),
-            messageId: messageId
-        };
+            from: chatId,
+        });
 
         if (cardId && groupId) {
-            // Update existing card
-            await db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`).update({
+            const cardRef = db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`);
+            const cardSnap = await cardRef.get();
+            const alreadyQueued = isDuplicateQueueMessage(cardSnap.data(), messageId);
+
+            const cardUpdate: Record<string, any> = {
                 messages: admin.firestore.FieldValue.arrayUnion(newMessage),
                 updatedAt: new Date(),
                 lastMessage: text || '[Telegram]',
                 unreadCount: admin.firestore.FieldValue.increment(1),
-                'botState.messageQueue': admin.firestore.FieldValue.arrayUnion(queueItem)
-            });
+                'botState.engine': 'queue',
+            };
+            if (!alreadyQueued) {
+                cardUpdate['botState.messageQueue'] = admin.firestore.FieldValue.arrayUnion(queueItem);
+            }
+
+            await cardRef.update(cardUpdate);
         } else {
             // Create new Lead Capture
             const groupsRef = db.collection(`${entityPath}/kanban-groups`);
@@ -127,11 +135,10 @@ export async function POST(req: Request) {
                 status: 'open',
                 source: 'TELEGRAM',
                 channel: 'telegram',
-                'botState': {
-                    status: 'active',
-                    messageQueue: [queueItem],
+                botState: {
+                    ...createQueuedBotState(queueItem),
                     waitingForInput: false,
-                    currentNodeId: null
+                    currentNodeId: null,
                 },
                 platform_ids: { telegram: chatId }
             });

@@ -3,6 +3,7 @@ import { db, admin } from '@/lib/firebase-admin';
 import axios from 'axios';
 import { getGmailAccessToken } from '@/lib/googleAuth';
 import { processChatbotFlow } from '@/lib/chatbotEngine';
+import { buildBotQueueItem, createQueuedBotState, isDuplicateQueueMessage } from '@/lib/botQueue';
 
 export const dynamic = 'force-dynamic';
 
@@ -283,25 +284,29 @@ export async function POST(req: Request) {
         let cardId: string | null = targetCardDoc?.id || null;
         let groupId: string | null = targetGroupId || null;
 
-        const queueItem = {
+        const queueItem = buildBotQueueItem({
             text: bodySnippet || '',
             messageId: `gm_${msgId}`,
             platform: 'gmail',
             from: fromEmail,
-            timestamp: Date.now()
-        };
+        });
 
         if (targetCardDoc && groupId) {
             const cardRef = targetCardDoc.ref;
-            await cardRef.update({
+            const alreadyQueued = isDuplicateQueueMessage(targetCardDoc.data(), `gm_${msgId}`);
+            const cardUpdate: Record<string, any> = {
                 lastMessage: bodySnippet.substring(0, 50),
                 updatedAt: new Date(),
                 unreadCount: admin.firestore.FieldValue.increment(1),
                 messages: admin.firestore.FieldValue.arrayUnion(newMessage),
-                'botState.messageQueue': admin.firestore.FieldValue.arrayUnion(queueItem),
+                'botState.engine': 'queue',
                 status: 'open',
                 source: 'GMAIL'
-            });
+            };
+            if (!alreadyQueued) {
+                cardUpdate['botState.messageQueue'] = admin.firestore.FieldValue.arrayUnion(queueItem);
+            }
+            await cardRef.update(cardUpdate);
         } else {
             // Create New Contact & Card
             const finalContactId = existingContactId || String(Date.now()).slice(-10);
@@ -319,14 +324,6 @@ export async function POST(req: Request) {
 
             const newCardRef = db.collection(`${entityPath}/kanban-groups/${destinationGroupId}/cards`).doc();
             
-            const queueItem = {
-                text: bodySnippet || '',
-                messageId: `gm_${msgId}`,
-                platform: 'gmail',
-                from: fromEmail,
-                timestamp: Date.now()
-            };
-
             await newCardRef.set({
                 crmId: finalContactId,
                 contactName: fromName,
@@ -336,7 +333,7 @@ export async function POST(req: Request) {
                 updatedAt: new Date(),
                 createdAt: new Date(),
                 messages: [newMessage],
-                'botState.messageQueue': [queueItem],
+                botState: createQueuedBotState(queueItem),
                 unreadCount: 1,
                 status: 'open',
                 source: 'GMAIL',

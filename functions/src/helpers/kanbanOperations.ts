@@ -56,15 +56,6 @@ export async function handleKanbanUpdateOmni(message: UnifiedMessage, userId?: s
         ? String(external_id || '').replace(/\D/g, '')
         : null;
 
-    const rawMeta = message.platform_metadata as { id?: string } | undefined;
-    const queueItem = {
-        text: message_text || '',
-        messageId: rawMeta?.id || `fn_${Date.now()}`,
-        platform: source_platform,
-        from: external_id,
-        timestamp: Date.now(),
-    };
-
     if (existingCard) {
         cardRef = existingCard.ref;
         await cardRef.update({
@@ -82,7 +73,6 @@ export async function handleKanbanUpdateOmni(message: UnifiedMessage, userId?: s
                 timestamp: message.timestamp || new Date(),
                 platform: source_platform
             }),
-            'botState.messageQueue': admin.firestore.FieldValue.arrayUnion(queueItem),
         });
     } else {
         // 3. CREATE NEW CARD IN THE REAL GROUP
@@ -100,7 +90,7 @@ export async function handleKanbanUpdateOmni(message: UnifiedMessage, userId?: s
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             unreadCount: 1,
-            botState: { messageQueue: [queueItem], status: 'active' },
+            botState: { status: 'active' },
             messages: [{
                 sender: 'user',
                 text: message_text,

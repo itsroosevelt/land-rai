@@ -279,7 +279,7 @@ function sanitizeButtonsData(buttons) {
  * Handles checking for active bots, session lifecycle, and command overrides.
  */
 async function tryTriggerBot(userId, entityId, platform, externalId, messageText, messageId, metadata) {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f;
     functions.logger.info(`[Bot Engine] 📥 Incoming message from ${externalId} on ${platform} for tenant ${userId}/${entityId}`);
     await logBotTrace(userId, entityId, {
         step: 'incoming_webhook', status: 'info', platform, externalId,
@@ -305,6 +305,19 @@ async function tryTriggerBot(userId, entityId, platform, externalId, messageText
     await logBotTrace(userId, entityId, { step: 'card_resolution', status: 'success', platform, externalId, details: `Resolved card path: ${cardRef.path}` });
     const cardSnap = await cardRef.get();
     const cardData = Object.assign({ id: cardRef.id }, cardSnap.data());
+    // Next.js queue engine owns bot execution for this card — avoid duplicate WhatsApp replies.
+    if (((_a = cardData.botState) === null || _a === void 0 ? void 0 : _a.engine) === 'queue') {
+        functions.logger.info(`[Bot Engine] Skipping legacy engine for ${externalId} — queue engine active.`);
+        await logBotTrace(userId, entityId, {
+            step: 'engine_skip', status: 'info', platform, externalId,
+            details: 'Queue engine active on card; legacy botEngine skipped to prevent duplicate prompts.'
+        });
+        return;
+    }
+    if (messageId && ((_b = cardData.botState) === null || _b === void 0 ? void 0 : _b.lastProcessedMessageId) === messageId) {
+        functions.logger.info(`[Bot Engine] Skipping duplicate message ${messageId} for ${externalId}`);
+        return;
+    }
     const now = new Date();
     const FORTY_EIGHT_HOURS_IN_MS = 48 * 60 * 60 * 1000;
     const ONE_HOUR_IN_MS = 60 * 60 * 1000;
@@ -316,8 +329,8 @@ async function tryTriggerBot(userId, entityId, platform, externalId, messageText
     // Combined command flag
     const isCommand = isReset || isMenu || isStop;
     // BILINGUAL STATUS RESOLUTION: Read both new and legacy state
-    const botStatus = ((_a = cardData.botState) === null || _a === void 0 ? void 0 : _a.status) || ((_b = cardData.chatbotState) === null || _b === void 0 ? void 0 : _b.status) || 'none';
-    const lastInteraction = ((_c = cardData.botState) === null || _c === void 0 ? void 0 : _c.lastInteraction) || ((_d = cardData.chatbotState) === null || _d === void 0 ? void 0 : _d.lastInteraction);
+    const botStatus = ((_c = cardData.botState) === null || _c === void 0 ? void 0 : _c.status) || ((_d = cardData.chatbotState) === null || _d === void 0 ? void 0 : _d.status) || 'none';
+    const lastInteraction = ((_e = cardData.botState) === null || _e === void 0 ? void 0 : _e.lastInteraction) || ((_f = cardData.chatbotState) === null || _f === void 0 ? void 0 : _f.lastInteraction);
     let shouldTrigger = false;
     if (isCommand) {
         // Command always triggers
