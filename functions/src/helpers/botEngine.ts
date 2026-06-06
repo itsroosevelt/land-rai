@@ -279,7 +279,18 @@ function sanitizeListData(data: any): any[] {
             const options = sec.options || [];
             const validRows: any[] = [];
             if (Array.isArray(rows)) {
-                rows.forEach((r: any) => { if (r && r.title && r.title.trim() !== '') validRows.push(r); });
+                rows.forEach((r: any) => {
+                    if (r && r.title && r.title.trim() !== '') {
+                        const cleanRow: any = {
+                            id: String(r.id || r.payload || r.title || '').trim(),
+                            title: String(r.title).trim()
+                        };
+                        if (r.description) {
+                            cleanRow.description = String(r.description).trim();
+                        }
+                        validRows.push(cleanRow);
+                    }
+                });
             }
             if (Array.isArray(options)) {
                 options.forEach((opt: any, idx: number) => {
@@ -293,7 +304,7 @@ function sanitizeListData(data: any): any[] {
     }
     if (cleanSections.length === 0 && Array.isArray(data.options)) {
         const validRows = data.options.filter((opt: any) => typeof opt === 'string' && opt.trim() !== '')
-            .map((opt: string, idx: number) => ({ id: `legacy_${idx}`, title: opt }));
+            .map((opt: string, idx: number) => ({ id: `legacy_${idx}`, title: opt, description: '' }));
         if (validRows.length > 0) cleanSections.push({ title: 'Opciones', rows: validRows });
     }
     return cleanSections;
