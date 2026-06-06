@@ -12,7 +12,7 @@ const tenantResolver_1 = require("../helpers/tenantResolver");
  * (Maintain for backward compatibility but migrate to Meta Webhook)
  */
 exports.whatsappWebhook = functions.https.onRequest(async (req, res) => {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f;
     // 1. VERIFICACIÓN (GET)
     if (req.method === 'GET') {
         const mode = req.query['hub.mode'];
@@ -80,7 +80,12 @@ exports.whatsappWebhook = functions.https.onRequest(async (req, res) => {
                         const unified = (0, messageNormalizer_1.normalizeWhatsAppMessage)(msg, contactName);
                         const result = await (0, kanbanOperations_1.handleKanbanUpdateOmni)(unified, u, e);
                         if (result === null || result === void 0 ? void 0 : result.success) {
-                            await (0, botEngine_1.tryTriggerBot)(u, e, 'whatsapp', unified.external_id, unified.message_text, msg.id, { mediaUrl: unified.media_url, type: unified.message_type });
+                            await (0, botEngine_1.tryTriggerBot)(u, e, 'whatsapp', unified.external_id, unified.message_text, msg.id, {
+                                mediaUrl: unified.media_url,
+                                type: unified.message_type,
+                                button_id: (_e = unified.interactive_data) === null || _e === void 0 ? void 0 : _e.button_id,
+                                list_id: (_f = unified.interactive_data) === null || _f === void 0 ? void 0 : _f.list_id
+                            });
                         }
                     }
                 }

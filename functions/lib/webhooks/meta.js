@@ -12,7 +12,7 @@ const tenantResolver_1 = require("../helpers/tenantResolver");
  * META WEBHOOK HANDLER (Arquitectura Molde Maestro)
  */
 exports.metaWebhook = functions.https.onRequest(async (req, res) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
     // 1. VERIFICACIÓN (GET)
     if (req.method === 'GET') {
         const mode = req.query['hub.mode'];
@@ -98,22 +98,27 @@ exports.metaWebhook = functions.https.onRequest(async (req, res) => {
                             // handleKanbanUpdateOmni se encarga de buscar/crear cards y sincronizar CRM
                             const result = await (0, kanbanOperations_1.handleKanbanUpdateOmni)(unified, u, e);
                             if (result === null || result === void 0 ? void 0 : result.success) {
-                                await (0, botEngine_1.tryTriggerBot)(u, e, 'whatsapp', unified.external_id, unified.message_text, msg.id, { mediaUrl: unified.media_url, type: unified.message_type });
+                                await (0, botEngine_1.tryTriggerBot)(u, e, 'whatsapp', unified.external_id, unified.message_text, msg.id, {
+                                    mediaUrl: unified.media_url,
+                                    type: unified.message_type,
+                                    button_id: (_f = unified.interactive_data) === null || _f === void 0 ? void 0 : _f.button_id,
+                                    list_id: (_g = unified.interactive_data) === null || _g === void 0 ? void 0 : _g.list_id
+                                });
                             }
                         }
                     }
                 }
                 else if (entry.messaging) {
                     const event = entry.messaging[0];
-                    const recipientId = (_f = event.recipient) === null || _f === void 0 ? void 0 : _f.id;
-                    const senderId = (_g = event.sender) === null || _g === void 0 ? void 0 : _g.id;
+                    const recipientId = (_h = event.recipient) === null || _h === void 0 ? void 0 : _h.id;
+                    const senderId = (_j = event.sender) === null || _j === void 0 ? void 0 : _j.id;
                     // [DIAGNOSTIC] Skip echo messages (bot's own messages being reflected back)
-                    if ((_h = event.message) === null || _h === void 0 ? void 0 : _h.is_echo) {
+                    if ((_k = event.message) === null || _k === void 0 ? void 0 : _k.is_echo) {
                         functions.logger.info(`[Meta Webhook] Skipping echo message for ${platform}`);
                         continue;
                     }
                     // Skip events with no actual message text or attachments
-                    if (!((_j = event.message) === null || _j === void 0 ? void 0 : _j.text) && !((_k = event.message) === null || _k === void 0 ? void 0 : _k.attachments)) {
+                    if (!((_l = event.message) === null || _l === void 0 ? void 0 : _l.text) && !((_m = event.message) === null || _m === void 0 ? void 0 : _m.attachments)) {
                         functions.logger.info(`[Meta Webhook] Skipping non-message event for ${platform}`);
                         continue;
                     }
@@ -155,7 +160,7 @@ exports.metaWebhook = functions.https.onRequest(async (req, res) => {
                         const unified = (0, messageNormalizer_1.normalizeMetaMessage)(event, platform, profile);
                         const result = await (0, kanbanOperations_1.handleKanbanUpdateOmni)(unified, u, e);
                         if (result === null || result === void 0 ? void 0 : result.success) {
-                            await (0, botEngine_1.tryTriggerBot)(u, e, platform, unified.external_id, unified.message_text, (_l = event.message) === null || _l === void 0 ? void 0 : _l.mid, { type: unified.message_type });
+                            await (0, botEngine_1.tryTriggerBot)(u, e, platform, unified.external_id, unified.message_text, (_o = event.message) === null || _o === void 0 ? void 0 : _o.mid, { type: unified.message_type });
                         }
                     }
                 }

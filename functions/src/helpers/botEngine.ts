@@ -450,11 +450,15 @@ export async function executeBotFlow(
     cardData: any,
     rawUserMessage: string,
     messageId?: string,
-    metadata?: { mediaUrl?: string, type?: string }
+    metadata?: { mediaUrl?: string, type?: string, button_id?: string, list_id?: string }
 ): Promise<void> {
     functions.logger.info(`>>> EXECUTING FLOW: ${bot.name} for ${to} (Tenant: ${userId}/${entityId}) <<<`);
 
     let currentMsg = rawUserMessage || '';
+    if (metadata?.button_id || metadata?.list_id) {
+        currentMsg = metadata.button_id || metadata.list_id || '';
+        functions.logger.info(`[executeBotFlow] Override currentMsg with interactive reply ID: "${currentMsg}"`);
+    }
 
     const platform = cardData.source || 'whatsapp'; // Default to whatsapp if not set
     const adapter = getMessagingAdapter(platform, userId, entityId);
@@ -513,7 +517,6 @@ export async function executeBotFlow(
             };
 
             if (isReset) {
-                wipePayload.customFields = admin.firestore.FieldValue.delete();
                 wipePayload.botOutcome = admin.firestore.FieldValue.delete();
                 wipePayload.lastError = admin.firestore.FieldValue.delete();
                 wipePayload.chatbotState = admin.firestore.FieldValue.delete();

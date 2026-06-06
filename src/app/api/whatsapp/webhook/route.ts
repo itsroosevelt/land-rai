@@ -175,6 +175,12 @@ export async function POST(req: Request) {
 
             const from = message.from;
             const { text, shouldProcess } = extractWhatsAppInboundText(message);
+            let displayPrefText = text;
+            if (message.type === 'interactive') {
+                displayPrefText = message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || text;
+            } else if (message.type === 'button') {
+                displayPrefText = message.button?.text || text;
+            }
 
             const messageId = message.id;
             debugLog(`[POST] Message from ${from}: "${text}" (Tenant: ${entityId})`);
@@ -269,7 +275,7 @@ export async function POST(req: Request) {
 
                 const newMessage = {
                     sender: 'user' as const,
-                    text: text,
+                    text: displayPrefText,
                     timestamp: new Date(),
                     whatsappMessageId: messageId,
                     platform: 'whatsapp'
@@ -293,7 +299,7 @@ export async function POST(req: Request) {
                     const alreadyQueued = isDuplicateQueueMessage(existingCardData, messageId);
 
                     const cardUpdate: Record<string, any> = {
-                        lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
+                        lastMessage: displayPrefText.length > 50 ? displayPrefText.substring(0, 47) + '...' : displayPrefText,
                         updatedAt: new Date(),
                         unreadCount: admin.firestore.FieldValue.increment(1),
                         messages: admin.firestore.FieldValue.arrayUnion(newMessage),
@@ -360,7 +366,7 @@ export async function POST(req: Request) {
                             contactName: finalContactName,
                             contactNumber: from,
                             contactNumberClean: cleanFrom,
-                            lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
+                            lastMessage: displayPrefText.length > 50 ? displayPrefText.substring(0, 47) + '...' : displayPrefText,
                             updatedAt: new Date(),
                             createdAt: new Date(),
                             messages: [newMessage],

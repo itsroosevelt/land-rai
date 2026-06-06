@@ -391,6 +391,10 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
     var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9;
     functions.logger.info(`>>> EXECUTING FLOW: ${bot.name} for ${to} (Tenant: ${userId}/${entityId}) <<<`);
     let currentMsg = rawUserMessage || '';
+    if ((metadata === null || metadata === void 0 ? void 0 : metadata.button_id) || (metadata === null || metadata === void 0 ? void 0 : metadata.list_id)) {
+        currentMsg = metadata.button_id || metadata.list_id || '';
+        functions.logger.info(`[executeBotFlow] Override currentMsg with interactive reply ID: "${currentMsg}"`);
+    }
     const platform = cardData.source || 'whatsapp'; // Default to whatsapp if not set
     const adapter = (0, factory_1.getMessagingAdapter)(platform, userId, entityId);
     if (!adapter) {
@@ -438,7 +442,6 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
             };
             if (isReset) {
-                wipePayload.customFields = admin.firestore.FieldValue.delete();
                 wipePayload.botOutcome = admin.firestore.FieldValue.delete();
                 wipePayload.lastError = admin.firestore.FieldValue.delete();
                 wipePayload.chatbotState = admin.firestore.FieldValue.delete();
