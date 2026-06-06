@@ -45,9 +45,16 @@ export const QuickReplySettings = ({ node, allNodes, allEdges, updateNodeConfig 
         headerMediaFilename: node.data.headerMediaFilename || '',
         bodyText: node.data.bodyText || '',
         footerText: node.data.footerText || '',
-        buttons: (node.data.buttons || []).map((b: any) =>
-            typeof b === 'string' ? { id: crypto.randomUUID(), title: b, payload: b } : b
-        ) as ButtonItem[]
+        buttons: (node.data.buttons || []).map((b: any) => {
+            if (typeof b === 'string') {
+                return { id: crypto.randomUUID(), title: b, payload: b.toUpperCase().replace(/\s+/g, '_').substring(0, 30) };
+            }
+            const title = b.title || '';
+            return {
+                ...b,
+                payload: b.payload || (title ? title.toUpperCase().replace(/\s+/g, '_').substring(0, 30) : ''),
+            };
+        }) as ButtonItem[]
     });
 
     const [showPayloads, setShowPayloads] = useState(false);

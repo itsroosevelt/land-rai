@@ -8,6 +8,7 @@ const admin = require("firebase-admin");
 const functions = require("firebase-functions");
 const axios_1 = require("axios");
 const factory_1 = require("./platforms/factory");
+const flowRouting_1 = require("./flowRouting");
 // Delay helper
 const delay = (ms) => new Promise(res => setTimeout(res, ms));
 // --- LOCK SYSTEM: Prevents duplicate processing when user sends multiple messages quickly ---
@@ -364,7 +365,7 @@ async function tryTriggerBot(userId, entityId, platform, externalId, messageText
 // --- MAIN ENGINE ---
 // --- MAIN ENGINE ---
 async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessage, messageId, metadata) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9;
     functions.logger.info(`>>> EXECUTING FLOW: ${bot.name} for ${to} (Tenant: ${userId}/${entityId}) <<<`);
     let currentMsg = rawUserMessage || '';
     const platform = cardData.source || 'whatsapp'; // Default to whatsapp if not set
@@ -564,54 +565,43 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
             }
             const outgoingEdges = bot.flow.edges.filter((e) => String(e.source) === String(currentNodeId));
             let selectedEdge = null;
-            if (currentNode.type === 'quickReplyNode' || currentNode.type === 'listMessageNode') {
-                let isValidSelection = false;
-                let matchedHandleId = null;
-                if (currentNode.type === 'quickReplyNode') {
-                    const buttons = sanitizeButtonsData(currentNode.data.buttons || []);
-                    if (buttons.length > 0) {
-                        const matchedBtn = buttons.find((btn) => (btn.title || '').toLowerCase().trim() === currentMsg.toLowerCase().trim() ||
-                            (btn.id || '') === currentMsg);
-                        if (matchedBtn) {
-                            isValidSelection = true;
-                            matchedHandleId = matchedBtn.id || matchedBtn.title;
-                        }
-                    }
-                    else {
-                        isValidSelection = true; // No buttons configured, act as passthrough
-                    }
-                }
-                else if (currentNode.type === 'listMessageNode') {
-                    const sections = sanitizeListData(currentNode.data);
-                    if (sections.length > 0) {
-                        for (const sec of sections) {
-                            const row = sec.rows.find((r) => (r.title || '').toLowerCase().trim() === currentMsg.toLowerCase().trim() ||
-                                (r.id || '') === currentMsg);
-                            if (row) {
-                                isValidSelection = true;
-                                matchedHandleId = row.id || row.title;
-                                break;
-                            }
-                        }
-                    }
-                    else {
-                        isValidSelection = true;
-                    }
-                }
-                if (!isValidSelection) {
-                    functions.logger.info(`[executeBotFlow] Invalid option selected for ${to}. Continuing to wait.`);
-                    const errorMsg = "Por favor, selecciona una de las opciones válidas del menú para continuar.";
+            if (currentNode.type === 'quickReplyNode') {
+                const buttons = (0, flowRouting_1.sanitizeFlowButtons)(((_t = currentNode.data) === null || _t === void 0 ? void 0 : _t.buttons) || []);
+                const resolution = (0, flowRouting_1.resolveQuickReplyEdge)(bot.flow.edges, currentNodeId, buttons, currentMsg);
+                if (resolution.invalid) {
+                    functions.logger.info(`[executeBotFlow] Invalid quick-reply selection for ${to}: "${currentMsg}"`);
+                    const errorMsg = 'Por favor, selecciona una de las opciones válidas del menú para continuar.';
                     await adapter.sendMessage(to, errorMsg);
                     await logBotMessage(to, errorMsg, cardData.id, cardData.groupId, cardRef, 'text');
-                    // Stop execution and wait again on the same node
                     return;
                 }
-                if (matchedHandleId && outgoingEdges.length > 0) {
-                    selectedEdge = outgoingEdges.find((e) => e.sourceHandle === matchedHandleId);
+                if (resolution.missingEdge) {
+                    functions.logger.error(`[executeBotFlow] Missing edge for quick-reply on node ${currentNodeId} (input: "${currentMsg}")`);
+                    const errorMsg = 'Esta opción aún no tiene un destino configurado en el flujo. Contacta al administrador.';
+                    await adapter.sendMessage(to, errorMsg);
+                    await logBotMessage(to, errorMsg, cardData.id, cardData.groupId, cardRef, 'text');
+                    return;
                 }
-                if (!selectedEdge && outgoingEdges.length > 0) {
-                    selectedEdge = outgoingEdges[0]; // Fallback to generic edge if handle not matched and valid
+                selectedEdge = resolution.edge;
+            }
+            else if (currentNode.type === 'listMessageNode') {
+                const sections = sanitizeListData(currentNode.data);
+                const resolution = (0, flowRouting_1.resolveListMessageEdge)(bot.flow.edges, currentNodeId, sections, currentMsg);
+                if (resolution.invalid) {
+                    functions.logger.info(`[executeBotFlow] Invalid list selection for ${to}: "${currentMsg}"`);
+                    const errorMsg = 'Por favor, selecciona una de las opciones válidas del menú para continuar.';
+                    await adapter.sendMessage(to, errorMsg);
+                    await logBotMessage(to, errorMsg, cardData.id, cardData.groupId, cardRef, 'text');
+                    return;
                 }
+                if (resolution.missingEdge) {
+                    functions.logger.error(`[executeBotFlow] Missing edge for list option on node ${currentNodeId} (input: "${currentMsg}")`);
+                    const errorMsg = 'Esta opción aún no tiene un destino configurado en el flujo. Contacta al administrador.';
+                    await adapter.sendMessage(to, errorMsg);
+                    await logBotMessage(to, errorMsg, cardData.id, cardData.groupId, cardRef, 'text');
+                    return;
+                }
+                selectedEdge = resolution.edge;
             }
             else {
                 if (outgoingEdges.length > 0)
@@ -682,9 +672,9 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
             // Simulación Humana (Typing Delay) - CONTROLADO POR UI
             if (['textMessageNode', 'mediaMessageNode', 'quickReplyNode', 'listMessageNode'].includes(nextNode.type)) {
                 // Por defecto es TRUE (Humano) a menos que se desactive explícitamente en el editor
-                const simulateTyping = ((_t = nextNode.data) === null || _t === void 0 ? void 0 : _t.typingSimulation) !== false;
+                const simulateTyping = ((_u = nextNode.data) === null || _u === void 0 ? void 0 : _u.typingSimulation) !== false;
                 if (simulateTyping) {
-                    const content = ((_u = nextNode.data) === null || _u === void 0 ? void 0 : _u.content) || ((_v = nextNode.data) === null || _v === void 0 ? void 0 : _v.text) || ((_w = nextNode.data) === null || _w === void 0 ? void 0 : _w.caption) || '';
+                    const content = ((_v = nextNode.data) === null || _v === void 0 ? void 0 : _v.content) || ((_w = nextNode.data) === null || _w === void 0 ? void 0 : _w.text) || ((_x = nextNode.data) === null || _x === void 0 ? void 0 : _x.caption) || '';
                     const humanDelay = calculateTypingDelay(content);
                     await delay(humanDelay);
                 }
@@ -702,7 +692,7 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                 case 'captureInputNode':
                     functions.logger.info(`[Bot Engine] Reached CaptureInputNode ${nextNodeId}. Sending prompt and waiting for user input.`);
                     // Enviar el prompt y esperar
-                    const prompt = replaceVariables(((_x = nextNode.data) === null || _x === void 0 ? void 0 : _x.content) || ((_y = nextNode.data) === null || _y === void 0 ? void 0 : _y.text) || '', cardData);
+                    const prompt = replaceVariables(((_y = nextNode.data) === null || _y === void 0 ? void 0 : _y.content) || ((_z = nextNode.data) === null || _z === void 0 ? void 0 : _z.text) || '', cardData);
                     if (prompt) {
                         await delay(calculateTypingDelay(prompt));
                         await adapter.sendMessage(to, prompt);
@@ -734,9 +724,9 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                     const qrText = replaceVariables(nextNode.data.text || nextNode.data.bodyText || 'Selecciona:', cardData);
                     const buttons = sanitizeButtonsData(nextNode.data.buttons || []);
                     const header = {
-                        type: ((_z = nextNode.data) === null || _z === void 0 ? void 0 : _z.headerType) || 'none',
-                        text: replaceVariables(((_0 = nextNode.data) === null || _0 === void 0 ? void 0 : _0.headerText) || '', cardData),
-                        url: (_1 = nextNode.data) === null || _1 === void 0 ? void 0 : _1.headerMediaUrl
+                        type: ((_0 = nextNode.data) === null || _0 === void 0 ? void 0 : _0.headerType) || 'none',
+                        text: replaceVariables(((_1 = nextNode.data) === null || _1 === void 0 ? void 0 : _1.headerText) || '', cardData),
+                        url: (_2 = nextNode.data) === null || _2 === void 0 ? void 0 : _2.headerMediaUrl
                     };
                     if (buttons.length > 0) {
                         await adapter.sendButtonMessage(to, qrText, buttons, header);
@@ -818,7 +808,7 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                         for (const cond of routeConditions) {
                             // Resolve variable value from cardData
                             const varName = (cond.variable || '').replace(/[\{\}]/g, '').trim();
-                            const varValue = ((_2 = cardData.customFields) === null || _2 === void 0 ? void 0 : _2[varName]) || cardData[varName];
+                            const varValue = ((_3 = cardData.customFields) === null || _3 === void 0 ? void 0 : _3[varName]) || cardData[varName];
                             const isMatch = evaluateCondition(varValue, cond.operator, cond.value, conditionData.fuzzyMatch !== false);
                             if (matchType === 'AND') {
                                 routeMatches = routeMatches && isMatch;
@@ -859,7 +849,7 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                     const op = setVarData.operation || 'set';
                     let valueToUse = replaceVariables(setVarData.value || '', cardData);
                     if (varToSet) {
-                        let currentVal = (_5 = (_4 = (_3 = cardData.customFields) === null || _3 === void 0 ? void 0 : _3[varToSet]) !== null && _4 !== void 0 ? _4 : cardData[varToSet]) !== null && _5 !== void 0 ? _5 : '';
+                        let currentVal = (_6 = (_5 = (_4 = cardData.customFields) === null || _4 === void 0 ? void 0 : _4[varToSet]) !== null && _5 !== void 0 ? _5 : cardData[varToSet]) !== null && _6 !== void 0 ? _6 : '';
                         let newVal = valueToUse;
                         if (opCat === 'math') {
                             const numCurrent = parseFloat(currentVal) || 0;
@@ -938,9 +928,9 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                     const systemPrompt = replaceVariables(aiData.systemPrompt || 'Eres un asistente útil.', cardData);
                     const userMsg = cardData.lastMessage || '';
                     const model = aiData.model || 'gpt-4o';
-                    const temperature = (_6 = aiData.temperature) !== null && _6 !== void 0 ? _6 : 0.7;
+                    const temperature = (_7 = aiData.temperature) !== null && _7 !== void 0 ? _7 : 0.7;
                     const outputVar = (aiData.outputVariable || '').replace(/[\{\}]/g, '').trim();
-                    const apiKey = (_7 = functions.config().openai) === null || _7 === void 0 ? void 0 : _7.key;
+                    const apiKey = (_8 = functions.config().openai) === null || _8 === void 0 ? void 0 : _8.key;
                     if (apiKey) {
                         try {
                             functions.logger.info(`[Bot] Calling AI Model: ${model}`);
@@ -971,7 +961,7 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                             }
                         }
                         catch (error) {
-                            functions.logger.error(`[Bot] AI Error:`, ((_8 = error.response) === null || _8 === void 0 ? void 0 : _8.data) || error.message);
+                            functions.logger.error(`[Bot] AI Error:`, ((_9 = error.response) === null || _9 === void 0 ? void 0 : _9.data) || error.message);
                             await adapter.sendMessage(to, "Lo siento, tuve un problema procesando tu solicitud con IA.");
                             await logBotMessage(to, "Lo siento, tuve un problema procesando tu solicitud con IA.", cardData.id, cardData.groupId, cardRef, 'text');
                         }

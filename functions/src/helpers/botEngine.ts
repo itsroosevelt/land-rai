@@ -2,6 +2,11 @@ import * as admin from 'firebase-admin';
 import * as functions from 'firebase-functions';
 import axios from 'axios';
 import { getMessagingAdapter } from './platforms/factory';
+import {
+    resolveListMessageEdge,
+    resolveQuickReplyEdge,
+    sanitizeFlowButtons,
+} from './flowRouting';
 
 // Delay helper
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
@@ -645,58 +650,48 @@ export async function executeBotFlow(
             const outgoingEdges = bot.flow.edges.filter((e: any) => String(e.source) === String(currentNodeId));
             let selectedEdge = null;
 
-            if (currentNode.type === 'quickReplyNode' || currentNode.type === 'listMessageNode') {
-                let isValidSelection = false;
-                let matchedHandleId = null;
+            if (currentNode.type === 'quickReplyNode') {
+                const buttons = sanitizeFlowButtons(currentNode.data?.buttons || []);
+                const resolution = resolveQuickReplyEdge(bot.flow.edges, currentNodeId, buttons, currentMsg);
 
-                if (currentNode.type === 'quickReplyNode') {
-                    const buttons = sanitizeButtonsData(currentNode.data.buttons || []);
-                    if (buttons.length > 0) {
-                        const matchedBtn = buttons.find((btn: any) =>
-                            (btn.title || '').toLowerCase().trim() === currentMsg.toLowerCase().trim() ||
-                            (btn.id || '') === currentMsg
-                        );
-                        if (matchedBtn) {
-                            isValidSelection = true;
-                            matchedHandleId = matchedBtn.id || matchedBtn.title;
-                        }
-                    } else {
-                        isValidSelection = true; // No buttons configured, act as passthrough
-                    }
-                } else if (currentNode.type === 'listMessageNode') {
-                    const sections = sanitizeListData(currentNode.data);
-                    if (sections.length > 0) {
-                        for (const sec of sections) {
-                            const row = sec.rows.find((r: any) =>
-                                (r.title || '').toLowerCase().trim() === currentMsg.toLowerCase().trim() ||
-                                (r.id || '') === currentMsg
-                            );
-                            if (row) {
-                                isValidSelection = true;
-                                matchedHandleId = row.id || row.title;
-                                break;
-                            }
-                        }
-                    } else {
-                        isValidSelection = true;
-                    }
-                }
-
-                if (!isValidSelection) {
-                    functions.logger.info(`[executeBotFlow] Invalid option selected for ${to}. Continuing to wait.`);
-                    const errorMsg = "Por favor, selecciona una de las opciones válidas del menú para continuar.";
+                if (resolution.invalid) {
+                    functions.logger.info(`[executeBotFlow] Invalid quick-reply selection for ${to}: "${currentMsg}"`);
+                    const errorMsg = 'Por favor, selecciona una de las opciones válidas del menú para continuar.';
                     await adapter.sendMessage(to, errorMsg);
                     await logBotMessage(to, errorMsg, cardData.id, cardData.groupId, cardRef, 'text');
-                    // Stop execution and wait again on the same node
                     return;
                 }
 
-                if (matchedHandleId && outgoingEdges.length > 0) {
-                    selectedEdge = outgoingEdges.find((e: any) => e.sourceHandle === matchedHandleId);
+                if (resolution.missingEdge) {
+                    functions.logger.error(`[executeBotFlow] Missing edge for quick-reply on node ${currentNodeId} (input: "${currentMsg}")`);
+                    const errorMsg = 'Esta opción aún no tiene un destino configurado en el flujo. Contacta al administrador.';
+                    await adapter.sendMessage(to, errorMsg);
+                    await logBotMessage(to, errorMsg, cardData.id, cardData.groupId, cardRef, 'text');
+                    return;
                 }
-                if (!selectedEdge && outgoingEdges.length > 0) {
-                    selectedEdge = outgoingEdges[0]; // Fallback to generic edge if handle not matched and valid
+
+                selectedEdge = resolution.edge;
+            } else if (currentNode.type === 'listMessageNode') {
+                const sections = sanitizeListData(currentNode.data);
+                const resolution = resolveListMessageEdge(bot.flow.edges, currentNodeId, sections, currentMsg);
+
+                if (resolution.invalid) {
+                    functions.logger.info(`[executeBotFlow] Invalid list selection for ${to}: "${currentMsg}"`);
+                    const errorMsg = 'Por favor, selecciona una de las opciones válidas del menú para continuar.';
+                    await adapter.sendMessage(to, errorMsg);
+                    await logBotMessage(to, errorMsg, cardData.id, cardData.groupId, cardRef, 'text');
+                    return;
                 }
+
+                if (resolution.missingEdge) {
+                    functions.logger.error(`[executeBotFlow] Missing edge for list option on node ${currentNodeId} (input: "${currentMsg}")`);
+                    const errorMsg = 'Esta opción aún no tiene un destino configurado en el flujo. Contacta al administrador.';
+                    await adapter.sendMessage(to, errorMsg);
+                    await logBotMessage(to, errorMsg, cardData.id, cardData.groupId, cardRef, 'text');
+                    return;
+                }
+
+                selectedEdge = resolution.edge;
             } else {
                 if (outgoingEdges.length > 0) selectedEdge = outgoingEdges[0];
             }

@@ -1,5 +1,11 @@
 import { admin, db } from './firebase-admin';
 import { sendMetaMessage, sendWhatsAppMessage, sendTelegramMessage, sendGmailMessage } from './sendProviders';
+import {
+    buildWhatsAppQuickReplyButtons,
+    resolveListMessageEdge,
+    resolveQuickReplyEdge,
+    sanitizeFlowButtons,
+} from './flowRouting';
 
 export interface ChatbotContext {
     userId: string;
@@ -412,14 +418,68 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 } else {
                     currentNodeId = null;
                 }
+            } else if (node?.type === 'quickReplyNode') {
+                const buttons = sanitizeFlowButtons(node.data?.buttons || []);
+                const resolution = resolveQuickReplyEdge(flow.edges, node.id, buttons, text);
+
+                if (resolution.invalid) {
+                    console.log(`[ChatbotEngine] ⚠️ Invalid quick-reply selection for node ${node.id}: "${text}"`);
+                    const errorContent = 'Por favor, selecciona una de las opciones válidas del menú para continuar.';
+                    await dispatchMessage(errorContent);
+                    await appendAgentMessage({
+                        text: errorContent,
+                        type: 'text',
+                        messageId: `bot_validation_${Date.now()}`
+                    });
+                    return;
+                }
+
+                if (resolution.missingEdge) {
+                    console.error(`[ChatbotEngine] ❌ No edge found for quick-reply on node ${node.id} (input: "${text}")`);
+                    const errorContent = 'Esta opción aún no tiene un destino configurado en el flujo. Contacta al administrador.';
+                    await dispatchMessage(errorContent);
+                    await appendAgentMessage({
+                        text: errorContent,
+                        type: 'text',
+                        messageId: `bot_config_${Date.now()}`
+                    });
+                    return;
+                }
+
+                currentNodeId = resolution.edge?.target || null;
+                await cardRef.update({ 'botState.waitingForInput': false });
+            } else if (node?.type === 'listMessageNode') {
+                const sections = node.data?.sections || [];
+                const resolution = resolveListMessageEdge(flow.edges, node.id, sections, text);
+
+                if (resolution.invalid) {
+                    console.log(`[ChatbotEngine] ⚠️ Invalid list selection for node ${node.id}: "${text}"`);
+                    const errorContent = 'Por favor, selecciona una de las opciones válidas del menú para continuar.';
+                    await dispatchMessage(errorContent);
+                    await appendAgentMessage({
+                        text: errorContent,
+                        type: 'text',
+                        messageId: `bot_validation_${Date.now()}`
+                    });
+                    return;
+                }
+
+                if (resolution.missingEdge) {
+                    console.error(`[ChatbotEngine] ❌ No edge found for list option on node ${node.id} (input: "${text}")`);
+                    const errorContent = 'Esta opción aún no tiene un destino configurado en el flujo. Contacta al administrador.';
+                    await dispatchMessage(errorContent);
+                    await appendAgentMessage({
+                        text: errorContent,
+                        type: 'text',
+                        messageId: `bot_config_${Date.now()}`
+                    });
+                    return;
+                }
+
+                currentNodeId = resolution.edge?.target || null;
+                await cardRef.update({ 'botState.waitingForInput': false });
             } else {
-                // QuickReply or List Selection - HYBRID MATCHING
-                const edge = flow.edges.find((e: any) => {
-                    const handle = String(e.sourceHandle || '').trim().toLowerCase();
-                    // Match by technical ID (handle) OR formatted text
-                    return e.source === node?.id && (handle === normalizedInput || handle === text.trim().toLowerCase());
-                }) || flow.edges.find((e: any) => e.source === node?.id); // Fallback to first exit
-                
+                const edge = flow.edges.find((e: any) => e.source === node?.id);
                 currentNodeId = edge ? edge.target : null;
                 await cardRef.update({ 'botState.waitingForInput': false });
             }
@@ -571,9 +631,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         // 4. CAPTURE / QUICK REPLY (Wait nodes)
         if (node.type === 'captureInputNode' || node.type === 'quickReplyNode') {
             const content = replaceVars(node.data?.content || node.data?.text || node.data?.bodyText || '');
-            const buttons = (node.data?.buttons || []).map((b: any) => ({
-                type: 'reply', reply: { id: (b.id || b.title || b).substring(0, 20), title: (b.title || b).substring(0, 20) }
-            })).slice(0, 3);
+            const buttons = buildWhatsAppQuickReplyButtons(node.data?.buttons || []);
 
             if (content.trim()) {
                 await dispatchMessage(content, node.type === 'quickReplyNode' ? { type: 'quick_reply', buttons } : {});

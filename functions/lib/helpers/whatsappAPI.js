@@ -10,6 +10,7 @@ exports.sendLocationMessage = sendLocationMessage;
 const functions = require("firebase-functions");
 const axios_1 = require("axios");
 const admin = require("firebase-admin");
+const flowRouting_1 = require("./flowRouting");
 const whatsappConfig = functions.config().whatsapp;
 // Updated with user provided keys as primary or fallback
 const accessToken = (whatsappConfig === null || whatsappConfig === void 0 ? void 0 : whatsappConfig.access_token) || '';
@@ -201,7 +202,7 @@ mediaTypeOrFileName = 'file', ctx) {
 }
 async function sendButtonMessage(to, bodyText, buttons, header, ctx) {
     const validButtons = buttons.slice(0, 3).map((btn, i) => {
-        const id = (btn.id || `btn_${i}`).substring(0, 256);
+        const id = (0, flowRouting_1.getWhatsAppReplyId)((btn === null || btn === void 0 ? void 0 : btn.id) ? btn : Object.assign(Object.assign({}, btn), { id: (btn === null || btn === void 0 ? void 0 : btn.id) || `btn_${i}` })).substring(0, 256);
         const title = (btn.title || "Opción").substring(0, 20);
         return {
             type: "reply",

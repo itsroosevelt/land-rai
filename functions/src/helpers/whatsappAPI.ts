@@ -3,6 +3,7 @@
 import * as functions from 'firebase-functions';
 import axios from 'axios';
 import * as admin from 'firebase-admin';
+import { getWhatsAppReplyId } from './flowRouting';
 
 const whatsappConfig = functions.config().whatsapp;
 // Updated with user provided keys as primary or fallback
@@ -227,7 +228,7 @@ export async function sendMediaMessage(
 
 export async function sendButtonMessage(to: string, bodyText: string, buttons: any[], header?: { type: string, text?: string, url?: string }, ctx?: { userId?: string, entityId?: string }): Promise<void> {
     const validButtons = buttons.slice(0, 3).map((btn, i) => {
-        const id = (btn.id || `btn_${i}`).substring(0, 256);
+        const id = getWhatsAppReplyId(btn?.id ? btn : { ...btn, id: btn?.id || `btn_${i}` }).substring(0, 256);
         const title = (btn.title || "Opción").substring(0, 20);
         return {
             type: "reply",

@@ -2,6 +2,7 @@
 // src/components/CustomNodes.tsx
 import React from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
+import { getButtonRouteId } from '@/lib/flowRouting';
 import {
     MessageSquare, Edit2, Zap, AlertTriangle, CheckCircle, Code, Variable,
     StopCircle, Rows, ImageIcon, CheckSquare, Contact, MapPin, BrainCircuit,
@@ -136,7 +137,7 @@ export const QuickReplyNode = ({ data = {} }: NodeProps) => {
                     buttons.map((btn, i) => {
                         const isObject = typeof btn === 'object' && btn !== null;
                         const label = isObject ? btn.title : btn;
-                        const id = isObject ? (btn.id || btn.payload || btn.title) : btn;
+                        const id = getButtonRouteId(btn);
                         return (
                             <OptionRow key={i} handleId={String(id)}>{label}</OptionRow>
                         );
@@ -167,9 +168,9 @@ export const ListMessageNode = ({ data = {} }: NodeProps) => (
                 {(section.rows || section.options || []).map((opt, optIndex) => {
                     const isObject = typeof opt === 'object' && opt !== null;
                     const label = isObject ? opt.title : opt;
-                    const id = isObject ? opt.id : opt;
+                    const id = getButtonRouteId(opt);
                     return (
-                        <OptionRow key={optIndex} handleId={id}>{label || `Opción ${optIndex + 1}`}</OptionRow>
+                        <OptionRow key={optIndex} handleId={String(id)}>{label || `Opción ${optIndex + 1}`}</OptionRow>
                     );
                 })}
             </div>
