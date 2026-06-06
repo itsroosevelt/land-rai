@@ -67,6 +67,29 @@ export function getButtonMatchCandidates(button: any): string[] {
     return [...new Set(raw)];
 }
 
+export function buttonsReferToSameOption(a: any, b: any): boolean {
+    const aCandidates = getButtonMatchCandidates(a);
+    const bCandidates = getButtonMatchCandidates(b);
+    return aCandidates.some((ac) => bCandidates.some((bc) => inputsMatch(ac, bc)));
+}
+
+export function getOutgoingEdges(edges: any[], sourceNodeId: string): any[] {
+    return (edges || []).filter((e) => String(e.source) === String(sourceNodeId));
+}
+
+/** Default next edge for single-output nodes (text, media, capture success, etc.). */
+export function resolveDefaultNextEdge(edges: any[], sourceNodeId: string): any | null {
+    const outgoing = getOutgoingEdges(edges, sourceNodeId);
+    if (!outgoing.length) return null;
+
+    const neutral =
+        outgoing.find((e) => !e.sourceHandle) ||
+        outgoing.find((e) => String(e.sourceHandle).toLowerCase() === 'success') ||
+        outgoing.find((e) => !String(e.sourceHandle).toLowerCase().includes('fail'));
+
+    return neutral || outgoing[0];
+}
+
 export function matchQuickReplyButton(buttons: any[], userText: string): any | null {
     if (!buttons?.length || !String(userText || '').trim()) return null;
 
@@ -109,7 +132,7 @@ export function resolveEdgeForSelection(
     sourceNodeId: string,
     handleCandidates: string[]
 ): any | null {
-    const outgoing = (edges || []).filter((e) => String(e.source) === String(sourceNodeId));
+    const outgoing = getOutgoingEdges(edges, sourceNodeId);
     if (!outgoing.length || !handleCandidates.length) return null;
 
     for (const candidate of handleCandidates) {
@@ -119,6 +142,34 @@ export function resolveEdgeForSelection(
 
     for (const edge of outgoing) {
         if (edgeHandleMatches(edge.sourceHandle, handleCandidates)) return edge;
+    }
+
+    return null;
+}
+
+/** Positional / legacy fallback when sourceHandle ids drift from button payloads. */
+export function resolveEdgeByButtonIndex(
+    edges: any[],
+    sourceNodeId: string,
+    buttons: any[],
+    matchedButton: any
+): any | null {
+    const outgoing = getOutgoingEdges(edges, sourceNodeId);
+    if (!outgoing.length || !matchedButton) return null;
+
+    const btnIndex = buttons.findIndex((btn) => buttonsReferToSameOption(btn, matchedButton));
+    if (btnIndex < 0) return null;
+
+    const buttonCandidates = getButtonMatchCandidates(buttons[btnIndex]);
+    const byHandle = outgoing.find((e) => edgeHandleMatches(e.sourceHandle, buttonCandidates));
+    if (byHandle) return byHandle;
+
+    if (outgoing.length === buttons.length) {
+        return outgoing[btnIndex] || null;
+    }
+
+    if (outgoing.length === 1) {
+        return outgoing[0];
     }
 
     return null;
@@ -142,8 +193,7 @@ export function resolveQuickReplyEdge(
     );
 
     if (!sanitized.length) {
-        const outgoing = (edges || []).filter((e) => String(e.source) === String(sourceNodeId));
-        const defaultEdge = outgoing.find((e) => !e.sourceHandle) || outgoing[0] || null;
+        const defaultEdge = resolveDefaultNextEdge(edges, sourceNodeId);
         return { edge: defaultEdge, matchedButton: null, invalid: false, missingEdge: false };
     }
 
@@ -153,7 +203,9 @@ export function resolveQuickReplyEdge(
     }
 
     const candidates = getButtonMatchCandidates(matchedButton);
-    const edge = resolveEdgeForSelection(edges, sourceNodeId, candidates);
+    const edge =
+        resolveEdgeForSelection(edges, sourceNodeId, candidates) ||
+        resolveEdgeByButtonIndex(edges, sourceNodeId, sanitized, matchedButton);
 
     return {
         edge,
@@ -171,8 +223,7 @@ export function resolveListMessageEdge(
 ): QuickReplyResolution {
     const sanitized = sections || [];
     if (!sanitized.length) {
-        const outgoing = (edges || []).filter((e) => String(e.source) === String(sourceNodeId));
-        const defaultEdge = outgoing.find((e) => !e.sourceHandle) || outgoing[0] || null;
+        const defaultEdge = resolveDefaultNextEdge(edges, sourceNodeId);
         return { edge: defaultEdge, matchedButton: null, invalid: false, missingEdge: false };
     }
 
@@ -181,7 +232,14 @@ export function resolveListMessageEdge(
         return { edge: null, matchedButton: null, invalid: true, missingEdge: false };
     }
 
-    const edge = resolveEdgeForSelection(edges, sourceNodeId, match.handleCandidates);
+    const allRows = sanitized.flatMap((s) => (s.rows || s.options || []).map((r: any) =>
+        typeof r === 'object' && r !== null ? r : { id: String(r), title: String(r) }
+    ));
+
+    const edge =
+        resolveEdgeForSelection(edges, sourceNodeId, match.handleCandidates) ||
+        resolveEdgeByButtonIndex(edges, sourceNodeId, allRows, match.row);
+
     return {
         edge,
         matchedButton: match.row,
@@ -197,6 +255,20 @@ export function buildWhatsAppQuickReplyButtons(buttons: any[]) {
         const id = getWhatsAppReplyId(base);
         return { type: 'reply', reply: { id, title } };
     });
+}
+
+export function buildWhatsAppListSections(sections: any[]) {
+    return (sections || []).map((s: any) => ({
+        title: s.title || 'Opciones',
+        rows: (s.rows || s.options || []).map((r: any) => {
+            const row = typeof r === 'object' && r !== null ? r : { title: String(r), id: String(r) };
+            return {
+                id: getWhatsAppReplyId(row).substring(0, 200),
+                title: String(row.title || row).substring(0, 24),
+                description: row.description ? String(row.description).substring(0, 72) : undefined,
+            };
+        }),
+    }));
 }
 
 export function sanitizeFlowButtons(buttons: any[]): any[] {

@@ -2,6 +2,8 @@ import { admin, db } from './firebase-admin';
 import { sendMetaMessage, sendWhatsAppMessage, sendTelegramMessage, sendGmailMessage } from './sendProviders';
 import {
     buildWhatsAppQuickReplyButtons,
+    buildWhatsAppListSections,
+    resolveDefaultNextEdge,
     resolveListMessageEdge,
     resolveQuickReplyEdge,
     sanitizeFlowButtons,
@@ -408,10 +410,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 await cardRef.update(updatePayload);
 
                 // Find next node (Universal Connector)
-                const edges = flow.edges.filter((e: any) => e.source === node.id);
-                const next = edges.find((e: any) => e.sourceHandle === 'success') 
-                          || edges.find((e: any) => !e.sourceHandle || !e.sourceHandle.toLowerCase().includes('fail'))
-                          || edges[0];
+                const next = resolveDefaultNextEdge(flow.edges, node.id);
                 
                 if (next) {
                     currentNodeId = next.target;
@@ -435,18 +434,22 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 }
 
                 if (resolution.missingEdge) {
-                    console.error(`[ChatbotEngine] ❌ No edge found for quick-reply on node ${node.id} (input: "${text}")`);
-                    const errorContent = 'Esta opción aún no tiene un destino configurado en el flujo. Contacta al administrador.';
-                    await dispatchMessage(errorContent);
-                    await appendAgentMessage({
-                        text: errorContent,
-                        type: 'text',
-                        messageId: `bot_config_${Date.now()}`
-                    });
-                    return;
+                    console.error(`[ChatbotEngine] ⚠️ No edge matched for quick-reply on node ${node.id} (input: "${text}"). Trying default exit.`);
+                    const fallback = resolveDefaultNextEdge(flow.edges, node.id);
+                    if (!fallback) {
+                        const errorContent = 'Por favor, selecciona una de las opciones del mensaje anterior para continuar.';
+                        await dispatchMessage(errorContent);
+                        await appendAgentMessage({
+                            text: errorContent,
+                            type: 'text',
+                            messageId: `bot_config_${Date.now()}`
+                        });
+                        return;
+                    }
+                    currentNodeId = fallback.target;
+                } else {
+                    currentNodeId = resolution.edge?.target || null;
                 }
-
-                currentNodeId = resolution.edge?.target || null;
                 await cardRef.update({ 'botState.waitingForInput': false });
             } else if (node?.type === 'listMessageNode') {
                 const sections = node.data?.sections || [];
@@ -465,21 +468,25 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 }
 
                 if (resolution.missingEdge) {
-                    console.error(`[ChatbotEngine] ❌ No edge found for list option on node ${node.id} (input: "${text}")`);
-                    const errorContent = 'Esta opción aún no tiene un destino configurado en el flujo. Contacta al administrador.';
-                    await dispatchMessage(errorContent);
-                    await appendAgentMessage({
-                        text: errorContent,
-                        type: 'text',
-                        messageId: `bot_config_${Date.now()}`
-                    });
-                    return;
+                    console.error(`[ChatbotEngine] ⚠️ No edge matched for list on node ${node.id} (input: "${text}"). Trying default exit.`);
+                    const fallback = resolveDefaultNextEdge(flow.edges, node.id);
+                    if (!fallback) {
+                        const errorContent = 'Por favor, selecciona una de las opciones del menú para continuar.';
+                        await dispatchMessage(errorContent);
+                        await appendAgentMessage({
+                            text: errorContent,
+                            type: 'text',
+                            messageId: `bot_config_${Date.now()}`
+                        });
+                        return;
+                    }
+                    currentNodeId = fallback.target;
+                } else {
+                    currentNodeId = resolution.edge?.target || null;
                 }
-
-                currentNodeId = resolution.edge?.target || null;
                 await cardRef.update({ 'botState.waitingForInput': false });
             } else {
-                const edge = flow.edges.find((e: any) => e.source === node?.id);
+                const edge = resolveDefaultNextEdge(flow.edges, node?.id || '');
                 currentNodeId = edge ? edge.target : null;
                 await cardRef.update({ 'botState.waitingForInput': false });
             }
@@ -499,26 +506,23 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         executionCount++;
         const node = flow.nodes.find((n: any) => n.id === currentNodeId);
         if (!node) {
-            console.log(`[ChatbotEngine] 🛑 Node not found: ${currentNodeId}`);
-            break;
+            console.log(`[ChatbotEngine] 🛑 Node not found: ${currentNodeId}. Attempting default edge recovery.`);
+            const orphanEdge = resolveDefaultNextEdge(flow.edges, currentNodeId);
+            currentNodeId = orphanEdge?.target || null;
+            if (!currentNodeId) break;
+            continue;
         }
 
         console.log(`[ChatbotEngine] ⚙️ Executing Node Type: ${node.type} (${node.id})`);
         
         // Skip start nodes in the middle of execution
         if (node.type === 'start' || node.type === 'startNode') {
-            const edge = flow.edges.find((e: any) => e.source === node.id);
+            const edge = resolveDefaultNextEdge(flow.edges, node.id);
             currentNodeId = edge ? edge.target : null;
             continue;
         }
 
         await cardRef.update({ 'botState.currentNodeId': node.id, 'botState.lastStep': `${node.type}` });
-
-        if (node.type === 'start' || node.type === 'startNode') {
-            const edge = flow.edges.find((e: any) => e.source === node.id);
-            currentNodeId = edge ? edge.target : null;
-            continue;
-        }
 
         // 1. TEXT MESSAGE
         if (node.type === 'textMessageNode') {
@@ -531,7 +535,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                     messageId: `bot_${Date.now()}`
                 });
             }
-            const edge = flow.edges.find((e: any) => e.source === node.id);
+            const edge = resolveDefaultNextEdge(flow.edges, node.id);
             currentNodeId = edge ? edge.target : null;
             continue;
         }
@@ -588,7 +592,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 });
             }
 
-            const edge = flow.edges.find((e: any) => e.source === node.id);
+            const edge = resolveDefaultNextEdge(flow.edges, node.id);
             currentNodeId = edge ? edge.target : null;
             continue;
         }
@@ -596,14 +600,7 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         // 3. LIST MESSAGE
         if (node.type === 'listMessageNode') {
             const body = replaceVars(node.data?.body || node.data?.text || 'Selecciona una opción:');
-            const sections = (node.data?.sections || []).map((s: any) => ({
-                title: s.title || 'Opciones',
-                rows: (s.rows || []).map((r: any) => ({
-                    id: (r.id || r.title).substring(0, 50),
-                    title: r.title.substring(0, 24),
-                    description: r.description?.substring(0, 72)
-                }))
-            }));
+            const sections = buildWhatsAppListSections(node.data?.sections || []);
 
             await dispatchMessage(body, { type: 'list', button: node.data?.buttonText || 'Ver opciones', sections });
             
@@ -632,11 +629,22 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         if (node.type === 'captureInputNode' || node.type === 'quickReplyNode') {
             const content = replaceVars(node.data?.content || node.data?.text || node.data?.bodyText || '');
             const buttons = buildWhatsAppQuickReplyButtons(node.data?.buttons || []);
+            const isQuickReply = node.type === 'quickReplyNode';
 
-            if (content.trim()) {
-                await dispatchMessage(content, node.type === 'quickReplyNode' ? { type: 'quick_reply', buttons } : {});
+            if (isQuickReply && buttons.length > 0) {
+                const prompt = content.trim() || 'Selecciona una opción:';
+                await dispatchMessage(prompt, { type: 'quick_reply', buttons });
+            } else if (content.trim()) {
+                await dispatchMessage(content, {});
+            } else if (node.type === 'captureInputNode') {
+                const prompt = 'Por favor, escribe tu respuesta:';
+                await dispatchMessage(prompt, {});
             }
-            
+
+            const agentText = isQuickReply && buttons.length > 0
+                ? (content.trim() || 'Selecciona una opción:')
+                : (content.trim() || (node.type === 'captureInputNode' ? 'Por favor, escribe tu respuesta:' : ''));
+
             const updatePayload: any = {
                 'botState.status': 'active',
                 'botState.waitingForInput': true,
@@ -645,15 +653,15 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                 'botState.lastWaitStartedAt': admin.firestore.FieldValue.serverTimestamp()
             };
             
-            if (content.trim()) {
+            if (agentText) {
                 updatePayload.messages = admin.firestore.FieldValue.arrayUnion({
                     sender: 'agent', 
-                    text: content, 
+                    text: agentText, 
                     platform, 
                     timestamp: new Date(), 
                     messageId: `bot_wait_${Date.now()}`,
-                    type: node.type === 'quickReplyNode' ? 'buttons' : 'text',
-                    ...(node.type === 'quickReplyNode' ? {
+                    type: isQuickReply ? 'buttons' : 'text',
+                    ...(isQuickReply ? {
                         metadata: {
                             buttons: buttons.map((button: any) => ({
                                 text: button.reply?.title || '',
@@ -680,13 +688,16 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
                     break;
                 }
             }
-            currentNodeId = target || flow.edges.find((e: any) => e.source === node.id && e.sourceHandle === 'else')?.target;
+            currentNodeId = target
+                || flow.edges.find((e: any) => e.source === node.id && e.sourceHandle === 'else')?.target
+                || resolveDefaultNextEdge(flow.edges, node.id)?.target
+                || null;
             continue;
         }
 
         if (node.type === 'setVariableNode') {
             await cardRef.update({ [`customFields.${node.data?.variableName}`]: node.data?.value });
-            const edge = flow.edges.find((e: any) => e.source === node.id);
+            const edge = resolveDefaultNextEdge(flow.edges, node.id);
             currentNodeId = edge ? edge.target : null;
             continue;
         }
@@ -698,8 +709,8 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
 
         // DEFAULT: Just follow the edge if node is unhandled
         console.log(`[ChatbotEngine] ⏩ Skipping logic/unknown node type: ${node.type}`);
-        const edge = flow.edges.find((e: any) => e.source === node.id);
+        const edge = resolveDefaultNextEdge(flow.edges, node.id);
         currentNodeId = edge ? edge.target : null;
-        if (!edge) break; // End of flow if no way forward
+        if (!edge) break;
     }
 }

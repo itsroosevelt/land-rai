@@ -3,6 +3,7 @@ import * as functions from 'firebase-functions';
 import axios from 'axios';
 import { getMessagingAdapter } from './platforms/factory';
 import {
+    resolveDefaultNextEdge,
     resolveListMessageEdge,
     resolveQuickReplyEdge,
     sanitizeFlowButtons,
@@ -663,14 +664,17 @@ export async function executeBotFlow(
                 }
 
                 if (resolution.missingEdge) {
-                    functions.logger.error(`[executeBotFlow] Missing edge for quick-reply on node ${currentNodeId} (input: "${currentMsg}")`);
-                    const errorMsg = 'Esta opción aún no tiene un destino configurado en el flujo. Contacta al administrador.';
-                    await adapter.sendMessage(to, errorMsg);
-                    await logBotMessage(to, errorMsg, cardData.id, cardData.groupId, cardRef, 'text');
-                    return;
+                    functions.logger.warn(`[executeBotFlow] No edge matched for quick-reply on node ${currentNodeId}. Trying default exit.`);
+                    selectedEdge = resolveDefaultNextEdge(bot.flow.edges, currentNodeId);
+                    if (!selectedEdge) {
+                        const errorMsg = 'Por favor, selecciona una de las opciones del mensaje anterior para continuar.';
+                        await adapter.sendMessage(to, errorMsg);
+                        await logBotMessage(to, errorMsg, cardData.id, cardData.groupId, cardRef, 'text');
+                        return;
+                    }
+                } else {
+                    selectedEdge = resolution.edge;
                 }
-
-                selectedEdge = resolution.edge;
             } else if (currentNode.type === 'listMessageNode') {
                 const sections = sanitizeListData(currentNode.data);
                 const resolution = resolveListMessageEdge(bot.flow.edges, currentNodeId, sections, currentMsg);
@@ -684,16 +688,19 @@ export async function executeBotFlow(
                 }
 
                 if (resolution.missingEdge) {
-                    functions.logger.error(`[executeBotFlow] Missing edge for list option on node ${currentNodeId} (input: "${currentMsg}")`);
-                    const errorMsg = 'Esta opción aún no tiene un destino configurado en el flujo. Contacta al administrador.';
-                    await adapter.sendMessage(to, errorMsg);
-                    await logBotMessage(to, errorMsg, cardData.id, cardData.groupId, cardRef, 'text');
-                    return;
+                    functions.logger.warn(`[executeBotFlow] No edge matched for list on node ${currentNodeId}. Trying default exit.`);
+                    selectedEdge = resolveDefaultNextEdge(bot.flow.edges, currentNodeId);
+                    if (!selectedEdge) {
+                        const errorMsg = 'Por favor, selecciona una de las opciones del menú para continuar.';
+                        await adapter.sendMessage(to, errorMsg);
+                        await logBotMessage(to, errorMsg, cardData.id, cardData.groupId, cardRef, 'text');
+                        return;
+                    }
+                } else {
+                    selectedEdge = resolution.edge;
                 }
-
-                selectedEdge = resolution.edge;
             } else {
-                if (outgoingEdges.length > 0) selectedEdge = outgoingEdges[0];
+                selectedEdge = resolveDefaultNextEdge(bot.flow.edges, currentNodeId);
             }
 
             if (outgoingEdges.length > 0) {
@@ -709,7 +716,7 @@ export async function executeBotFlow(
                 functions.logger.warn(`[executeBotFlow] Start Node NOT found for bot ${bot.id}`);
                 return;
             }
-            const firstEdge = bot.flow.edges.find((e: any) => String(e.source) === String(startNode.id));
+            const firstEdge = resolveDefaultNextEdge(bot.flow.edges, startNode.id);
             if (firstEdge) nextNodeId = firstEdge.target;
             else {
                 functions.logger.warn(`[executeBotFlow] Start Node ${startNode.id} has no outgoing edges.`);
@@ -1150,7 +1157,7 @@ function extractName(input: string): string {
 
 function getNextNodeId(bot: any, currentId: string | null): string | null {
     if (!currentId) return null;
-    const edge = bot.flow.edges.find((e: any) => String(e.source) === String(currentId));
+    const edge = resolveDefaultNextEdge(bot.flow.edges, currentId);
     return edge ? edge.target : null;
 }
 

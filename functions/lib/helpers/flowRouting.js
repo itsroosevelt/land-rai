@@ -9,13 +9,18 @@ exports.getButtonRouteId = getButtonRouteId;
 exports.getWhatsAppReplyId = getWhatsAppReplyId;
 exports.inputsMatch = inputsMatch;
 exports.getButtonMatchCandidates = getButtonMatchCandidates;
+exports.buttonsReferToSameOption = buttonsReferToSameOption;
+exports.getOutgoingEdges = getOutgoingEdges;
+exports.resolveDefaultNextEdge = resolveDefaultNextEdge;
 exports.matchQuickReplyButton = matchQuickReplyButton;
 exports.matchListRow = matchListRow;
 exports.edgeHandleMatches = edgeHandleMatches;
 exports.resolveEdgeForSelection = resolveEdgeForSelection;
+exports.resolveEdgeByButtonIndex = resolveEdgeByButtonIndex;
 exports.resolveQuickReplyEdge = resolveQuickReplyEdge;
 exports.resolveListMessageEdge = resolveListMessageEdge;
 exports.buildWhatsAppQuickReplyButtons = buildWhatsAppQuickReplyButtons;
+exports.buildWhatsAppListSections = buildWhatsAppListSections;
 exports.sanitizeFlowButtons = sanitizeFlowButtons;
 exports.WHATSAPP_REPLY_ID_MAX = 256;
 exports.WHATSAPP_BUTTON_TITLE_MAX = 20;
@@ -77,6 +82,23 @@ function getButtonMatchCandidates(button) {
         .map(String);
     return [...new Set(raw)];
 }
+function buttonsReferToSameOption(a, b) {
+    const aCandidates = getButtonMatchCandidates(a);
+    const bCandidates = getButtonMatchCandidates(b);
+    return aCandidates.some((ac) => bCandidates.some((bc) => inputsMatch(ac, bc)));
+}
+function getOutgoingEdges(edges, sourceNodeId) {
+    return (edges || []).filter((e) => String(e.source) === String(sourceNodeId));
+}
+function resolveDefaultNextEdge(edges, sourceNodeId) {
+    const outgoing = getOutgoingEdges(edges, sourceNodeId);
+    if (!outgoing.length)
+        return null;
+    const neutral = outgoing.find((e) => !e.sourceHandle) ||
+        outgoing.find((e) => String(e.sourceHandle).toLowerCase() === 'success') ||
+        outgoing.find((e) => !String(e.sourceHandle).toLowerCase().includes('fail'));
+    return neutral || outgoing[0];
+}
 function matchQuickReplyButton(buttons, userText) {
     if (!(buttons === null || buttons === void 0 ? void 0 : buttons.length) || !String(userText || '').trim())
         return null;
@@ -102,7 +124,7 @@ function edgeHandleMatches(sourceHandle, candidates) {
     return candidates.some((c) => inputsMatch(handle, c));
 }
 function resolveEdgeForSelection(edges, sourceNodeId, handleCandidates) {
-    const outgoing = (edges || []).filter((e) => String(e.source) === String(sourceNodeId));
+    const outgoing = getOutgoingEdges(edges, sourceNodeId);
     if (!outgoing.length || !handleCandidates.length)
         return null;
     for (const candidate of handleCandidates) {
@@ -116,11 +138,29 @@ function resolveEdgeForSelection(edges, sourceNodeId, handleCandidates) {
     }
     return null;
 }
+function resolveEdgeByButtonIndex(edges, sourceNodeId, buttons, matchedButton) {
+    const outgoing = getOutgoingEdges(edges, sourceNodeId);
+    if (!outgoing.length || !matchedButton)
+        return null;
+    const btnIndex = buttons.findIndex((btn) => buttonsReferToSameOption(btn, matchedButton));
+    if (btnIndex < 0)
+        return null;
+    const buttonCandidates = getButtonMatchCandidates(buttons[btnIndex]);
+    const byHandle = outgoing.find((e) => edgeHandleMatches(e.sourceHandle, buttonCandidates));
+    if (byHandle)
+        return byHandle;
+    if (outgoing.length === buttons.length) {
+        return outgoing[btnIndex] || null;
+    }
+    if (outgoing.length === 1) {
+        return outgoing[0];
+    }
+    return null;
+}
 function resolveQuickReplyEdge(edges, sourceNodeId, buttons, userText) {
     const sanitized = (buttons || []).filter((b) => { var _a; return b && (typeof b === 'string' || ((_a = b.title) === null || _a === void 0 ? void 0 : _a.trim()) || b.id || b.payload); });
     if (!sanitized.length) {
-        const outgoing = (edges || []).filter((e) => String(e.source) === String(sourceNodeId));
-        const defaultEdge = outgoing.find((e) => !e.sourceHandle) || outgoing[0] || null;
+        const defaultEdge = resolveDefaultNextEdge(edges, sourceNodeId);
         return { edge: defaultEdge, matchedButton: null, invalid: false, missingEdge: false };
     }
     const matchedButton = matchQuickReplyButton(sanitized, userText);
@@ -128,7 +168,8 @@ function resolveQuickReplyEdge(edges, sourceNodeId, buttons, userText) {
         return { edge: null, matchedButton: null, invalid: true, missingEdge: false };
     }
     const candidates = getButtonMatchCandidates(matchedButton);
-    const edge = resolveEdgeForSelection(edges, sourceNodeId, candidates);
+    const edge = resolveEdgeForSelection(edges, sourceNodeId, candidates) ||
+        resolveEdgeByButtonIndex(edges, sourceNodeId, sanitized, matchedButton);
     return {
         edge,
         matchedButton,
@@ -139,15 +180,16 @@ function resolveQuickReplyEdge(edges, sourceNodeId, buttons, userText) {
 function resolveListMessageEdge(edges, sourceNodeId, sections, userText) {
     const sanitized = sections || [];
     if (!sanitized.length) {
-        const outgoing = (edges || []).filter((e) => String(e.source) === String(sourceNodeId));
-        const defaultEdge = outgoing.find((e) => !e.sourceHandle) || outgoing[0] || null;
+        const defaultEdge = resolveDefaultNextEdge(edges, sourceNodeId);
         return { edge: defaultEdge, matchedButton: null, invalid: false, missingEdge: false };
     }
     const match = matchListRow(sanitized, userText);
     if (!match) {
         return { edge: null, matchedButton: null, invalid: true, missingEdge: false };
     }
-    const edge = resolveEdgeForSelection(edges, sourceNodeId, match.handleCandidates);
+    const allRows = sanitized.flatMap((s) => (s.rows || s.options || []).map((r) => typeof r === 'object' && r !== null ? r : { id: String(r), title: String(r) }));
+    const edge = resolveEdgeForSelection(edges, sourceNodeId, match.handleCandidates) ||
+        resolveEdgeByButtonIndex(edges, sourceNodeId, allRows, match.row);
     return {
         edge,
         matchedButton: match.row,
@@ -162,6 +204,19 @@ function buildWhatsAppQuickReplyButtons(buttons) {
         const id = getWhatsAppReplyId(base);
         return { type: 'reply', reply: { id, title } };
     });
+}
+function buildWhatsAppListSections(sections) {
+    return (sections || []).map((s) => ({
+        title: s.title || 'Opciones',
+        rows: (s.rows || s.options || []).map((r) => {
+            const row = typeof r === 'object' && r !== null ? r : { title: String(r), id: String(r) };
+            return {
+                id: getWhatsAppReplyId(row).substring(0, 200),
+                title: String(row.title || row).substring(0, 24),
+                description: row.description ? String(row.description).substring(0, 72) : undefined,
+            };
+        }),
+    }));
 }
 function sanitizeFlowButtons(buttons) {
     if (!Array.isArray(buttons))

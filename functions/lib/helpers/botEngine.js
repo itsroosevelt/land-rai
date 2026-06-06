@@ -576,13 +576,18 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                     return;
                 }
                 if (resolution.missingEdge) {
-                    functions.logger.error(`[executeBotFlow] Missing edge for quick-reply on node ${currentNodeId} (input: "${currentMsg}")`);
-                    const errorMsg = 'Esta opción aún no tiene un destino configurado en el flujo. Contacta al administrador.';
-                    await adapter.sendMessage(to, errorMsg);
-                    await logBotMessage(to, errorMsg, cardData.id, cardData.groupId, cardRef, 'text');
-                    return;
+                    functions.logger.warn(`[executeBotFlow] No edge matched for quick-reply on node ${currentNodeId}. Trying default exit.`);
+                    selectedEdge = (0, flowRouting_1.resolveDefaultNextEdge)(bot.flow.edges, currentNodeId);
+                    if (!selectedEdge) {
+                        const errorMsg = 'Por favor, selecciona una de las opciones del mensaje anterior para continuar.';
+                        await adapter.sendMessage(to, errorMsg);
+                        await logBotMessage(to, errorMsg, cardData.id, cardData.groupId, cardRef, 'text');
+                        return;
+                    }
                 }
-                selectedEdge = resolution.edge;
+                else {
+                    selectedEdge = resolution.edge;
+                }
             }
             else if (currentNode.type === 'listMessageNode') {
                 const sections = sanitizeListData(currentNode.data);
@@ -595,17 +600,21 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                     return;
                 }
                 if (resolution.missingEdge) {
-                    functions.logger.error(`[executeBotFlow] Missing edge for list option on node ${currentNodeId} (input: "${currentMsg}")`);
-                    const errorMsg = 'Esta opción aún no tiene un destino configurado en el flujo. Contacta al administrador.';
-                    await adapter.sendMessage(to, errorMsg);
-                    await logBotMessage(to, errorMsg, cardData.id, cardData.groupId, cardRef, 'text');
-                    return;
+                    functions.logger.warn(`[executeBotFlow] No edge matched for list on node ${currentNodeId}. Trying default exit.`);
+                    selectedEdge = (0, flowRouting_1.resolveDefaultNextEdge)(bot.flow.edges, currentNodeId);
+                    if (!selectedEdge) {
+                        const errorMsg = 'Por favor, selecciona una de las opciones del menú para continuar.';
+                        await adapter.sendMessage(to, errorMsg);
+                        await logBotMessage(to, errorMsg, cardData.id, cardData.groupId, cardRef, 'text');
+                        return;
+                    }
                 }
-                selectedEdge = resolution.edge;
+                else {
+                    selectedEdge = resolution.edge;
+                }
             }
             else {
-                if (outgoingEdges.length > 0)
-                    selectedEdge = outgoingEdges[0];
+                selectedEdge = (0, flowRouting_1.resolveDefaultNextEdge)(bot.flow.edges, currentNodeId);
             }
             if (outgoingEdges.length > 0) {
                 if (selectedEdge)
@@ -622,7 +631,7 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                 functions.logger.warn(`[executeBotFlow] Start Node NOT found for bot ${bot.id}`);
                 return;
             }
-            const firstEdge = bot.flow.edges.find((e) => String(e.source) === String(startNode.id));
+            const firstEdge = (0, flowRouting_1.resolveDefaultNextEdge)(bot.flow.edges, startNode.id);
             if (firstEdge)
                 nextNodeId = firstEdge.target;
             else {
@@ -1038,7 +1047,7 @@ function extractName(input) {
 function getNextNodeId(bot, currentId) {
     if (!currentId)
         return null;
-    const edge = bot.flow.edges.find((e) => String(e.source) === String(currentId));
+    const edge = (0, flowRouting_1.resolveDefaultNextEdge)(bot.flow.edges, currentId);
     return edge ? edge.target : null;
 }
 function validateInput(input, config, metadata) {
