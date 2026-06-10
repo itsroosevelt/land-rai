@@ -58,6 +58,9 @@ export async function handleKanbanUpdateOmni(message: UnifiedMessage, userId?: s
 
     if (existingCard) {
         cardRef = existingCard.ref;
+        const existingData = existingCard.data() || {};
+        const alreadyOnQueueEngine = existingData.botState?.engine === 'queue';
+
         await cardRef.update({
             [`platform_ids.${source_platform}`]: external_id,
             ...(cleanWhatsAppId ? { contactNumberClean: cleanWhatsAppId, contactNumber: external_id } : {}),
@@ -66,6 +69,8 @@ export async function handleKanbanUpdateOmni(message: UnifiedMessage, userId?: s
             unreadCount: admin.firestore.FieldValue.increment(1),
             status: 'open',
             primary_channel: source_platform,
+            // Cards owned by the Next.js queue engine must keep that flag so legacy botEngine does not double-reply.
+            ...(alreadyOnQueueEngine ? { 'botState.engine': 'queue' } : {}),
             messages: admin.firestore.FieldValue.arrayUnion({
                 sender: 'user',
                 text: message_text,

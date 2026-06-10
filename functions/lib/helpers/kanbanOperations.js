@@ -8,6 +8,7 @@ const admin = require("firebase-admin");
  * ROOSEVELT KANBAN MASTER OPERATIONS (FINAL SYNC)
  */
 async function handleKanbanUpdateOmni(message, userId, entityId) {
+    var _a;
     const db = admin.firestore();
     const { source_platform, external_id, message_text, message_type } = message;
     if (!userId || !entityId)
@@ -50,7 +51,9 @@ async function handleKanbanUpdateOmni(message, userId, entityId) {
         : null;
     if (existingCard) {
         cardRef = existingCard.ref;
-        await cardRef.update(Object.assign(Object.assign({ [`platform_ids.${source_platform}`]: external_id }, (cleanWhatsAppId ? { contactNumberClean: cleanWhatsAppId, contactNumber: external_id } : {})), { lastMessage: message_text || `[${message_type.toUpperCase()}]`, updatedAt: admin.firestore.FieldValue.serverTimestamp(), unreadCount: admin.firestore.FieldValue.increment(1), status: 'open', primary_channel: source_platform, messages: admin.firestore.FieldValue.arrayUnion({
+        const existingData = existingCard.data() || {};
+        const alreadyOnQueueEngine = ((_a = existingData.botState) === null || _a === void 0 ? void 0 : _a.engine) === 'queue';
+        await cardRef.update(Object.assign(Object.assign(Object.assign(Object.assign({ [`platform_ids.${source_platform}`]: external_id }, (cleanWhatsAppId ? { contactNumberClean: cleanWhatsAppId, contactNumber: external_id } : {})), { lastMessage: message_text || `[${message_type.toUpperCase()}]`, updatedAt: admin.firestore.FieldValue.serverTimestamp(), unreadCount: admin.firestore.FieldValue.increment(1), status: 'open', primary_channel: source_platform }), (alreadyOnQueueEngine ? { 'botState.engine': 'queue' } : {})), { messages: admin.firestore.FieldValue.arrayUnion({
                 sender: 'user',
                 text: message_text,
                 type: message_type,

@@ -36,8 +36,9 @@ function dedupeQueueItems(queue: any[]): any[] {
  * Sequential Chatbot Engine Runner
  * Implements a FIFO queue consumer pattern to prevent race conditions and duplicate responses.
  */
-export async function processChatbotFlow(ctx: ChatbotContext) {
+export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
     const { userId, entityId, groupId, cardId, platform, from, text, messageId } = ctx;
+    const triggerMessageId = messageId ? String(messageId).trim() : '';
     const entityPath = `users/${userId}/entities/${entityId}`;
     const cardRef = db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`);
 
@@ -58,8 +59,8 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                 console.log(`[ChatbotEngine] 🔓 Priority command breaking existing lock for ${cardId}`);
             }
 
-            // DEDUP: If this exact message ID was just processed, skip queueing
-            if (messageId && bState.lastProcessedMessageId === messageId) return false;
+            // DEDUP: Skip only when this webhook message was fully processed in a prior run.
+            if (triggerMessageId && bState.lastProcessedMessageId === triggerMessageId) return false;
 
             // LOCK CHECK: If still locked (not a priority command), check timeout
             if (data.botLock && !isPriorityCommand) {
@@ -71,15 +72,30 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
                 }
             }
 
-            // Acquire lock and mark start
-            transaction.update(cardRef, { 
+            // Acquire lock only — lastProcessedMessageId is set after the queue item is consumed.
+            transaction.update(cardRef, {
                 botLock: admin.firestore.FieldValue.serverTimestamp(),
-                'botState.lastProcessedMessageId': messageId || null
             });
             return true;
         });
 
-        if (!canExecute) return;
+        if (!canExecute) {
+            if (retryCount < 2 && triggerMessageId) {
+                const blockedSnap = await cardRef.get();
+                const blockedData = blockedSnap.data() || {};
+                const blockedState = blockedData.botState || {};
+                const stillPending = dedupeQueueItems(blockedState.messageQueue || [])
+                    .some((item) => String(item?.messageId || '').trim() === triggerMessageId);
+                const notYetProcessed = blockedState.lastProcessedMessageId !== triggerMessageId;
+
+                if (stillPending && notYetProcessed && blockedData.botLock) {
+                    console.log(`[ChatbotEngine] ⏳ Lock contention for ${cardId}; retrying queue consumer (${retryCount + 1}/2)`);
+                    await sleep(2000);
+                    return processChatbotFlow(ctx, retryCount + 1);
+                }
+            }
+            return;
+        }
 
         // Trim stale/duplicate queue entries before consuming (prevents old messages re-firing prompts).
         const preRunSnap = await cardRef.get();
@@ -111,8 +127,11 @@ export async function processChatbotFlow(ctx: ChatbotContext) {
             const msgPlatform = currentMsg.platform || platform;
             const msgFrom = currentMsg.from || from;
 
-            // Skip duplicate deliveries (Meta retries / double webhook hits).
-            if (msgId && (processedInRunner.has(msgId) || bState.lastProcessedMessageId === msgId)) {
+            // Skip duplicate deliveries within this runner, or stale items already handled earlier.
+            const isStaleProcessedItem = !!msgId
+                && bState.lastProcessedMessageId === msgId
+                && msgId !== triggerMessageId;
+            if (msgId && (processedInRunner.has(msgId) || isStaleProcessedItem)) {
                 console.log(`[ChatbotEngine] ⏭️ Skipping duplicate queue item [${msgId}]`);
                 await db.runTransaction(async (transaction) => {
                     transaction.update(cardRef, {
@@ -322,7 +341,9 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             'whatsapp': ['wa', 'wpp', 'whatsapp cloud'],
             'instagram': ['ig', 'insta'],
             'messenger': ['fb', 'facebook', 'msg'],
-            'telegram': ['tg', 'tele']
+            'telegram': ['tg', 'tele'],
+            'x_twitter': ['x', 'twitter'],
+            'x': ['x_twitter', 'twitter'],
         };
 
         const currentAliases = aliases[currentPlatform] || [];

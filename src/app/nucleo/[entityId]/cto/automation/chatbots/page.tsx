@@ -229,13 +229,19 @@ const ChatbotsPage = () => {
       const currentPlatform = getPrimaryPlatform(bot.targetPlatforms);
       const isRemoving = currentPlatform === platformId;
 
+      if (!isRemoving && !connectedPlatforms.includes(platformId)) {
+        toast.error(`You cannot assign ${platformId.toUpperCase()} because it is not connected.`);
+        return;
+      }
+
       await updateExclusiveBotPlatform({
         db,
         userId: currentUser!.uid,
         entityId: activeEntity!,
         botId: bot.id,
         platformId: isRemoving ? null : platformId,
-        activate: isRemoving ? false : bot.isActive
+        // Assigning a channel activates the bot; removing the channel deactivates it.
+        activate: isRemoving ? false : true
       });
       toast.success(`${platformId.toUpperCase()} ${!isRemoving ? 'assigned' : 'removed'} in "${bot.name}"`);
     } catch (error) {

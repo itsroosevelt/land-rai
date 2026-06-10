@@ -239,6 +239,16 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                 updatedAt: new Date(),
             }, { merge: true });
 
+            await fetch('/api/whatsapp/validate-phone-id', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    phoneNumberId: waConfig.phoneNumberId,
+                    userId: currentUser.uid,
+                    entityId: activeEntity,
+                }),
+            });
+
             toast.success("¡WhatsApp conectado!", { id: "wa-config" });
             setIsEditing(false);
             setStep(4);
