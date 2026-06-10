@@ -48,7 +48,11 @@ export async function GET(req: Request) {
             recommended: {
                 callbackUrl: globalWebhookUrl,
                 verifyToken: DEFAULT_VERIFY_TOKEN,
-                note: 'Recomendado en Meta: URL sin parámetros y token global. Los mensajes se enrutan por phoneNumberId.',
+                note: 'Recomendado en Meta: URL en Vercel (bot + omnichannel). Firebase solo hace proxy de respaldo en us-west3.',
+            },
+            firebaseProxy: {
+                callbackUrl: `https://us-west3-roosevelt-491004.cloudfunctions.net/whatsappWebhook`,
+                note: 'Solo si Meta ya apunta a Cloud Functions. Reenvía automáticamente a Vercel.',
             },
             tenant: {
                 callbackUrl: tenantWebhookUrl,

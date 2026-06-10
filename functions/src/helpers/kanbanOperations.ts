@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { UnifiedMessage } from '../types/message';
+import { regionalFunctions } from '../region';
 
 /**
  * ROOSEVELT KANBAN MASTER OPERATIONS (FINAL SYNC)
@@ -123,7 +124,7 @@ export async function handleKanbanUpdateOmni(message: UnifiedMessage, userId?: s
     return { success: true, cardId: cardRef.id };
 }
 
-export const moveCard = functions.https.onCall(async (data, context) => {
+export const moveCard = regionalFunctions.https.onCall(async (data, context) => {
     if (!admin.apps.length) admin.initializeApp();
     const db = admin.firestore();
     const uid = context.auth?.uid;

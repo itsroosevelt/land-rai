@@ -4,6 +4,7 @@ exports.moveCard = void 0;
 exports.handleKanbanUpdateOmni = handleKanbanUpdateOmni;
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+const region_1 = require("../region");
 /**
  * ROOSEVELT KANBAN MASTER OPERATIONS (FINAL SYNC)
  */
@@ -87,7 +88,7 @@ async function handleKanbanUpdateOmni(message, userId, entityId) {
     }
     return { success: true, cardId: cardRef.id };
 }
-exports.moveCard = functions.https.onCall(async (data, context) => {
+exports.moveCard = region_1.regionalFunctions.https.onCall(async (data, context) => {
     var _a;
     if (!admin.apps.length)
         admin.initializeApp();

@@ -1,14 +1,15 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
+import { regionalFunctions } from '../region';
 
 /**
  * ONE-TIME MIGRATION: Adds `platform_ids`, `channel`, and `contactNumberClean`
  * to existing Kanban cards that were created before the omnichannel refactor.
  *
- * CALL ONCE via: GET https://us-central1-udreamms-platform-1.cloudfunctions.net/migrateCards
+ * CALL ONCE via: GET https://us-west3-roosevelt-491004.cloudfunctions.net/migrateCards?secret=...
  * After migration is confirmed, remove this function and redeploy.
  */
-export const migrateCards = functions.https.onRequest(async (req, res) => {
+export const migrateCards = regionalFunctions.https.onRequest(async (req, res) => {
     const db = admin.firestore();
 
     // Security: basic check to prevent accidental runs

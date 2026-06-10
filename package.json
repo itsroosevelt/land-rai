@@ -10,7 +10,9 @@
     "start": "next start",
     "lint": "next lint --dir src",
     "postinstall": "patch-package",
-    "deploy:functions": "firebase deploy --only functions"
+    "deploy:functions": "firebase deploy --only functions",
+    "cleanup:functions:legacy": "firebase functions:delete metaWebhook telegramWebhook xWebhook webchatWebhook tiktokWebhook googleFormsWebhook baileysWebhook ssrroosevelt491004 --region us-central1 --force",
+    "cleanup:functions:central": "firebase functions:delete whatsappWebhook moveCard migrateCards --region us-central1 --force"
   },
   "keywords": [
     "ia",
