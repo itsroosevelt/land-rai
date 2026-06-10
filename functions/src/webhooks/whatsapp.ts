@@ -84,7 +84,12 @@ export const whatsappWebhook = functions.https.onRequest(async (req, res) => {
                         const result = await handleKanbanUpdateOmni(unified, u, e);
                         
                         if (result?.success) {
-                            await tryTriggerBot(u, e, 'whatsapp', unified.external_id, unified.message_text, msg.id, { mediaUrl: unified.media_url, type: unified.message_type });
+                            await tryTriggerBot(u, e, 'whatsapp', unified.external_id, unified.message_text, msg.id, { 
+                                mediaUrl: unified.media_url, 
+                                type: unified.message_type,
+                                button_id: unified.interactive_data?.button_id,
+                                list_id: unified.interactive_data?.list_id
+                            });
                         }
                     }
                 }

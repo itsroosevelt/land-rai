@@ -262,11 +262,14 @@ export function buildWhatsAppListSections(sections: any[]) {
         title: s.title || 'Opciones',
         rows: (s.rows || s.options || []).map((r: any) => {
             const row = typeof r === 'object' && r !== null ? r : { title: String(r), id: String(r) };
-            return {
+            const cleanRow: any = {
                 id: getWhatsAppReplyId(row).substring(0, 200),
                 title: String(row.title || row).substring(0, 24),
-                description: row.description ? String(row.description).substring(0, 72) : undefined,
             };
+            if (row.description) {
+                cleanRow.description = String(row.description).substring(0, 72);
+            }
+            return cleanRow;
         }),
     }));
 }

@@ -279,7 +279,18 @@ function sanitizeListData(data: any): any[] {
             const options = sec.options || [];
             const validRows: any[] = [];
             if (Array.isArray(rows)) {
-                rows.forEach((r: any) => { if (r && r.title && r.title.trim() !== '') validRows.push(r); });
+                rows.forEach((r: any) => {
+                    if (r && r.title && r.title.trim() !== '') {
+                        const cleanRow: any = {
+                            id: String(r.id || r.payload || r.title || '').trim(),
+                            title: String(r.title).trim()
+                        };
+                        if (r.description) {
+                            cleanRow.description = String(r.description).trim();
+                        }
+                        validRows.push(cleanRow);
+                    }
+                });
             }
             if (Array.isArray(options)) {
                 options.forEach((opt: any, idx: number) => {
@@ -293,7 +304,7 @@ function sanitizeListData(data: any): any[] {
     }
     if (cleanSections.length === 0 && Array.isArray(data.options)) {
         const validRows = data.options.filter((opt: any) => typeof opt === 'string' && opt.trim() !== '')
-            .map((opt: string, idx: number) => ({ id: `legacy_${idx}`, title: opt }));
+            .map((opt: string, idx: number) => ({ id: `legacy_${idx}`, title: opt, description: '' }));
         if (validRows.length > 0) cleanSections.push({ title: 'Opciones', rows: validRows });
     }
     return cleanSections;
@@ -439,11 +450,15 @@ export async function executeBotFlow(
     cardData: any,
     rawUserMessage: string,
     messageId?: string,
-    metadata?: { mediaUrl?: string, type?: string }
+    metadata?: { mediaUrl?: string, type?: string, button_id?: string, list_id?: string }
 ): Promise<void> {
     functions.logger.info(`>>> EXECUTING FLOW: ${bot.name} for ${to} (Tenant: ${userId}/${entityId}) <<<`);
 
     let currentMsg = rawUserMessage || '';
+    if (metadata?.button_id || metadata?.list_id) {
+        currentMsg = metadata.button_id || metadata.list_id || '';
+        functions.logger.info(`[executeBotFlow] Override currentMsg with interactive reply ID: "${currentMsg}"`);
+    }
 
     const platform = cardData.source || 'whatsapp'; // Default to whatsapp if not set
     const adapter = getMessagingAdapter(platform, userId, entityId);
@@ -502,7 +517,6 @@ export async function executeBotFlow(
             };
 
             if (isReset) {
-                wipePayload.customFields = admin.firestore.FieldValue.delete();
                 wipePayload.botOutcome = admin.firestore.FieldValue.delete();
                 wipePayload.lastError = admin.firestore.FieldValue.delete();
                 wipePayload.chatbotState = admin.firestore.FieldValue.delete();

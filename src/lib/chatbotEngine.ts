@@ -8,6 +8,37 @@ import {
     resolveQuickReplyEdge,
     sanitizeFlowButtons,
 } from './flowRouting';
+import axios from 'axios';
+
+function evaluateCondition(varValue: any, operator: string, targetValue: any, fuzzy: boolean = true): boolean {
+    let v = varValue === undefined || varValue === null ? '' : String(varValue);
+    let t = targetValue === undefined || targetValue === null ? '' : String(targetValue);
+
+    if (fuzzy) {
+        v = v.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        t = t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    }
+
+    switch (operator) {
+        case 'equals': return v === t;
+        case 'not_equals': return v !== t;
+        case 'contains': return v.includes(t);
+        case 'starts_with': return v.startsWith(t);
+        case 'ends_with': return v.endsWith(t);
+        case 'gt': return parseFloat(v) > parseFloat(t);
+        case 'lt': return parseFloat(v) < parseFloat(t);
+        case 'gte': return parseFloat(v) >= parseFloat(t);
+        case 'lte': return parseFloat(v) <= parseFloat(t);
+        case 'is_set': return varValue !== undefined && varValue !== null && String(varValue).trim() !== '';
+        case 'is_empty': return varValue === undefined || varValue === null || String(varValue).trim() === '';
+        case 'regex':
+            try {
+                const re = new RegExp(t, 'i');
+                return re.test(v);
+            } catch (e) { return false; }
+        default: return false;
+    }
+}
 
 export interface ChatbotContext {
     userId: string;
@@ -276,7 +307,6 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
 
         // Only wipe captured variables on explicit hard reset — not on "hola" to start.
         if (isReset) {
-            resetPayload.customFields = {};
             resetPayload['botState.messageQueue'] = [];
             resetPayload['botState.lastProcessedMessageId'] = null;
         }
@@ -285,9 +315,6 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
         
         // Sync local cardData for current cycle execution
         cardData.botState = { ...(cardData.botState || {}), status: 'active', waitingForInput: false, currentNodeId: null };
-        if (isReset) {
-            cardData.customFields = {};
-        }
         
         if (isReset) {
             if (isExplicitReset) {
@@ -751,34 +778,267 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             return; // EXIT loop, wait for user
         }
 
-        // 4. LOGIC NODES (Set Variable, Webhook, etc.) - DEFAULT SKIP & ADVANCE
+        // 4. LOGIC NODES (Set Variable, Webhook, etc.)
         if (node.type === 'conditionNode') {
             const snap = await cardRef.get();
             const fresh = snap.data() || {};
-            const val = String(fresh.customFields?.[node.data?.variableName] || '').trim().toLowerCase();
-            let target = null;
-            for (const r of node.data?.routes || []) {
-                if (val === String(r.value || '').trim().toLowerCase()) {
-                    target = flow.edges.find((e: any) => e.source === node.id && e.sourceHandle === r.id)?.target;
+            const conditionData = node.data || {};
+            const routes = conditionData.routes || [];
+            let matchedRouteId: string | null = null;
+
+            for (const route of routes) {
+                const matchType = route.matchType || 'AND';
+                const routeConditions = route.conditions || [];
+
+                if (routeConditions.length === 0) continue;
+
+                let routeMatches = matchType === 'AND'; // Start true for AND, false for OR
+
+                for (const cond of routeConditions) {
+                    const varName = (cond.variable || '').replace(/[\{\}]/g, '').trim();
+                    const varValue = fresh.customFields?.[varName] || fresh[varName];
+
+                    const isMatch = evaluateCondition(varValue, cond.operator, cond.value, conditionData.fuzzyMatch !== false);
+
+                    if (matchType === 'AND') {
+                        routeMatches = routeMatches && isMatch;
+                        if (!routeMatches) break;
+                    } else {
+                        routeMatches = routeMatches || isMatch;
+                        if (routeMatches) break;
+                    }
+                }
+
+                if (routeMatches) {
+                    matchedRouteId = route.id;
                     break;
                 }
             }
-            currentNodeId = target
-                || flow.edges.find((e: any) => e.source === node.id && e.sourceHandle === 'else')?.target
-                || resolveDefaultNextEdge(flow.edges, node.id)?.target
-                || null;
+
+            if (matchedRouteId) {
+                const matchedEdge = flow.edges.find((e: any) => String(e.source) === String(node.id) && String(e.sourceHandle) === String(matchedRouteId));
+                currentNodeId = matchedEdge ? matchedEdge.target : resolveDefaultNextEdge(flow.edges, node.id)?.target || null;
+            } else {
+                const elseEdge = flow.edges.find((e: any) => String(e.source) === String(node.id) && e.sourceHandle === 'else');
+                currentNodeId = elseEdge ? elseEdge.target : resolveDefaultNextEdge(flow.edges, node.id)?.target || null;
+            }
             continue;
         }
 
         if (node.type === 'setVariableNode') {
-            await cardRef.update({ [`customFields.${node.data?.variableName}`]: node.data?.value });
+            const snap = await cardRef.get();
+            const fresh = snap.data() || {};
+            const setVarData = node.data || {};
+            const varToSet = (setVarData.variableName || '').replace(/[\{\}]/g, '').trim();
+            const opCat = setVarData.operationCategory || 'set';
+            const op = setVarData.operation || 'set';
+            let valueToUse = replaceVars(setVarData.value || '', fresh);
+
+            if (varToSet) {
+                let currentVal = fresh.customFields?.[varToSet] ?? fresh[varToSet] ?? '';
+                let newVal: any = valueToUse;
+
+                if (opCat === 'math') {
+                    const numCurrent = parseFloat(currentVal) || 0;
+                    const numInput = parseFloat(valueToUse) || 0;
+                    if (op === 'add') newVal = numCurrent + numInput;
+                    else if (op === 'subtract') newVal = numCurrent - numInput;
+                    else if (op === 'multiply') newVal = numCurrent * numInput;
+                } else if (opCat === 'list') {
+                    let list = Array.isArray(currentVal) ? currentVal : [];
+                    if (op === 'push') {
+                        list.push(valueToUse);
+                        newVal = list;
+                    }
+                }
+
+                await cardRef.update({
+                    [`customFields.${varToSet}`]: newVal
+                });
+                
+                // Update local context for the remainder of this cycle
+                sessionVars[varToSet] = newVal;
+            }
+
             const edge = resolveDefaultNextEdge(flow.edges, node.id);
             currentNodeId = edge ? edge.target : null;
             continue;
         }
 
+        if (node.type === 'delayNode') {
+            const delayData = node.data || {};
+            let delayMs = 2000;
+
+            if (delayData.mode === 'random') {
+                const min = parseFloat(delayData.minSeconds || 1);
+                const max = parseFloat(delayData.maxSeconds || 3);
+                delayMs = (Math.random() * (max - min) + min) * 1000;
+            } else {
+                const seconds = parseFloat(delayData.durationSeconds || delayData.duration || 2);
+                delayMs = seconds * 1000;
+            }
+
+            console.log(`[ChatbotEngine] Executing delay: ${delayMs}ms`);
+            await sleep(delayMs);
+            const edge = resolveDefaultNextEdge(flow.edges, node.id);
+            currentNodeId = edge ? edge.target : null;
+            continue;
+        }
+
+        if (node.type === 'webhookNode') {
+            const snap = await cardRef.get();
+            const fresh = snap.data() || {};
+            const webhookData = node.data || {};
+            const url = replaceVars(webhookData.url || '');
+            const method = (webhookData.method || 'POST').toUpperCase();
+            const saveTo = (webhookData.saveResponseTo || '').replace(/[\{\}]/g, '').trim();
+
+            if (url) {
+                try {
+                    console.log(`[ChatbotEngine] Executing Webhook: ${method} ${url}`);
+                    const response = await axios({
+                        method,
+                        url,
+                        timeout: 10000,
+                    });
+
+                    if (saveTo) {
+                        await cardRef.update({
+                            [`customFields.${saveTo}`]: response.data
+                        });
+                        sessionVars[saveTo] = response.data;
+                    }
+
+                    const successEdge = flow.edges.find((e: any) => String(e.source) === String(node.id) && e.sourceHandle === 'success');
+                    currentNodeId = successEdge ? successEdge.target : resolveDefaultNextEdge(flow.edges, node.id)?.target || null;
+                } catch (error: any) {
+                    console.error(`[ChatbotEngine] Webhook Error:`, error.message);
+                    const failureEdge = flow.edges.find((e: any) => String(e.source) === String(node.id) && e.sourceHandle === 'failure');
+                    currentNodeId = failureEdge ? failureEdge.target : resolveDefaultNextEdge(flow.edges, node.id)?.target || null;
+                }
+            } else {
+                const edge = resolveDefaultNextEdge(flow.edges, node.id);
+                currentNodeId = edge ? edge.target : null;
+            }
+            continue;
+        }
+
+        if (node.type === 'generativeAINode') {
+            const snap = await cardRef.get();
+            const fresh = snap.data() || {};
+            const aiData = node.data || {};
+            const systemPrompt = replaceVars(aiData.systemPrompt || 'Eres un asistente útil.');
+            const userMsg = fresh.lastMessage || '';
+            const model = aiData.model || 'gpt-4o';
+            const temperature = aiData.temperature ?? 0.7;
+            const outputVar = (aiData.outputVariable || '').replace(/[\{\}]/g, '').trim();
+
+            let apiKey = process.env.OPENAI_API_KEY;
+            try {
+                const aiIntegration = await db.doc(`${entityPath}/integrations/openai`).get();
+                if (aiIntegration.exists) {
+                    apiKey = aiIntegration.data()?.apiKey || apiKey;
+                }
+            } catch (err) {}
+
+            if (apiKey) {
+                try {
+                    console.log(`[ChatbotEngine] Calling AI Model: ${model}`);
+                    const aiResponse = await axios.post('https://api.openai.com/v1/chat/completions', {
+                        model: model.startsWith('gpt') ? model : 'gpt-4o',
+                        messages: [
+                            { role: 'system', content: systemPrompt },
+                            { role: 'user', content: userMsg }
+                        ],
+                        temperature: temperature
+                    }, {
+                        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                        timeout: 30000
+                    });
+
+                    const aiText = aiResponse.data.choices[0].message.content;
+
+                    if (outputVar) {
+                        await cardRef.update({
+                            [`customFields.${outputVar}`]: aiText
+                        });
+                        sessionVars[outputVar] = aiText;
+                    } else {
+                        await dispatchMessage(aiText);
+                        await appendAgentMessage({
+                            text: aiText,
+                            type: 'text',
+                            messageId: `bot_ai_${Date.now()}`
+                        });
+                    }
+                } catch (error: any) {
+                    console.error(`[ChatbotEngine] AI Error:`, error.response?.data || error.message);
+                    const errorMsg = "Lo siento, tuve un problema procesando tu solicitud con IA.";
+                    await dispatchMessage(errorMsg);
+                    await appendAgentMessage({
+                        text: errorMsg,
+                        type: 'text',
+                        messageId: `bot_ai_err_${Date.now()}`
+                    });
+                }
+            } else {
+                console.warn("[ChatbotEngine] Missing OpenAI API Key");
+                const errorMsg = "El nodo de IA no está configurado (falta API Key).";
+                await dispatchMessage(errorMsg);
+                await appendAgentMessage({
+                    text: errorMsg,
+                    type: 'text',
+                    messageId: `bot_ai_err_${Date.now()}`
+                });
+            }
+            const edge = resolveDefaultNextEdge(flow.edges, node.id);
+            currentNodeId = edge ? edge.target : null;
+            continue;
+        }
+
+        if (node.type === 'humanHandoffNode') {
+            console.log(`[ChatbotEngine] Human Handoff initiated`);
+            await cardRef.update({
+                isHandledByHuman: true,
+                botActive: false,
+                'botState.status': 'completed',
+                'botState.waitingForInput': false
+            });
+            const handoffMsg = "Te estoy transfiriendo con un agente humano. Por favor, espera un momento.";
+            await dispatchMessage(handoffMsg);
+            await appendAgentMessage({
+                text: handoffMsg,
+                type: 'text',
+                messageId: `bot_handoff_${Date.now()}`
+            });
+            return;
+        }
+
         if (node.type === 'endNode') {
-            await cardRef.update({ 'botState.status': 'completed', 'botState.waitingForInput': false });
+            const endData = node.data || {};
+            console.log(`[ChatbotEngine] End Node reached. Outcome: ${endData.outcome || 'neutral'}`);
+
+            if (endData.clearVariables) {
+                const varsToClear = endData.clearVariables.split(',').map((v: string) => v.trim()).filter((v: string) => v !== '');
+                if (varsToClear.length > 0) {
+                    const updateObj: any = {};
+                    varsToClear.forEach((v: string) => {
+                        updateObj[`customFields.${v}`] = admin.firestore.FieldValue.delete();
+                    });
+                    await cardRef.update(updateObj);
+                }
+            }
+
+            const botOutcome = {
+                outcome: endData.outcome || 'neutral',
+                label: endData.outcomeLabel || (endData.outcome === 'success' ? 'Éxito' : 'Cierre'),
+                finishedAt: new Date()
+            };
+            await cardRef.update({ 
+                botOutcome,
+                'botState.status': 'completed', 
+                'botState.waitingForInput': false 
+            });
             return;
         }
 
