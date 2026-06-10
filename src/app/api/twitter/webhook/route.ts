@@ -2,45 +2,213 @@ import { NextResponse } from 'next/server';
 import { db, admin } from '@/lib/firebase-admin';
 import { processChatbotFlow } from '@/lib/chatbotEngine';
 import { buildBotQueueItem, createQueuedBotState, isDuplicateQueueMessage } from '@/lib/botQueue';
+import { isXCommentInteraction, resolveXBotRouting } from '@/lib/automation/xBotRouting';
+import { resolveTwitterTenant } from '@/lib/xWebhookHelpers';
 import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * GET: Twitter CRC (Challenge-Response Check)
- * Required for Twitter Account Activity API validation.
- */
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const crc_token = searchParams.get('crc_token');
 
     if (crc_token) {
         const consumer_secret = process.env.TWITTER_CONSUMER_SECRET || '';
-        if (!consumer_secret) {
-            console.warn('[Twitter Webhook] TWITTER_CONSUMER_SECRET is missing. CRC will fail.');
-        }
-
         const hmac = crypto.createHmac('sha256', consumer_secret).update(crc_token).digest('base64');
-        const response_token = `sha256=${hmac}`;
-
-        return NextResponse.json({ response_token });
+        return NextResponse.json({ response_token: `sha256=${hmac}` });
     }
 
     return new Response('Twitter Webhook Active', { status: 200 });
 }
 
-/**
- * POST: Ingest incoming DM events
- */
+async function ingestXMessage(params: {
+    tenant: Awaited<ReturnType<typeof resolveTwitterTenant>>;
+    senderId: string;
+    text: string;
+    messageId: string;
+    resolvedName: string;
+    routing: ReturnType<typeof resolveXBotRouting>;
+    tweetId?: string;
+    inReplyToTweetId?: string;
+}) {
+    const { tenant, senderId, text, messageId, resolvedName, routing, tweetId, inReplyToTweetId } = params;
+    if (!tenant) return null;
+
+    const { userId, entityId, entityPath } = tenant;
+
+    const dedupRef = db.doc(`${entityPath}/processed_messages/${messageId}`);
+    const dedupSnap = await dedupRef.get();
+    if (dedupSnap.exists) return { duplicate: true as const };
+
+    await dedupRef.set({
+        timestamp: Date.now(),
+        senderId,
+        type: routing.interactionType === 'comment' ? 'x_comment' : 'x_dm',
+    });
+
+    let targetCardDoc: admin.firestore.QueryDocumentSnapshot | null = null;
+    let targetGroupId: string | null = null;
+
+    const cardsSnap = await db.collectionGroup('cards')
+        .where('platform_ids.x_twitter', '==', senderId)
+        .get();
+
+    const entityCard = cardsSnap.docs.find((d) => d.ref.path.startsWith(entityPath));
+    if (entityCard) {
+        targetCardDoc = entityCard;
+        const cardPathParts = entityCard.ref.path.split('/');
+        targetGroupId = cardPathParts[cardPathParts.indexOf('kanban-groups') + 1];
+    }
+
+    const platformLabel = routing.interactionType === 'comment' ? 'x_twitter' : 'x_twitter';
+    const sourceLabel = routing.interactionType === 'comment' ? 'X_COMMENT' : 'TWITTER';
+
+    const newMessage = {
+        sender: 'user' as const,
+        text,
+        timestamp: admin.firestore.Timestamp.now(),
+        messageId,
+        platform: platformLabel,
+        ...(tweetId ? { metadata: { tweetId, inReplyToTweetId } } : {}),
+    };
+
+    const queueItem = {
+        ...buildBotQueueItem({
+            text,
+            messageId: messageId || `x_${Date.now()}`,
+            platform: routing.platform,
+            from: senderId,
+        }),
+        ...(tweetId ? { tweetId, inReplyToTweetId } : {}),
+    };
+
+    let cardId: string;
+    let groupId: string;
+
+    if (targetCardDoc && targetGroupId) {
+        const alreadyQueued = isDuplicateQueueMessage(targetCardDoc.data(), messageId);
+        const cardUpdate: Record<string, any> = {
+            contactName: resolvedName,
+            lastMessage: text.length > 50 ? `${text.substring(0, 47)}...` : text,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            unreadCount: admin.firestore.FieldValue.increment(1),
+            messages: admin.firestore.FieldValue.arrayUnion(newMessage),
+            'botState.engine': 'queue',
+            status: 'open',
+            source: sourceLabel,
+            channel: 'twitter',
+            primary_channel: routing.interactionType === 'comment' ? 'x_twitter_comments' : 'x_twitter',
+            ...(tweetId ? {
+                'customFields.lastTweetId': tweetId,
+                'customFields.inReplyToTweetId': inReplyToTweetId || null,
+            } : {}),
+        };
+        if (!alreadyQueued) {
+            cardUpdate['botState.messageQueue'] = admin.firestore.FieldValue.arrayUnion(queueItem);
+        }
+        await targetCardDoc.ref.update(cardUpdate);
+        cardId = targetCardDoc.id;
+        groupId = targetGroupId;
+    } else {
+        const groupsRef = db.collection(`${entityPath}/kanban-groups`);
+        const groupsSnap = await groupsRef.get();
+        const inboxGroup = groupsSnap.docs.find(
+            (g) => (g.data().name || '').toLowerCase().includes('inbox') ||
+                (g.data().name || '').toLowerCase().includes('entrada')
+        );
+        groupId = inboxGroup ? inboxGroup.id : (groupsSnap.empty ? 'default_inbox' : groupsSnap.docs[0].id);
+
+        if (!inboxGroup && groupsSnap.empty) {
+            await groupsRef.doc('default_inbox').set({
+                name: 'Inbox',
+                order: 0,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+        }
+
+        const newCardRef = db.collection(`${entityPath}/kanban-groups/${groupId}/cards`).doc();
+        await newCardRef.set({
+            id: newCardRef.id,
+            contactName: resolvedName,
+            contactNumber: senderId,
+            lastMessage: text.length > 50 ? `${text.substring(0, 47)}...` : text,
+            updatedAt: admin.firestore.Timestamp.now(),
+            createdAt: admin.firestore.Timestamp.now(),
+            messages: [newMessage],
+            botState: createQueuedBotState(queueItem),
+            unreadCount: 1,
+            status: 'open',
+            source: sourceLabel,
+            channel: 'twitter',
+            primary_channel: routing.interactionType === 'comment' ? 'x_twitter_comments' : 'x_twitter',
+            platform_ids: { x_twitter: senderId },
+            ...(tweetId ? {
+                customFields: { lastTweetId: tweetId, inReplyToTweetId: inReplyToTweetId || null },
+            } : {}),
+        });
+        cardId = newCardRef.id;
+    }
+
+    await processChatbotFlow({
+        userId,
+        entityId,
+        groupId,
+        cardId,
+        platform: routing.platform as 'x_twitter',
+        from: senderId,
+        text,
+        messageId,
+        botsCollection: routing.botsCollection,
+    });
+
+    return { success: true as const };
+}
+
 export async function POST(req: Request) {
     console.log('[Twitter Webhook] INCOMING EVENT');
 
     try {
         const body = await req.json();
+        const tenant = await resolveTwitterTenant(body);
 
-        // 1. Validate if it's a DM event
-        if (!body.direct_message_events || body.direct_message_events.length === 0) {
-            return NextResponse.json({ success: true, ignored: 'no_dm_events' });
+        if (!tenant) {
+            console.error('[Twitter Webhook] No tenant found for X User ID:', body.for_user_id);
+            return NextResponse.json({ success: false, error: 'Tenant not mapped' });
+        }
+
+        // --- PUBLIC: replies, @mentions, quotes → X Comentarios Bots ---
+        if (body.tweet_create_events?.length) {
+            let processed = 0;
+            for (const tweet of body.tweet_create_events) {
+                if (!isXCommentInteraction(tweet, tenant.ourUserId)) continue;
+
+                const senderId = tweet.user?.id_str || tweet.user?.id;
+                const text = tweet.text || '';
+                const messageId = tweet.id_str || tweet.id;
+                if (!senderId || !text || !messageId) continue;
+
+                const resolvedName = tweet.user?.name || tweet.user?.screen_name || `X User ${String(senderId).slice(-4)}`;
+                const routing = resolveXBotRouting('comment');
+
+                const result = await ingestXMessage({
+                    tenant,
+                    senderId: String(senderId),
+                    text,
+                    messageId: String(messageId),
+                    resolvedName,
+                    routing,
+                    tweetId: String(messageId),
+                    inReplyToTweetId: tweet.in_reply_to_status_id_str || undefined,
+                });
+
+                if (result && !('duplicate' in result)) processed++;
+            }
+            return NextResponse.json({ success: true, processed_comments: processed });
+        }
+
+        // --- DM events → X DM Bots (unchanged flow) ---
+        if (!body.direct_message_events?.length) {
+            return NextResponse.json({ success: true, ignored: 'no_supported_events' });
         }
 
         const event = body.direct_message_events[0];
@@ -50,151 +218,24 @@ export async function POST(req: Request) {
 
         const messageData = event.message_create;
         const senderId = messageData.sender_id;
-        const recipientId = messageData.target.recipient_id; // This is OUR account ID
-        const text = messageData.message_data.text;
 
-        // Skip if it's an echo (message sent by us)
-        // Note: Body often contains 'for_user_id' which is our ID
         if (senderId === body.for_user_id) {
             return NextResponse.json({ success: true, ignored: 'echo' });
         }
 
-        console.log(`[Twitter Webhook] DM from ${senderId}: ${text}`);
-
-        // 2. Identify Tenant (Multi-Tenant Logic)
-        let tenantRef: admin.firestore.DocumentReference | null = null;
-        let tenantData: any = null;
-
-        const integrationSnap = await db.collectionGroup('integrations')
-            .where('provider', '==', 'x_twitter')
-            .get();
-
-        // Search for the integration that matches the 'for_user_id' (our account)
-        for (const doc of integrationSnap.docs) {
-            const data = doc.data();
-            if (data.twitterUserId === body.for_user_id || data.twitterHandle === body.user?.screen_name) {
-                tenantRef = doc.ref;
-                tenantData = data;
-                break;
-            }
-        }
-
-        // Fallback: If no match found, use the first active Twitter integration (emergency)
-        if (!tenantRef) {
-            const emergencySnap = integrationSnap.docs.find(d => d.data().status === 'Connected');
-            if (emergencySnap) {
-                tenantRef = emergencySnap.ref;
-                tenantData = emergencySnap.data();
-            }
-        }
-
-        if (!tenantRef) {
-            console.error('[Twitter Webhook] No tenant found for X User ID:', body.for_user_id);
-            return NextResponse.json({ success: false, error: 'Tenant not mapped' });
-        }
-
-        const pathParts = tenantRef.path.split('/');
-        const userId = pathParts[pathParts.indexOf('users') + 1];
-        const entityId = pathParts[pathParts.indexOf('entities') + 1];
-        const entityPath = `users/${userId}/entities/${entityId}`;
-
-        // 3. Message Deduplication
+        const text = messageData.message_data.text;
         const messageId = event.id;
-        const dedupRef = db.doc(`${entityPath}/processed_messages/${messageId}`);
-        const dedupSnap = await dedupRef.get();
-        if (dedupSnap.exists) {
-            return NextResponse.json({ success: true, duplicate: true });
-        }
-        await dedupRef.set({ timestamp: Date.now(), senderId, type: 'twitter_ingestion' });
+        const resolvedName = body.users?.[senderId]?.name || `X User ${String(senderId).slice(-4)}`;
+        const routing = resolveXBotRouting('dm');
 
-        // 4. Ingest to Kanban / CRM
-        let targetCardDoc: any = null;
-        let targetGroupId: string | null = null;
-
-        // Find existing card for this Twitter user
-        const cardsSnap = await db.collectionGroup('cards')
-            .where(`platform_ids.x_twitter`, '==', senderId)
-            .get();
-        
-        const entityCard = cardsSnap.docs.find(d => d.ref.path.startsWith(entityPath));
-        if (entityCard) {
-            targetCardDoc = entityCard;
-            const cardPathParts = targetCardDoc.ref.path.split('/');
-            targetGroupId = cardPathParts[cardPathParts.indexOf('kanban-groups') + 1];
-        }
-
-        const resolvedName = body.users?.[senderId]?.name || `X User ${senderId.slice(-4)}`;
-        const newMessage = {
-            sender: 'user',
-            text: text,
-            timestamp: admin.firestore.Timestamp.now(),
-            messageId: messageId,
-            platform: 'x_twitter'
-        };
-
-        const queueItem = buildBotQueueItem({
-            text: text,
-            messageId: messageId || `x_${Date.now()}`,
-            platform: 'x_twitter',
-            from: senderId,
+        await ingestXMessage({
+            tenant,
+            senderId,
+            text,
+            messageId,
+            resolvedName,
+            routing,
         });
-
-        if (targetCardDoc && targetGroupId) {
-            const alreadyQueued = isDuplicateQueueMessage(targetCardDoc.data(), messageId);
-            const cardUpdate: Record<string, any> = {
-                contactName: resolvedName,
-                lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
-                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                unreadCount: admin.firestore.FieldValue.increment(1),
-                messages: admin.firestore.FieldValue.arrayUnion(newMessage),
-                'botState.engine': 'queue',
-                status: 'open',
-                source: 'TWITTER',
-                channel: 'twitter'
-            };
-            if (!alreadyQueued) {
-                cardUpdate['botState.messageQueue'] = admin.firestore.FieldValue.arrayUnion(queueItem);
-            }
-            await targetCardDoc.ref.update(cardUpdate);
-        } else {
-            // Create New
-            const groupsRef = db.collection(`${entityPath}/kanban-groups`);
-            const groupsSnap = await groupsRef.get();
-            const inboxGroup = groupsSnap.docs.find(g => (g.data().name || '').toLowerCase().includes('inbox') || (g.data().name || '').toLowerCase().includes('entrada'));
-            const groupId = inboxGroup ? inboxGroup.id : (groupsSnap.empty ? 'default_inbox' : groupsSnap.docs[0].id);
-
-            if (!inboxGroup && groupsSnap.empty) {
-                await groupsRef.doc('default_inbox').set({ name: 'Inbox', order: 0, createdAt: admin.firestore.FieldValue.serverTimestamp() });
-            }
-
-            const newCardRef = db.collection(`${entityPath}/kanban-groups/${groupId}/cards`).doc();
-            await newCardRef.set({
-                id: newCardRef.id,
-                contactName: resolvedName,
-                contactNumber: senderId,
-                lastMessage: text.length > 50 ? text.substring(0, 47) + '...' : text,
-                updatedAt: admin.firestore.Timestamp.now(),
-                createdAt: admin.firestore.Timestamp.now(),
-                messages: [newMessage],
-                botState: createQueuedBotState(queueItem),
-                unreadCount: 1,
-                status: 'open',
-                source: 'TWITTER',
-                channel: 'twitter',
-                platform_ids: { x_twitter: senderId }
-            });
-            
-            targetGroupId = groupId;
-            targetCardDoc = { id: newCardRef.id, ref: newCardRef };
-        }
-
-        // 5. Trigger Chatbot
-        if (targetGroupId && targetCardDoc) {
-            await processChatbotFlow({
-                userId, entityId, groupId: targetGroupId, cardId: targetCardDoc.id,
-                platform: 'x_twitter', from: senderId, text: text, messageId: messageId
-            });
-        }
 
         return NextResponse.json({ success: true });
     } catch (error: any) {

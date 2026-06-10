@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db, admin } from '@/lib/firebase-admin';
 import { processChatbotFlow } from '@/lib/chatbotEngine';
 import { buildBotQueueItem, createQueuedBotState, isDuplicateQueueMessage } from '@/lib/botQueue';
+import { resolveMetaBotRouting } from '@/lib/automation/metaBotRouting';
 
 import fs from 'fs';
 
@@ -320,7 +321,18 @@ export async function POST(req: Request) {
 
         if (groupId && cardId) {
             try {
-                await processChatbotFlow({ userId, entityId, groupId, cardId, platform: provider, from: senderId, text: botInputText || text, messageId });
+                const botRouting = resolveMetaBotRouting(objectType, provider, changes);
+                await processChatbotFlow({
+                    userId,
+                    entityId,
+                    groupId,
+                    cardId,
+                    platform: botRouting.platform as 'messenger' | 'instagram',
+                    from: senderId,
+                    text: botInputText || text,
+                    messageId,
+                    botsCollection: botRouting.botsCollection,
+                });
                 await logRef.update({ step: 'chatbot_triggered' });
             } catch (botError: any) {
                 await logRef.update({ step: 'chatbot_error', error: botError.message });

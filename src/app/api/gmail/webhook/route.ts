@@ -371,7 +371,8 @@ export async function POST(req: Request) {
                 platform: 'gmail', 
                 from: fromEmail, 
                 text: bodySnippet,
-                messageId: `gm_${msgId}`
+                messageId: `gm_${msgId}`,
+                botsCollection: 'gmail-bots',
             }).catch(error => {
                  console.error(`[Gmail Chatbot Error] ${error}`);
             });

@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Plus, Loader2, Power, ArrowLeft, Trash2, MessageCircle, Facebook, Instagram, Send, Mail, Twitter } from 'lucide-react';
+import { Plus, Loader2, Power, ArrowLeft, Trash2, MessageCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { collection, onSnapshot, doc, deleteDoc, runTransaction } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext';
@@ -39,11 +39,6 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
 
 const PLATFORMS = [
   { id: 'whatsapp', icon: WhatsAppIcon, color: 'text-[#25D366]', label: 'WA', activeBg: 'bg-[#25D366]/10', activeBorder: 'border-[#25D366]/30' },
-  { id: 'messenger', icon: Facebook, color: 'text-[#0084FF]', label: 'FB', activeBg: 'bg-[#0084FF]/10', activeBorder: 'border-[#0084FF]/30' },
-  { id: 'instagram', icon: Instagram, color: 'text-[#E1306C]', label: 'IG', activeBg: 'bg-[#E1306C]/10', activeBorder: 'border-[#E1306C]/30' },
-  { id: 'telegram', icon: Send, color: 'text-[#0088cc]', label: 'TG', activeBg: 'bg-[#0088cc]/10', activeBorder: 'border-[#0088cc]/30' },
-  { id: 'x_twitter', icon: Twitter, color: 'text-white', label: 'X', activeBg: 'bg-white/10', activeBorder: 'border-white/30' },
-  { id: 'gmail', icon: Mail, color: 'text-[#EA4335]', label: 'GM', activeBg: 'bg-[#EA4335]/10', activeBorder: 'border-[#EA4335]/30' }
 ];
 
 const ChatbotsPage = () => {
@@ -138,9 +133,11 @@ const ChatbotsPage = () => {
             const botRef = doc(db, 'users', currentUser.uid, 'entities', activeEntity, 'chatbots', formattedId);
             transaction.set(botRef, {
                 id: formattedId,
-                name: 'New Chatbot',
+                name: 'New WhatsApp Bot',
                 isActive: false,
-                targetPlatforms: [],
+                channel: 'whatsapp',
+                botType: 'dm',
+                targetPlatforms: ['whatsapp'],
                 createdAt: new Date(),
                 flow: {
                     nodes: [{ id: '1', type: 'startNode', position: { x: 250, y: 5 }, data: { label: 'Start' } }],
@@ -277,7 +274,7 @@ const ChatbotsPage = () => {
           <Button variant="outline" size="icon" onClick={handleGoBack} className="h-8 w-8">
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <h1 className="text-xl font-medium tracking-tight">My Chatbots</h1>
+          <h1 className="text-xl font-medium tracking-tight">WhatsApp Bots</h1>
           <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${
             connectionStatus === 'connected' 
               ? 'bg-green-500/10 border-green-500/20 text-green-400' 

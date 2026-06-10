@@ -8,6 +8,7 @@ import {
     resolveQuickReplyEdge,
     sanitizeFlowButtons,
 } from './flowRouting';
+import { isIsolatedBotCollection, resolveBotsCollectionName } from './automation/botStorage';
 import axios from 'axios';
 
 function evaluateCondition(varValue: any, operator: string, targetValue: any, fuzzy: boolean = true): boolean {
@@ -45,10 +46,12 @@ export interface ChatbotContext {
     entityId: string;
     groupId: string;
     cardId: string;
-    platform: 'whatsapp' | 'messenger' | 'instagram' | 'telegram' | 'gmail' | 'x_twitter' | 'x';
+    platform: 'whatsapp' | 'messenger' | 'instagram' | 'instagram_comments' | 'facebook_comments' | 'telegram' | 'gmail' | 'x_twitter' | 'x_twitter_comments' | 'x';
     from: string;
     text: string;
     messageId?: string;
+    /** Firestore subcollection for channel-isolated bots (e.g. messenger-bots). WhatsApp uses chatbots. */
+    botsCollection?: string;
 }
 
 const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
@@ -68,7 +71,7 @@ function dedupeQueueItems(queue: any[]): any[] {
  * Implements a FIFO queue consumer pattern to prevent race conditions and duplicate responses.
  */
 export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
-    const { userId, entityId, groupId, cardId, platform, from, text, messageId } = ctx;
+    const { userId, entityId, groupId, cardId, platform, from, text, messageId, botsCollection } = ctx;
     const triggerMessageId = messageId ? String(messageId).trim() : '';
     const entityPath = `users/${userId}/entities/${entityId}`;
     const cardRef = db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`);
@@ -178,7 +181,7 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
 
             try {
                 // --- 3. INNER ENGINE CORE ---
-                await runEngineCycle(cardRef, cardData, currentMsg, entityPath, entityId, userId);
+                await runEngineCycle(cardRef, cardData, currentMsg, entityPath, entityId, userId, botsCollection);
             } catch (cycleErr: any) {
                 console.error(`[ChatbotEngine] ❌ Cycle Error [${msgId}]:`, cycleErr.message);
                 // Log error to card but DON'T stop the whole runner
@@ -211,7 +214,15 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
 /**
  * Single Engine Cycle: Processes ONE message through the flow.
  */
-async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath: string, entityId: string, userId: string) {
+async function runEngineCycle(
+    cardRef: any,
+    cardData: any,
+    msg: any,
+    entityPath: string,
+    entityId: string,
+    userId: string,
+    botsCollection?: string
+) {
     const text = msg.text || '';
     const platform = msg.platform;
     const from = msg.from;
@@ -232,9 +243,18 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
     const dispatchMessage = async (content: string, options: any = {}) => {
         const opts = { userId, entityId, ...options };
         if (platform === 'whatsapp') return await sendWhatsAppMessage(from, content, opts);
-        if (platform === 'messenger' || platform === 'instagram') return await sendMetaMessage(from, content, { ...opts, provider: platform });
+        if (platform === 'messenger' || platform === 'facebook_comments') {
+            return await sendMetaMessage(from, content, { ...opts, provider: 'messenger' });
+        }
+        if (platform === 'instagram' || platform === 'instagram_comments') {
+            return await sendMetaMessage(from, content, { ...opts, provider: 'instagram' });
+        }
         if (platform === 'telegram') return await sendTelegramMessage(from, content, opts);
         if (platform === 'gmail') return await sendGmailMessage(from, content, opts);
+        if (platform === 'x_twitter' || platform === 'x' || platform === 'x_twitter_comments') {
+            console.log(`[ChatbotEngine] X outbound (${platform}) queued in card — API send pending OAuth tokens.`);
+            return { logged: true, platform, to: from };
+        }
     };
 
     const normalizedInput = text.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -346,16 +366,19 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
 
 
     // --- C. FLOW RESOLUTION (Rule 4: Root Isolation) ---
-    const botsRef = db.collection(`${entityPath}/chatbots`);
+    const collectionName = resolveBotsCollectionName(platform, botsCollection);
+    const botsRef = db.collection(`${entityPath}/${collectionName}`);
     const botsSnapshot = await botsRef.where('isActive', 'in', [true, 'true']).get();
     const allActiveBots = botsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
 
     if (allActiveBots.length === 0) {
-        console.log(`[ChatbotEngine] ⚠️ No active bots found for entity ${entityId}`);
+        console.log(`[ChatbotEngine] ⚠️ No active bots in ${collectionName} for entity ${entityId}`);
         return;
     }
 
-    // Filter and score bots by platform relevance
+    const isolatedChannel = isIsolatedBotCollection(collectionName);
+
+    // Filter and score bots by platform relevance (isolated collections skip cross-channel scoring)
     const platformBots = allActiveBots.map(bot => {
         const targets = (bot.targetPlatforms || []).map((t: string) => t.toLowerCase().trim());
         let score = 0;
@@ -370,13 +393,16 @@ async function runEngineCycle(cardRef: any, cardData: any, msg: any, entityPath:
             'messenger': ['fb', 'facebook', 'msg'],
             'telegram': ['tg', 'tele'],
             'x_twitter': ['x', 'twitter'],
+            'x_twitter_comments': ['x', 'twitter', 'x_comments'],
             'x': ['x_twitter', 'twitter'],
         };
 
         const currentAliases = aliases[currentPlatform] || [];
         const hasMatch = targets.some((t: string) => t === currentPlatform || currentAliases.includes(t));
 
-        if (hasMatch) {
+        if (isolatedChannel) {
+            score = 10;
+        } else if (hasMatch) {
             score = 10; // Explicit match (High Priority)
         } else if (currentPlatform === 'gmail') {
             score = 0; // STRICT MATCH REQUIRED: Gmail should never be targeted by a global/wildcard bot

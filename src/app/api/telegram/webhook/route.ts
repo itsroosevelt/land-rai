@@ -158,7 +158,8 @@ export async function POST(req: Request) {
             await processChatbotFlow({
                 userId, entityId, groupId, cardId, 
                 platform: 'telegram', from: chatId, text: text || '',
-                messageId: messageId
+                messageId: messageId,
+                botsCollection: 'telegram-bots',
             }).catch(console.error);
         }
 
