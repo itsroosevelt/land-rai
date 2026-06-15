@@ -462,7 +462,7 @@ function WorkspaceContent() {
         newNodes.push({
             id: 'action-return', type: 'actionNode', position: toCanvas(titleSavedForReturn.x, titleSavedForReturn.y - 1.2),
             draggable: false, zIndex: 110, data: { 
-                label: 'Regresar a la suite',
+                label: 'Return to the suite',
                 onClick: () => router.push(`/nucleo/${entityId}`)
             }
         });
