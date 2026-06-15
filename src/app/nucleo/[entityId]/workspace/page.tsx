@@ -53,7 +53,7 @@ const DEPARTMENTS_DATA: Record<string, { title: string, layers: any[] }> = {
         { id: 'governance', label: 'Protocol Governance', path: 'governance', icon: Gavel, theme: 'slate' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
     
-    ceo: { title: "Executive Center", layers: [
+    ceo: { title: "Chief Executive Officer", layers: [
         { id: 'board-liaison', label: 'Board Liaison', path: 'board-liaison', icon: Users, theme: 'amber' },
         { id: 'crisis-management', label: 'Crisis Management', path: 'crisis-management', icon: ShieldAlert, theme: 'amber' },
         { id: 'culture-steering', label: 'Culture Steering', path: 'culture-steering', icon: Heart, theme: 'amber' },
@@ -66,7 +66,7 @@ const DEPARTMENTS_DATA: Record<string, { title: string, layers: any[] }> = {
         { id: 'strategy', label: 'Vision & Strategy', path: 'strategy', icon: Target, theme: 'amber' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
     
-    coo: { title: "Operations Center", layers: [
+    coo: { title: "Chief Operating Officer", layers: [
         { id: 'cx', label: 'Customer Experience', path: 'cx', icon: Smile, theme: 'cyan' },
         { id: 'facilities', label: 'Facilities Management', path: 'facilities', icon: Building, theme: 'cyan' },
         { id: 'procurement', label: 'Global Procurement', path: 'procurement', icon: ShoppingBag, theme: 'cyan' },
@@ -96,7 +96,7 @@ const DEPARTMENTS_DATA: Record<string, { title: string, layers: any[] }> = {
         { id: 'smart-contracts', label: 'Smart Contracts', path: 'smart-contracts', icon: FileText, theme: 'cyan' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
     
-    cfo: { title: "Financial Center", layers: [
+    cfo: { title: "Chief Financial Officer", layers: [
         { id: 'audit-prep', label: 'Audit Prep', path: 'audit-prep', icon: FileCheck, theme: 'emerald' },
         { id: 'billing', label: 'Billing Engine', path: 'billing', icon: CreditCard, theme: 'emerald' },
         { id: 'cash-flow', label: 'Cash Flow', path: 'cash-flow', icon: Landmark, theme: 'emerald' },
@@ -104,7 +104,7 @@ const DEPARTMENTS_DATA: Record<string, { title: string, layers: any[] }> = {
         { id: 'tax', label: 'Tax Management', path: 'tax', icon: Gavel, theme: 'emerald' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
     
-    cmo: { title: "Marketing Center", layers: [
+    cmo: { title: "Chief Marketing Officer", layers: [
         { id: 'affiliates', label: 'Affiliate Program', path: 'affiliates', icon: Link, theme: 'orange' },
         { id: 'brand', label: 'Brand Identity', path: 'brand', icon: Award, theme: 'orange' },
         { id: 'content', label: 'Content Factory', path: 'content', icon: PenTool, theme: 'orange' },
@@ -119,37 +119,37 @@ const DEPARTMENTS_DATA: Record<string, { title: string, layers: any[] }> = {
         { id: 'social', label: 'Social Media', path: 'social', icon: Share2, theme: 'orange' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
     
-    chro: { title: "Human Resources Center", layers: [
+    chro: { title: "Chief Human Resources Officer", layers: [
         { id: 'hris', label: 'HR Registry', path: 'hris', icon: Users, theme: 'purple' },
         { id: 'payroll', label: 'Payroll Engine', path: 'payroll', icon: DollarSign, theme: 'purple' },
         { id: 'heart', label: 'Performance', path: 'heart', icon: Heart, theme: 'purple' },
         { id: 'recruitment', label: 'Talent Acquisition', path: 'recruitment', icon: UserPlus, theme: 'purple' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
     
-    cso: { title: "Strategy Center", layers: [
+    cso: { title: "Chief Strategy Officer", layers: [
         { id: 'expansion', label: 'Global Expansion', path: 'expansion', icon: Globe, theme: 'red' },
         { id: 'growth', label: 'Growth Strategy', path: 'growth', icon: Zap, theme: 'red' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
 
-    ciso: { title: "Security Center", layers: [
+    ciso: { title: "Chief Information Security Officer", layers: [
         { id: 'threats', label: 'Threat Intelligence', path: 'threats', icon: ShieldAlert, theme: 'blue' },
         { id: 'compliance', label: 'InfoSec Compliance', path: 'compliance', icon: ShieldCheck, theme: 'blue' },
         { id: 'sec-ops', label: 'Security Ops', path: 'sec-ops', icon: Lock, theme: 'blue' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
 
-    clo: { title: "Legal Center", layers: [
+    clo: { title: "Chief Legal Officer", layers: [
         { id: 'contracts', label: 'Contract Lifecycle', path: 'contracts', icon: FileText, theme: 'slate' },
         { id: 'litigation', label: 'Litigation Center', path: 'litigation', icon: Gavel, theme: 'slate' },
         { id: 'ip', label: 'Intellectual Property', path: 'ip', icon: Lightbulb, theme: 'slate' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
 
-    cpo: { title: "Product Center", layers: [
+    cpo: { title: "Chief Product Officer", layers: [
         { id: 'roadmap', label: 'Product Roadmap', path: 'roadmap', icon: Map, theme: 'indigo' },
         { id: 'discovery', label: 'User Discovery', path: 'discovery', icon: Search, theme: 'indigo' },
         { id: 'design', label: 'Design System', path: 'design', icon: PenTool, theme: 'indigo' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
 
-    cdo: { title: "Data Center", layers: [
+    cdo: { title: "Chief Data Officer", layers: [
         { id: 'governance', label: 'Data Governance', path: 'governance', icon: Database, theme: 'purple' },
         { id: 'bi', label: 'Business Intelligence', path: 'bi', icon: BarChart, theme: 'purple' },
         { id: 'ml', label: 'Neural Modeling', path: 'ml', icon: Brain, theme: 'purple' }
