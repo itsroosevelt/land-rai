@@ -26,6 +26,7 @@ import { db } from '@/lib/firebase';
 import { toast } from 'sonner';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { resolveCardChannel } from '@/lib/omnichannel/resolveCardChannel';
 export default function KambanBoard() {
     const { currentUser, activeEntity } = useAuth();
     const getTenantPath = () => {
@@ -62,29 +63,10 @@ export default function KambanBoard() {
     return () => unsubscribe();
   }, [currentUser?.uid, activeEntity]);
 
-  const resolveCardChannel = (card: any) => {
-    const explicitChannel = String(card.channel || card.source || card.primary_channel || '').toLowerCase();
-
-    if (explicitChannel.includes('gmail')) return 'gmail';
-    if (explicitChannel.includes('instagram')) return 'instagram';
-    if (explicitChannel.includes('messenger') || explicitChannel.includes('facebook')) return 'messenger';
-    if (explicitChannel.includes('snapchat')) return 'snapchat';
-    if (explicitChannel.includes('telegram')) return 'telegram';
-    if (explicitChannel.includes('twitter') || explicitChannel.includes('x')) return 'x';
-    if (explicitChannel.includes('tiktok')) return 'tiktok';
-    if (explicitChannel.includes('web')) return 'web';
-    if (explicitChannel.includes('whatsapp') || explicitChannel === 'manual') return 'whatsapp';
-
-    if (card.platform === 'gmail' || card.metadata?.platform === 'gmail') return 'gmail';
-
-    if (card.platform_ids?.instagram) return 'instagram';
-    if (card.platform_ids?.messenger) return 'messenger';
-    if (card.platform_ids?.telegram) return 'telegram';
-    if (card.platform_ids?.whatsapp) return 'whatsapp';
-    if (card.metaSenderId) return 'messenger';
-    if (card.contactNumber) return 'whatsapp';
-
-    return 'others';
+  const resolveCardChannelForBoard = (card: any) => {
+    const ch = resolveCardChannel(card);
+    if (ch === 'instagram_comments') return 'instagram';
+    return ch;
   };
 
   const onAddGroup = async () => {
@@ -159,7 +141,7 @@ export default function KambanBoard() {
       snapchat: 0, x: 0, tiktok: 0, telegram: 0, gmail: 0, others: 0
     };
     cards.forEach(card => {
-      const channel = resolveCardChannel(card);
+      const channel = resolveCardChannelForBoard(card);
 
       if (channel === 'whatsapp') stats.whatsapp++;
       else if (channel === 'instagram') stats.instagram++;

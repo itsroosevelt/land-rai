@@ -13,6 +13,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { toast } from 'sonner';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { isInstagramCard, resolveCardChannel } from '@/lib/omnichannel/resolveCardChannel';
 export interface ConversationModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -329,10 +330,10 @@ export default function ConversationModal({
         <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 sm:py-10">
           <div className="flex items-center gap-3 flex-wrap mb-8">
             {(() => {
-              const c = (data.channel || data.source || '').toLowerCase();
-              if (c.includes('instagram')) return <Instagram size={18} className="text-pink-500" />;
-              if (c.includes('messenger') || c.includes('facebook')) return <Facebook size={18} className="text-blue-600" />;
-              if (c.includes('web')) return <Globe2 size={18} className="text-cyan-400" />;
+              const ch = resolveCardChannel(data);
+              if (isInstagramCard(data)) return <Instagram size={18} className="text-pink-500" />;
+              if (ch === 'messenger') return <Facebook size={18} className="text-blue-600" />;
+              if (ch === 'web') return <Globe2 size={18} className="text-cyan-400" />;
               return <MessageCircle size={18} className="text-emerald-500" />;
             })()}
 

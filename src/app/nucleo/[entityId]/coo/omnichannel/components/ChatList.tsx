@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, Filter, Clock, MessageCircle, ChevronDown, Check, Mic, Mail } from 'lucide-react';
 import WhatsappIcon from '@/components/icons/WhatsappIcon';
+import { isInstagramCard, resolveCardChannel, resolveOmnichannelBadge } from '@/lib/omnichannel/resolveCardChannel';
 
 interface ChatListProps {
     selectedFolder: string;
@@ -46,10 +47,7 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
                 return src.includes('whatsapp');
             });
         } else if (selectedFolder === 'instagram') {
-            filtered = filtered.filter(c => {
-                const src = (c.channel || c.source || c.primary_channel || '').toLowerCase();
-                return src.includes('instagram');
-            });
+            filtered = filtered.filter((c) => isInstagramCard(c));
         } else if (selectedFolder === 'messenger') {
             filtered = filtered.filter(c => {
                 const src = (c.channel || c.source || c.primary_channel || '').toLowerCase();
@@ -98,8 +96,16 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
         const uniqueMap = new Map<string, any>();
         filtered.forEach(c => {
             const phone = c.contactNumber || c.contactNumberClean;
-            const sourceKey = (c.source || c.channel || c.primary_channel || 'unknown').toLowerCase();
-            const idKey = phone ? phone.replace(/\D/g, '') : (c.platform_ids?.[sourceKey] || c.platform_ids?.messenger || c.external_id || c.id);
+            const resolved = resolveCardChannel(c);
+            const sourceKey = resolved === 'others' ? 'unknown' : resolved;
+            const idKey = phone
+                ? phone.replace(/\D/g, '')
+                : (c.platform_ids?.instagram ||
+                      c.platform_ids?.messenger ||
+                      c.platform_ids?.whatsapp ||
+                      c.metaSenderId ||
+                      c.external_id ||
+                      c.id);
             
             // KEY: Keep them separated by platform (Rule: Platform Isolation)
             const key = `${sourceKey}_${idKey}`;
@@ -141,16 +147,7 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
         return filtered.map(c => ({
             id: c.id,
             name: c.contactName || c.contactNumber || 'Desconocido',
-            channel: (() => {
-                const src = (c.channel || c.source || c.primary_channel || '').toLowerCase();
-                if (src.includes('gmail') || src.includes('email')) return 'gmail';
-                if (src.includes('instagram')) return 'instagram';
-                if (src.includes('messenger') || src.includes('facebook')) return 'messenger';
-                if (src.includes('telegram')) return 'telegram';
-                if (src.includes('x') || src.includes('twitter')) return 'twitter';
-                if (src.includes('whatsapp')) return 'whatsapp';
-                return 'whatsapp'; // Default
-            })(),
+            channel: resolveOmnichannelBadge(c),
             snippet: c.lastMessage || c.description || 'Nueva conversación',
             time: c.updatedAt ? (typeof c.updatedAt.toDate === 'function' ? c.updatedAt.toDate() : (c.updatedAt.seconds ? new Date(c.updatedAt.seconds * 1000) : new Date(c.updatedAt))).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'}) : 'Reciente',
             unread: c.unreadCount || 0,

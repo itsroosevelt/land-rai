@@ -9,6 +9,11 @@ export interface BotQueueItem {
     platform: string;
     from: string;
     timestamp: number;
+    metadata?: {
+        commentId?: string;
+        mediaId?: string;
+        mediaProductType?: string;
+    };
 }
 
 export function buildBotQueueItem(params: {
@@ -16,6 +21,7 @@ export function buildBotQueueItem(params: {
     messageId: string;
     platform: string;
     from: string;
+    metadata?: BotQueueItem['metadata'];
 }): BotQueueItem {
     return {
         text: params.text || '',
@@ -23,6 +29,7 @@ export function buildBotQueueItem(params: {
         platform: params.platform,
         from: params.from,
         timestamp: Date.now(),
+        ...(params.metadata ? { metadata: params.metadata } : {}),
     };
 }
 

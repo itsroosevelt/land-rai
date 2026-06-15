@@ -46,7 +46,7 @@ export async function POST(req: Request) {
         // We subscribe the page to the app so we receive real-time messages
         try {
             await axios.post(`https://graph.facebook.com/v21.0/${targetId}/subscribed_apps`, {
-                subscribed_fields: ['messages', 'messaging_postbacks', 'messaging_optins', 'message_deliveries', 'message_reads', 'feed'],
+                subscribed_fields: ['messages', 'messaging_postbacks', 'messaging_optins', 'message_deliveries', 'message_reads', 'feed', 'comments'],
                 access_token: permanentToken
             });
             console.log(`[exchange-token] ✅ Webhook subscribed for Page ${targetId}`);

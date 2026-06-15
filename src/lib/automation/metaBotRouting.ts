@@ -15,6 +15,7 @@ export function resolveMetaBotRouting(
     const isComment =
         !!changes &&
         (field === 'comments' ||
+            field === 'live_comments' ||
             field === 'feed' ||
             changes?.value?.item === 'comment' ||
             field === 'mentions');

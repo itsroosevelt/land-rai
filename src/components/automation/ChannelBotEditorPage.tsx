@@ -14,14 +14,14 @@ import {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
-import { ArrowLeft, Check, Cloud, Loader2, Save } from 'lucide-react';
+import { ArrowLeft, Check, Cloud, Instagram, Loader2, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatbotCanvas from '@/components/ChatbotCanvas';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import { BotChannelConfig } from '@/lib/automation/channels';
+import { useAutomationEntity } from '@/lib/automation/useAutomationEntity';
 import { normalizeTargetPlatforms } from '@/lib/automation/botActivation';
 
 interface ChannelBotEditorPageProps {
@@ -31,7 +31,7 @@ interface ChannelBotEditorPageProps {
 
 export function ChannelBotEditorPage({ channel, botId }: ChannelBotEditorPageProps) {
   const router = useRouter();
-  const { currentUser, activeEntity } = useAuth();
+  const { currentUser, entityId, authLoading, isReady } = useAutomationEntity();
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [chatbotName, setChatbotName] = useState('Cargando...');
@@ -40,25 +40,26 @@ export function ChannelBotEditorPage({ channel, botId }: ChannelBotEditorPagePro
   const [isLoading, setIsLoading] = useState(true);
   const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
   const Icon = channel.Icon;
-  const listHref = channel.listHref(activeEntity || '');
+  const listHref = channel.listHref(entityId || '');
 
-  const botDocRef = () =>
-    doc(db, 'users', currentUser!.uid, 'entities', activeEntity!, channel.collection, botId);
+  const botDocPath = () =>
+    doc(db, 'users', currentUser!.uid, 'entities', entityId, channel.collection, botId);
 
   const saveData = useCallback(
     async (currentNodes: Node[], currentEdges: Edge[], name: string) => {
-      if (!botId || !currentUser || !activeEntity) return;
+      if (!botId || !currentUser || !entityId) return;
       setSaveStatus('saving');
       try {
         const edgesToSave = currentEdges.map(({ selected, ...edge }) => ({ ...edge, type: 'custom' }));
         await setDoc(
-          botDocRef(),
+          botDocPath(),
           {
             name,
             channel: channel.slug,
             botType: channel.botType,
             targetPlatforms: [channel.enginePlatform],
             flow: { nodes: currentNodes, edges: edgesToSave },
+            updatedAt: new Date(),
           },
           { merge: true }
         );
@@ -67,53 +68,71 @@ export function ChannelBotEditorPage({ channel, botId }: ChannelBotEditorPagePro
       } catch (error) {
         console.error('Error al guardar:', error);
         setSaveStatus('error');
+        toast.error('Error al guardar el flujo.');
       }
     },
-    [botId, currentUser, activeEntity, channel]
+    [botId, currentUser, entityId, channel]
   );
 
   useEffect(() => {
+    if (authLoading) return;
+
     const load = async () => {
-      if (!botId || !currentUser || !activeEntity) {
+      if (!botId || !currentUser || !entityId) {
         setIsLoading(false);
         return;
       }
+
       setIsLoading(true);
-      const snap = await getDoc(botDocRef());
-      if (snap.exists()) {
-        const data = snap.data();
-        setChatbotName(data.name || `Bot ${channel.shortTitle}`);
-        setTargetPlatforms(normalizeTargetPlatforms(data.targetPlatforms) || [channel.enginePlatform]);
-        const flowData = data.flow || {};
-        setNodes(Array.isArray(flowData.nodes) ? flowData.nodes : []);
-        setEdges(
-          (flowData.edges || []).map(({ animated, style, ...edge }: any) => ({ ...edge, type: 'custom' }))
-        );
-      } else {
-        setChatbotName(`Nuevo bot ${channel.shortTitle}`);
-        const startNodes = [{ id: '1', type: 'startNode', position: { x: 250, y: 5 }, data: { label: 'Inicio' } }];
-        setNodes(startNodes);
-        setEdges([]);
-        await saveData(startNodes, [], `Nuevo bot ${channel.shortTitle}`);
+      try {
+        const snap = await getDoc(botDocPath());
+        if (snap.exists()) {
+          const data = snap.data();
+          setChatbotName(data.name || `Bot ${channel.shortTitle}`);
+          setTargetPlatforms(normalizeTargetPlatforms(data.targetPlatforms) || [channel.enginePlatform]);
+          const flowData = data.flow || {};
+          setNodes(Array.isArray(flowData.nodes) ? flowData.nodes : []);
+          setEdges(
+            (flowData.edges || []).map(({ animated, style, ...edge }: Edge & { animated?: boolean; style?: object }) => ({
+              ...edge,
+              type: 'custom',
+            }))
+          );
+        } else {
+          setChatbotName(`Nuevo bot ${channel.shortTitle}`);
+          const startNodes: Node[] = [
+            { id: '1', type: 'startNode', position: { x: 250, y: 5 }, data: { label: 'Inicio' } },
+          ];
+          setNodes(startNodes);
+          setEdges([]);
+          await saveData(startNodes, [], `Nuevo bot ${channel.shortTitle}`);
+        }
+      } catch (err) {
+        console.error('[ChannelBotEditorPage] load error:', err);
+        toast.error('No se pudo cargar el bot.');
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
+
     load();
-  }, [botId, currentUser, activeEntity, channel.slug]);
+  }, [botId, currentUser, entityId, authLoading, channel.slug, channel.collection]);
 
   useEffect(() => {
-    if (!botId || !currentUser || !activeEntity) return;
-    const unsubscribe = onSnapshot(botDocRef(), (snap) => {
+    if (!botId || !currentUser || !entityId) return;
+    const unsubscribe = onSnapshot(botDocPath(), (snap) => {
       if (!snap.exists()) return;
       const data = snap.data();
       setTargetPlatforms(normalizeTargetPlatforms(data.targetPlatforms) || [channel.enginePlatform]);
-      if (typeof data.name === 'string') setChatbotName((prev) => (prev === data.name ? prev : data.name));
+      if (typeof data.name === 'string') {
+        setChatbotName((prev) => (prev === data.name ? prev : data.name));
+      }
     });
     return () => unsubscribe();
-  }, [botId, currentUser, activeEntity, channel.collection]);
+  }, [botId, currentUser, entityId, channel.collection]);
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || !isReady) return;
     if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
     debounceTimeout.current = setTimeout(() => {
       if (nodes.length > 0 || edges.length > 0) saveData(nodes, edges, chatbotName);
@@ -121,7 +140,7 @@ export function ChannelBotEditorPage({ channel, botId }: ChannelBotEditorPagePro
     return () => {
       if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
     };
-  }, [nodes, edges, chatbotName, saveData, isLoading]);
+  }, [nodes, edges, chatbotName, saveData, isLoading, isReady]);
 
   const onNodesChange: OnNodesChange = useCallback((changes) => setNodes((nds) => applyNodeChanges(changes, nds)), []);
   const onEdgesChange: OnEdgesChange = useCallback((changes) => setEdges((eds) => applyEdgeChanges(changes, eds)), []);
@@ -130,10 +149,22 @@ export function ChannelBotEditorPage({ channel, botId }: ChannelBotEditorPagePro
     []
   );
 
-  if (isLoading) {
+  if (authLoading || isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-neutral-900 text-white">
+      <div className="flex flex-col items-center justify-center h-screen bg-neutral-900 text-white gap-3">
         <Loader2 className="w-12 h-12 animate-spin text-neutral-500" />
+        <p className="text-[10px] uppercase tracking-widest text-neutral-500">
+          {authLoading ? 'Validando sesión…' : 'Cargando editor…'}
+        </p>
+      </div>
+    );
+  }
+
+  if (!isReady) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-neutral-900 text-white gap-4 p-6">
+        <p className="text-sm text-neutral-400">No se pudo abrir el editor.</p>
+        <Button onClick={() => router.push(listHref)}>Volver a bots</Button>
       </div>
     );
   }
@@ -145,7 +176,7 @@ export function ChannelBotEditorPage({ channel, botId }: ChannelBotEditorPagePro
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => activeEntity && router.push(listHref)}
+            onClick={() => router.push(listHref)}
             className="text-neutral-400 hover:text-white"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -158,7 +189,19 @@ export function ChannelBotEditorPage({ channel, botId }: ChannelBotEditorPagePro
             onChange={(e) => setChatbotName(e.target.value)}
             className="bg-transparent border-transparent text-lg font-medium text-white w-[280px] h-9"
           />
-          <span className="text-[10px] text-neutral-500 uppercase tracking-widest">{channel.shortTitle}</span>
+          <span className="text-[10px] text-neutral-500 uppercase tracking-widest hidden sm:inline">
+            {channel.shortTitle}
+          </span>
+          {channel.enginePlatform === 'instagram' && (
+            <span className="hidden md:flex items-center gap-1 text-[9px] text-pink-400/80 uppercase tracking-wider">
+              <Instagram className="w-3 h-3" /> Solo DMs · sin botones nativos
+            </span>
+          )}
+          {channel.enginePlatform === 'instagram_comments' && (
+            <span className="hidden md:flex items-center gap-1 text-[9px] text-orange-400/80 uppercase tracking-wider">
+              <Instagram className="w-3 h-3" /> Respuestas públicas a comentarios
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-3 text-sm">
           {saveStatus === 'saving' && (

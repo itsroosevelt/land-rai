@@ -245,6 +245,65 @@ export async function sendMetaMessage(
     }
 }
 
+/** Reply publicly to an Instagram comment (Graph API). Uses integrations/instagram token. */
+export async function sendInstagramCommentReply(
+    commentId: string,
+    text: string,
+    options: { userId?: string; entityId?: string } = {}
+): Promise<any> {
+    if (!commentId || !text?.trim()) {
+        throw new Error('commentId and text are required for Instagram comment replies.');
+    }
+
+    let token: string | undefined;
+    if (options.userId && options.entityId) {
+        const configDoc = await db.doc(`users/${options.userId}/entities/${options.entityId}/integrations/instagram`).get();
+        if (configDoc.exists) {
+            const data = configDoc.data();
+            token = data?.accessToken || data?.pageAccessToken || data?.token;
+        }
+    }
+
+    if (!token) {
+        throw new Error('Instagram access token not found. Reconnect in CTO → Integraciones.');
+    }
+
+    const apiUrl = `https://graph.facebook.com/v21.0/${commentId}/replies`;
+    try {
+        const response = await axios.post(
+            apiUrl,
+            { message: text },
+            { params: { access_token: token } }
+        );
+
+        return {
+            ...response.data,
+            comment_id: response.data.id,
+            repliedTo: commentId,
+        };
+    } catch (error: any) {
+        const metaError = error.response?.data?.error;
+        const detail = metaError?.message || error.message;
+        console.error('[sendInstagramCommentReply] Failed:', metaError || detail);
+
+        if (options.userId && options.entityId) {
+            try {
+                await db.collection(`users/${options.userId}/entities/${options.entityId}/internal_logs`).add({
+                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                    type: 'instagram_comment_reply_error',
+                    commentId,
+                    error: detail,
+                    code: metaError?.code || null,
+                });
+            } catch (logErr) {
+                console.error('[sendInstagramCommentReply] Failed to log error:', logErr);
+            }
+        }
+
+        throw new Error(`Instagram comment reply failed: ${detail}`);
+    }
+}
+
 // --- WhatsApp Business Cloud API (Multi-Tenant Aware) ---
 
 interface WhatsAppSendOptions {

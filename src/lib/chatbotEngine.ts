@@ -1,5 +1,5 @@
 import { admin, db } from './firebase-admin';
-import { sendMetaMessage, sendWhatsAppMessage, sendTelegramMessage, sendGmailMessage } from './sendProviders';
+import { sendMetaMessage, sendWhatsAppMessage, sendTelegramMessage, sendGmailMessage, sendInstagramCommentReply } from './sendProviders';
 import {
     buildWhatsAppQuickReplyButtons,
     buildWhatsAppListSections,
@@ -246,7 +246,15 @@ async function runEngineCycle(
         if (platform === 'messenger' || platform === 'facebook_comments') {
             return await sendMetaMessage(from, content, { ...opts, provider: 'messenger' });
         }
-        if (platform === 'instagram' || platform === 'instagram_comments') {
+        if (platform === 'instagram_comments') {
+            const commentId = msg.metadata?.commentId || cardData?.botState?.lastCommentId;
+            if (!commentId) {
+                console.warn('[ChatbotEngine] instagram_comments reply skipped — missing commentId in queue metadata.');
+                return { skipped: true, reason: 'missing_comment_id' };
+            }
+            return await sendInstagramCommentReply(commentId, content, { userId, entityId });
+        }
+        if (platform === 'instagram') {
             return await sendMetaMessage(from, content, { ...opts, provider: 'instagram' });
         }
         if (platform === 'telegram') return await sendTelegramMessage(from, content, opts);
@@ -390,6 +398,7 @@ async function runEngineCycle(
         const aliases: Record<string, string[]> = {
             'whatsapp': ['wa', 'wpp', 'whatsapp cloud'],
             'instagram': ['ig', 'insta'],
+            'instagram_comments': ['ig', 'insta', 'instagram_comments'],
             'messenger': ['fb', 'facebook', 'msg'],
             'telegram': ['tg', 'tele'],
             'x_twitter': ['x', 'twitter'],

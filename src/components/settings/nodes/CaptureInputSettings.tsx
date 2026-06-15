@@ -1,8 +1,8 @@
 // src/components/settings/nodes/CaptureInputSettings.tsx
 'use client';
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { Node } from 'reactflow';
+import { Edge, Node } from 'reactflow';
 import { produce } from 'immer';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,8 +11,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SettingsSection, Field } from '../SharedComponents';
 import { Clock, AlertTriangle, CornerDownRight, ShieldAlert } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import {
+    CAPTURE_VARIABLE_PRESETS,
+    findCapturePresetById,
+    findCapturePresetByVariable,
+} from '@/lib/flowCapturePresets';
 
 interface CaptureInputData {
+    label?: string;
     variableName?: string;
     inputType?: string; // 'text', 'email', 'phone', 'date', 'url', 'number', 'regex', 'image', 'document'
     validationRegex?: string;
@@ -22,11 +28,13 @@ interface CaptureInputData {
     timeoutMessage?: string;
     exitKeywords?: string;
     isMedia?: boolean;
+    capturePresetId?: string;
 }
 
 interface NodeSettingsProps {
     node: Node<CaptureInputData>;
     allNodes: Node[];
+    allEdges?: Edge[];
     updateNodeConfig: (nodeId: string, data: object) => void;
 }
 
@@ -40,8 +48,88 @@ const REGEX_TEMPLATES: Record<string, string> = {
 };
 
 export const CaptureInputSettings = ({ node, allNodes, updateNodeConfig }: NodeSettingsProps) => {
-    // Estado inicial seguro
     const data = node.data || {};
+
+    const flowCaptures = useMemo(
+        () =>
+            allNodes
+                .filter(
+                    (n) =>
+                        n.id !== node.id &&
+                        n.type === 'captureInputNode' &&
+                        n.data?.variableName
+                )
+                .map((n) => ({
+                    nodeId: n.id,
+                    variableName: String(n.data.variableName),
+                    label: n.data?.label || n.data.variableName,
+                })),
+        [allNodes, node.id]
+    );
+
+    const matchedPreset = findCapturePresetByVariable(data.variableName || '');
+    const reuseCapture = flowCaptures.find(
+        (c) => c.variableName === data.variableName && !matchedPreset
+    );
+    const selectValue =
+        matchedPreset?.id ||
+        (reuseCapture ? `reuse-${reuseCapture.variableName}` : '') ||
+        (data.variableName ? 'custom' : '');
+
+    const applyPreset = useCallback(
+        (presetId: string) => {
+            if (presetId === 'custom') {
+                updateNodeConfig(
+                    node.id,
+                    produce(data, (draft) => {
+                        draft.capturePresetId = 'custom';
+                    })
+                );
+                return;
+            }
+
+            if (presetId.startsWith('reuse-')) {
+                const varName = presetId.replace('reuse-', '');
+                const sourceNode = allNodes.find(
+                    (n) =>
+                        n.type === 'captureInputNode' &&
+                        String(n.data?.variableName) === varName
+                );
+                if (sourceNode?.data) {
+                    const src = sourceNode.data;
+                    updateNodeConfig(
+                        node.id,
+                        produce(data, (draft) => {
+                            draft.capturePresetId = presetId;
+                            draft.variableName = varName;
+                            draft.inputType = src.inputType || 'text';
+                            draft.isMedia = src.isMedia;
+                            draft.validationRegex = src.validationRegex || '';
+                            draft.errorMessage = src.errorMessage || '';
+                        })
+                    );
+                }
+                return;
+            }
+
+            const preset = findCapturePresetById(presetId);
+            if (!preset) return;
+            const isMedia = ['image', 'document', 'audio', 'video'].includes(preset.inputType);
+            updateNodeConfig(
+                node.id,
+                produce(data, (draft) => {
+                    draft.capturePresetId = preset.id;
+                    draft.variableName = preset.variableName;
+                    draft.inputType = preset.inputType;
+                    draft.isMedia = isMedia;
+                    draft.validationRegex = preset.validationRegex || REGEX_TEMPLATES[preset.inputType] || '';
+                    draft.errorMessage = preset.errorMessage || '';
+                    if (!draft.label) draft.label = preset.label;
+                })
+            );
+        },
+        [allNodes, data, node.id, updateNodeConfig]
+    );
 
     // Función centralizada de actualización con Immer
     const updateConfig = useCallback((path: keyof CaptureInputData, value: any) => {
@@ -92,31 +180,76 @@ export const CaptureInputSettings = ({ node, allNodes, updateNodeConfig }: NodeS
                 <TabsContent value="validation" className="space-y-4 mt-4">
                     <SettingsSection title="📦 Almacenamiento">
                         <Field
-                            label="Nombre de la Variable"
-                            htmlFor="variableName"
-                            description="Se utilizará para recuperar el dato en otros nodos."
+                            label="¿Qué dato capturar?"
+                            htmlFor="capturePreset"
+                            description="Elige una plantilla. Se configura sola la variable y validación."
                         >
-                            <div className="space-y-1.5 flex flex-col">
-                                <div className="relative">
-                                    <span className="absolute left-3 top-2.5 text-neutral-500 font-mono text-xs">@</span>
-                                    <Input
-                                        id="variableName"
-                                        value={data.variableName || ''}
-                                        onChange={(e) => updateConfig('variableName', e.target.value)}
-                                        placeholder="ej: email_cliente"
-                                        className={cn(
-                                            "pl-7 font-mono text-purple-400 bg-neutral-900/20 border-neutral-800/50 focus:border-purple-500/50",
-                                            varError && "border-red-500/50 focus:border-red-500/50 text-red-400"
-                                        )}
-                                    />
-                                </div>
-                                {varError && (
-                                    <span className="text-[10px] text-red-500 font-bold uppercase tracking-tight ml-1 animate-in fade-in slide-in-from-top-1 duration-200">
-                                        ⚠️ {varError}
-                                    </span>
-                                )}
-                            </div>
+                            <Select value={selectValue || undefined} onValueChange={applyPreset}>
+                                <SelectTrigger id="capturePreset" className="bg-neutral-950 border-neutral-800">
+                                    <SelectValue placeholder="Selecciona captura…" />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-[320px]">
+                                    {CAPTURE_VARIABLE_PRESETS.map((preset) => (
+                                        <SelectItem key={preset.id} value={preset.id}>
+                                            <span className="font-medium">{preset.label}</span>
+                                            <span className="ml-2 font-mono text-[10px] text-neutral-500">@{preset.variableName}</span>
+                                        </SelectItem>
+                                    ))}
+                                    {flowCaptures.map((cap) => (
+                                        <SelectItem key={`flow-${cap.nodeId}`} value={`reuse-${cap.variableName}`}>
+                                            <span className="text-neutral-400">En flujo:</span>{' '}
+                                            {cap.label}{' '}
+                                            <span className="font-mono text-[10px]">@{cap.variableName}</span>
+                                        </SelectItem>
+                                    ))}
+                                    <Separator className="my-1 bg-neutral-800" />
+                                    <SelectItem value="custom">✏️ Personalizado…</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </Field>
+
+                        {(selectValue === 'custom' || (!matchedPreset && data.variableName)) && (
+                            <Field
+                                label="Nombre personalizado"
+                                htmlFor="variableName"
+                                description="Solo si elegiste Personalizado."
+                            >
+                                <div className="space-y-1.5 flex flex-col">
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-2.5 text-neutral-500 font-mono text-xs">@</span>
+                                        <Input
+                                            id="variableName"
+                                            value={data.variableName || ''}
+                                            onChange={(e) =>
+                                                updateConfig(
+                                                    'variableName',
+                                                    e.target.value.replace(/\s+/g, '_').toLowerCase()
+                                                )
+                                            }
+                                            placeholder="ej: codigo_promo"
+                                            className={cn(
+                                                'pl-7 font-mono text-purple-400 bg-neutral-900/20 border-neutral-800/50 focus:border-purple-500/50',
+                                                varError && 'border-red-500/50 focus:border-red-500/50 text-red-400'
+                                            )}
+                                        />
+                                    </div>
+                                    {varError && (
+                                        <span className="text-[10px] text-red-500 font-bold uppercase tracking-tight ml-1">
+                                            ⚠️ {varError}
+                                        </span>
+                                    )}
+                                </div>
+                            </Field>
+                        )}
+
+                        {matchedPreset && selectValue !== 'custom' && (
+                            <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-2 text-[10px] text-purple-200/90">
+                                Guardará en{' '}
+                                <span className="font-mono text-purple-300">@{matchedPreset.variableName}</span>
+                                {' · '}
+                                {matchedPreset.description}
+                            </div>
+                        )}
                     </SettingsSection>
 
                     <SettingsSection title="🛡️ Reglas de Entrada">

@@ -26,6 +26,17 @@ const InstagramModal: React.FC<InstagramModalProps> = ({ isOpen, onClose, active
     const [availablePages, setAvailablePages] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [userToken, setUserToken] = useState<string | null>(null);
+    const [showManualConnect, setShowManualConnect] = useState(false);
+    const [manualPageToken, setManualPageToken] = useState('');
+    const [manualPageId, setManualPageId] = useState('');
+    const [manualInstagramId, setManualInstagramId] = useState('');
+    const [manualLoading, setManualLoading] = useState(false);
+
+    const isSecureContext = typeof window !== 'undefined' && window.location.protocol === 'https:';
+    const isLocalHttp =
+        typeof window !== 'undefined' &&
+        window.location.protocol === 'http:' &&
+        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
     const userId = currentUser?.uid;
     const entityId = activeEntity?.id || activeEntity;
@@ -49,11 +60,26 @@ const InstagramModal: React.FC<InstagramModalProps> = ({ isOpen, onClose, active
     }, [userId, entityId]);
 
     const handleConnectInstagram = async () => {
+        if (isLocalHttp) {
+            toast.error(
+                'Facebook Login requiere HTTPS. Usa https://www.byroosevelt.com/.../integrations o la conexión manual abajo.',
+                { duration: 8000 }
+            );
+            setShowManualConnect(true);
+            return;
+        }
+
         const toastId = toast.loading("Conectando con Facebook...");
         try {
             // @ts-ignore
             if (!window.FB) {
-                toast.error("Facebook SDK no cargado.", { id: toastId });
+                toast.error("Facebook SDK no cargado. Configura NEXT_PUBLIC_META_APP_ID.", { id: toastId });
+                return;
+            }
+
+            const appId = process.env.NEXT_PUBLIC_META_APP_ID;
+            if (!appId) {
+                toast.error("NEXT_PUBLIC_META_APP_ID no está configurado en el servidor.", { id: toastId });
                 return;
             }
 
@@ -65,11 +91,54 @@ const InstagramModal: React.FC<InstagramModalProps> = ({ isOpen, onClose, active
                 } else {
                     toast.error("Conexión cancelada.", { id: toastId });
                 }
-            }, { scope: 'instagram_basic,instagram_manage_messages,pages_show_list,pages_read_engagement' });
+            }, { scope: 'instagram_basic,instagram_manage_messages,instagram_manage_comments,pages_show_list,pages_read_engagement,pages_manage_metadata' });
 
         } catch (error) {
             console.error("Instagram Login Error:", error);
             toast.error("Error al conectar.", { id: toastId });
+        }
+    };
+
+    const handleManualConnect = async () => {
+        if (!userId || !entityId || !manualPageToken.trim()) {
+            toast.error('Pega el Page Access Token.');
+            return;
+        }
+
+        setManualLoading(true);
+        const toastId = toast.loading('Validando token con Meta...');
+        try {
+            const res = await fetch('/api/meta/connect-instagram-manual', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId,
+                    entityId,
+                    pageAccessToken: manualPageToken.trim(),
+                    pageId: manualPageId.trim() || undefined,
+                    instagramId: manualInstagramId.trim() || undefined,
+                }),
+            });
+            const data = await res.json();
+
+            if (!res.ok) {
+                if (data.pages?.length) {
+                    toast.error(`${data.message}`, { id: toastId, duration: 6000 });
+                } else {
+                    toast.error(data.details || data.error || 'Error al conectar.', { id: toastId, duration: 6000 });
+                }
+                return;
+            }
+
+            toast.success(`Instagram @${data.username || data.instagramId} conectado.`, { id: toastId });
+            setShowManualConnect(false);
+            setManualPageToken('');
+            setManualPageId('');
+            setManualInstagramId('');
+        } catch {
+            toast.error('Error de red al conectar.', { id: toastId });
+        } finally {
+            setManualLoading(false);
         }
     };
 
@@ -247,10 +316,88 @@ const InstagramModal: React.FC<InstagramModalProps> = ({ isOpen, onClose, active
                                                         <p className="text-[13px] md:text-[15px] text-white/70 font-normal mt-1 md:mt-2 leading-relaxed">Asegúrate de que tu cuenta esté vinculada a una Fanpage de Facebook.</p>
                                                     </div>
                                                 </div>
+
+                                                {isLocalHttp && (
+                                                    <div className="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-left">
+                                                        <p className="text-[11px] text-amber-100/90 leading-relaxed">
+                                                            <strong>Estás en localhost (HTTP).</strong> Meta no permite FB.login sin HTTPS.
+                                                            Opciones: conectar en{' '}
+                                                            <a
+                                                                href={`https://www.byroosevelt.com/nucleo/${entityId}/cto/integrations`}
+                                                                className="underline text-amber-200"
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                            >
+                                                                producción (byroosevelt.com)
+                                                            </a>{' '}
+                                                            o usar conexión manual abajo.
+                                                        </p>
+                                                    </div>
+                                                )}
+
+                                                {!isSecureContext && !isLocalHttp && (
+                                                    <div className="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-left">
+                                                        <p className="text-[11px] text-amber-100/90">
+                                                            Esta página no usa HTTPS. El botón de Facebook puede fallar. Usa conexión manual o abre el sitio con https://
+                                                        </p>
+                                                    </div>
+                                                )}
         
-                                                <button onClick={handleConnectInstagram} className="w-full h-14 md:h-16 bg-gradient-to-r from-[#FFDC80] via-[#E1306C] to-[#405DE6] text-white text-[10px] md:text-xs font-bold uppercase tracking-[0.3em] rounded-full transition-all shadow-[0_0_40px_rgba(225,48,108,0.2)]">
-                                                    CONTINUAR VINCULACIÓN
+                                                <button
+                                                    onClick={handleConnectInstagram}
+                                                    disabled={isLocalHttp}
+                                                    className="w-full h-14 md:h-16 bg-gradient-to-r from-[#FFDC80] via-[#E1306C] to-[#405DE6] text-white text-[10px] md:text-xs font-bold uppercase tracking-[0.3em] rounded-full transition-all shadow-[0_0_40px_rgba(225,48,108,0.2)] disabled:opacity-40 disabled:cursor-not-allowed"
+                                                >
+                                                    {isLocalHttp ? 'LOGIN FB — SOLO EN HTTPS' : 'CONTINUAR VINCULACIÓN'}
                                                 </button>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowManualConnect((v) => !v)}
+                                                    className="mt-4 w-full text-[9px] text-white/40 hover:text-white uppercase tracking-widest font-bold transition-colors"
+                                                >
+                                                    {showManualConnect ? 'Ocultar conexión manual' : 'Conexión manual (Page Access Token)'}
+                                                </button>
+
+                                                {showManualConnect && (
+                                                    <div className="mt-4 space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-left">
+                                                        <p className="text-[10px] text-white/50 leading-relaxed">
+                                                            Opción A — Token <strong>IGAAP…</strong> de Meta → Instagram → Generar token:
+                                                            pega el token y el Instagram ID (<strong>17841447647402430</strong> para @_udreamms).
+                                                            <br /><br />
+                                                            Opción B — Token <strong>EAA…</strong> (Page Access Token) de Graph API Explorer.
+                                                        </p>
+                                                        <input
+                                                            type="password"
+                                                            value={manualPageToken}
+                                                            onChange={(e) => setManualPageToken(e.target.value)}
+                                                            placeholder="Token (IGAAP… o EAA…)"
+                                                            className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-xs text-white placeholder:text-white/30"
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            value={manualInstagramId}
+                                                            onChange={(e) => setManualInstagramId(e.target.value)}
+                                                            placeholder="Instagram ID (ej. 17841447647402430) — obligatorio si token IGAAP"
+                                                            className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-xs text-white placeholder:text-white/30"
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            value={manualPageId}
+                                                            onChange={(e) => setManualPageId(e.target.value)}
+                                                            placeholder="Page ID (opcional si solo tienes una página)"
+                                                            className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-xs text-white placeholder:text-white/30"
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleManualConnect}
+                                                            disabled={manualLoading}
+                                                            className="w-full h-11 rounded-full bg-white/10 border border-white/20 text-[10px] font-bold uppercase tracking-widest text-white hover:bg-white/15 disabled:opacity-50"
+                                                        >
+                                                            {manualLoading ? 'Validando…' : 'Conectar con token'}
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </>
                                         )}
                                     </motion.div>

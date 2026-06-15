@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { countryData } from '@/lib/utils';
+import { resolveCardChannel } from '@/lib/omnichannel/resolveCardChannel';
 import {
   Dialog,
   DialogContent,
@@ -222,22 +223,10 @@ const Card = ({ card, groupId, onClick, cardColor = 'bg-neutral-800', contacts =
     return normalized === 'usuario meta' || normalized === 'usuario' || normalized === 'instagram user';
   };
 
-  const resolveCardChannel = () => {
-    const c = String(card.channel || card.source || card.primary_channel || '').toLowerCase();
-    if (c.includes('instagram')) return 'instagram';
-    if (c.includes('messenger') || c.includes('facebook')) return 'messenger';
-    if (c.includes('web')) return 'web';
-    if (c.includes('telegram')) return 'telegram';
-    if (c.includes('x') || c.includes('twitter')) return 'x';
-    if (c.includes('tiktok')) return 'tiktok';
-    if (c.includes('gmail')) return 'gmail';
-    if (c.includes('whatsapp') || c === 'manual') return 'whatsapp';
-    if (card.platform_ids?.instagram) return 'instagram';
-    if (card.platform_ids?.messenger || card.metaSenderId) return 'messenger';
-    if (card.platform_ids?.telegram) return 'telegram';
-    if (card.platform_ids?.whatsapp || card.contactNumber) return 'whatsapp';
-    if (card.platform === 'gmail' || card.metadata?.platform === 'gmail') return 'gmail';
-    return 'whatsapp';
+  const resolveCardChannelLocal = () => {
+    const ch = resolveCardChannel(card);
+    if (ch === 'instagram_comments') return 'instagram';
+    return ch;
   };
 
   const resolveDisplayName = () => {
@@ -273,7 +262,7 @@ const Card = ({ card, groupId, onClick, cardColor = 'bg-neutral-800', contacts =
     return 'border-emerald-500';
   };
 
-  const resolvedChannel = resolveCardChannel();
+  const resolvedChannel = resolveCardChannelLocal();
   const channelColorClass = getChannelColor(resolvedChannel);
 
   return (

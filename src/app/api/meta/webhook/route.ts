@@ -3,6 +3,7 @@ import { db, admin } from '@/lib/firebase-admin';
 import { processChatbotFlow } from '@/lib/chatbotEngine';
 import { buildBotQueueItem, createQueuedBotState, isDuplicateQueueMessage } from '@/lib/botQueue';
 import { resolveMetaBotRouting } from '@/lib/automation/metaBotRouting';
+import { isMetaCommentChange, parseMetaChange } from '@/lib/automation/metaWebhookHelpers';
 
 import fs from 'fs';
 
@@ -71,23 +72,46 @@ export async function POST(req: Request) {
         const objectType = body.object;
         const targetId = entry.id; 
         const messaging = entry.messaging?.[0];
-        const changes = entry.changes?.[0];
+        const allChanges = entry.changes || [];
+        const changes = allChanges.find((c: { field?: string; value?: Record<string, unknown> }) => isMetaCommentChange(c)) || allChanges[0];
+        const parsedChange = changes ? parseMetaChange(changes) : null;
+        const isCommentWebhook = !!parsedChange?.isComment;
 
         if (!messaging && !changes) {
             return NextResponse.json({ success: true, ignored: 'no_data' });
         }
 
-        const senderId = messaging?.sender?.id || changes?.value?.from?.id;
-        if (!senderId) return NextResponse.json({ success: true, ignored: 'no_sender' });
+        const senderId =
+            messaging?.sender?.id ||
+            parsedChange?.senderId ||
+            (changes?.value?.from && typeof changes.value.from === 'object'
+                ? String((changes.value.from as { id?: string }).id || '')
+                : null);
 
-        if (senderId === targetId || senderId === entry.id) {
+        if (!senderId) {
+            return NextResponse.json({
+                success: true,
+                ignored: 'no_sender',
+                field: changes?.field || null,
+                objectType,
+            });
+        }
+
+        // Do not drop Instagram/Facebook comment webhooks — only filter echo on DM/messaging.
+        if (!isCommentWebhook && (senderId === targetId || senderId === entry.id)) {
              return NextResponse.json({ success: true, ignored: 'self_echo' });
         }
 
         const rawAttachments = messaging?.message?.attachments || [];
         const firstAttachment = rawAttachments[0];
         const quickReplyPayload = messaging?.message?.quick_reply?.payload || '';
-        const visibleMessageText = messaging?.message?.text || messaging?.postback?.title || changes?.value?.text || changes?.value?.message || '';
+        const visibleMessageText =
+            messaging?.message?.text ||
+            messaging?.postback?.title ||
+            parsedChange?.text ||
+            changes?.value?.text ||
+            changes?.value?.message ||
+            '';
         const botInputText = quickReplyPayload || messaging?.postback?.payload || visibleMessageText;
         
         let text = '';
@@ -131,7 +155,22 @@ export async function POST(req: Request) {
             provider = selectedMatch.provider as 'instagram' | 'messenger';
         }
 
-        if (!tenantRef) return NextResponse.json({ success: true, ignored: 'unmapped_tenant' });
+        if (!tenantRef) {
+            console.warn('[Meta Webhook] unmapped_tenant', {
+                objectType,
+                targetId,
+                field: changes?.field,
+                senderId,
+                isCommentWebhook,
+            });
+            return NextResponse.json({
+                success: true,
+                ignored: 'unmapped_tenant',
+                objectType,
+                targetId,
+                field: changes?.field || null,
+            });
+        }
 
         const pathParts = tenantRef!.path.split('/');
         const userId = pathParts[1];
@@ -139,16 +178,33 @@ export async function POST(req: Request) {
         const entityPath = `users/${userId}/entities/${entityId}`;
         entityPathForError = entityPath;
 
+        const botRouting = resolveMetaBotRouting(objectType, provider, changes);
+        const enginePlatform = botRouting.platform;
+        const isCommentEvent = enginePlatform.includes('_comments');
+        const commentId = parsedChange?.commentId || null;
+        const mediaId = parsedChange?.mediaId || null;
+        const channelKey = isCommentEvent ? enginePlatform : provider.toLowerCase();
+        const sourceLabel = isCommentEvent
+            ? (provider === 'instagram' ? 'INSTAGRAM_COMMENT' : 'FACEBOOK_COMMENT')
+            : provider.toUpperCase();
+
         // INICIALIZAR LOGS DE RASTREO
         const logRef = await db.collection(`${entityPath}/internal_logs`).add({
             timestamp: admin.firestore.FieldValue.serverTimestamp(),
             type: `${provider}_webhook_hit`,
             senderId,
+            field: changes?.field || null,
+            isCommentWebhook,
+            commentId,
             step: 'init'
         });
 
         // DEDUPLICATION
-        const messageId = messaging?.message?.mid || changes?.message_id || `temp_${Date.now()}_${senderId}`;
+        const messageId =
+            messaging?.message?.mid ||
+            parsedChange?.messageId ||
+            changes?.message_id ||
+            `temp_${Date.now()}_${senderId}`;
         const dedupRef = db.doc(`${entityPath}/processed_messages/${messageId}`);
         const isDuplicate = await db.runTransaction(async (t) => {
             const snap = await t.get(dedupRef);
@@ -227,7 +283,8 @@ export async function POST(req: Request) {
             text: text,
             timestamp: admin.firestore.Timestamp.now(),
             messageId: messageId,
-            platform: provider,
+            platform: channelKey,
+            ...(commentId ? { metadata: { commentId, mediaId } } : {}),
             ...(firstAttachment ? {
                 fileUrl: firstAttachment?.payload?.url || null,
                 fileType: firstAttachment?.type === 'image' ? 'image/*' : firstAttachment?.type === 'video' ? 'video/*' : firstAttachment?.type === 'audio' ? 'audio/*' : 'application/octet-stream',
@@ -244,8 +301,9 @@ export async function POST(req: Request) {
             const queueItem = buildBotQueueItem({
                 text: botInputText || text || '',
                 messageId: messageId || `meta_${Date.now()}`,
-                platform: provider,
+                platform: enginePlatform,
                 from: senderId,
+                ...(commentId ? { metadata: { commentId, ...(mediaId ? { mediaId } : {}), ...(changes?.value?.media?.media_product_type ? { mediaProductType: changes.value.media.media_product_type } : {}) } } : {}),
             });
             const alreadyQueued = isDuplicateQueueMessage(targetCardDoc.data(), messageId);
             const cardUpdate: any = {
@@ -255,10 +313,17 @@ export async function POST(req: Request) {
                 messages: admin.firestore.FieldValue.arrayUnion(newMessage),
                 'botState.engine': 'queue',
                 status: 'open',
-                [`platform_ids.${provider.toLowerCase()}`]: senderId
+                channel: channelKey,
+                primary_channel: channelKey,
+                source: sourceLabel,
+                metaSenderId: senderId,
+                [`platform_ids.${provider.toLowerCase()}`]: senderId,
             };
             if (!alreadyQueued) {
                 cardUpdate['botState.messageQueue'] = admin.firestore.FieldValue.arrayUnion(queueItem);
+            }
+            if (commentId) {
+                cardUpdate['botState.lastCommentId'] = commentId;
             }
             if (!targetCardDoc.data()?.contactName || isGenericProfileName(targetCardDoc.data()?.contactName)) cardUpdate.contactName = finalResolvedName;
 
@@ -280,8 +345,9 @@ export async function POST(req: Request) {
             const queueItem = buildBotQueueItem({
                 text: botInputText || text || '',
                 messageId: messageId || `meta_${Date.now()}`,
-                platform: provider,
+                platform: enginePlatform,
                 from: senderId,
+                ...(commentId ? { metadata: { commentId, ...(mediaId ? { mediaId } : {}), ...(changes?.value?.media?.media_product_type ? { mediaProductType: changes.value.media.media_product_type } : {}) } } : {}),
             });
 
             await newCardRef.set({
@@ -294,12 +360,15 @@ export async function POST(req: Request) {
                 updatedAt: admin.firestore.Timestamp.now(),
                 createdAt: admin.firestore.Timestamp.now(),
                 messages: [newMessage],
-                botState: createQueuedBotState(queueItem),
+                botState: {
+                    ...createQueuedBotState(queueItem),
+                    ...(commentId ? { lastCommentId: commentId } : {}),
+                },
                 unreadCount: 1,
                 status: 'open',
-                source: provider.toUpperCase(),
-                primary_channel: provider.toLowerCase(),
-                channel: provider.toLowerCase(),
+                source: sourceLabel,
+                primary_channel: channelKey,
+                channel: channelKey,
                 platform_ids: { [provider.toLowerCase()]: senderId }
             });
 
@@ -321,13 +390,12 @@ export async function POST(req: Request) {
 
         if (groupId && cardId) {
             try {
-                const botRouting = resolveMetaBotRouting(objectType, provider, changes);
                 await processChatbotFlow({
                     userId,
                     entityId,
                     groupId,
                     cardId,
-                    platform: botRouting.platform as 'messenger' | 'instagram',
+                    platform: enginePlatform as any,
                     from: senderId,
                     text: botInputText || text,
                     messageId,
