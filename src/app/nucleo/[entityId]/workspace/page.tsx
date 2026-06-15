@@ -15,11 +15,13 @@ import ReactFlow, {
     MiniMap,
     Controls,
     Handle,
-    BackgroundVariant
+    BackgroundVariant,
+    ReactFlowProvider,
+    useReactFlow
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import {
-    FileCheck, Scale, MessageSquare, TrendingUp, FileText, Megaphone, Cpu, Activity, Package, BookOpen, Contact, Brain, Users, Search, Award, Truck, Settings, Layout, Building, PieChart, Gavel, Coffee, Lightbulb, Briefcase, Share2, Server, Network, LifeBuoy, Calendar, Code2, Database, UserPlus, Globe, Shield, PenTool, Lock, Rocket, Landmark, Bot, Layers, ShieldAlert, CreditCard, Heart, Crown, GraduationCap, Target, BarChart, Send, Zap, DollarSign, ChevronDown, Handshake, Fingerprint, Key, Sun, Phone, Smartphone, ShoppingBag, Globe2, Terminal, Workflow, ZapOff, Anchor, Bell, Box, CheckCircle, Clipboard, Compass, Eye, Filter, Gift, HelpCircle, Image, Link, List, Mail, Map, MapPin, Mic, Moon, MousePointer, Music, Navigation, Paperclip, Play, Plus, Power, Printer, Radio, Save, Scissors, Share, Star, Table, Tag, Thermometer, ThumbsUp, Trash, Video, Volume2, Watch, Wifi, Wind, Smile, X, Edit3, Move, ExternalLink, Grid3X3, Square, ShieldCheck, BriefcaseIcon, Microscope, HardHat, ArrowLeft
+    FileCheck, Scale, MessageSquare, TrendingUp, FileText, Megaphone, Cpu, Activity, Package, BookOpen, Contact, Brain, Users, Search, Award, Truck, Settings, Layout, Building, PieChart, Gavel, Coffee, Lightbulb, Briefcase, Share2, Server, Network, LifeBuoy, Calendar, Code2, Database, UserPlus, Globe, Shield, PenTool, Lock, Rocket, Landmark, Bot, Layers, ShieldAlert, CreditCard, Heart, Crown, GraduationCap, Target, BarChart, Send, Zap, DollarSign, ChevronDown, Handshake, Fingerprint, Key, Sun, Phone, Smartphone, ShoppingBag, Globe2, Terminal, Workflow, ZapOff, Anchor, Bell, Box, CheckCircle, Clipboard, Compass, Eye, Filter, Gift, HelpCircle, Image, Link, List, Mail, Map, MapPin, Mic, Moon, MousePointer, Music, Navigation, Paperclip, Play, Plus, Power, Printer, Radio, Save, Scissors, Share, Star, Table, Tag, Thermometer, ThumbsUp, Trash, Video, Volume2, Watch, Wifi, Wind, Smile, X, Edit3, Move, ExternalLink, Grid3X3, Square, ShieldCheck, BriefcaseIcon, Microscope, HardHat, ArrowLeft, Minus, ZoomIn, ZoomOut, Maximize2
 } from "lucide-react";
 import { WindowNode } from '@/components/shared/WindowNode';
 import { cn } from '@/lib/utils';
@@ -78,7 +80,7 @@ const DEPARTMENTS_DATA: Record<string, { title: string, layers: any[] }> = {
         { id: 'whatsapp', label: 'WhatsApp Flows', path: 'whatsapp', icon: Smartphone, theme: 'cyan' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
     
-    cto: { title: "Technology Center", layers: [
+    cto: { title: "Chief Technology Officer", layers: [
         { id: 'orchestrator', label: 'AI Orchestrator', path: 'orchestrator', icon: Cpu, theme: 'cyan' },
         { id: 'voice-center', label: 'AI Voice Center', path: 'voice-center', icon: Phone, theme: 'cyan' },
         { id: 'web-builder', label: 'AI Web Builder', path: 'web-builder', icon: Globe, theme: 'cyan' },
@@ -193,14 +195,12 @@ const TitleNode = ({ data }: NodeProps) => (
         <h1 className="text-6xl md:text-8xl font-thin text-white tracking-tighter whitespace-nowrap drop-shadow-[0_0_30px_rgba(255,255,255,0.1)]">
             {data.title}
         </h1>
-        <div className="h-1 w-full bg-gradient-to-r from-transparent via-white/20 to-transparent mt-4" />
     </div>
 );
 
 const LayerNode = ({ data }: NodeProps) => {
     const [isHovered, setIsHovered] = useState(false);
     const [lastTap, setLastTap] = useState(0);
-    const theme = themes[data.theme || 'cyan'];
     
     return (
         <div className="relative group">
@@ -233,27 +233,21 @@ const LayerNode = ({ data }: NodeProps) => {
                 style={{
                     transform: 'translate(-50%, -50%) rotateX(60deg) rotateZ(-45deg)',
                     transformStyle: 'preserve-3d',
-                    backgroundColor: isHovered ? theme.bg : (data.isPrimary ? 'rgba(255, 255, 255, 0.04)' : theme.bg.replace('0.15', '0.03')),
-                    borderColor: isHovered ? theme.border : (data.isPrimary ? 'rgba(255, 255, 255, 0.45)' : theme.border.replace('0.3', '0.2')),
+                    backgroundColor: isHovered ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.03)',
+                    borderColor: isHovered ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.2)',
                     boxShadow: isHovered 
-                        ? `inset 0 0 100px ${theme.shadow}, 0 50px 100px rgba(0,0,0,0.8), 0 0 40px ${theme.shadow}` 
-                        : (data.isPrimary 
-                            ? '0 30px 60px rgba(0,0,0,0.5), inset 0 0 40px rgba(255,255,255,0.1), 0 0 20px rgba(255,255,255,0.1)'
-                            : `0 30px 60px rgba(0,0,0,0.5), inset 0 0 40px ${theme.shadow.replace('0.3', '0.05')}, 0 0 20px ${theme.shadow.replace('0.3', '0.1')}`
-                        ),
+                        ? 'inset 0 0 100px rgba(255, 255, 255, 0.1), 0 50px 100px rgba(0,0,0,0.8), 0 0 40px rgba(255, 255, 255, 0.3)' 
+                        : '0 30px 60px rgba(0,0,0,0.5), inset 0 0 40px rgba(255,255,255,0.05), 0 0 20px rgba(255,255,255,0.05)',
                 }}
             >
                 {data.icon && (
-                    <div style={{ transform: 'rotateZ(45deg) rotateX(-20deg)' }} className={cn(
-                        "p-8 rounded-full transition-all duration-300",
-                        isHovered ? theme.iconBg : "bg-white/5"
-                    )}>
-                        <data.icon className={cn(
-                            "w-24 h-24 transition-all duration-300",
-                            isHovered ? theme.iconText : (data.isPrimary ? "text-white/20" : theme.iconText.replace('text-', 'text-').replace('400', '400/30')),
-                            isHovered && theme.iconShadow
-                        )} />
-                    </div>
+                    <data.icon 
+                        style={{ transform: 'rotateZ(45deg) rotateX(-20deg)' }} 
+                        className={cn(
+                            "w-32 h-32 transition-all duration-300",
+                            isHovered ? "text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.8)]" : "text-white/25"
+                        )} 
+                    />
                 )}
             </motion.div>
         </div>
@@ -265,10 +259,9 @@ const ActionNode = ({ data }: NodeProps) => (
         <motion.div 
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            className="flex items-center justify-center gap-3 px-8 py-4 rounded-[2rem] bg-neutral-900/80 backdrop-blur-md border border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.5)] transition-all group-hover:border-cyan-500/50 group-hover:bg-neutral-800/90"
+            className="transition-all"
         >
-            <ArrowLeft className="w-5 h-5 text-white/50 group-hover:text-cyan-400 transition-colors" />
-            <span className="text-sm font-black tracking-[0.2em] uppercase text-white/70 group-hover:text-white transition-colors">
+            <span className="text-sm font-normal text-white/70 group-hover:text-white transition-colors">
                 {data.label}
             </span>
         </motion.div>
@@ -325,11 +318,20 @@ const FolderNode = ({ data }: NodeProps) => {
 const nodeTypes = { axesNode: AxesNode, titleNode: TitleNode, layerNode: LayerNode, windowNode: WindowNode, actionNode: ActionNode, folderNode: FolderNode };
 
 export default function UnifiedWorkspace() {
+    return (
+        <ReactFlowProvider>
+            <WorkspaceContent />
+        </ReactFlowProvider>
+    );
+}
+
+function WorkspaceContent() {
     const router = useRouter();
     const params = useParams();
     const searchParams = useSearchParams();
     const entityId = params.entityId as string;
     const { currentUser, activeEntity } = useAuth();
+    const { zoomIn, zoomOut, fitView, setCenter } = useReactFlow();
     
     const roleParam = searchParams.get('role') || 'ceo';
     const [activeRole, setActiveRole] = useState<string>(roleParam);
@@ -401,22 +403,23 @@ export default function UnifiedWorkspace() {
     const selectedNode = useMemo(() => nodes.find(n => n.id === selectedNodeId), [nodes, selectedNodeId]);
     const cartesianPos = useMemo(() => selectedNode ? fromCanvas(selectedNode.position.x, selectedNode.position.y) : { x: 0, y: 0 }, [selectedNode]);
 
-    const spawnWindow = (layer: any) => {
+    const spawnWindow = (layer: any, parentPos?: { x: number, y: number }) => {
         setNodes((nds) => {
-            if (nds.some(node => node.id === `window-${layer.id}`)) return nds;
-
-            const windowCount = nds.filter(node => node.id.startsWith('window-')).length;
-            const xInches = 15 + (windowCount * 10);
-            const yInches = -15 - (windowCount * 10);
-            const pos = toCanvas(xInches, yInches);
-
             const uniqueId = `window-${layer.role || activeRole}-${layer.id}`;
+            if (nds.some(node => node.id === uniqueId)) return nds;
+
+            // Offset the window position relative to the layer node (e.g. 500px to the right, 100px up)
+            const pos = parentPos 
+                ? { x: parentPos.x + 500, y: parentPos.y - 100 }
+                : toCanvas(15, -15);
+
             const newNode: Node = {
                 id: uniqueId,
                 type: 'windowNode',
                 position: pos,
                 data: {
                     id: layer.id, label: layer.label, icon: layer.icon,
+                    origin: parentPos, // Pass parentPos as origin for the entry animation
                     url: `/nucleo/${entityId}/${layer.role || activeRole}/${layer.path}`,
                     onClose: () => {
                         setOpenWindows(prev => prev.filter(id => id !== uniqueId));
@@ -455,11 +458,11 @@ export default function UnifiedWorkspace() {
         });
 
         // Retorno
-        const actionSaved = savedLayout['action-return'] || { x: 0, y: -4.5 };
+        const titleSavedForReturn = savedLayout['dept-title'] || { x: 0, y: -3 };
         newNodes.push({
-            id: 'action-return', type: 'actionNode', position: toCanvas(actionSaved.x, actionSaved.y),
-            draggable: true, zIndex: 110, data: { 
-                label: 'Regresar a la Suite',
+            id: 'action-return', type: 'actionNode', position: toCanvas(titleSavedForReturn.x, titleSavedForReturn.y - 1.2),
+            draggable: false, zIndex: 110, data: { 
+                label: 'Regresar a la suite',
                 onClick: () => router.push(`/nucleo/${entityId}`)
             }
         });
@@ -477,46 +480,7 @@ export default function UnifiedWorkspace() {
             allNodesData.push({ ...layer, role: activeRole, type: 'layer', isPrimary: true });
         });
 
-        // 2. Capas de todos los demás departamentos (Colapsables y ARCOIRIS)
-        let deptIndex = 0;
-        Object.entries(DEPARTMENTS_DATA).forEach(([role, dept]) => {
-            if (role === activeRole) return;
-            
-            const isExpanded = expandedDepts.includes(role);
-            const theme = rainbowThemes[deptIndex % rainbowThemes.length];
-            deptIndex++;
-            
-            if (isExpanded) {
-                // Si está expandido, añadir botón de colapsar + todas las capas
-                allNodesData.push({ 
-                    id: `folder-${role}`, 
-                    title: dept.title, 
-                    role: role.toUpperCase(),
-                    icon: dept.layers[0]?.icon,
-                    theme: theme, 
-                    type: 'folder', 
-                    isExpanded: true,
-                    onClick: () => toggleDept(role),
-                    onDoubleClick: () => spawnWindow({ ...dept.layers[0], role })
-                });
-                dept.layers.forEach(layer => {
-                    allNodesData.push({ ...layer, role: role, type: 'layer', theme: theme, isPrimary: false });
-                });
-            } else {
-                // Si está colapsado, añadir solo el folder
-                allNodesData.push({ 
-                    id: `folder-${role}`, 
-                    title: dept.title, 
-                    role: role.toUpperCase(),
-                    icon: dept.layers[0]?.icon,
-                    theme: theme, 
-                    type: 'folder', 
-                    isExpanded: false,
-                    onClick: () => toggleDept(role),
-                    onDoubleClick: () => spawnWindow({ ...dept.layers[0], role })
-                });
-            }
-        });
+
 
         allNodesData.forEach((item, index) => {
             const nodeId = item.type === 'folder' ? item.id : `layer-${item.role}-${item.id}`;
@@ -529,14 +493,14 @@ export default function UnifiedWorkspace() {
                     data: { ...item }
                 });
             } else {
+                const canvasPos = toCanvas(saved.x, saved.y);
                 newNodes.push({
-                    id: nodeId, type: 'layerNode', position: toCanvas(saved.x, saved.y),
+                    id: nodeId, type: 'layerNode', position: canvasPos,
                     draggable: false, zIndex: 1000 - index,
                     style: { zIndex: 1000 - index, pointerEvents: 'none' },
                     data: { 
                         ...item, 
-                        onClick: () => setSelectedNodeId(nodeId),
-                        onDoubleClick: () => spawnWindow(item)
+                        onDoubleClick: () => spawnWindow(item, canvasPos)
                     }
                 });
             }
@@ -557,37 +521,24 @@ export default function UnifiedWorkspace() {
 
     return (
         <div className="w-full h-screen bg-black flex flex-col relative overflow-hidden">
-            <AnimatePresence>
-                {selectedNodeId && selectedNode && !isMobile && (
-                    <motion.div initial={{ x: -400, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -400, opacity: 0 }} className="fixed left-8 top-[58%] -translate-y-1/2 z-[300] w-64 bg-[#0D0F14]/90 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-6 shadow-[0_0_80px_rgba(0,0,0,0.8)]">
-                        <div className="flex items-center justify-between mb-6">
-                            <div className="flex items-center gap-3 text-white/40"><Move className="w-4 h-4" /><span className="text-[10px] font-bold tracking-[0.2em] uppercase">Coordenadas</span></div>
-                            <button onClick={() => setSelectedNodeId(null)} className="text-white/20 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
-                        </div>
-                        <div className="space-y-4">
-                            <div><div className="text-[10px] font-black text-white/20 uppercase tracking-widest mb-1 px-1">Elemento</div><div className="text-sm font-medium text-white/90 px-1 truncate">{selectedNode.data.label || selectedNode.data.title}</div></div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="space-y-2"><label className="text-[9px] font-bold text-white/30 uppercase tracking-widest px-1">Eje X</label><input type="number" step="0.1" value={cartesianPos.x} onChange={(e) => updateNodePosition(selectedNodeId, Number(e.target.value), cartesianPos.y)} className="w-full bg-white/5 border border-white/10 rounded-2xl px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-cyan-500/50 transition-all" /></div>
-                                <div className="space-y-2"><label className="text-[9px] font-bold text-white/30 uppercase tracking-widest px-1">Eje Y</label><input type="number" step="0.1" value={cartesianPos.y} onChange={(e) => updateNodePosition(selectedNodeId, cartesianPos.x, Number(e.target.value))} className="w-full bg-white/5 border border-white/10 rounded-2xl px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-cyan-500/50 transition-all" /></div>
-                            </div>
-                            <div className="pt-2">{selectedNode.id.startsWith('layer-') && (<button onClick={() => spawnWindow(selectedNode.data)} className="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-bold py-3 rounded-2xl transition-all shadow-[0_10px_30px_rgba(6,182,212,0.3)] active:scale-95 flex items-center justify-center gap-2"><ExternalLink className="w-4 h-4" /><span>ABRIR MÓDULO</span></button>)}</div>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            <div className={cn(
-                "fixed bottom-8 z-[200] flex gap-2 bg-[#0D0F14]/90 backdrop-blur-3xl border border-white/10 p-2 rounded-2xl shadow-2xl transition-all",
-                isMobile ? "right-4 scale-[0.6] origin-right bottom-4 p-1.5" : "right-[240px]"
-            )}>
-                <button onClick={() => setGridType('none')} className={cn("p-2 md:p-3 rounded-xl transition-all", gridType === 'none' ? "bg-white/10 text-white" : "text-white/20 hover:text-white/40")} title="Sin Cuadrícula"><Square className="w-5 h-5" /></button>
-                <button onClick={() => setGridType('dots')} className={cn("p-2 md:p-3 rounded-xl transition-all", gridType === 'dots' ? "bg-white/10 text-white" : "text-white/20 hover:text-white/40")} title="Puntos"><div className="w-5 h-5 flex items-center justify-center font-black text-xs">.</div></button>
-                <button onClick={() => setGridType('lines')} className={cn("p-2 md:p-3 rounded-xl transition-all", gridType === 'lines' ? "bg-white/10 text-white" : "text-white/20 hover:text-white/40")} title="Líneas"><Grid3X3 className="w-5 h-5" /></button>
-            </div>
-            <div className={cn("fixed bottom-8 left-8 z-[200] transition-all", isMobile && "left-4 bottom-4 scale-[0.6] origin-left")}>
-                <button onClick={() => router.push(`/nucleo/${entityId}`)} className="w-16 h-16 bg-[#0D0F14]/90 backdrop-blur-3xl border border-white/10 rounded-2xl flex items-center justify-center shadow-[0_0_50px_rgba(0,0,0,0.9)] hover:border-cyan-500/50 hover:scale-105 transition-all active:scale-95 group">
-                    <span className="text-white/40 group-hover:text-cyan-400 font-black text-3xl transition-colors tracking-tighter">N</span>
-                </button>
+            
+            {/* Top Hover Menu containing all workspace controls */}
+            <div className="fixed top-0 left-0 right-0 h-16 z-[3000] group flex items-start justify-center pt-4 pointer-events-none">
+                <div className="flex items-center gap-4 bg-[#0D0F14]/90 backdrop-blur-3xl border border-white/10 p-2 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] opacity-0 -translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-auto">
+                    {/* Grid Type Controls */}
+                    <div className="flex gap-1 border-r border-white/10 pr-3 mr-1">
+                        <button onClick={() => setGridType('none')} className={cn("p-2 rounded-xl transition-all", gridType === 'none' ? "bg-white/10 text-white" : "text-white/20 hover:text-white/40")} title="Sin Cuadrícula"><Square className="w-4 h-4" /></button>
+                        <button onClick={() => setGridType('dots')} className={cn("p-2 rounded-xl transition-all", gridType === 'dots' ? "bg-white/10 text-white" : "text-white/20 hover:text-white/40")} title="Puntos"><div className="w-4 h-4 flex items-center justify-center font-black text-[10px]">.</div></button>
+                        <button onClick={() => setGridType('lines')} className={cn("p-2 rounded-xl transition-all", gridType === 'lines' ? "bg-white/10 text-white" : "text-white/20 hover:text-white/40")} title="Líneas"><Grid3X3 className="w-4 h-4" /></button>
+                    </div>
+                    {/* Zoom / View Controls */}
+                    <div className="flex gap-1">
+                        <button onClick={() => zoomIn()} className="p-2 rounded-xl text-white/20 hover:text-white hover:bg-white/10 transition-all" title="Acercar"><ZoomIn className="w-4 h-4" /></button>
+                        <button onClick={() => zoomOut()} className="p-2 rounded-xl text-white/20 hover:text-white hover:bg-white/10 transition-all" title="Alejar"><ZoomOut className="w-4 h-4" /></button>
+                        <button onClick={() => setCenter(0, 0, { zoom: 1, duration: 800 })} className="p-2 rounded-xl text-white/20 hover:text-white hover:bg-white/10 transition-all" title="Ir al Origen (0,0)"><Navigation className="w-4 h-4 -rotate-45" /></button>
+                        <button onClick={() => fitView({ duration: 800 })} className="p-2 rounded-xl text-white/20 hover:text-white hover:bg-white/10 transition-all" title="Ajustar Vista"><Maximize2 className="w-4 h-4" /></button>
+                    </div>
+                </div>
             </div>
 
             <div className="flex-1 w-full h-full relative z-0">
@@ -596,13 +547,13 @@ export default function UnifiedWorkspace() {
                     edges={edges} 
                     onNodesChange={onNodesChange} 
                     onEdgesChange={onEdgesChange} 
-                    onNodeClick={(e, n) => (n.id.startsWith('layer-') || n.id === 'dept-title' || n.type === 'windowNode') && setSelectedNodeId(n.id)} 
                     onNodeDragStop={onNodeDragStop} 
                     nodeTypes={nodeTypes} 
                     className="bg-[#050505]" 
                     proOptions={{ hideAttribution: true }} 
                     minZoom={0.01} 
                     maxZoom={4} 
+                    zoomOnDoubleClick={false}
                     fitView 
                     fitViewOptions={{ 
                         padding: 0.2,
@@ -611,8 +562,6 @@ export default function UnifiedWorkspace() {
                     }}
                 >
                     {gridType !== 'none' && <Background variant={gridType === 'dots' ? BackgroundVariant.Dots : BackgroundVariant.Lines} color="#ffffff" gap={PIXELS_PER_INCH} size={1} className="opacity-[0.03]" />}
-                    <MiniMap style={{ backgroundColor: '#0D0F14', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }} maskColor="rgba(0, 0, 0, 0.8)" nodeColor={(n) => n.type === 'layerNode' ? '#06b6d4' : n.type === 'titleNode' ? '#ffffff' : '#ffffff05'} />
-                    <Controls className="bg-[#0D0F14]/90 border-white/10 rounded-xl overflow-hidden" />
                 </ReactFlow>
             </div>
         </div>

@@ -74,7 +74,7 @@ export const Carousel = () => {
             />
 
             <div
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none select-none"
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[68%] pointer-events-none select-none"
                 style={{ zIndex: CENTER_Z_INDEX }}
             >
                 <CentralVideo />

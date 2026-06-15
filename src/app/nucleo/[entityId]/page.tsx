@@ -10,6 +10,59 @@ import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { PersonaDashboard } from './_persona/PersonaDashboard';
+import { useLanguage } from '@/contexts/LanguageContext';
+
+const LetterByLetterText = ({ text, delayOffset = 0 }: { text: string, delayOffset?: number }) => {
+    const characters = Array.from(text);
+    
+    const container = {
+        hidden: { opacity: 0 },
+        visible: {
+            opacity: 1,
+            transition: { staggerChildren: 0.03, delayChildren: delayOffset },
+        },
+    };
+
+    const child = {
+        visible: {
+            opacity: 1,
+            y: 0,
+            transition: {
+                type: "spring" as const,
+                damping: 15,
+                stiffness: 120,
+            },
+        },
+        hidden: {
+            opacity: 0,
+            y: 15,
+            transition: {
+                type: "spring" as const,
+                damping: 15,
+                stiffness: 120,
+            },
+        },
+    };
+
+    return (
+        <motion.span
+            style={{ display: 'inline-flex', flexWrap: 'wrap', justifyContent: 'center' }}
+            variants={container}
+            initial="hidden"
+            animate="visible"
+        >
+            {characters.map((char, index) => (
+                <motion.span
+                    variants={child}
+                    key={index}
+                    style={{ display: 'inline-block', minWidth: char === ' ' ? '0.25em' : 'auto' }}
+                >
+                    {char}
+                </motion.span>
+            ))}
+        </motion.span>
+    );
+};
 
 const informationItems = [
     { href: '#wallets', icon: Wallet, label: 'Wallets' },
@@ -20,6 +73,7 @@ const informationItems = [
 
 export default function SuiteDashboard() {
     const { activeEntity, currentUser } = useAuth();
+    const { t } = useLanguage();
     const [entityType, setEntityType] = useState<string | null>(null);
     const [loadingEntity, setLoadingEntity] = useState(true);
 
@@ -63,12 +117,14 @@ export default function SuiteDashboard() {
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        transition={{ delay: 0.4, duration: 1 }}
-                        className="mt-4 mb-0 text-center relative z-[2000] px-6"
+                        transition={{ delay: 0.2, duration: 1 }}
+                        className="mt-20 mb-4 text-center relative z-[2000] px-6"
                     >
-                        <span className="text-2xl md:text-3xl font-light text-white/50 tracking-tight block mb-2">Welcome Back</span>
-                        <h2 className="text-2xl md:text-4xl font-extralight tracking-tighter text-white leading-tight">
-                            Where should we start?
+                        <span className="text-3xl md:text-4xl font-light text-white/50 tracking-tight block mb-3">
+                            <LetterByLetterText text={t('suite.welcome')} delayOffset={0.2} />
+                        </span>
+                        <h2 className="text-3xl md:text-5xl font-extralight tracking-tighter text-white leading-tight">
+                            <LetterByLetterText text={t('suite.question')} delayOffset={0.6} />
                         </h2>
                     </motion.div>
 
@@ -77,21 +133,6 @@ export default function SuiteDashboard() {
                         <Carousel />
                     </div>
 
-                    {/* 3. Title Section: Smaller and more subtle */}
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.8, delay: 0.6 }}
-                        className="text-center relative z-[2000] pointer-events-none mt-2 pb-6"
-                    >
-                        <div className="h-[1px] w-8 bg-white/10 mx-auto mb-6" />
-                        <h1 className="text-xs md:text-sm font-light tracking-[0.3em] mb-2 text-white/20 uppercase">
-                            Autonomous Management System
-                        </h1>
-                        <p className="text-neutral-500 max-w-lg mx-auto leading-relaxed text-[10px] md:text-xs opacity-20 px-6">
-                            Unified governance through decentralized protocols. Harmonizing operations, finance, and technology in a single autonomous flow.
-                        </p>
-                    </motion.div>
 
                     {/* 4. Global Identity Switcher Glass Pill */}
                     <IdentitySwitcher />

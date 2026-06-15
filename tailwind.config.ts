@@ -25,9 +25,9 @@ const config = {
         bold: '600',
       },
       fontFamily: {
-        playfair: ['var(--font-montserrat)', 'sans-serif'], // Replaced with Montserrat for global consistency
-        sans: ['var(--font-montserrat)', ...fontFamily.sans],
-        'open-sans': ['var(--font-montserrat)', ...fontFamily.sans],
+        playfair: ['var(--font-outfit)', 'sans-serif'],
+        sans: ['var(--font-outfit)', ...fontFamily.sans],
+        'open-sans': ['var(--font-outfit)', ...fontFamily.sans],
         outfit: ['var(--font-outfit)', ...fontFamily.sans],
       },
       colors: {

@@ -190,17 +190,17 @@ export default function SubscriptionsPage() {
                     <CheckCircle className="w-4.5 h-4.5 text-emerald-400" />
                   </div>
                   <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                    <span className="text-[10px] uppercase tracking-widest text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 w-fit">
+                    <span className="text-[10px] uppercase tracking-widest text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 w-fit">
                       Active: {activePlanId}
                     </span>
-                    <p className="text-sm font-medium text-emerald-100/90 tracking-wide">
+                    <p className="text-sm font-normal text-emerald-100/90 tracking-wide">
                       Your subscription is active and valid until <span className="text-emerald-300 font-semibold">{expiresAt ? new Date(expiresAt).toLocaleDateString() : 'N/A'}</span>
                     </p>
                   </div>
                 </div>
                 <Button
                   onClick={() => router.push('/nucleo')}
-                  className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-black font-bold tracking-wider text-xs rounded-full h-9 px-6 transition-all duration-300 shadow-md shadow-emerald-500/20"
+                  className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-black font-semibold tracking-wider text-xs rounded-full h-9 px-6 transition-all duration-300 shadow-md shadow-emerald-500/20"
                 >
                   Go to Dashboard
                 </Button>
@@ -215,7 +215,7 @@ export default function SubscriptionsPage() {
                 <Button
                   onClick={() => router.push('/configuracion')}
                   variant="outline"
-                  className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white rounded-full flex items-center gap-2 h-10 px-5 text-xs font-semibold tracking-wider uppercase transition-all duration-300 shadow-md backdrop-blur-sm"
+                  className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white rounded-full flex items-center gap-2 h-10 px-5 text-xs font-normal tracking-wider uppercase transition-all duration-300 shadow-md backdrop-blur-sm"
                 >
                   <Wallet className="w-3.5 h-3.5" />
                   Wallet
@@ -224,13 +224,13 @@ export default function SubscriptionsPage() {
             )}
 
             <div className="mx-auto mb-14 max-w-2xl text-center">
-              <p className="mb-4 text-[11px] uppercase tracking-[0.45em] text-white/40 font-semibold">
+              <p className="mb-4 text-[11px] uppercase tracking-[0.45em] text-white/40 font-normal">
                 Subscription
               </p>
               <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
                 Choose your subscription
               </h1>
-              <p className="mt-4 text-sm text-white/55 sm:text-base font-medium">
+              <p className="mt-4 text-sm text-white/55 sm:text-base font-normal">
                 Immediate access to Roosevelt with flexible payment options.
               </p>
               {currentUser?.email ? (
@@ -265,11 +265,11 @@ export default function SubscriptionsPage() {
                           {plan.name}
                         </p>
                         {isCurrentPlan ? (
-                          <span className="text-[10px] px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full uppercase tracking-widest font-bold animate-pulse">
+                          <span className="text-[10px] px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full uppercase tracking-widest font-semibold animate-pulse">
                             Active Plan
                           </span>
                         ) : plan.id === 'pro' && (
-                          <span className="text-[10px] px-3 py-1 bg-blue-600/30 text-blue-200 rounded-full uppercase tracking-widest font-bold">
+                          <span className="text-[10px] px-3 py-1 bg-blue-600/30 text-blue-200 rounded-full uppercase tracking-widest font-semibold">
                             Popular
                           </span>
                         )}
@@ -280,20 +280,20 @@ export default function SubscriptionsPage() {
                           <span className="text-5xl font-semibold tracking-tight text-white">
                             {plan.price}
                           </span>
-                          <span className="pb-2 text-sm uppercase tracking-[0.25em] text-white/35 font-semibold">
+                          <span className="pb-2 text-sm uppercase tracking-[0.25em] text-white/35 font-normal">
                             / month
                           </span>
                         </div>
                       )}
 
-                      <p className="text-sm leading-6 text-white/60 font-medium">{plan.description}</p>
+                      <p className="text-sm leading-6 text-white/60 font-normal">{plan.description}</p>
                     </div>
 
                     <div className="mb-10 space-y-4">
                       {plan.features.map((feature) => (
                         <div
                           key={feature}
-                          className="flex items-center gap-3 text-sm text-white/75 font-medium"
+                          className="flex items-center gap-3 text-sm text-white/75 font-normal"
                         >
                           <div className="flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/5">
                             <Check className="h-3.5 w-3.5" />
@@ -308,7 +308,7 @@ export default function SubscriptionsPage() {
                         href="mailto:info@rooseveltcorp.com?subject=Enterprise Plan Inquiry"
                         className="mt-auto"
                       >
-                        <Button className="w-full h-12 rounded-full bg-white/10 hover:bg-white/20 text-white border border-white/20 flex items-center justify-center gap-2 font-semibold tracking-wider text-xs">
+                        <Button className="w-full h-12 rounded-full bg-white/10 hover:bg-white/20 text-white border border-white/20 flex items-center justify-center gap-2 font-normal tracking-wider text-xs">
                           <Mail className="w-4 h-4" />
                           Contact our team
                         </Button>
@@ -316,7 +316,7 @@ export default function SubscriptionsPage() {
                     ) : isCurrentPlan ? (
                       <Button
                         disabled
-                        className="mt-auto h-12 rounded-full bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 font-bold tracking-widest text-xs uppercase cursor-default flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50"
+                        className="mt-auto h-12 rounded-full bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 font-semibold tracking-widest text-xs uppercase cursor-default flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50"
                       >
                         <CheckCircle className="w-4 h-4 text-emerald-400" />
                         Current Plan
@@ -324,10 +324,10 @@ export default function SubscriptionsPage() {
                     ) : (
                       <Button
                         onClick={() => setSelectedPlan(plan as typeof plans[number])}
-                        className={`mt-auto h-12 rounded-full font-semibold tracking-widest text-xs uppercase shadow-lg transition-all duration-300 ${
+                        className={`mt-auto h-12 rounded-full font-normal tracking-widest text-xs uppercase shadow-lg transition-all duration-300 ${
                           hasActiveSubscription 
                             ? plan.priceUSD > currentPlanPrice
-                              ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-900/20 animate-pulse' 
+                              ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-900/20 animate-pulse font-semibold' 
                               : 'bg-white/10 hover:bg-white/20 text-white border border-white/10'
                             : 'bg-white text-black hover:bg-gray-100'
                         }`}
@@ -345,13 +345,13 @@ export default function SubscriptionsPage() {
             </div>
 
             <div className="mt-16 max-w-2xl mx-auto text-center">
-              <p className="text-xs uppercase tracking-[0.35em] text-white/40 mb-4 font-semibold">
+              <p className="text-xs uppercase tracking-[0.35em] text-white/40 mb-4 font-normal">
                 💎 Save with LXR
               </p>
-              <p className="text-sm text-white/60 font-medium">
+              <p className="text-sm text-white/60 font-normal">
                 Pay with our LXR token and unlock exclusive discounts.
-                Starter: <span className="text-green-400 font-bold">$14.99</span> (vs $19.99) •
-                Pro: <span className="text-green-400 font-bold">$74.99</span> (vs $99.99)
+                Starter: <span className="text-green-400 font-semibold">$14.99</span> (vs $19.99) •
+                Pro: <span className="text-green-400 font-semibold">$74.99</span> (vs $99.99)
               </p>
             </div>
 
@@ -380,7 +380,7 @@ export default function SubscriptionsPage() {
               className="group flex items-center gap-2 text-white/40 hover:text-white transition-all duration-300"
             >
               <LogOut className="w-4 h-4 transition-transform duration-300 group-hover:-translate-x-1" strokeWidth={1.5} />
-              <span className="text-sm font-medium tracking-wide">Log out</span>
+              <span className="text-sm font-normal tracking-wide">Log out</span>
             </button>
           </div>
 
@@ -390,7 +390,7 @@ export default function SubscriptionsPage() {
               onClick={() => router.push('/nucleo')}
               className="group flex items-center gap-2 text-white/40 hover:text-white transition-all duration-300"
             >
-              <span className="text-sm font-medium tracking-wide">Go to Nucleo</span>
+              <span className="text-sm font-normal tracking-wide">Go to Nucleo</span>
               <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" strokeWidth={1.5} />
             </button>
           </div>

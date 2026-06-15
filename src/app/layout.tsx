@@ -1,19 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
-import { Montserrat, Outfit } from "next/font/google";
+import { Outfit } from "next/font/google";
 
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { SidebarProvider } from "@/components/SidebarContext";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/contexts/AuthContext";
-
-const montserrat = Montserrat({
-  subsets: ["latin"],
-  variable: "--font-montserrat",
-  weight: ["300", "400", "500", "600", "700"],
-  display: "swap",
-});
+import { LanguageProvider } from "@/contexts/LanguageContext";
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -56,19 +50,21 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" suppressHydrationWarning>
-      <body className={`${montserrat.variable} ${outfit.variable} ${montserrat.className} font-sans`}>
+      <body className={`${outfit.variable} ${outfit.className} font-sans`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
           enableSystem
           disableTransitionOnChange
         >
-          <AuthProvider>
-            <SidebarProvider>
-              {children}
-              <Toaster position="top-right" richColors theme="dark" />
-            </SidebarProvider>
-          </AuthProvider>
+          <LanguageProvider>
+            <AuthProvider>
+              <SidebarProvider>
+                {children}
+                <Toaster position="top-right" richColors theme="dark" />
+              </SidebarProvider>
+            </AuthProvider>
+          </LanguageProvider>
         </ThemeProvider>
         <Script src="https://terminal.jup.ag/main-v3.js" strategy="lazyOnload" />
         <Script id="meta-sdk-core" strategy="lazyOnload">

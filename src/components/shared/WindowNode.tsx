@@ -78,10 +78,10 @@ export const WindowNode = ({ data, xPos, yPos }: NodeProps) => {
             }}
             transition={{
                 type: 'spring',
-                stiffness: isClosing ? 150 : 100,
-                damping: isClosing ? 25 : 22,
+                stiffness: isClosing ? 200 : 350,
+                damping: isClosing ? 25 : 28,
                 restDelta: 0.001,
-                opacity: { duration: 0.3 }
+                opacity: { duration: 0.15 }
             }}
             className={cn(
                 "bg-[#0A0A0A]/95 backdrop-blur-3xl border border-white/10 flex flex-col overflow-hidden pointer-events-auto transition-all duration-300 relative group",
@@ -89,7 +89,7 @@ export const WindowNode = ({ data, xPos, yPos }: NodeProps) => {
                     ? "w-[240px] sm:w-[300px] h-[48px] rounded-t-2xl rounded-b-none shadow-lg" 
                     : isMaximized 
                         ? "fixed inset-0 w-screen h-screen z-[9999] rounded-none shadow-none" 
-                        : "w-[95vw] sm:w-[1000px] h-[80vh] sm:h-[700px] rounded-2xl shadow-[0_30px_80px_rgba(0,0,0,0.8)] border-cyan-500/20"
+                        : "w-[95vw] sm:w-[1000px] h-[80vh] sm:h-[700px] rounded-2xl shadow-[0_30px_80px_rgba(0,0,0,0.8)] border-white/10"
             )}
             style={isMaximized ? { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100dvh' } : {}}
         >
@@ -99,48 +99,29 @@ export const WindowNode = ({ data, xPos, yPos }: NodeProps) => {
                 isMaximized ? "absolute top-0 left-0 opacity-0 hover:opacity-100 -translate-y-2 hover:translate-y-0" : "relative",
                 "custom-drag-handle"
             )}>
-                {/* Traffic Lights - Mac Style Refined */}
-                <div className="flex items-center gap-2 w-[70px]">
-                    <button 
-                        onClick={(e) => { e.stopPropagation(); handleClose(); }}
-                        className="w-3 h-3 rounded-full bg-[#FF5F57] hover:bg-[#FF5F57]/80 border border-black/20 shadow-[inset_0_1px_2px_rgba(0,0,0,0.3)] transition-all flex items-center justify-center group"
-                    >
-                        <X className="w-2 h-2 text-black opacity-0 group-hover:opacity-60" />
-                    </button>
+                {/* Spacer for centering */}
+                <div className="w-[140px] flex shrink-0" />
+
+                {/* Center title - Capital letter, rest lowercase, no container */}
+                <div className="flex items-center justify-center flex-1">
+                    <span className="text-white/95 font-medium tracking-wide text-xs whitespace-nowrap uppercase tracking-[0.15em]">
+                        {data.label ? data.label.charAt(0).toUpperCase() + data.label.slice(1).toLowerCase() : ''}
+                    </span>
+                </div>
+
+                {/* Right Actions - All window controls in one place */}
+                <div className="flex items-center gap-1 w-[140px] justify-end shrink-0">
                     <button 
                         onClick={(e) => { 
                             e.stopPropagation(); 
                             setIsMinimized(!isMinimized); 
                             if (isMaximized) setIsMaximized(false); 
                         }}
-                        className="w-3 h-3 rounded-full bg-[#FEBC2E] hover:bg-[#FEBC2E]/80 border border-black/20 shadow-[inset_0_1px_2px_rgba(0,0,0,0.3)] transition-all flex items-center justify-center group"
+                        className="p-1.5 hover:bg-white/5 rounded-lg transition-colors group"
+                        title="Minimizar"
                     >
-                        <Minus className="w-2 h-2 text-black opacity-0 group-hover:opacity-60" />
+                        <Minus className="w-3.5 h-3.5 text-white/40 group-hover:text-white transition-colors" />
                     </button>
-                    <button 
-                        onClick={(e) => { 
-                            e.stopPropagation(); 
-                            setIsMaximized(!isMaximized); 
-                            if (isMinimized) setIsMinimized(false); 
-                        }}
-                        className="w-3 h-3 rounded-full bg-[#28C840] hover:bg-[#28C840]/80 border border-black/20 shadow-[inset_0_1px_2px_rgba(0,0,0,0.3)] transition-all flex items-center justify-center group"
-                    >
-                        <Square className="w-1.5 h-1.5 text-black opacity-0 group-hover:opacity-60" />
-                    </button>
-                </div>
-
-                {/* Center Badge - Muestra la ruta técnica */}
-                <div className="flex items-center gap-2 px-4 py-1.5 bg-white/[0.03] rounded-full border border-white/10 shadow-[inset_0_1px_10px_rgba(255,255,255,0.02)]">
-                    <span className="text-white/20 font-mono text-[9px] tracking-widest uppercase">
-                        {data.url.split('/').slice(3, -1).join(' / ') || 'nucleo'} /
-                    </span>
-                    <span className="text-white/90 font-bold tracking-[0.1em] uppercase text-[10px] whitespace-nowrap">
-                        {data.label}
-                    </span>
-                </div>
-
-                {/* Right Actions */}
-                <div className="flex items-center gap-1 w-[120px] justify-end">
                     <button 
                         onClick={(e) => { 
                             e.stopPropagation(); 
@@ -148,24 +129,19 @@ export const WindowNode = ({ data, xPos, yPos }: NodeProps) => {
                             if (isMinimized) setIsMinimized(false);
                         }}
                         className="p-1.5 hover:bg-white/5 rounded-lg transition-colors group"
-                        title={isMaximized ? "Restaurar" : "Pantalla completa"}
+                        title={isMaximized ? "Restaurar" : "Maximizar"}
                     >
-                        <Maximize2 className={cn("w-3.5 h-3.5 transition-colors", isMaximized ? "text-cyan-400" : "text-white/40 group-hover:text-cyan-400")} />
+                        <Maximize2 className="w-3.5 h-3.5 text-white/40 group-hover:text-white transition-colors" />
                     </button>
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
-                            const pathParts = data.url.split('/');
-                            const entityId = pathParts[2];
-                            const role = pathParts[3] || 'ceo';
-                            // Pasamos el ID del layer para que se abra maximizado en la nueva pestaña
-                            const fullWorkspaceUrl = `/nucleo/${entityId}/workspace?role=${role}&maximize=${data.id}`;
-                            window.open(fullWorkspaceUrl, '_blank');
+                            window.open(data.url, '_blank');
                         }}
                         className="p-1.5 hover:bg-white/5 rounded-lg transition-colors group"
-                        title="Duplicar instancia Roosevelt"
+                        title="Abrir en pestaña nueva"
                     >
-                        <ExternalLink className="w-3.5 h-3.5 text-white/40 group-hover:text-cyan-400 transition-colors" />
+                        <ExternalLink className="w-3.5 h-3.5 text-white/40 group-hover:text-white transition-colors" />
                     </button>
                     <div className="w-px h-4 bg-white/10 mx-1" />
                     <button 

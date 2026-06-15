@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { 
     Plus, X, LogOut, Briefcase, Settings, Edit2, 
@@ -29,6 +30,7 @@ interface Entity {
 export default function NucleoPage() {
     const router = useRouter();
     const { currentUser, loading, setActiveEntity } = useAuth();
+    const { t } = useLanguage();
     const [mounted, setMounted] = useState(false);
     const [transitioning, setTransitioning] = useState<string | null>(null);
 
@@ -44,6 +46,22 @@ export default function NucleoPage() {
     const [inputValue, setInputValue] = useState('');
     const [creationType, setCreationType] = useState<'persona' | 'empresa'>('empresa');
     const [creatingProgress, setCreatingProgress] = useState(false);
+
+    // Background Slideshow
+    const backgrounds = [
+        '/assets/bg-1.png',
+        '/assets/bg-2.png',
+        '/assets/bg-3.png',
+        '/assets/bg-4.png'
+    ];
+    const [bgIndex, setBgIndex] = useState(0);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setBgIndex((prev) => (prev + 1) % backgrounds.length);
+        }, 8000); // changes every 8 seconds for a relaxed feel
+        return () => clearInterval(interval);
+    }, []);
 
     useEffect(() => {
         setMounted(true);
@@ -141,7 +159,25 @@ export default function NucleoPage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#0f1115] text-white flex flex-col items-center justify-center selection:bg-blue-500/10 relative overflow-hidden">
+        <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center selection:bg-blue-500/10 relative overflow-hidden">
+
+            {/* Background abstract slideshow rotated horizontally */}
+            <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden select-none flex items-center justify-center bg-black">
+                <AnimatePresence mode="popLayout">
+                    <motion.img
+                        key={backgrounds[bgIndex]}
+                        src={backgrounds[bgIndex]}
+                        alt="Background Pattern"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 0.85 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 2, ease: "easeInOut" }}
+                        className="absolute w-[100vh] h-[100vw] object-cover rotate-90 shrink-0"
+                    />
+                </AnimatePresence>
+                {/* Deep navy blue and black transparent overlay layer */}
+                <div className="absolute inset-0 bg-gradient-to-b from-[#030a1c]/60 via-black/85 to-black z-[1]" />
+            </div>
 
             {/* Background glow effects */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-blue-500/5 rounded-full blur-[120px] pointer-events-none" />
@@ -266,7 +302,7 @@ export default function NucleoPage() {
                 className="z-10 w-full max-w-6xl px-6 flex flex-col items-center"
             >
                 <h1 className="mt-24 md:mt-0 text-2xl md:text-5xl font-light tracking-wide text-center mb-12 md:mb-20 text-white/90 px-4">
-                    {managementMode ? 'Gestión de Entornos' : '¿Qué entorno vas a conectar?'}
+                    {managementMode ? t('nucleo.titleManagement') : t('nucleo.titleQuestion')}
                 </h1>
 
                 <div className="flex flex-wrap justify-center gap-12 md:gap-16">
@@ -459,15 +495,6 @@ export default function NucleoPage() {
                     </Modal>
                 )}
             </AnimatePresence>
-
-            {/* Admin Branding */}
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 0.2 }}
-                className="absolute bottom-12 text-[10px] tracking-[0.6em] uppercase text-white/50 font-bold"
-            >
-                Roosevelt Identity Core
-            </motion.div>
         </div>
     );
 }

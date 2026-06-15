@@ -6,10 +6,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Menu, X, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export const LandingNavbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { language, setLanguage, t } = useLanguage();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -20,14 +22,14 @@ export const LandingNavbar = () => {
   }, []);
 
   const navLinks = [
-    { name: 'Infrastructure', href: '#infrastructure' },
-    { name: 'Product', href: '#product' },
-    { name: 'Build', href: '#build' },
-    { name: 'Features', href: '#features' },
-    { name: 'Brain', href: '#brain' },
-    { name: 'Responsibility', href: '#responsibility' },
-    { name: 'Social Impact', href: '#impact' },
-    { name: 'About', href: '#about' },
+    { name: t('nav.infrastructure'), href: '#infrastructure' },
+    { name: t('nav.product'), href: '#product' },
+    { name: t('nav.build'), href: '#build' },
+    { name: t('nav.features'), href: '#features' },
+    { name: t('nav.brain'), href: '#brain' },
+    { name: t('nav.responsibility'), href: '#responsibility' },
+    { name: t('nav.socialImpact'), href: '#impact' },
+    { name: t('nav.about'), href: '#about' },
   ];
 
   return (
@@ -45,7 +47,7 @@ export const LandingNavbar = () => {
         <div className="w-full flex items-center justify-between relative">
           {/* Logo */}
           <Link href="/" className="flex items-center group">
-            <span className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent leading-none tracking-tight">
+            <span className="text-2xl font-semibold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent leading-none tracking-tight">
               Roosevelt
             </span>
           </Link>
@@ -56,7 +58,7 @@ export const LandingNavbar = () => {
               <Link 
                 key={link.name} 
                 href={link.href}
-                className="text-xs font-medium text-white/70 hover:text-white transition-colors relative group"
+                className="text-xs font-normal text-white/70 hover:text-white transition-colors relative group"
               >
                 {link.name}
                 <span className="absolute -bottom-1 left-0 w-0 h-[1px] bg-white transition-all duration-300 group-hover:w-full" />
@@ -66,18 +68,44 @@ export const LandingNavbar = () => {
 
           {/* Actions */}
           <div className="hidden xl:flex items-center gap-4">
+            {/* Language Switcher */}
+            <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-full p-0.5 mr-2">
+              <button
+                onClick={() => setLanguage('es')}
+                className={cn(
+                  "text-[10px] font-normal tracking-wider px-2 py-0.5 rounded-full transition-all duration-300",
+                  language === 'es' 
+                    ? "bg-white text-black" 
+                    : "text-white/50 hover:text-white"
+                )}
+              >
+                ES
+              </button>
+              <button
+                onClick={() => setLanguage('en')}
+                className={cn(
+                  "text-[10px] font-normal tracking-wider px-2 py-0.5 rounded-full transition-all duration-300",
+                  language === 'en' 
+                    ? "bg-white text-black" 
+                    : "text-white/50 hover:text-white"
+                )}
+              >
+                EN
+              </button>
+            </div>
+
             <Link href="/login?mode=login">
               <Button 
-                className="bg-white text-black hover:bg-white/90 text-xs rounded-full px-6 h-8 font-semibold transition-all hover:scale-105 shadow-[0_0_20px_rgba(255,255,255,0.1)]"
+                className="bg-transparent text-white border border-white/20 hover:bg-white hover:text-black hover:scale-105 hover:shadow-[0_0_20px_rgba(255,255,255,0.2)] text-xs rounded-full px-6 h-8 font-normal transition-all duration-300"
               >
-                Login
+                {t('nav.signIn')}
               </Button>
             </Link>
             <Link href="/login?register=true">
               <Button 
-                className="bg-gradient-to-r from-blue-400 to-blue-600 hover:from-blue-500 hover:to-blue-700 text-white text-xs rounded-full px-6 h-8 font-semibold transition-all hover:scale-105 shadow-[0_0_20px_rgba(59,130,246,0.3)]"
+                className="bg-transparent text-white border border-blue-500/50 hover:bg-gradient-to-r hover:from-blue-400 hover:to-blue-600 hover:border-transparent hover:scale-105 hover:shadow-[0_0_20px_rgba(59,130,246,0.4)] text-xs rounded-full px-6 h-8 font-normal transition-all duration-300"
               >
-                Get Started
+                {t('nav.signUp')}
               </Button>
             </Link>
           </div>
@@ -102,8 +130,33 @@ export const LandingNavbar = () => {
             className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-2xl xl:hidden flex flex-col p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
           >
             <div className="flex justify-between items-center mb-8">
-               <div className="flex items-center">
-                <span className="text-lg font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent tracking-tight">Roosevelt</span>
+              <div className="flex items-center gap-3">
+                <span className="text-lg font-semibold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent tracking-tight">Roosevelt</span>
+                {/* Language Switcher */}
+                <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-full p-0.5 ml-2">
+                  <button
+                    onClick={() => setLanguage('es')}
+                    className={cn(
+                      "text-[9px] font-normal tracking-wider px-2 py-0.5 rounded-full transition-all duration-300",
+                      language === 'es' 
+                        ? "bg-white text-black" 
+                        : "text-white/50 hover:text-white"
+                    )}
+                  >
+                    ES
+                  </button>
+                  <button
+                    onClick={() => setLanguage('en')}
+                    className={cn(
+                      "text-[9px] font-normal tracking-wider px-2 py-0.5 rounded-full transition-all duration-300",
+                      language === 'en' 
+                        ? "bg-white text-black" 
+                        : "text-white/50 hover:text-white"
+                    )}
+                  >
+                    EN
+                  </button>
+                </div>
               </div>
               <button 
                 onClick={() => setIsMobileMenuOpen(false)}
@@ -135,13 +188,13 @@ export const LandingNavbar = () => {
 
             <div className="mt-auto space-y-2 pb-2">
               <Link href="/login?mode=login" onClick={() => setIsMobileMenuOpen(false)}>
-                <Button className="w-full h-10 rounded-lg bg-white text-black hover:bg-white/90 text-xs font-semibold transition-all">
-                  Login
+                <Button className="w-full h-10 rounded-lg bg-transparent text-white border border-white/20 hover:bg-white hover:text-black text-xs font-normal transition-all duration-300">
+                  {t('nav.signIn')}
                 </Button>
               </Link>
               <Link href="/login?register=true" onClick={() => setIsMobileMenuOpen(false)}>
-                <Button className="w-full h-10 rounded-lg bg-gradient-to-r from-blue-400 to-blue-600 hover:from-blue-500 hover:to-blue-700 text-white text-xs font-semibold transition-all shadow-[0_0_15px_rgba(59,130,246,0.1)]">
-                  Get Started
+                <Button className="w-full h-10 rounded-lg bg-transparent text-white border border-blue-500/50 hover:bg-gradient-to-r hover:from-blue-400 hover:to-blue-600 hover:border-transparent text-xs font-normal transition-all duration-300">
+                  {t('nav.signUp')}
                 </Button>
               </Link>
             </div>

@@ -7,6 +7,7 @@ import Image from 'next/image';
 
 
 import { LandingNavbar } from '@/components/landing/LandingNavbar';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface Particle {
   x: number;
@@ -80,6 +81,8 @@ const BlueParticles = () => {
 };
 
 export default function LandingPage() {
+  const { t } = useLanguage();
+
   return (
     <div className="min-h-screen bg-black text-white relative flex flex-col selection:bg-white/10 overflow-x-hidden">
       <LandingNavbar />
@@ -108,19 +111,19 @@ export default function LandingPage() {
           transition={{ duration: 0.8, ease: "easeOut" }}
           className="w-full xl:w-1/2 flex flex-col items-center xl:items-start text-center xl:text-left justify-center mt-4 md:mt-8 xl:mt-[55vh] relative top-0 xl:top-20"
         >
-          <span className="text-blue-500 text-[9px] md:text-[10px] tracking-[0.3em] uppercase font-bold mb-4 md:mb-5 block">
-            Autonomous Infrastructure
+          <span className="text-blue-500 text-[9px] md:text-[10px] tracking-[0.3em] uppercase font-normal mb-4 md:mb-5 block">
+            {t('hero.tag')}
           </span>
           <h1 className="text-2xl md:text-4xl xl:text-5xl font-semibold tracking-tight text-white mb-6 md:mb-8 leading-[1.15]">
-            Welcome to the <br className="hidden xl:block" />
-            new era of autonomy <br className="hidden xl:block" />
-            with <span className="bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent font-bold">Roosevelt</span>
+            {t('hero.titleLine1')} <br className="hidden xl:block" />
+            {t('hero.titleLine2')} <br className="hidden xl:block" />
+            {t('hero.titleLine3')}{' '}
+            <span className="bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent font-semibold">Roosevelt</span>
           </h1>
-          <p className="text-[10px] md:text-xs text-white/60 font-medium leading-relaxed max-w-lg">
-            Stop configuring processes and start delegating results. Roosevelt is the intelligent agent that manages your personal and business infrastructure from end to end.
+          <p className="text-[10px] md:text-xs text-white/60 font-normal leading-relaxed max-w-lg">
+            {t('hero.description')}
           </p>
         </motion.div>
-
 
       </div>
 
