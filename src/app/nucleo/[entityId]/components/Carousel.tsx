@@ -115,7 +115,7 @@ function CarouselItem({ node, index, total, rotation, radius }: {
 
     const scale = useTransform(z, (zv: number) => (zv + PERSPECTIVE) / PERSPECTIVE);
     const opacity = useTransform(z, (zv: number) => Math.min(1, Math.max(0.4, (zv + radius.z) / (2 * radius.z) + 0.3)));
-    const y = useTransform(z, (zv: number) => 120 + (zv * 0.2));
+    const y = useTransform(z, (zv: number) => 60 + (zv * 0.2));
     const zIndex = useTransform(z, (zv: number) => Math.round(zv + CENTER_Z_INDEX));
 
     return (
