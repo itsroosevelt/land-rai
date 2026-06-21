@@ -38,11 +38,11 @@ export default function InboxSidebar({ selectedFolder, setSelectedFolder, cards 
     const params = useParams();
     const activeEntity = params?.entityId as string;
     const [integrationStatuses, setIntegrationStatuses] = useState<Record<string, string>>({});
-    const [isCollapsed, setIsCollapsed] = useState(false);
+    const [isCollapsed, setIsCollapsed] = useState(true);
 
     useEffect(() => {
         try {
-            if (localStorage.getItem(STORAGE_KEY) === 'true') setIsCollapsed(true);
+            if (localStorage.getItem(STORAGE_KEY) === 'false') setIsCollapsed(false);
         } catch {
             /* ignore */
         }
