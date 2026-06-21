@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, doc, deleteDoc, updateDoc, serverTimestamp, writeBatch, Timestamp } from 'firebase/firestore';
 import Card from './Card';
-import { Plus, Trash2, MoreVertical, Palette, Upload } from 'lucide-react';
+import { Plus, Trash2, MoreVertical, Palette, Upload, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -24,6 +24,8 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { toast } from 'sonner';
 import { SelectContactModal } from './SelectContactModal';
 import { CreateClientModal } from './CreateClientModal';
+import { sortCardsByArrival } from '@/lib/omnichannel/cardSort';
+import { cardMatchesColumnSearch } from '@/lib/omnichannel/columnSearch';
 
 // --- Types ---
 interface CardData {
@@ -75,6 +77,7 @@ export const kambanColumn = ({
     };
     const [isSelectContactOpen, setIsSelectContactOpen] = useState(false);
     const [isCreateClientOpen, setIsCreateClientOpen] = useState(false);
+    const [columnSearch, setColumnSearch] = useState('');
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     // Droppable for receiving cards
@@ -206,6 +209,12 @@ export const kambanColumn = ({
     };
 
     const selectedColor = colors.find(c => c.value === group.color) || colors[0];
+    const sortedCards = useMemo(() => sortCardsByArrival(cards), [cards]);
+    const visibleCards = useMemo(() => {
+        if (!columnSearch.trim()) return sortedCards;
+        return sortedCards.filter((card) => cardMatchesColumnSearch(card, columnSearch));
+    }, [sortedCards, columnSearch]);
+    const isFiltering = columnSearch.trim().length > 0;
 
     return (
         <div
@@ -213,7 +222,7 @@ export const kambanColumn = ({
             data-group-id={group.id}
             className={cn(
                 "flex flex-col flex-shrink-0 h-fit rounded-2xl border border-white/5 transition-all duration-300 hover:border-white/10 shadow-lg overflow-hidden pb-2 mb-8 snap-center",
-                isCompact ? 'w-[85vw] sm:w-72' : 'w-[90vw] sm:w-80',
+                isCompact ? 'w-[85vw] sm:w-80' : 'w-[90vw] sm:w-[22rem]',
                 selectedColor.value
             )}
         >
@@ -225,7 +234,7 @@ export const kambanColumn = ({
                         {group.name === 'Inbox' || group.name === 'Bandeja de Entrada' ? 'Inbox' : group.name}
                     </div>
                     <span className={cn("font-medium text-[12px] opacity-40", selectedColor.textColor.replace('text-', 'text-'))}>
-                        {cards.length}
+                        {isFiltering ? `${visibleCards.length}/${sortedCards.length}` : sortedCards.length}
                     </span>
                 </div>
 
@@ -299,6 +308,19 @@ export const kambanColumn = ({
                             </DropdownMenuContent>
                         </DropdownMenu>
                 </div>
+
+                <div className="relative mt-2 px-1">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-600 pointer-events-none" size={12} />
+                    <input
+                        type="text"
+                        value={columnSearch}
+                        onChange={(e) => setColumnSearch(e.target.value)}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}
+                        placeholder="Buscar tarjeta..."
+                        className="w-full bg-black/30 border border-white/10 rounded-lg py-1.5 pl-7 pr-2 text-[11px] text-white placeholder:text-neutral-600 focus:outline-none focus:border-blue-500/40 transition-colors"
+                    />
+                </div>
             </div>
 
             {/* Hidden CSV input */}
@@ -311,9 +333,9 @@ export const kambanColumn = ({
             />
 
             {/* Cards */}
-            <div className="p-2 space-y-1">
-                <SortableContext items={cards.map(c => c.id)} strategy={verticalListSortingStrategy}>
-                    {cards.map((card) => (
+            <div className="p-2 space-y-1 min-h-[100px]">
+                <SortableContext items={visibleCards.map(c => c.id)} strategy={verticalListSortingStrategy}>
+                    {visibleCards.map((card) => (
                         <Card
                             key={card.id}
                             card={card}
@@ -326,9 +348,11 @@ export const kambanColumn = ({
                     ))}
                 </SortableContext>
 
-                {cards.length === 0 && (
-                    <div className={cn("flex flex-col items-center justify-center py-6 px-4 text-center rounded-xl border border-dashed border-white/5 opacity-20")}>
-                        <span className="text-[10px] font-medium">Empty</span>
+                {visibleCards.length === 0 && (
+                    <div className={cn("flex flex-col items-center justify-center py-6 px-4 text-center rounded-xl border border-dashed border-white/5 opacity-40")}>
+                        <span className="text-[10px] font-medium">
+                            {isFiltering ? 'Sin resultados' : 'Empty'}
+                        </span>
                     </div>
                 )}
 

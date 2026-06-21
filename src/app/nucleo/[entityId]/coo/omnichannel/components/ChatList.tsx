@@ -1,7 +1,10 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Search, Filter, Clock, MessageCircle, ChevronDown, Check, Mic, Mail } from 'lucide-react';
+import { Search, Filter, Clock, MessageCircle, ChevronDown, Check, Mic, Mail, Globe2 } from 'lucide-react';
 import WhatsappIcon from '@/components/icons/WhatsappIcon';
 import { isInstagramCard, resolveCardChannel, resolveOmnichannelBadge } from '@/lib/omnichannel/resolveCardChannel';
+import { getCountryStatsSummary } from '@/lib/omnichannel/countryStats';
+import { CountryFlag } from '@/components/CountryFlag';
+import { ConversationContactMeta, getContactAvatarInitial } from './ConversationContactMeta';
 
 interface ChatListProps {
     selectedFolder: string;
@@ -13,6 +16,90 @@ interface ChatListProps {
 
 type SortOption = 'newest' | 'oldest';
 type FilterOption = 'all' | 'unread';
+
+function filterCardsByFolder(cards: any[], selectedFolder: string): any[] {
+    if (selectedFolder === 'mine') {
+        return cards.filter(c => c.assignedTo === 'Mío');
+    }
+    if (selectedFolder === 'unassigned') {
+        return cards.filter(c => !c.assignedTo || c.assignedTo === 'Unassigned');
+    }
+    if (selectedFolder === 'whatsapp') {
+        return cards.filter(c => {
+            const src = (c.channel || c.source || c.primary_channel || '').toLowerCase();
+            return src.includes('whatsapp');
+        });
+    }
+    if (selectedFolder === 'instagram') {
+        return cards.filter((c) => isInstagramCard(c));
+    }
+    if (selectedFolder === 'messenger') {
+        return cards.filter(c => {
+            const src = (c.channel || c.source || c.primary_channel || '').toLowerCase();
+            return src.includes('messenger') || src.includes('facebook') || src.includes('meta');
+        });
+    }
+    if (selectedFolder === 'telegram') {
+        return cards.filter(c => {
+            const src = (c.channel || c.source || c.primary_channel || '').toLowerCase();
+            return src.includes('telegram');
+        });
+    }
+    if (selectedFolder === 'twitter' || selectedFolder === 'x') {
+        return cards.filter(c => {
+            const src = (c.channel || c.source || c.primary_channel || '').toLowerCase();
+            return src.includes('x') || src.includes('twitter');
+        });
+    }
+    if (selectedFolder === 'gmail') {
+        return cards.filter(c => {
+            const src = (c.channel || c.source || c.primary_channel || '').toLowerCase();
+            return src.includes('gmail') || src.includes('email');
+        });
+    }
+    if (selectedFolder.startsWith('label:')) {
+        const labelFilter = selectedFolder.replace('label:', '');
+        return cards.filter(c => c.labels?.includes(labelFilter));
+    }
+    return cards;
+}
+
+function dedupeCards(filtered: any[]): any[] {
+    const uniqueMap = new Map<string, any>();
+
+    filtered.forEach(c => {
+        const phone = c.contactNumber || c.contactNumberClean;
+        const resolved = resolveCardChannel(c);
+        const sourceKey = resolved === 'others' ? 'unknown' : resolved;
+        const idKey = phone
+            ? phone.replace(/\D/g, '')
+            : (c.platform_ids?.instagram ||
+                  c.platform_ids?.messenger ||
+                  c.platform_ids?.whatsapp ||
+                  c.metaSenderId ||
+                  c.external_id ||
+                  c.id);
+
+        const key = `${sourceKey}_${idKey}`;
+        const existing = uniqueMap.get(key);
+
+        const getTimestamp = (card: any) => {
+            const ts = card.updatedAt;
+            if (!ts) return 0;
+            if (typeof ts.toDate === 'function') return ts.toDate().getTime();
+            if (ts.seconds) return ts.seconds * 1000;
+            if (ts instanceof Date) return ts.getTime();
+            if (typeof ts === 'number') return ts;
+            return 0;
+        };
+
+        if (!existing || getTimestamp(c) > getTimestamp(existing)) {
+            uniqueMap.set(key, c);
+        }
+    });
+
+    return Array.from(uniqueMap.values());
+}
 
 export default function ChatList({ selectedFolder, activeConversationId, setActiveConversationId, cards = [], loading = false }: ChatListProps) {
     const [searchQuery, setSearchQuery] = useState('');
@@ -32,48 +119,15 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    // Country stats from contacts in the current folder (unique phones per country)
+    const countryStats = useMemo(() => {
+        const folderCards = dedupeCards(filterCardsByFolder(cards, selectedFolder));
+        return getCountryStatsSummary(folderCards);
+    }, [cards, selectedFolder]);
+
     // Process and filter real cards from Firebase
     const conversations = useMemo(() => {
-        let filtered = [...cards];
-
-        // 1. Folder Filtering
-        if (selectedFolder === 'mine') {
-            filtered = filtered.filter(c => c.assignedTo === 'Mío');
-        } else if (selectedFolder === 'unassigned') {
-            filtered = filtered.filter(c => !c.assignedTo || c.assignedTo === 'Unassigned');
-        } else if (selectedFolder === 'whatsapp') {
-            filtered = filtered.filter(c => {
-                const src = (c.channel || c.source || c.primary_channel || '').toLowerCase();
-                return src.includes('whatsapp');
-            });
-        } else if (selectedFolder === 'instagram') {
-            filtered = filtered.filter((c) => isInstagramCard(c));
-        } else if (selectedFolder === 'messenger') {
-            filtered = filtered.filter(c => {
-                const src = (c.channel || c.source || c.primary_channel || '').toLowerCase();
-                return src.includes('messenger') || src.includes('facebook') || src.includes('meta');
-            });
-        } else if (selectedFolder === 'telegram') {
-            filtered = filtered.filter(c => {
-                const src = (c.channel || c.source || c.primary_channel || '').toLowerCase();
-                return src.includes('telegram');
-            });
-        } else if (selectedFolder === 'twitter' || selectedFolder === 'x') {
-            filtered = filtered.filter(c => {
-                const src = (c.channel || c.source || c.primary_channel || '').toLowerCase();
-                return src.includes('x') || src.includes('twitter');
-            });
-        } else if (selectedFolder === 'gmail') {
-            filtered = filtered.filter(c => {
-                const src = (c.channel || c.source || c.primary_channel || '').toLowerCase();
-                return src.includes('gmail') || src.includes('email');
-            });
-        } else if (selectedFolder === 'all') {
-            // No filter applied for 'all'
-        } else if (selectedFolder.startsWith('label:')) {
-            const labelFilter = selectedFolder.replace('label:', '');
-            filtered = filtered.filter(c => c.labels?.includes(labelFilter));
-        }
+        let filtered = filterCardsByFolder(cards, selectedFolder);
 
         console.log(`[ChatList] Filtered ${filtered.length} cards for folder: ${selectedFolder}`);
 
@@ -91,42 +145,8 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
             );
         }
 
-        // 4. Deduplication logic (Reverted to Platform Isolation)
-        // If multiple cards exist for the same contact, we show them separately by platform
-        const uniqueMap = new Map<string, any>();
-        filtered.forEach(c => {
-            const phone = c.contactNumber || c.contactNumberClean;
-            const resolved = resolveCardChannel(c);
-            const sourceKey = resolved === 'others' ? 'unknown' : resolved;
-            const idKey = phone
-                ? phone.replace(/\D/g, '')
-                : (c.platform_ids?.instagram ||
-                      c.platform_ids?.messenger ||
-                      c.platform_ids?.whatsapp ||
-                      c.metaSenderId ||
-                      c.external_id ||
-                      c.id);
-            
-            // KEY: Keep them separated by platform (Rule: Platform Isolation)
-            const key = `${sourceKey}_${idKey}`;
-            
-            const existing = uniqueMap.get(key);
-            
-            const getTimestamp = (card: any) => {
-                const ts = card.updatedAt;
-                if (!ts) return 0;
-                if (typeof ts.toDate === 'function') return ts.toDate().getTime();
-                if (ts.seconds) return ts.seconds * 1000;
-                if (ts instanceof Date) return ts.getTime();
-                if (typeof ts === 'number') return ts;
-                return 0;
-            };
-
-            if (!existing || getTimestamp(c) > getTimestamp(existing)) {
-                uniqueMap.set(key, c);
-            }
-        });
-        filtered = Array.from(uniqueMap.values());
+        // 4. Deduplication
+        filtered = dedupeCards(filtered);
 
         // 5. Sorting
         filtered.sort((a, b) => {
@@ -146,22 +166,20 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
 
         return filtered.map(c => ({
             id: c.id,
-            name: c.contactName || c.contactNumber || 'Desconocido',
+            card: c,
             channel: resolveOmnichannelBadge(c),
             snippet: c.lastMessage || c.description || 'Nueva conversación',
             time: c.updatedAt ? (typeof c.updatedAt.toDate === 'function' ? c.updatedAt.toDate() : (c.updatedAt.seconds ? new Date(c.updatedAt.seconds * 1000) : new Date(c.updatedAt))).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'}) : 'Reciente',
             unread: c.unreadCount || 0,
-            status: 'open',
             presence: c.presence || null,
-            allChannels: Array.from(c.allChannels || [])
         }));
     }, [cards, selectedFolder, searchQuery, sortBy, filterBy]);
 
     return (
-        <div className="w-full md:w-[280px] bg-[#0d0d0d] border-r border-neutral-900 flex flex-col h-full flex-shrink-0 text-white">
+        <div className="w-full bg-[#0d0d0d] border-r border-neutral-900 flex flex-col h-full flex-shrink-0 text-white">
             {/* Header & Search */}
-            <div className="p-2 border-b border-neutral-900 space-y-2">
-                <div className="flex items-center justify-between relative px-1 pt-1">
+            <div className="p-2.5 border-b border-neutral-900 space-y-2 overflow-visible">
+                <div className="flex items-center justify-between relative px-0.5 pt-0.5">
                     <h2 className="font-bold text-[10px] uppercase tracking-widest text-neutral-500 opacity-80">
                         {selectedFolder.startsWith('label:') ? selectedFolder.replace('label:', 'LABEL: ') : selectedFolder}
                     </h2>
@@ -207,16 +225,61 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
                     </div>
                 </div>
 
-                <div className="relative px-1">
+                <div className="relative px-0.5">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-700" size={12} />
                     <input
                         type="text"
                         placeholder="Search..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-neutral-900 border border-neutral-800 rounded py-1 pl-7 pr-2 text-[11px] focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-neutral-700"
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded py-1.5 pl-7 pr-2 text-[11px] focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-neutral-700"
                     />
                 </div>
+
+                {countryStats.total > 0 && (
+                    <div className="px-0.5 pt-1 overflow-visible w-full">
+                        <div className="flex flex-wrap items-center content-start gap-x-2 gap-y-2 w-full">
+                            <div className="group relative inline-flex items-center gap-1.5 cursor-default pr-1 border-r border-neutral-800 mr-0.5">
+                                <span
+                                    role="tooltip"
+                                    className="pointer-events-none absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 z-50 rounded-md bg-neutral-800 px-2 py-1 text-[10px] font-medium text-white whitespace-nowrap opacity-0 shadow-md border border-neutral-700 transition-opacity duration-150 group-hover:opacity-100"
+                                >
+                                    Total de contactos
+                                    <span
+                                        aria-hidden
+                                        className="absolute left-1/2 top-full -translate-x-1/2 border-[5px] border-transparent border-t-neutral-800"
+                                    />
+                                </span>
+                                <Globe2 size={15} className="text-sky-400/90 flex-shrink-0" strokeWidth={2} />
+                                <span className="text-[12px] font-bold text-white tabular-nums leading-none">
+                                    {countryStats.total}
+                                </span>
+                            </div>
+
+                            {countryStats.byCountry.map((stat) => (
+                                <div
+                                    key={stat.iso}
+                                    className="group relative inline-flex items-center gap-1 cursor-default"
+                                >
+                                    <span
+                                        role="tooltip"
+                                        className="pointer-events-none absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 z-50 rounded-md bg-neutral-800 px-2 py-1 text-[10px] font-medium text-white whitespace-nowrap opacity-0 shadow-md border border-neutral-700 transition-opacity duration-150 group-hover:opacity-100"
+                                    >
+                                        {stat.country}
+                                        <span
+                                            aria-hidden
+                                            className="absolute left-1/2 top-full -translate-x-1/2 border-[5px] border-transparent border-t-neutral-800"
+                                        />
+                                    </span>
+                                    <CountryFlag iso={stat.iso} country={stat.country} size="sm" />
+                                    <span className="text-[11px] font-semibold text-neutral-200 tabular-nums leading-none">
+                                        {stat.count}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Conversation List */}
@@ -233,15 +296,15 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
                             <button
                                 key={chat.id}
                                 onClick={() => setActiveConversationId(chat.id)}
-                                className={`w-full flex items-start p-2 text-left transition-colors hover:bg-neutral-900/50 relative ${activeConversationId === chat.id ? 'bg-neutral-900/80 shadow-inner' : ''}`}
+                                className={`w-full flex items-start p-2.5 text-left transition-colors hover:bg-neutral-900/50 relative ${activeConversationId === chat.id ? 'bg-neutral-900/80 shadow-inner' : ''}`}
                             >
                                 {activeConversationId === chat.id && (
-                                    <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-blue-500 rounded-r" />
+                                    <div className="absolute left-0 top-2 bottom-2 w-0.5 bg-blue-500 rounded-r" />
                                 )}
 
-                                <div className="relative mr-2 flex-shrink-0 pt-0.5">
-                                    <div className="w-7 h-7 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center font-bold text-[10px] text-white">
-                                        {chat.name.charAt(0).toUpperCase()}
+                                <div className="relative mr-2.5 flex-shrink-0 pt-0.5">
+                                    <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center font-bold text-[11px] text-white">
+                                        {getContactAvatarInitial(chat.card)}
                                     </div>
                                     <div className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border border-[#0d0d0d] flex items-center justify-center overflow-hidden
                                         ${chat.channel.toLowerCase().includes('whatsapp') ? 'bg-[#25D366]' :
@@ -268,17 +331,26 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
                                 </div>
 
                                 <div className="flex-1 min-w-0">
-                                    <div className="flex justify-between items-baseline mb-0">
-                                        <h3 className={`font-semibold truncate pr-1 text-[12px] ${chat.unread > 0 ? 'text-white' : 'text-neutral-400'}`}>
-                                            {chat.name}
-                                        </h3>
-                                        <span className="text-[9px] text-neutral-600 flex-shrink-0 font-medium">
-                                            {chat.time}
-                                        </span>
+                                    <div className="flex justify-between items-start gap-2 mb-1">
+                                        <ConversationContactMeta
+                                            card={chat.card}
+                                            compact
+                                            highlight={chat.unread > 0}
+                                        />
+                                        <div className="flex flex-col items-end flex-shrink-0 gap-1">
+                                            <span className="text-[9px] text-neutral-600 font-medium leading-none">
+                                                {chat.time}
+                                            </span>
+                                            {chat.unread > 0 && (
+                                                <span className="bg-blue-600 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full inline-block min-w-[1rem] text-center leading-none">
+                                                    {chat.unread}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-1">
+                                    <div className="flex items-center gap-1 min-w-0">
                                         {chat.unread > 0 && <div className="w-1 h-1 rounded-full bg-blue-500 flex-shrink-0" />}
-                                        <div className={`truncate text-[11px] ${chat.unread > 0 ? 'text-neutral-300 font-medium' : 'text-neutral-600'}`}>
+                                        <div className={`truncate text-[10px] ${chat.unread > 0 ? 'text-neutral-300 font-medium' : 'text-neutral-600'}`}>
                                             {chat.presence === 'typing' ? (
                                                 <span className="text-blue-500 italic animate-pulse">Escribiendo...</span>
                                             ) : chat.presence === 'recording' ? (
@@ -291,14 +363,6 @@ export default function ChatList({ selectedFolder, activeConversationId, setActi
                                         </div>
                                     </div>
                                 </div>
-
-                                {chat.unread > 0 && (
-                                    <div className="ml-1 flex-shrink-0 pt-0.5">
-                                        <span className="bg-blue-600 text-white text-[8px] font-bold px-1 py-0 rounded-full inline-block min-w-[0.8rem] text-center">
-                                            {chat.unread}
-                                        </span>
-                                    </div>
-                                )}
                             </button>
                         ))
                     )}

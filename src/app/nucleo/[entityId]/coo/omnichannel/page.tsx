@@ -102,7 +102,7 @@ export default function OmnichannelInboxPage() {
                 </div>
 
                 {/* 2. Middle Column: List of conversations */}
-                <div className={`${activeConversationId ? 'hidden' : 'flex'} md:flex flex-col w-full md:w-[280px] h-full bg-[#0d0d0d]`}>
+                <div className={`${activeConversationId ? 'hidden' : 'flex'} md:flex flex-col w-full md:w-[600px] h-full bg-[#0d0d0d] flex-shrink-0`}>
                     {/* Mobile Header for List View */}
                     {!activeConversationId && (
                         <div className="md:hidden h-14 border-b border-neutral-900 flex items-center px-4 justify-between bg-[#0a0a0a]">

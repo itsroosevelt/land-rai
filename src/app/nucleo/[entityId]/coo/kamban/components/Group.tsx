@@ -1,7 +1,7 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { sortCardsByArrival } from '@/lib/omnichannel/cardSort';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, doc, deleteDoc, updateDoc, serverTimestamp, query, writeBatch, Timestamp } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext';
@@ -87,8 +87,7 @@ const Group = ({ group, allGroups = [], onCardClick, onUpdateColor, contacts = [
 
     const unsubscribe = onSnapshot(cardsQuery, (snapshot) => {
       const cardsData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, groupId: group.id })) as CardData[];
-      cardsData.sort((a, b) => (b.updatedAt?.toDate()?.getTime() || 0) - (a.updatedAt?.toDate()?.getTime() || 0));
-      setCards(cardsData);
+      setCards(sortCardsByArrival(cardsData));
     });
     return () => unsubscribe();
   }, [group.id]);

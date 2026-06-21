@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';import { useAuth } from '@/contexts/AuthContext';
+import { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 
 import { db } from '@/lib/firebase';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, arrayUnion, Timestamp, addDoc } from 'firebase/firestore';
-import { functions } from '@/lib/firebase';
-import { httpsCallable } from 'firebase/functions';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, Timestamp, addDoc } from 'firebase/firestore';
 import { toast } from 'sonner';
+import { moveCardBetweenGroups } from '@/lib/kanban/moveCardClient';
 
 export const useKambanBoard = (filterTerm: string = '') => {
     const { currentUser, activeEntity } = useAuth();
@@ -57,14 +57,12 @@ export const useKambanBoard = (filterTerm: string = '') => {
         return () => unsubscribes.forEach(u => u());
     }, [groups.length]);
 
-    const moveCardCallable = httpsCallable(functions, 'moveCard');
-
     const handleDragEnd = async (event: any) => {
         const { active, over } = event;
         if (!over) return;
 
-        const activeId = active.id;
-        const overId = over.id;
+        const activeId = active.id as string;
+        const overId = over.id as string;
 
         if (activeId === overId) return;
 
@@ -72,57 +70,45 @@ export const useKambanBoard = (filterTerm: string = '') => {
         if (!movedCard) return;
 
         const sourceGroupId = movedCard.groupId;
+        const tenantPath = getTenantPath();
+        if (!tenantPath || !currentUser?.uid) return;
 
-        // Determine dest group
+        // Determine destination group
         let destGroupId = overId;
         const isOverGroup = groups.some(g => g.id === overId);
-        
+
         if (!isOverGroup) {
-            // Dropped on a card?
             const overCard = cards.find(c => c.id === overId);
             if (overCard) {
                 destGroupId = overCard.groupId;
             } else {
-                console.warn("[useKambanBoard] Over target not found:", overId);
+                console.warn('[useKambanBoard] Over target not found:', overId);
                 return;
             }
         }
 
         if (sourceGroupId === destGroupId) return;
 
-        // Optimistic Update
+        const destGroup = groups.find(g => g.id === destGroupId);
+
+        // Optimistic update
         setCards(prev => prev.map(c =>
             c.id === activeId ? { ...c, groupId: destGroupId } : c
         ));
 
-        const destGroup = groups.find(g => g.id === destGroupId);
-
         try {
-            console.log(`[useKambanBoard] Moving card ${activeId} from ${sourceGroupId} to ${destGroupId}`);
-            await moveCardCallable({
+            await moveCardBetweenGroups({
+                tenantPath,
                 cardId: activeId,
                 sourceGroupId,
                 destGroupId,
-                userId: currentUser?.uid,
-                entityId: activeEntity
+                destGroupName: destGroup?.name,
+                authorName: currentUser.displayName || 'Usuario',
             });
-
-            const cardRef = doc(db, `${getTenantPath()}/kanban-groups`, destGroupId, 'cards', activeId);
-            await updateDoc(cardRef, {
-                groupId: destGroupId,
-                history: arrayUnion({
-                    id: `hist_${Date.now()}`,
-                    type: 'status',
-                    content: `Movido a ${destGroup?.name || 'Grupo'}`,
-                    timestamp: Timestamp.now(),
-                    author: currentUser?.displayName || 'Usuario'
-                })
-            });
-            toast.success(`Movido a ${destGroup?.name}`);
+            toast.success(`Movido a ${destGroup?.name || 'grupo'}`);
         } catch (error) {
             console.error('[useKambanBoard] Move failed:', error);
             toast.error('Error al mover tarjeta');
-            // Revert optimistic update
             setCards(prev => prev.map(c =>
                 c.id === activeId ? { ...c, groupId: sourceGroupId } : c
             ));

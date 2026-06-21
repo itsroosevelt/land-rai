@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { MoreVertical, Info, Send, Paperclip, Mail, Smile, Image as ImageIcon, FileText, Loader2, Zap, User, XCircle, Ban, Mic, X, Plus, MapPin, Contact2, AlertCircle, RefreshCw, List, MousePointer2, ExternalLink, ChevronLeft } from 'lucide-react';
 import { useConversationLogic } from '../../whatsapp/components/ConversationModal/hooks/useConversationLogic';
 import { Button } from '@/components/ui/button';
@@ -6,6 +6,8 @@ import { toast } from 'sonner';
 import { db } from '@/lib/firebase';
 import { doc, updateDoc, Timestamp, collection, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext';
+import { getContactHeaderNames, getContactPhoneDisplay } from '@/lib/omnichannel/contactHeaderInfo';
+import { CountryFlag } from '@/components/CountryFlag';
 
 interface ChatAreaProps {
     card: any;
@@ -176,8 +178,22 @@ export default function ChatArea({ card, groups, groupName, allConversations, on
         }
     }, [card?.id, logic.liveCardData?.messages?.length]);
 
-    const contactName = card?.contactName || card?.contactNumber || 'Desconocido';
-    const isOnline = card?.isOnline ?? true;
+    const liveCard = logic.liveCardData || card;
+    const { whatsappName, botName } = getContactHeaderNames(liveCard);
+    const contactName = whatsappName;
+    const displayInitial = (botName || whatsappName).charAt(0).toUpperCase();
+
+    const phoneDisplay = useMemo(
+        () => getContactPhoneDisplay(liveCard),
+        [
+            liveCard?.contactNumber,
+            liveCard?.contactNumberClean,
+            liveCard?.phone,
+            liveCard?.channel,
+            liveCard?.source,
+            liveCard?.primary_channel,
+        ]
+    );
 
     const handleSelectQuickReply = (text: string) => {
         logic.setNewMessage(text);
@@ -307,35 +323,59 @@ export default function ChatArea({ card, groups, groupName, allConversations, on
         <div className="flex-1 flex flex-col h-full relative">
 
             {/* Header */}
-            <div className="h-14 border-b border-neutral-800 bg-[#111] flex items-center justify-between px-3 flex-shrink-0">
-                <div className="flex items-center gap-3">
+            <div className="min-h-14 py-2.5 border-b border-neutral-800 bg-[#111] flex items-center justify-between px-3 flex-shrink-0">
+                <div className="flex items-center gap-3 min-w-0">
                     {onBack && (
                         <button 
                             onClick={onBack}
-                            className="md:hidden p-2 -ml-1 text-blue-500 hover:bg-blue-500/10 rounded-full transition-all active:scale-90"
+                            className="md:hidden p-2 -ml-1 text-blue-500 hover:bg-blue-500/10 rounded-full transition-all active:scale-90 flex-shrink-0"
                         >
                             <ChevronLeft size={24} />
                         </button>
                     )}
-                    <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center font-bold text-white text-[12px] shadow-sm">
-                        {contactName.charAt(0).toUpperCase()}
+                    <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center font-bold text-white text-[13px] shadow-sm flex-shrink-0">
+                        {displayInitial}
                     </div>
-                    <div>
-                        <h2 className="font-semibold text-white tracking-tight text-[13px]">{contactName}</h2>
-                        <div className="flex items-center text-[10px] text-neutral-500 min-h-[16px]">
-                            {card?.presence === 'typing' ? (
-                                <span className="text-blue-500 italic animate-pulse font-medium">Escribiendo...</span>
-                            ) : card?.presence === 'recording' ? (
-                                <span className="text-blue-500 italic animate-pulse font-medium flex items-center gap-1">
-                                    <Mic size={10} /> Grabando audio...
+                    <div className="min-w-0 flex flex-col gap-1">
+                        <div className="flex items-baseline gap-x-2 gap-y-0.5 min-w-0 flex-wrap">
+                            <h2 className="font-semibold text-white tracking-tight text-[15px] leading-tight truncate">
+                                {whatsappName}
+                            </h2>
+                            <span className="text-neutral-600 text-[12px] leading-none flex-shrink-0">|</span>
+                            {botName ? (
+                                <span
+                                    className="text-[14px] text-sky-300/95 font-medium leading-tight truncate"
+                                    title="Nombre indicado en la conversación"
+                                >
+                                    {botName}
                                 </span>
                             ) : (
-                                <>
-                                    <span className={`w-1 h-1 rounded-full mr-1.5 inline-block ${isOnline ? 'bg-green-500' : 'bg-neutral-500'}`}></span>
-                                    {isOnline ? 'Online' : 'Offline'}
-                                </>
+                                <span className="text-[13px] text-neutral-500 italic leading-tight truncate">
+                                    En espera del nombre
+                                </span>
                             )}
                         </div>
+
+                        {phoneDisplay ? (
+                            <div className="flex items-center gap-1.5 min-w-0 text-[11px] leading-none">
+                                <CountryFlag iso={phoneDisplay.iso} country={phoneDisplay.country} size="sm" />
+                                <span className="text-neutral-300 truncate">{phoneDisplay.country}</span>
+                                <span className="text-neutral-600 flex-shrink-0">·</span>
+                                <span className="text-neutral-500 font-mono truncate">{phoneDisplay.formatted}</span>
+                            </div>
+                        ) : null}
+
+                        {(liveCard?.presence === 'typing' || liveCard?.presence === 'recording') && (
+                            <div className="flex items-center text-[10px] text-blue-400 min-h-[14px]">
+                                {liveCard?.presence === 'typing' ? (
+                                    <span className="italic animate-pulse font-medium">Escribiendo...</span>
+                                ) : (
+                                    <span className="italic animate-pulse font-medium flex items-center gap-1">
+                                        <Mic size={10} /> Grabando audio...
+                                    </span>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 

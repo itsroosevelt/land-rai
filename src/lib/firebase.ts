@@ -29,7 +29,7 @@ const storage = getStorage(app);
 const functions = getFunctions(app);
 
 // Prueba de Conexión y Confirmación para Roosevelt
-console.log("🚀 [ROOSEVELT INFRASTRUCTURE]: Sistema de bases de datos Firebase inicializado con éxito. Listo para operar en la cuenta del nuevo dueño.");
+console.log("🚀 [itsroosevelt]: Firebase inicializado correctamente.");
 
 // Export the services
 export { app, db, auth, storage, functions };

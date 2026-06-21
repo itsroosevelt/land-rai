@@ -128,6 +128,11 @@ export default function KambanBoard() {
     setActiveId(event.active.id as string);
   };
 
+  const handleDragEndWrapper = async (event: Parameters<typeof handleDragEnd>[0]) => {
+    setActiveId(null);
+    await handleDragEnd(event);
+  };
+
   const handleCardClick = (card: any) => {
     setSelectedCard(card);
     setIsModalOpen(true);
@@ -180,7 +185,7 @@ export default function KambanBoard() {
           sensors={sensors}
           collisionDetection={closestCorners}
           onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
+          onDragEnd={handleDragEndWrapper}
         >
           <div className="flex min-h-full w-full md:min-w-max p-2 pt-1 pb-4 gap-2 overflow-x-auto snap-x snap-mandatory no-scrollbar">
             {groups.map(group => (

@@ -1,7 +1,7 @@
 {
-  "name": "roosevelt-platform",
+  "name": "itsroosevelt",
   "version": "1.0.0",
-  "description": "Roosevelt - Plataforma SaaS Multi-Tenant para Gestión y Automatización de Negocios.",
+  "description": "itsroosevelt - Plataforma SaaS Multi-Tenant para Gestión y Automatización de Negocios.",
   "main": "index.js",
   "scripts": {
     "dev": "next dev -p 3000",
@@ -22,7 +22,7 @@
     "firebase",
     "google cloud"
   ],
-  "author": "Roosevelt Corp",
+  "author": "itsroosevelt",
   "license": "ISC",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.36.3",

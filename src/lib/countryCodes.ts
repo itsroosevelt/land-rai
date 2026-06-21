@@ -210,3 +210,53 @@ export const ALL_COUNTRY_CODES: CountryCode[] = [
     { code: '+998', country: 'Uzbekistan', flag: '🇺🇿', iso: 'UZ' },
 ];
 
+const SORTED_BY_CODE_LENGTH = [...ALL_COUNTRY_CODES].sort(
+    (a, b) => b.code.length - a.code.length
+);
+
+/** Resolve country metadata from an E.164 or digits-only phone string. */
+export function getCountryFromPhone(fullPhone: string): CountryCode | undefined {
+    if (!fullPhone) return undefined;
+    const digits = fullPhone.replace(/\D/g, '');
+    if (!digits) return undefined;
+    const normalized = fullPhone.trim().startsWith('+') ? `+${digits}` : `+${digits}`;
+    return SORTED_BY_CODE_LENGTH.find(c => normalized.startsWith(c.code));
+}
+
+export interface PhoneDisplayInfo {
+    flag: string;
+    formatted: string;
+    country?: string;
+    iso?: string;
+}
+
+/** Format phone for compact UI display with country flag. */
+export function getPhoneDisplayInfo(phone: string | undefined | null): PhoneDisplayInfo | null {
+    if (!phone) return null;
+
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length < 8) return null;
+
+    const normalized = phone.trim().startsWith('+') ? `+${digits}` : `+${digits}`;
+    const country = getCountryFromPhone(normalized);
+    const localPart = country ? normalized.slice(country.code.length) : normalized.slice(1);
+
+    let formattedLocal = localPart;
+    if (localPart.length > 6) {
+        formattedLocal = `${localPart.slice(0, 3)} ${localPart.slice(3, 6)} ${localPart.slice(6)}`.trim();
+    } else if (localPart.length > 3) {
+        formattedLocal = `${localPart.slice(0, 3)} ${localPart.slice(3)}`;
+    }
+
+    const formatted = country
+        ? `${country.code} ${formattedLocal}`.trim()
+        : normalized;
+
+    return {
+        flag: country?.flag ?? '🌍',
+        formatted,
+        country: country?.country,
+        iso: country?.iso,
+    };
+}
+

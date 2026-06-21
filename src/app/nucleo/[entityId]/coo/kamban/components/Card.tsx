@@ -22,8 +22,8 @@ import {
   FileSpreadsheet, Mail, Send
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { countryData } from '@/lib/utils';
 import { resolveCardChannel } from '@/lib/omnichannel/resolveCardChannel';
+import { ConversationContactMeta } from '../../omnichannel/components/ConversationContactMeta';
 import {
   Dialog,
   DialogContent,
@@ -192,78 +192,20 @@ const Card = ({ card, groupId, onClick, cardColor = 'bg-neutral-800', contacts =
     }
   };
 
-  const formatTimestamp = (timestamp) => {
-    if (!timestamp?.toDate) return '';
-    const date = timestamp.toDate();
-    const day = date.getDate().toString().padStart(2, '0');
-    const month = date.toLocaleString('es-ES', { month: 'short' }).toUpperCase();
-    const time = date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
-
-    return `${day} ${month} ${time}`;
-  };
-
-  const getCountryInfo = (phoneNumber) => {
-    if (!phoneNumber) return { flag: '🏳️', code: 'N/A' };
-    const number = phoneNumber.replace('+', '');
-    const codes = Object.keys(countryData).sort((a, b) => b.length - a.length);
-    for (const code of codes) {
-      if (number.startsWith(code)) {
-        const data = countryData[code];
-        return typeof data === 'string' ? { flag: data, code: 'N/A' } : data;
-      }
-    }
-    return { flag: '🏳️', code: 'N/A' };
-  };
-
-  const { flag, code } = getCountryInfo(card.contactNumber);
-
-  const isGenericMetaName = (value: any) => {
-    const normalized = String(value || '').trim().toLowerCase();
-    if (!normalized) return true;
-    return normalized === 'usuario meta' || normalized === 'usuario' || normalized === 'instagram user';
-  };
-
-  const resolveCardChannelLocal = () => {
+  const resolvedChannel = (() => {
     const ch = resolveCardChannel(card);
     if (ch === 'instagram_comments') return 'instagram';
     return ch;
+  })();
+
+  const renderChannelIcon = () => {
+    if (resolvedChannel === 'gmail') return <Mail size={12} className="text-red-500 flex-shrink-0" />;
+    if (resolvedChannel === 'instagram') return <Instagram size={12} className="text-pink-500 flex-shrink-0" />;
+    if (resolvedChannel === 'messenger') return <Facebook size={12} className="text-blue-600 flex-shrink-0" />;
+    if (resolvedChannel === 'web') return <Globe2 size={12} className="text-cyan-400 flex-shrink-0" />;
+    if (resolvedChannel === 'telegram') return <Send size={12} className="text-sky-500 flex-shrink-0" />;
+    return <WhatsappIcon className="w-3 h-3 text-emerald-500 fill-current flex-shrink-0" />;
   };
-
-  const resolveDisplayName = () => {
-    const contactId = (card as any).contactId || (card as any).crmId;
-    let linkedContact: any = null;
-
-    if (contactId) linkedContact = (contacts as any[]).find(c => c.id === contactId);
-    if (!linkedContact && card.metaSenderId) {
-      linkedContact = (contacts as any[]).find(c => c.metaSenderId === card.metaSenderId);
-    }
-    if (!linkedContact && card.contactNumber) {
-      const normalizedCardPhone = card.contactNumber.replace(/\D/g, '');
-      if (normalizedCardPhone) {
-        linkedContact = (contacts as any[]).find(c => (c.phone || '').replace(/\D/g, '') === normalizedCardPhone);
-      }
-    }
-
-    const linkedName = linkedContact?.name || `${linkedContact?.firstName || ''} ${linkedContact?.lastName || ''}`.trim();
-    if (linkedName && !isGenericMetaName(linkedName)) return linkedName;
-    if (card.contactName && !isGenericMetaName(card.contactName)) return card.contactName;
-    if (linkedName) return linkedName;
-    return card.contactName || 'Unknown';
-  };
-
-  const getChannelColor = (channel = '') => {
-    const c = (channel || '').toLowerCase();
-    if (c.includes('instagram')) return 'border-pink-500';
-    if (c.includes('messenger') || c.includes('facebook')) return 'border-blue-600';
-    if (c.includes('web')) return 'border-cyan-400';
-    if (c.includes('telegram')) return 'border-sky-500';
-    if (c.includes('x') || c.includes('twitter')) return 'border-neutral-400';
-    if (c.includes('tiktok')) return 'border-pink-400';
-    return 'border-emerald-500';
-  };
-
-  const resolvedChannel = resolveCardChannelLocal();
-  const channelColorClass = getChannelColor(resolvedChannel);
 
   return (
     <TooltipProvider>
@@ -271,42 +213,69 @@ const Card = ({ card, groupId, onClick, cardColor = 'bg-neutral-800', contacts =
         ref={setNodeRef}
         style={style}
         data-card-id={card.id}
-        onClick={onClick}
         {...attributes}
-        {...listeners}
         className={cn(
-          "group relative p-2 sm:p-3 rounded-xl border border-white/5 transition-all duration-200 select-none cursor-pointer mb-1.5 sm:mb-2 shadow-sm",
+          "group relative p-2.5 sm:p-3 rounded-xl border border-white/5 transition-all duration-200 select-none mb-1.5 sm:mb-2 shadow-sm",
           cardColor || "bg-[#181818]/50",
-          "hover:bg-white/5 hover:border-white/10"
+          "hover:bg-white/5 hover:border-white/10",
+          isDragging && "opacity-60 ring-1 ring-blue-500/40"
         )}
       >
-        <div className="flex items-center justify-between min-w-0">
-          <h3 className="font-semibold text-[13px] text-white/90 truncate leading-tight tracking-tight flex items-center gap-1.5">
-            {(() => {
-              if (resolvedChannel === 'gmail') return <Mail size={12} className="text-red-500" />;
-              if (resolvedChannel === 'instagram') return <Instagram size={12} className="text-pink-500" />;
-              if (resolvedChannel === 'messenger') return <Facebook size={12} className="text-blue-600" />;
-              if (resolvedChannel === 'web') return <Globe2 size={12} className="text-cyan-400" />;
-              if (resolvedChannel === 'telegram') return <Send size={12} className="text-sky-500" />;
-              return <WhatsappIcon className="w-3 h-3 text-emerald-500 fill-current" />;
-            })()}
-            {resolveDisplayName()}
-          </h3>
-
-          <div className="flex items-center gap-2">
-            {card.unreadCount > 0 && (
-              <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
+        <div className="flex items-start gap-1.5 min-w-0">
+          <button
+            type="button"
+            aria-label="Arrastrar tarjeta"
+            {...listeners}
+            onClick={(e) => e.stopPropagation()}
+            className={cn(
+              "mt-0.5 p-1 rounded-md text-neutral-600 hover:text-neutral-300 hover:bg-white/5 flex-shrink-0 touch-none",
+              "cursor-grab active:cursor-grabbing"
             )}
+          >
+            <GripVertical size={14} />
+          </button>
 
-            <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={(e) => { e.stopPropagation(); handleOpenDeleteDialog(e); }}
-                className="h-6 w-6 text-neutral-500 hover:text-red-400 hover:bg-red-500/10 rounded-full"
-              >
-                <Trash2 size={12} />
-              </Button>
+          <div
+            className="flex-1 min-w-0 cursor-pointer"
+            onClick={onClick}
+          >
+            <div className="flex items-start gap-2 min-w-0">
+              <div className="pt-0.5">{renderChannelIcon()}</div>
+
+              <div className="flex-1 min-w-0">
+                <ConversationContactMeta
+                  card={card}
+                  compact
+                  highlight={card.unreadCount > 0}
+                />
+                {card.lastMessage && (
+                  <p className={cn(
+                    'text-[10px] truncate mt-1 leading-snug',
+                    card.unreadCount > 0 ? 'text-neutral-300 font-medium' : 'text-neutral-500'
+                  )}>
+                    {card.lastMessage}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                {card.unreadCount > 0 && (
+                  <span className="bg-blue-600 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full min-w-[1rem] text-center leading-none">
+                    {card.unreadCount}
+                  </span>
+                )}
+
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => { e.stopPropagation(); handleOpenDeleteDialog(e); }}
+                    className="h-6 w-6 text-neutral-500 hover:text-red-400 hover:bg-red-500/10 rounded-full"
+                  >
+                    <Trash2 size={12} />
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

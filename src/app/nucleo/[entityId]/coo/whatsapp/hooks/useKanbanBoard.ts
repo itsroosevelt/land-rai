@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, arrayUnion, Timestamp } from 'firebase/firestore';
-import { functions } from '@/lib/firebase';
-import { httpsCallable } from 'firebase/functions';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { toast } from 'sonner';
+import { moveCardBetweenGroups } from '@/lib/kanban/moveCardClient';
 import { useAuth } from '@/contexts/AuthContext';
 
 export const useKanbanBoard = (filterTerm: string = '') => {
@@ -77,14 +76,12 @@ export const useKanbanBoard = (filterTerm: string = '') => {
         return () => unsubscribes.forEach(u => u());
     }, [groups, currentUser?.uid, activeEntity]);
 
-    const moveCardCallable = httpsCallable(functions, 'moveCard');
-
     const handleDragEnd = async (event: any) => {
         const { active, over } = event;
         if (!over) return;
 
-        const activeId = active.id;
-        const overId = over.id;
+        const activeId = active.id as string;
+        const overId = over.id as string;
 
         if (activeId === overId) return;
 
@@ -92,20 +89,19 @@ export const useKanbanBoard = (filterTerm: string = '') => {
         if (!movedCard) return;
 
         const sourceGroupId = movedCard.groupId;
+        const tenantPath = getTenantPath();
+        if (!tenantPath || !currentUser?.uid) return;
 
-        // Determine dest group
         let destGroupId = overId;
         const isOverGroup = groups.some(g => g.id === overId);
         if (!isOverGroup) {
-            // Dropped on a card?
             const overCard = cards.find(c => c.id === overId);
             if (overCard) destGroupId = overCard.groupId;
             else return;
         }
 
-        if (sourceGroupId === destGroupId) return; // Reorder logic TODO
+        if (sourceGroupId === destGroupId) return;
 
-        // Optimistic Update
         setCards(prev => prev.map(c =>
             c.id === activeId ? { ...c, groupId: destGroupId } : c
         ));
@@ -113,30 +109,21 @@ export const useKanbanBoard = (filterTerm: string = '') => {
         const destGroup = groups.find(g => g.id === destGroupId);
 
         try {
-            const tenantPath = getTenantPath();
-            if (!tenantPath) return;
-
-            await moveCardCallable({
+            await moveCardBetweenGroups({
+                tenantPath,
                 cardId: activeId,
                 sourceGroupId,
                 destGroupId,
-                userId: currentUser?.uid,
-                entityId: activeEntity
+                destGroupName: destGroup?.name,
+                authorName: currentUser.displayName || 'Usuario',
             });
-
-            await updateDoc(doc(db, `${tenantPath}/kanban-groups/${destGroupId}/cards/${activeId}`), {
-                history: arrayUnion({
-                    id: `hist_${Date.now()}`,
-                    type: 'status',
-                    content: `Movido a ${destGroup?.name || 'Grupo'}`,
-                    timestamp: Timestamp.now(),
-                    author: 'Usuario'
-                })
-            });
-            toast.success(`Movido a ${destGroup?.name}`);
+            toast.success(`Movido a ${destGroup?.name || 'grupo'}`);
         } catch (error) {
             console.error('Move failed', error);
             toast.error('Error al mover');
+            setCards(prev => prev.map(c =>
+                c.id === activeId ? { ...c, groupId: sourceGroupId } : c
+            ));
         }
     };
 
