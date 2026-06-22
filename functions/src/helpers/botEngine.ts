@@ -360,6 +360,15 @@ export async function tryTriggerBot(
     const cardSnap = await cardRef.get();
     const cardData = { id: cardRef.id, ...cardSnap.data() } as any;
 
+    if (cardData.humanTakeover?.active === true) {
+        functions.logger.info(`[Bot Engine] Human takeover active — skipping bot for ${externalId}`);
+        await logBotTrace(userId, entityId, {
+            step: 'human_takeover', status: 'info', platform, externalId,
+            details: 'Human agent has control; bot execution skipped.',
+        });
+        return;
+    }
+
     // Next.js queue engine owns bot execution for this card — avoid duplicate WhatsApp replies.
     if (cardData.botState?.engine === 'queue') {
         functions.logger.info(`[Bot Engine] Skipping legacy engine for ${externalId} — queue engine active.`);

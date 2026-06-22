@@ -315,6 +315,14 @@ async function tryTriggerBot(userId, entityId, platform, externalId, messageText
     await logBotTrace(userId, entityId, { step: 'card_resolution', status: 'success', platform, externalId, details: `Resolved card path: ${cardRef.path}` });
     const cardSnap = await cardRef.get();
     const cardData = Object.assign({ id: cardRef.id }, cardSnap.data());
+    if (cardData.humanTakeover && cardData.humanTakeover.active === true) {
+        functions.logger.info(`[Bot Engine] Human takeover active — skipping bot for ${externalId}`);
+        await logBotTrace(userId, entityId, {
+            step: 'human_takeover', status: 'info', platform, externalId,
+            details: 'Human agent has control; bot execution skipped.',
+        });
+        return;
+    }
     // Next.js queue engine owns bot execution for this card — avoid duplicate WhatsApp replies.
     if (((_a = cardData.botState) === null || _a === void 0 ? void 0 : _a.engine) === 'queue') {
         functions.logger.info(`[Bot Engine] Skipping legacy engine for ${externalId} — queue engine active.`);

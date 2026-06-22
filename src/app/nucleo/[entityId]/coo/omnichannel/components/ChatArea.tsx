@@ -1,12 +1,15 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { MoreVertical, Info, Send, Paperclip, Mail, Smile, Image as ImageIcon, FileText, Loader2, Zap, User, XCircle, Ban, Mic, X, Plus, MapPin, Contact2, AlertCircle, RefreshCw, List, MousePointer2, ExternalLink, ChevronLeft } from 'lucide-react';
+import { MoreVertical, Send, Mail, Smile, Image as ImageIcon, FileText, Loader2, User, XCircle, Ban, Mic, X, Plus, ChevronLeft, Bot, Hand, Zap, RefreshCw, AlertCircle, ExternalLink, MousePointer2, List } from 'lucide-react';
+import EmojiPicker, { Theme } from 'emoji-picker-react';
 import { useConversationLogic } from '../../whatsapp/components/ConversationModal/hooks/useConversationLogic';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase';
 import { doc, updateDoc, Timestamp, collection, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 import { getContactHeaderNames, getContactPhoneDisplay } from '@/lib/omnichannel/contactHeaderInfo';
+import { isHumanTakeoverActive } from '@/lib/omnichannel/humanTakeover';
 import { CountryFlag } from '@/components/CountryFlag';
 
 interface ChatAreaProps {
@@ -17,19 +20,14 @@ interface ChatAreaProps {
     onBack?: () => void;
 }
 
-const QUICK_REPLIES = [
-    { id: 'greet', label: 'Saludo Inicial', text: '¡Hola! ¿En qué podemos ayudarte hoy?' },
-    { id: 'wait', label: 'Esperar un Momento', text: 'Un momento por favor, estoy revisando tu solicitud...' },
-    { id: 'pricing', label: 'Info Precios', text: 'Nuestros planes comienzan desde $50/mes. ¿Te gustaría ver el catálogo completo?' },
-    { id: 'bye', label: 'Despedida', text: '¡Gracias por contactarnos! Que tengas un excelente día.' },
-];
-
 export default function ChatArea({ card, groups, groupName, allConversations, onBack }: ChatAreaProps) {
-    const [showQuickReplies, setShowQuickReplies] = useState(false);
     const [showMoreMenu, setShowMoreMenu] = useState(false);
     const [showAttachments, setShowAttachments] = useState(false);
+    const [takeoverLoading, setTakeoverLoading] = useState(false);
     const moreMenuRef = useRef<HTMLDivElement>(null);
     const attachmentsRef = useRef<HTMLDivElement>(null);
+    const mediaInputRef = useRef<HTMLInputElement>(null);
+    const docInputRef = useRef<HTMLInputElement>(null);
 
     // --- Audio Recording State --- //
     const [isRecording, setIsRecording] = useState(false);
@@ -45,6 +43,7 @@ export default function ChatArea({ card, groups, groupName, allConversations, on
     };
 
     const startRecording = async () => {
+        if (!isHumanTakeoverActive(logic.liveCardData || card) || logic.liveCardData?.isBlocked) return;
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const mediaRecorder = new MediaRecorder(stream);
@@ -195,9 +194,74 @@ export default function ChatArea({ card, groups, groupName, allConversations, on
         ]
     );
 
-    const handleSelectQuickReply = (text: string) => {
-        logic.setNewMessage(text);
-        setShowQuickReplies(false);
+    const handleSelectFile = (file: File | null | undefined) => {
+        if (!file) return;
+        if (logic.filePreviewUrl) URL.revokeObjectURL(logic.filePreviewUrl);
+        logic.setSelectedFile(file);
+        logic.setFilePreviewUrl(URL.createObjectURL(file));
+    };
+
+    const handleMediaFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        handleSelectFile(e.target.files?.[0]);
+        e.target.value = '';
+        setShowAttachments(false);
+    };
+
+    const handleDocFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        handleSelectFile(e.target.files?.[0]);
+        e.target.value = '';
+        setShowAttachments(false);
+    };
+
+    const humanControl = isHumanTakeoverActive(logic.liveCardData || card);
+    const inputDisabled = logic.liveCardData?.isBlocked || !humanControl;
+
+    const getCardRef = () => {
+        const groupId = logic.liveCardData?.groupId || card?.groupId;
+        const cardId = card?.id;
+        if (!currentUser?.uid || !activeEntity || !groupId || !cardId) return null;
+        return doc(db, `users/${currentUser.uid}/entities/${activeEntity}/kanban-groups/${groupId}/cards/${cardId}`);
+    };
+
+    const handleTakeover = async () => {
+        const cardRef = getCardRef();
+        if (!cardRef || !currentUser) return;
+        setTakeoverLoading(true);
+        try {
+            await updateDoc(cardRef, {
+                humanTakeover: {
+                    active: true,
+                    activatedAt: Timestamp.now(),
+                    activatedBy: currentUser.uid,
+                    activatedByName: currentUser.displayName || currentUser.email || 'Agente',
+                },
+            });
+            toast.success('Tomaste el control del chat');
+        } catch (err) {
+            console.error('[ChatArea] Takeover error:', err);
+            toast.error('No se pudo tomar el chat');
+        } finally {
+            setTakeoverLoading(false);
+        }
+    };
+
+    const handleReleaseBot = async () => {
+        const cardRef = getCardRef();
+        if (!cardRef || !currentUser) return;
+        setTakeoverLoading(true);
+        try {
+            await updateDoc(cardRef, {
+                'humanTakeover.active': false,
+                'humanTakeover.releasedAt': Timestamp.now(),
+                'humanTakeover.releasedBy': currentUser.uid,
+            });
+            toast.success('El bot retomará la conversación');
+        } catch (err) {
+            console.error('[ChatArea] Release bot error:', err);
+            toast.error('No se pudo devolver el chat al bot');
+        } finally {
+            setTakeoverLoading(false);
+        }
     };
 
     const handleCloseConversation = async () => {
@@ -651,136 +715,219 @@ export default function ChatArea({ card, groups, groupName, allConversations, on
             </div>
 
             {/* Input Area */}
-            <div className="p-4 bg-[#111] border-t border-neutral-800 flex-shrink-0 relative">
+            <div className="bg-[#0b141a] border-t border-neutral-800/80 flex-shrink-0 relative">
+                {/* Takeover control bar */}
+                {!logic.liveCardData?.isBlocked && (
+                    <div className="flex items-center justify-between gap-4 px-4 py-3 border-b border-white/[0.06] bg-transparent">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors duration-300 ${humanControl ? 'bg-white/10 text-white' : 'bg-blue-500/15 text-blue-400'}`}>
+                                {humanControl ? <Hand size={15} /> : <Bot size={15} />}
+                            </div>
+                            <span className={`text-[13px] font-medium truncate transition-colors duration-300 ${humanControl ? 'text-white/90' : 'text-blue-300/90'}`}>
+                                {humanControl ? 'Tú tienes el control' : 'El bot está atendiendo'}
+                            </span>
+                        </div>
+
+                        <button
+                            type="button"
+                            disabled={takeoverLoading}
+                            onClick={humanControl ? handleReleaseBot : handleTakeover}
+                            className={`
+                                group flex items-center gap-3 pl-1 pr-3.5 py-1 rounded-full border backdrop-blur-md
+                                transition-all duration-300 shrink-0 disabled:opacity-60
+                                ${humanControl
+                                    ? 'bg-white/[0.06] border-white/25 hover:bg-white/10 hover:border-white/35'
+                                    : 'bg-blue-500/[0.08] border-blue-500/40 hover:bg-blue-500/15 hover:border-blue-500/55 shadow-[0_0_24px_rgba(59,130,246,0.12)]'}
+                            `}
+                        >
+                            {takeoverLoading ? (
+                                <Loader2 size={16} className={`animate-spin mx-2 ${humanControl ? 'text-white' : 'text-blue-400'}`} />
+                            ) : (
+                                <>
+                                    <div
+                                        className={`
+                                            relative w-11 h-6 rounded-full transition-colors duration-300
+                                            ${humanControl ? 'bg-white/25' : 'bg-blue-500'}
+                                        `}
+                                    >
+                                        <div
+                                            className={`
+                                                absolute top-0.5 w-5 h-5 rounded-full shadow-md transition-all duration-300
+                                                ${humanControl
+                                                    ? 'left-0.5 bg-white'
+                                                    : 'left-[22px] bg-white'}
+                                            `}
+                                        />
+                                    </div>
+                                    <span className={`text-[12px] font-semibold tracking-wide transition-colors duration-300 ${humanControl ? 'text-white' : 'text-blue-300'}`}>
+                                        {humanControl ? 'Devolver al bot' : 'Tomar el chat'}
+                                    </span>
+                                </>
+                            )}
+                        </button>
+                    </div>
+                )}
+
                 {/* File Preview Overlay */}
-                {logic.filePreviewUrl && (
-                    <div className="absolute bottom-full left-4 mb-4 bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl p-3 z-50 w-72 animate-in fade-in slide-in-from-bottom-4">
+                {logic.filePreviewUrl && humanControl && (
+                    <div className="absolute bottom-full left-4 mb-4 bg-[#1f2c34] border border-neutral-700/50 rounded-2xl shadow-2xl p-3 z-50 w-72 animate-in fade-in slide-in-from-bottom-4">
                         <div className="relative">
                             {logic.selectedFile?.type.startsWith('image/') ? (
                                 <img src={logic.filePreviewUrl} alt="Preview" className="w-full h-40 object-cover rounded-xl" />
+                            ) : logic.selectedFile?.type.startsWith('video/') ? (
+                                <video src={logic.filePreviewUrl} className="w-full h-40 object-cover rounded-xl" controls />
                             ) : (
                                 <div className="w-full h-20 bg-neutral-800 rounded-xl flex items-center justify-center gap-3 px-4">
-                                    <FileText className="text-blue-500" size={24} />
+                                    <FileText className="text-purple-400" size={24} />
                                     <div className="flex-1 min-w-0">
-                                        <div className="text-[10px] font-bold text-white truncate uppercase tracking-widest">{logic.selectedFile?.name}</div>
+                                        <div className="text-[11px] font-medium text-white truncate">{logic.selectedFile?.name}</div>
                                         <div className="text-[10px] text-neutral-500">{(logic.selectedFile?.size || 0) / 1024 > 1024 ? `${((logic.selectedFile?.size || 0) / (1024 * 1024)).toFixed(1)} MB` : `${((logic.selectedFile?.size || 0) / 1024).toFixed(1)} KB`}</div>
                                     </div>
                                 </div>
                             )}
-                            <button onClick={logic.handleCancelPreview} className="absolute -top-2 -right-2 bg-neutral-950 text-white rounded-full p-1 border border-neutral-800 hover:bg-red-500 transition-colors"><X className="w-3 h-3" /></button>
+                            <button onClick={logic.handleCancelPreview} className="absolute -top-2 -right-2 bg-neutral-950 text-white rounded-full p-1 border border-neutral-700 hover:bg-red-500 transition-colors"><X className="w-3 h-3" /></button>
                         </div>
                         {logic.uploading && (
                             <div className="mt-3 space-y-1.5">
-                                <div className="flex justify-between text-[8px] font-black text-neutral-500 uppercase tracking-widest px-1"><span>Subiendo...</span><span>{logic.progress}%</span></div>
-                                <div className="w-full bg-neutral-800 h-1.5 rounded-full overflow-hidden"><div className="bg-blue-600 h-full transition-all" style={{ width: `${logic.progress}%` }} /></div>
+                                <div className="flex justify-between text-[10px] text-neutral-500 px-1"><span>Subiendo...</span><span>{logic.progress}%</span></div>
+                                <div className="w-full bg-neutral-800 h-1.5 rounded-full overflow-hidden"><div className="bg-blue-500 h-full transition-all" style={{ width: `${logic.progress}%` }} /></div>
                             </div>
                         )}
-                        {!logic.uploading && <Button size="sm" className="w-full mt-3 h-8 bg-blue-600 hover:bg-blue-700 text-[10px] font-black uppercase tracking-widest rounded-lg" onClick={logic.handleDisplayFileSend}>Enviar Archivo</Button>}
+                        {!logic.uploading && (
+                            <Button size="sm" className="w-full mt-3 h-9 bg-blue-600 hover:bg-blue-500 text-[11px] font-semibold rounded-lg" onClick={logic.handleDisplayFileSend}>
+                                Enviar
+                            </Button>
+                        )}
                     </div>
                 )}
 
-                {/* Quick Replies */}
-                {showQuickReplies && (
-                    <div className="absolute bottom-full left-4 mb-2 w-64 bg-neutral-900 border border-neutral-800 rounded-lg shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-2 py-1">
-                        {QUICK_REPLIES.map(reply => (
-                            <button key={reply.id} onClick={() => handleSelectQuickReply(reply.text)} className="w-full text-left px-4 py-2.5 hover:bg-neutral-800 transition-colors group">
-                                <div className="text-[11px] font-bold text-blue-400 mb-0.5">{reply.label}</div>
-                                <div className="text-[11px] text-neutral-400 group-hover:text-neutral-200 truncate">{reply.text}</div>
+                <div className="p-4 pb-4">
+                    <div className={`flex items-center gap-2 bg-[#1f2c34] rounded-[32px] px-2 py-2 min-h-[68px] border border-neutral-700/30 relative transition-opacity ${inputDisabled ? 'opacity-50' : ''}`}>
+                        {logic.liveCardData?.isBlocked && (
+                            <div className="absolute inset-0 bg-[#1f2c34]/90 backdrop-blur-[1px] z-20 flex items-center justify-center gap-3 rounded-[32px]">
+                                <Ban size={14} className="text-red-500" />
+                                <span className="text-[11px] text-neutral-400 font-medium">Contacto bloqueado</span>
+                                <button onClick={logic.handleToggleBlock} className="text-blue-400 hover:text-blue-300 text-[11px] font-semibold">Desbloquear</button>
+                            </div>
+                        )}
+
+                        {!humanControl && !logic.liveCardData?.isBlocked && (
+                            <div className="absolute inset-0 bg-[#1f2c34]/75 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-[32px] pointer-events-none">
+                                <span className="text-[13px] text-neutral-500 font-medium">Toma el chat para escribir</span>
+                            </div>
+                        )}
+
+                        {/* Attachments (+) */}
+                        <div className="relative shrink-0" ref={attachmentsRef}>
+                            <button
+                                type="button"
+                                disabled={inputDisabled}
+                                onClick={() => setShowAttachments(!showAttachments)}
+                                className={`w-12 h-12 flex items-center justify-center rounded-full transition-colors ${showAttachments ? 'text-blue-400' : 'text-neutral-400 hover:text-white'}`}
+                            >
+                                <Plus size={26} className={showAttachments ? 'rotate-45 transition-transform duration-200' : 'transition-transform duration-200'} />
                             </button>
-                        ))}
-                    </div>
-                )}
-
-                <div className="flex items-end bg-neutral-900 border border-neutral-800 rounded-xl flex-shrink-0 relative focus-within:ring-1 focus-within:ring-blue-500/50 transition-all">
-                    {logic.liveCardData?.isBlocked && (
-                        <div className="absolute inset-0 bg-neutral-900/80 backdrop-blur-[2px] z-20 flex items-center justify-center gap-3 rounded-lg animate-in fade-in">
-                            <Ban size={14} className="text-red-500" />
-                            <span className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">Contacto Bloqueado</span>
-                            <button onClick={logic.handleToggleBlock} className="text-blue-500 hover:text-blue-400 text-[10px] font-black uppercase tracking-widest border-b border-blue-500/30">Desbloquear</button>
-                        </div>
-                    )}
-
-                    <button disabled={logic.liveCardData?.isBlocked} onClick={() => setShowQuickReplies(!showQuickReplies)} className={`p-3 ${showQuickReplies ? 'text-blue-500' : 'text-neutral-400 hover:text-white'}`}><Zap size={18} fill={showQuickReplies ? 'currentColor' : 'none'} /></button>
-                    
-                    <div className="relative" ref={attachmentsRef}>
-                        <button disabled={logic.liveCardData?.isBlocked} onClick={() => setShowAttachments(!showAttachments)} className={`p-3 ${showAttachments ? 'text-blue-500' : 'text-neutral-400 hover:text-white'}`}><Plus size={20} className={showAttachments ? 'rotate-45 transition-transform' : 'transition-transform'} /></button>
-                        {showAttachments && (
-                            <div className="absolute bottom-full left-0 mb-2 w-48 bg-neutral-900 border border-neutral-800 rounded-lg shadow-2xl z-50 py-1 overflow-hidden animate-in fade-in slide-in-from-bottom-2">
-                                <button onClick={() => { logic.open(); setShowAttachments(false); }} className="w-full flex items-center gap-3 px-4 py-2 hover:bg-neutral-800 text-neutral-300 hover:text-white text-[11px] font-bold transition-colors">
-                                    <ImageIcon size={14} className="text-blue-400" /> <span>Fotos y Videos</span>
-                                </button>
-                                <button onClick={() => { logic.open(); setShowAttachments(false); }} className="w-full flex items-center gap-3 px-4 py-2 hover:bg-neutral-800 text-neutral-300 hover:text-white text-[11px] font-bold transition-colors">
-                                    <FileText size={14} className="text-purple-400" /> <span>Documento</span>
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="flex-1 flex flex-col min-w-0">
-                        {logic.activePlatform === 'Gmail' && (
-                            <div className="mx-2 mt-1 mb-1 px-3 py-2 bg-white/5 rounded-xl border border-white/5 animate-in slide-in-from-bottom-2 fade-in duration-500">
-                                <div className="flex items-center gap-3 border-b border-white/5 pb-2 mb-2">
-                                    <div className="flex items-center gap-1.5 min-w-[60px]">
-                                        <Mail size={12} className="text-blue-400/70" />
-                                        <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">Asunto</span>
-                                    </div>
-                                    <input 
-                                        type="text" 
-                                        placeholder="Escribe el título del correo..."
-                                        className="flex-1 bg-transparent border-none focus:outline-none focus:ring-0 text-white text-[12px] font-bold placeholder:text-neutral-700"
-                                        value={logic.gmailSubject || ''}
-                                        onChange={(e) => logic.setGmailSubject?.(e.target.value)}
-                                    />
+                            {showAttachments && humanControl && (
+                                <div className="absolute bottom-full left-0 mb-3 flex flex-col gap-4 py-1 z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                                    <button
+                                        type="button"
+                                        onClick={() => docInputRef.current?.click()}
+                                        className="flex items-center gap-3 group"
+                                    >
+                                        <div className="w-11 h-11 rounded-full bg-[#7f66ff] flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
+                                            <FileText size={20} className="text-white" />
+                                        </div>
+                                        <span className="text-[14px] text-white font-normal whitespace-nowrap drop-shadow-sm">Documento</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => mediaInputRef.current?.click()}
+                                        className="flex items-center gap-3 group"
+                                    >
+                                        <div className="w-11 h-11 rounded-full bg-[#007bfc] flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
+                                            <ImageIcon size={20} className="text-white" />
+                                        </div>
+                                        <span className="text-[14px] text-white font-normal whitespace-nowrap drop-shadow-sm">Fotos y videos</span>
+                                    </button>
                                 </div>
-                                <textarea
-                                    disabled={logic.liveCardData?.isBlocked}
-                                    className="w-full bg-transparent border-none focus:outline-none focus:ring-0 text-white py-1 resize-none max-h-48 min-h-[80px] text-[13px] placeholder:text-neutral-600 leading-relaxed"
-                                    placeholder="Redacta el contenido del correo aquí..."
-                                    value={logic.newMessage}
-                                    onChange={(e) => logic.setNewMessage(e.target.value)}
-                                    onPaste={handlePaste}
-                                />
-                            </div>
-                        )}
-                        
-                        {logic.activePlatform !== 'Gmail' && (
+                            )}
+                        </div>
+
+                        {/* Emoji */}
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <button
+                                    type="button"
+                                    disabled={inputDisabled}
+                                    className="w-12 h-12 flex items-center justify-center rounded-full text-neutral-400 hover:text-white shrink-0 disabled:opacity-40"
+                                >
+                                    <Smile size={26} />
+                                </button>
+                            </PopoverTrigger>
+                            <PopoverContent side="top" align="start" className="p-0 border-none bg-transparent shadow-none z-[110]">
+                                <EmojiPicker onEmojiClick={logic.onEmojiClick} theme={Theme.DARK} width={320} height={380} />
+                            </PopoverContent>
+                        </Popover>
+
+                        {/* Text input */}
+                        <div className="flex-1 flex flex-col min-w-0 py-2">
+                            {logic.activePlatform === 'Gmail' && humanControl && (
+                                <div className="mb-1.5 px-1 border-b border-neutral-700/40 pb-1.5">
+                                    <div className="flex items-center gap-2">
+                                        <Mail size={13} className="text-blue-400/70 shrink-0" />
+                                        <input
+                                            type="text"
+                                            placeholder="Asunto del correo..."
+                                            className="flex-1 bg-transparent border-none focus:outline-none text-white text-[12px] placeholder:text-neutral-600"
+                                            value={logic.gmailSubject || ''}
+                                            onChange={(e) => logic.setGmailSubject?.(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                            )}
                             <textarea
-                                disabled={logic.liveCardData?.isBlocked}
-                                className="flex-1 bg-transparent border-none focus:outline-none focus:ring-0 text-white py-3 px-3 resize-none max-h-32 min-h-[44px] text-[13.5px] placeholder:text-neutral-600"
-                                placeholder={logic.liveCardData?.isBlocked ? "Bloqueado" : "Escribe un mensaje..."}
+                                disabled={inputDisabled}
+                                className="w-full bg-transparent border-none focus:outline-none focus:ring-0 text-white resize-none max-h-40 min-h-[52px] text-[17px] placeholder:text-neutral-500 leading-relaxed py-2.5 px-2 disabled:cursor-not-allowed"
+                                placeholder={logic.liveCardData?.isBlocked ? 'Bloqueado' : 'Escribe un mensaje'}
                                 rows={1}
                                 value={logic.newMessage}
                                 onChange={(e) => logic.setNewMessage(e.target.value)}
-                                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); logic.handleSendMessage(); } }}
-                                onPaste={handlePaste}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey && humanControl) {
+                                        e.preventDefault();
+                                        logic.handleSendMessage();
+                                    }
+                                }}
+                                onPaste={humanControl ? handlePaste : undefined}
                             />
-                        )}
+                        </div>
+
+                        {/* Send / Mic */}
+                        <div className="flex items-center shrink-0 pr-1">
+                            <input ref={mediaInputRef} type="file" accept="image/*,video/*" className="hidden" onChange={handleMediaFileChange} />
+                            <input ref={docInputRef} type="file" accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,audio/*" className="hidden" onChange={handleDocFileChange} />
+                            <input {...logic.getInputProps()} className="hidden" />
+
+                            {isRecording ? (
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-[11px] text-red-400 font-mono tabular-nums">{formatRecordingTime(recordingTime)}</span>
+                                    <button type="button" onClick={cancelRecording} className="w-9 h-9 flex items-center justify-center text-neutral-500 hover:text-red-400"><X size={18} /></button>
+                                    <button type="button" onClick={stopRecording} className="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-500 shadow-lg"><Send size={20} className="translate-x-[1px]" /></button>
+                                </div>
+                            ) : (
+                                <button
+                                    type="button"
+                                    disabled={inputDisabled || logic.isSending}
+                                    onClick={logic.newMessage.trim() ? logic.handleSendMessage : startRecording}
+                                    className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${logic.newMessage.trim() ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-md shadow-blue-600/20' : 'text-neutral-400 hover:text-white'}`}
+                                >
+                                    {logic.isSending ? <Loader2 size={22} className="animate-spin" /> : logic.newMessage.trim() ? <Send size={22} className="translate-x-[1px]" /> : <Mic size={24} />}
+                                </button>
+                            )}
+                        </div>
                     </div>
 
-                    <div className="flex items-center px-3 pb-2.5 h-[44px]">
-                        <input {...logic.getInputProps()} />
-                        {isRecording ? (
-                            <div className="flex items-center gap-2">
-                                <button onClick={cancelRecording} className="p-1.5 text-neutral-500 hover:text-red-400"><X size={16} /></button>
-                                <button onClick={stopRecording} className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 shadow-lg shadow-blue-600/20 transition-all scale-110"><Send size={14} className="translate-x-[1px]" /></button>
-                            </div>
-                        ) : (
-                            <button
-                                onClick={logic.newMessage.trim() ? logic.handleSendMessage : startRecording}
-                                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${logic.newMessage.trim() ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20 scale-105' : 'bg-neutral-800 text-neutral-400 hover:text-white'}`}
-                            >
-                                {logic.isSending ? <Loader2 size={14} className="animate-spin" /> : logic.newMessage.trim() ? <Send size={14} className="translate-x-[1px]" /> : <Mic size={16} />}
-                            </button>
-                        )}
-                    </div>
-                </div>
-
-                <div className="flex justify-between items-center mt-2.5 px-1.5 text-[10px] font-black text-neutral-600 uppercase tracking-[0.1em]">
-                    <span>Shift + Enter para nueva línea</span>
-                    <div className="flex gap-4">
-                        <span className="hover:text-neutral-400 cursor-pointer transition-colors">Nota Privada</span>
-                        <span className="text-blue-600 hover:text-blue-400 cursor-pointer transition-colors">Responder</span>
-                    </div>
+                    <p className="text-[10px] text-neutral-600 mt-2 px-2">Shift + Enter para nueva línea</p>
                 </div>
             </div>
         </div>

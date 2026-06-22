@@ -8,6 +8,8 @@ if (!admin.apps.length) {
         const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
         let serviceAccountBase64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
         let serviceAccountEnv = process.env.FIREBASE_SERVICE_ACCOUNT;
+        const firebaseClientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+        const firebasePrivateKey = process.env.FIREBASE_PRIVATE_KEY;
         
         const possiblePaths = [
             path.join(process.cwd(), 'serviceAccountKey.json'),
@@ -35,6 +37,34 @@ if (!admin.apps.length) {
                 initialized = true;
             } catch (b64Err: any) {
                 console.error('[Firebase Admin] ❌ Error initializing from BASE64 ENV:', b64Err.message);
+            }
+        }
+
+        if (!initialized && firebaseClientEmail && firebasePrivateKey) {
+            try {
+                let privateKey = firebasePrivateKey.trim();
+                privateKey = privateKey.replace(/^['"]|['"]$/g, '');
+                while (privateKey.includes('\\n')) {
+                    privateKey = privateKey.replace(/\\n/g, '\n');
+                }
+                if (!privateKey.includes('\n') && privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+                    privateKey = privateKey
+                        .replace('-----BEGIN PRIVATE KEY-----', '-----BEGIN PRIVATE KEY-----\n')
+                        .replace('-----END PRIVATE KEY-----', '\n-----END PRIVATE KEY-----');
+                }
+
+                admin.initializeApp({
+                    credential: admin.credential.cert({
+                        projectId: projectId || process.env.FIREBASE_PROJECT_ID || 'roosevelt-491004',
+                        clientEmail: firebaseClientEmail,
+                        privateKey,
+                    }),
+                    projectId,
+                });
+                console.log('[Firebase Admin] ✅ SUCCESS: Initialized from FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY.');
+                initialized = true;
+            } catch (splitKeyErr: any) {
+                console.error('[Firebase Admin] ❌ Error initializing from split ENV keys:', splitKeyErr.message);
             }
         }
 

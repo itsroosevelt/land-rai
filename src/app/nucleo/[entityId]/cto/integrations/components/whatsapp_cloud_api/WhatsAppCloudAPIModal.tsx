@@ -7,6 +7,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useParams } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
+import { getWhatsAppIntegrationHealth } from '@/lib/omnichannel/whatsappIntegrationStatus';
+import { WhatsAppReadinessPanel } from './WhatsAppReadinessPanel';
 
 interface Props {
     isOpen: boolean;
@@ -179,6 +181,8 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
     }, [isOpen, currentUser?.uid, activeEntity, step]);
 
     if (!activeIntegration || activeIntegration.id !== 'whatsapp') return null;
+
+    const whatsappHealth = getWhatsAppIntegrationHealth(waConfig);
 
     const tenantWebhookUrl = webhookMeta?.tenantWebhookUrl
         || (currentUser?.uid && activeEntity
@@ -858,7 +862,11 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                                             <CheckCircle2 className="w-10 h-10 text-green-500" />
                                         </div>
                                         <h3 className="text-3xl font-extralight text-white tracking-tighter mb-2 italic uppercase">Canal Sincronizado</h3>
-                                        <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-10">Nodo Activo en la Red Roosevelt</p>
+                                        <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-6">Nodo Activo en la Red Roosevelt</p>
+
+                                        <div className="w-full mb-6">
+                                            <WhatsAppReadinessPanel health={whatsappHealth} entityId={activeEntity} />
+                                        </div>
 
                                         <div className="w-full space-y-4 px-2">
                                             <div className="h-24 bg-white/5 border border-white/10 rounded-[32px] flex items-center px-8 justify-between relative overflow-hidden backdrop-blur-sm">

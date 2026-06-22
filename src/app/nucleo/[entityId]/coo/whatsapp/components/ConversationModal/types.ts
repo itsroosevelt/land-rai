@@ -198,6 +198,14 @@ export interface CardData {
     unreadCount?: number;
     metaSenderId?: string;
     psid?: string;
+    humanTakeover?: {
+        active: boolean;
+        activatedAt?: Timestamp;
+        activatedBy?: string;
+        activatedByName?: string;
+        releasedAt?: Timestamp;
+        releasedBy?: string;
+    };
 }
 
 export interface ConversationModalProps {

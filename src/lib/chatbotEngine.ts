@@ -79,6 +79,23 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
     console.log(`[ChatbotEngine] 🚀 RUNNER START | Platform: ${platform} | From: ${from}`);
 
     try {
+        // Human agent has control — save client messages but do not run the bot.
+        const earlySnap = await cardRef.get();
+        if (earlySnap.exists && earlySnap.data()?.humanTakeover?.active === true) {
+            console.log(`[ChatbotEngine] 🧑‍💼 Human takeover active — skipping bot for ${cardId}`);
+            const data = earlySnap.data() || {};
+            const queue = dedupeQueueItems(data.botState?.messageQueue || []);
+            if (triggerMessageId && queue.some((q) => String(q.messageId) === triggerMessageId)) {
+                const remaining = queue.filter((q) => String(q.messageId) !== triggerMessageId);
+                await cardRef.update({
+                    'botState.messageQueue': remaining,
+                    'botState.lastProcessedMessageId': triggerMessageId,
+                    botLock: admin.firestore.FieldValue.delete(),
+                });
+            }
+            return;
+        }
+
         // --- 1. ATOMIC LOCK ACQUISITION ---
         const canExecute = await db.runTransaction(async (transaction) => {
             const snap = await transaction.get(cardRef);

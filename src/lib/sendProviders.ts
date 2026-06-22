@@ -332,43 +332,55 @@ export async function sendWhatsAppMessage(
     let token = process.env.WHATSAPP_ACCESS_TOKEN;
     let phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
+    const applyWhatsAppCredentials = (source: Record<string, any> | undefined) => {
+        if (!source) return;
+        const resolvedToken = source.accessToken || source.token || source.access_token || source.pageAccessToken;
+        const resolvedPhone = source.phoneNumberId || source.phone_number_id || source.phoneId;
+        if (resolvedToken && typeof resolvedToken === 'string' && resolvedToken.startsWith('EAA')) {
+            token = resolvedToken;
+        }
+        if (resolvedPhone) {
+            phoneNumberId = String(resolvedPhone);
+        }
+    };
+
     // 1. Multi-Tenant Token Resolution (Surgical Separation)
     if (options.userId && options.entityId) {
         try {
             const entityPath = `users/${options.userId}/entities/${options.entityId}`;
-            // Target ONLY WhatsApp specific documents
-            const [standardSnap, internalSnap] = await Promise.all([
-                db.doc(`${entityPath}/integrations/whatsapp`).get(),
-                db.doc(`${entityPath}/integrations/whatsapp_internal`).get()
+            const integrationsRef = db.collection(`${entityPath}/integrations`);
+
+            const [standardSnap, internalSnap, allIntegrationsSnap] = await Promise.all([
+                integrationsRef.doc('whatsapp').get(),
+                integrationsRef.doc('whatsapp_internal').get(),
+                integrationsRef.get(),
             ]);
 
-            const standardData = standardSnap.data();
-            const internalData = internalSnap.data();
+            applyWhatsAppCredentials(standardSnap.data());
+            applyWhatsAppCredentials(internalSnap.data());
 
-            // Prioritize standard connection, fallback to internal
-            const data = standardData || internalData;
-
-            if (data) {
-                token = data.accessToken || data.token || data.access_token;
-                phoneNumberId = data.phoneNumberId || data.phone_number_id || data.phoneId;
-                
-                if (token) console.log(`[WhatsApp] 🛡️ Token resolved surgically from ${standardSnap.exists ? 'whatsapp' : 'whatsapp_internal'}`);
-                if (phoneNumberId) console.log(`[WhatsApp] 📱 PhoneID resolved surgically.`);
+            if (!token || !phoneNumberId) {
+                for (const doc of allIntegrationsSnap.docs) {
+                    if (doc.id === '_init') continue;
+                    applyWhatsAppCredentials(doc.data());
+                    if (token && phoneNumberId) break;
+                }
             }
+
+            if (token) console.log(`[WhatsApp] 🛡️ Token resolved for entity ${options.entityId}`);
+            if (phoneNumberId) console.log(`[WhatsApp] 📱 PhoneID resolved for entity ${options.entityId}`);
 
             console.log(`[WhatsApp] 🎯 Final Resolution: hasToken=${!!token}, hasPhoneId=${!!phoneNumberId}`);
 
-            // Fallback de Casing si aún falta algo
+            // Fallback de Casing si aún falta algo (userId con distinto casing)
             if (!token || !phoneNumberId) {
                 const allUsers = await db.collection('users').get();
                 const match = allUsers.docs.find(u => u.id.toLowerCase() === options.userId!.toLowerCase());
                 if (match && match.id !== options.userId) {
                     const altSnap = await db.collection(`users/${match.id}/entities/${options.entityId}/integrations`).get();
                     for (const doc of altSnap.docs) {
-                        const d = doc.data();
-                        const t = d?.accessToken || d?.token || d?.access_token;
-                        if (t && typeof t === 'string' && t.startsWith('EAA')) token = t;
-                        if (!phoneNumberId) phoneNumberId = d?.phoneNumberId || d?.phone_number_id;
+                        if (doc.id === '_init') continue;
+                        applyWhatsAppCredentials(doc.data());
                     }
                 }
             }
@@ -379,7 +391,12 @@ export async function sendWhatsAppMessage(
 
     // 2. Final Extraction & Validation
     if (!token || !phoneNumberId) {
-        throw new Error(`Configuración de WhatsApp faltante para '${options.entityId}'. \nDetalles: userId=${options.userId}, hasToken=${!!token}, hasPhoneId=${!!phoneNumberId}`);
+        throw new Error(
+            `Configuración de WhatsApp incompleta para '${options.entityId}'. ` +
+            `Falta ${!token && !phoneNumberId ? 'Access Token y Phone Number ID' : !token ? 'Access Token' : 'Phone Number ID'}. ` +
+            `Ve a CTO → Integraciones → WhatsApp, edita la conexión y guarda ambos campos. ` +
+            `Detalles: userId=${options.userId}, hasToken=${!!token}, hasPhoneId=${!!phoneNumberId}`
+        );
     }
 
     const url = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
