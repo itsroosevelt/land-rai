@@ -16,6 +16,9 @@ export default function SubscriptionGuard({ children }: SubscriptionGuardProps) 
 
   useEffect(() => {
     if (!loading) {
+      const hasBypass = typeof window !== 'undefined' && localStorage.getItem('roosevelt_bypass') === 'roosevelt2025';
+      if (hasBypass) return;
+
       // If no active subscription, redirect to subscriptions page
       if (status !== 'active' || isExpired) {
         if (isExpired) {
@@ -28,7 +31,9 @@ export default function SubscriptionGuard({ children }: SubscriptionGuardProps) 
     }
   }, [status, isExpired, loading, router]);
 
-  if (loading) {
+  const hasBypass = typeof window !== 'undefined' && localStorage.getItem('roosevelt_bypass') === 'roosevelt2025';
+
+  if (loading && !hasBypass) {
     return (
       <div className="flex items-center justify-center h-screen bg-black text-white">
         <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
@@ -37,8 +42,8 @@ export default function SubscriptionGuard({ children }: SubscriptionGuardProps) 
     );
   }
 
-  // If subscription is active and not expired, render children
-  if (status === 'active' && !isExpired) {
+  // If subscription is active and not expired, or bypass code is active, render children
+  if ((status === 'active' && !isExpired) || hasBypass) {
     return <>{children}</>;
   }
 

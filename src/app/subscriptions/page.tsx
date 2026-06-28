@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import CheckoutModal from '@/components/subscriptions/CheckoutModal';
 import { useSubscriptionStatus } from '@/hooks/useSubscriptionStatus';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 
 interface Particle {
   x: number;
@@ -178,10 +179,35 @@ const plans = [
 export default function SubscriptionsPage() {
   const router = useRouter();
   const { currentUser, activeEntity, loading } = useAuth();
-  const { status: subscriptionStatus, plan: activePlanId, expiresAt } = useSubscriptionStatus();
+  const { status: subscriptionStatus, plan: activePlanId, expiresAt, isExpired } = useSubscriptionStatus();
   const [selectedPlan, setSelectedPlan] = useState<typeof plans[number] | null>(null);
   const [hasHistory, setHasHistory] = useState(false);
   const [isAnnual, setIsAnnual] = useState(true);
+  const [isBypassOpen, setIsBypassOpen] = useState(false);
+  const [bypassCode, setBypassCode] = useState('');
+
+  const handleGoToNucleo = () => {
+    const hasActiveSub = subscriptionStatus === 'active' && !isExpired;
+    const hasBypass = typeof window !== 'undefined' && localStorage.getItem('roosevelt_bypass') === 'roosevelt2025';
+
+    if (hasActiveSub || hasBypass) {
+      router.push('/nucleo');
+    } else {
+      setIsBypassOpen(true);
+    }
+  };
+
+  const handleVerifyBypass = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (bypassCode.trim() === 'roosevelt2025') {
+      localStorage.setItem('roosevelt_bypass', 'roosevelt2025');
+      setIsBypassOpen(false);
+      toast.success('Acceso concedido. Redirigiendo...');
+      router.push('/nucleo');
+    } else {
+      toast.error('Código incorrecto. Se requiere suscripción activa.');
+    }
+  };
 
   useEffect(() => {
     const checkHistory = async () => {
@@ -270,10 +296,17 @@ export default function SubscriptionsPage() {
           <section className="mx-auto flex min-h-screen w-full max-w-[90rem] flex-col justify-center px-6 py-16 sm:px-10 lg:px-12 relative z-[10]">
 
 
-            <div className="mx-auto mb-10 max-w-2xl text-center z-[40]">
+            <div className="mx-auto mb-10 max-w-2xl text-center z-[40] space-y-3">
               <h1 className="text-xl sm:text-2xl font-light tracking-wide text-white/90">
                 Find the right plan for your business
               </h1>
+              <p className="text-[11px] text-white/50 leading-relaxed font-normal max-w-lg mx-auto">
+                Si realizaste el pago y no pudiste avanzar al núcleo contacta a{" "}
+                <a href="mailto:support@byroosevelt.com" className="text-blue-400 hover:underline">
+                  support@byroosevelt.com
+                </a>{" "}
+                y lo resolveremos de inmediato trabajamos 24/7 con mas de 10000 agentes para resolver solicitudes
+              </p>
             </div>
 
             <div className="mx-auto w-full max-w-[90rem] rounded-3xl border border-white/5 bg-white/[0.03] backdrop-blur-md p-8 sm:p-10 shadow-2xl relative z-[20]">
@@ -482,7 +515,7 @@ export default function SubscriptionsPage() {
               </Button>
             )}
             <button
-              onClick={() => router.push('/nucleo')}
+              onClick={handleGoToNucleo}
               className="group flex items-center gap-2 text-white/40 hover:text-white transition-all duration-300"
             >
               <span className="text-sm font-normal tracking-wide">Go to Nucleo</span>
@@ -490,6 +523,43 @@ export default function SubscriptionsPage() {
           </div>
         </div>
       </main>
+
+      {isBypassOpen && (
+        <Dialog open onOpenChange={setIsBypassOpen}>
+          <DialogContent className="max-w-sm bg-[#111111] border border-white/10 text-white rounded-2xl p-6 shadow-2xl">
+            <DialogTitle className="text-base font-semibold text-white">Código de Acceso</DialogTitle>
+            <form onSubmit={handleVerifyBypass} className="mt-4 space-y-4">
+              <p className="text-xs text-white/50 leading-relaxed">
+                Ingresa el código de acceso proporcionado para avanzar al núcleo sin una suscripción activa.
+              </p>
+              <input
+                type="text"
+                placeholder="Code"
+                value={bypassCode}
+                onChange={(e) => setBypassCode(e.target.value)}
+                className="w-full h-10 px-3.5 bg-white/[0.02] border border-white/10 rounded-xl text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500/50 transition-colors"
+                autoFocus
+              />
+              <div className="flex justify-end gap-2.5 pt-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setIsBypassOpen(false)}
+                  className="h-9 px-4 rounded-full text-white/60 hover:text-white text-xs font-normal"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  className="h-9 px-5 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium"
+                >
+                  Verificar
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
     </ProtectedRoute>
   );
 }
