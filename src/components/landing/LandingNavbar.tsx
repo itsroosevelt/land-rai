@@ -45,8 +45,10 @@ export const LandingNavbar = () => {
         )}
       >
         <div className="w-full flex items-center justify-between relative">
-          {/* Logo */}
-          <Link href="/" className="flex items-center group">
+          <Link href="/" className="flex items-center gap-2.5 group">
+            <div className="w-8 h-8 relative transition-transform duration-300 group-hover:scale-105 shrink-0">
+              <img src="/assets/newlogo.png" alt="Roosevelt Logo" className="object-contain w-full h-full drop-shadow-[0_0_8px_rgba(37,99,235,0.3)]" />
+            </div>
             <span className="text-2xl font-semibold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent leading-none tracking-tight">
               Roosevelt
             </span>
@@ -130,8 +132,10 @@ export const LandingNavbar = () => {
             className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-2xl xl:hidden flex flex-col p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
           >
             <div className="flex justify-between items-center mb-8">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2.5">
+                <img src="/assets/newlogo.png" alt="Roosevelt Logo" className="w-6 h-6 object-contain drop-shadow-[0_0_8px_rgba(37,99,235,0.3)]" />
                 <span className="text-lg font-semibold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent tracking-tight">Roosevelt</span>
+                
                 {/* Language Switcher */}
                 <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-full p-0.5 ml-2">
                   <button
@@ -158,6 +162,7 @@ export const LandingNavbar = () => {
                   </button>
                 </div>
               </div>
+
               <button 
                 onClick={() => setIsMobileMenuOpen(false)}
                 className="p-1 text-white/70 hover:text-white"
