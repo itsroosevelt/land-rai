@@ -9,12 +9,13 @@ interface PriceDataV3 {
   priceChange24h: number;
 }
 
+const GLOBAL_PRICE_CACHE: { [key: string]: number } = {};
+const GLOBAL_CACHE_TIME: { [key: string]: number } = {};
+
 export function usePriceFromJupiter(tokenAddresses: string[], cacheDurationMs = 60000) {
   const [prices, setPrices] = useState<{ [key: string]: number | null }>({});
   const [loading, setLoading] = useState(true);
   const [secondsRemaining, setSecondsRemaining] = useState(0);
-  const cacheRef = useRef<{ [key: string]: number | null }>({});
-  const cacheTimeRef = useRef<number>(0);
 
   useEffect(() => {
     if (tokenAddresses.length === 0) {
@@ -26,11 +27,26 @@ export function usePriceFromJupiter(tokenAddresses: string[], cacheDurationMs = 
 
     const fetchPrices = async () => {
       const now = Date.now();
-      const isCached = cacheTimeRef.current && (now - cacheTimeRef.current) < cacheDurationMs;
+      
+      // Check global cache first
+      let allCached = true;
+      const cachedPrices: { [key: string]: number | null } = {};
+      for (const address of tokenAddresses) {
+        const cacheTime = GLOBAL_CACHE_TIME[address] || 0;
+        if (now - cacheTime < cacheDurationMs && GLOBAL_PRICE_CACHE[address] !== undefined) {
+          cachedPrices[address] = GLOBAL_PRICE_CACHE[address];
+        } else {
+          allCached = false;
+        }
+      }
 
-      if (isCached) {
-        setPrices(cacheRef.current);
+      if (allCached) {
+        setPrices(cachedPrices);
         setLoading(false);
+        const oldestTime = Math.min(...tokenAddresses.map(addr => GLOBAL_CACHE_TIME[addr] || now));
+        const elapsed = now - oldestTime;
+        const remaining = Math.max(0, cacheDurationMs - elapsed);
+        setSecondsRemaining(Math.ceil(remaining / 1000));
         return;
       }
 
@@ -48,14 +64,23 @@ export function usePriceFromJupiter(tokenAddresses: string[], cacheDurationMs = 
 
         const newPrices: { [key: string]: number | null } = {};
         for (const address of tokenAddresses) {
-          newPrices[address] = data[address]?.usdPrice || null;
+          const val = data[address]?.usdPrice || null;
+          newPrices[address] = val;
+          if (val !== null) {
+            GLOBAL_PRICE_CACHE[address] = val;
+            GLOBAL_CACHE_TIME[address] = now;
+          }
         }
-        cacheRef.current = newPrices;
-        cacheTimeRef.current = now;
         setPrices(newPrices);
+        setSecondsRemaining(Math.ceil(cacheDurationMs / 1000));
       } catch (error) {
         console.error('Error fetching prices from Jupiter:', error);
-        setPrices(tokenAddresses.reduce((acc, addr) => ({ ...acc, [addr]: null }), {}));
+        // Fallback to memory cache if request fails
+        const fallbackPrices: { [key: string]: number | null } = {};
+        for (const address of tokenAddresses) {
+          fallbackPrices[address] = GLOBAL_PRICE_CACHE[address] !== undefined ? GLOBAL_PRICE_CACHE[address] : null;
+        }
+        setPrices(fallbackPrices);
       } finally {
         setLoading(false);
       }
@@ -63,24 +88,22 @@ export function usePriceFromJupiter(tokenAddresses: string[], cacheDurationMs = 
 
     fetchPrices();
 
-    // Timer para mostrar segundos restantes
+    // Timer to update remaining seconds
     const timerInterval = setInterval(() => {
-      const elapsed = Date.now() - cacheTimeRef.current;
+      const now = Date.now();
+      const oldestTime = Math.min(...tokenAddresses.map(addr => GLOBAL_CACHE_TIME[addr] || now));
+      const elapsed = now - oldestTime;
       const remaining = Math.max(0, cacheDurationMs - elapsed);
       setSecondsRemaining(Math.ceil(remaining / 1000));
 
-      // Refetch cuando expire
+      // Refetch when expired
       if (remaining <= 0) {
         fetchPrices();
       }
     }, 1000);
 
-    // Refetch periodically
-    const fetchInterval = setInterval(fetchPrices, cacheDurationMs);
-
     return () => {
       clearInterval(timerInterval);
-      clearInterval(fetchInterval);
     };
   }, [tokenAddresses.join(','), cacheDurationMs]);
 

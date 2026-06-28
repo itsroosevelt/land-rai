@@ -14,7 +14,14 @@ export function ThemeProvider({
   if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
     const orig = console.error;
     console.error = (...args: any[]) => {
-      if (typeof args[0] === 'string' && args[0].includes('Encountered a script tag')) {
+      const argStr = args.map(a => String(a)).join(' ');
+      if (
+        argStr.includes('Encountered a script tag') ||
+        argStr.includes('429') ||
+        argStr.includes('Jupiter') ||
+        argStr.includes('Retrying') ||
+        argStr.includes('price')
+      ) {
         return;
       }
       orig.apply(console, args);
