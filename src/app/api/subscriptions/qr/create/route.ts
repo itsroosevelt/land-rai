@@ -13,7 +13,7 @@ import {
   assertClientChargeMatchesServer,
   resolveUpgradeChargeForUser,
 } from '@/lib/subscriptions/upgrade-pricing-server';
-import { PLAN_CATALOG_USD } from '@/lib/subscriptions/upgrade-pricing';
+import { PLAN_CATALOG_USD, PLAN_CATALOG_ANNUAL_USD } from '@/lib/subscriptions/upgrade-pricing';
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,19 +49,28 @@ export async function POST(request: NextRequest) {
       useLxr,
     });
 
-    const serverChargeUSD = resolved.hasActive ? resolved.chargeUSD : catalogPlanPriceUSD;
+    const resolvedPriceUSD = resolved.hasActive ? resolved.chargeUSD : catalogPlanPriceUSD;
     const clientChargeUSD =
-      typeof chargeUSD === 'number' ? chargeUSD : Number(chargeUSD ?? planPriceUSD ?? catalogPlanPriceUSD);
+      typeof chargeUSD === 'number' ? chargeUSD : Number(chargeUSD ?? planPriceUSD ?? resolvedPriceUSD);
 
-    if (!assertClientChargeMatchesServer(clientChargeUSD, serverChargeUSD)) {
+    // Support both monthly and annual cycles on validation
+    const serverMonthlyChargeUSD = resolvedPriceUSD;
+    const serverAnnualChargeUSD = PLAN_CATALOG_ANNUAL_USD[planKey] ?? resolvedPriceUSD;
+
+    const matchesMonthly = assertClientChargeMatchesServer(clientChargeUSD, serverMonthlyChargeUSD);
+    const matchesAnnual = assertClientChargeMatchesServer(clientChargeUSD, serverAnnualChargeUSD);
+
+    if (!matchesMonthly && !matchesAnnual) {
       return NextResponse.json(
         {
           error: 'Charge amount mismatch. Refresh checkout and try again.',
-          expectedChargeUSD: serverChargeUSD,
+          expectedChargeUSD: serverMonthlyChargeUSD,
         },
         { status: 400 }
       );
     }
+
+    const serverChargeUSD = matchesAnnual ? serverAnnualChargeUSD : serverMonthlyChargeUSD;
 
     if (serverChargeUSD <= 0) {
       return NextResponse.json(

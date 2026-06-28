@@ -1,6 +1,14 @@
 export const PLAN_CATALOG_USD: Record<string, number> = {
-  starter: 19.99,
+  starter: 49.00,
+  standard: 100.00,
+  plus: 199.00,
   pro: 99.99,
+};
+
+export const PLAN_CATALOG_ANNUAL_USD: Record<string, number> = {
+  starter: 39.20 * 12,
+  standard: 80.00 * 12,
+  plus: 159.20 * 12,
 };
 
 export const PLAN_CATALOG_LXR_USD: Record<string, number> = {

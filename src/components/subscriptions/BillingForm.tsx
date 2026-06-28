@@ -1,8 +1,5 @@
-'use client';
-
 import { useState } from 'react';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Mail, User, ChevronDown } from 'lucide-react';
 
 export interface BillingData {
   email: string;
@@ -25,11 +22,54 @@ interface BillingFormProps {
 }
 
 const COUNTRIES = [
-  'Argentina', 'Bolivia', 'Brasil', 'Chile', 'Colombia', 'Costa Rica',
+  'Estados Unidos', 'Argentina', 'Bolivia', 'Brasil', 'Chile', 'Colombia', 'Costa Rica',
   'Cuba', 'República Dominicana', 'Ecuador', 'El Salvador', 'Guatemala',
   'Honduras', 'México', 'Nicaragua', 'Panamá', 'Paraguay', 'Perú',
-  'Puerto Rico', 'Uruguay', 'Venezuela', 'España', 'Estados Unidos', 'Otros'
+  'Puerto Rico', 'Uruguay', 'Venezuela', 'España', 'Otros'
 ];
+
+const COUNTRY_ISO_MAP: Record<string, string> = {
+  'Estados Unidos': 'us',
+  'Argentina': 'ar',
+  'Bolivia': 'bo',
+  'Brasil': 'br',
+  'Chile': 'cl',
+  'Colombia': 'co',
+  'Costa Rica': 'cr',
+  'Cuba': 'cu',
+  'República Dominicana': 'do',
+  'Ecuador': 'ec',
+  'El Salvador': 'sv',
+  'Guatemala': 'gt',
+  'Honduras': 'hn',
+  'México': 'mx',
+  'Nicaragua': 'ni',
+  'Panamá': 'pa',
+  'Paraguay': 'py',
+  'Perú': 'pe',
+  'Puerto Rico': 'pr',
+  'Uruguay': 'uy',
+  'Venezuela': 've',
+  'España': 'es',
+  'Otros': 'globe'
+};
+
+const PHONE_PREFIXES = [
+  '+1', '+34', '+52', '+54', '+57', '+51', '+56', '+58', '+593', '+507'
+];
+
+const PHONE_ISO_MAP: Record<string, string> = {
+  '+1': 'us',
+  '+34': 'es',
+  '+52': 'mx',
+  '+54': 'ar',
+  '+57': 'co',
+  '+51': 'pe',
+  '+56': 'cl',
+  '+58': 've',
+  '+593': 'ec',
+  '+507': 'pa'
+};
 
 export default function BillingForm({
   initialEmail = '',
@@ -49,7 +89,11 @@ export default function BillingForm({
     zipCode: '',
   });
 
-  const requiredFields: (keyof BillingData)[] = ['email', 'phone', 'fullName', 'country', 'addressLine1', 'city', 'state', 'zipCode'];
+  const [isPhoneOpen, setIsPhoneOpen] = useState(false);
+  const [isCountryOpen, setIsCountryOpen] = useState(false);
+
+  // Only email, fullName, and phone are required for validation
+  const requiredFields: (keyof BillingData)[] = ['email', 'fullName', 'phone'];
 
   const handleChange = (field: keyof BillingData, value: string) => {
     const newData = { ...data, [field]: value };
@@ -60,154 +104,193 @@ export default function BillingForm({
       return val.trim() !== '';
     });
     
-    // Check basic email structure
     const isEmailValid = newData.email.includes('@');
 
     onValidChange(isValid && isEmailValid);
     onDataChange(newData);
   };
 
+  const currentPhoneIso = PHONE_ISO_MAP[data.phonePrefix] || 'us';
+  const currentCountryIso = COUNTRY_ISO_MAP[data.country] || 'us';
+
   return (
-    <div className="space-y-4">
-      {/* Name */}
-      <div>
-        <Label htmlFor="fullName" className="text-xs font-medium text-white/80 mb-1.5 block">
-          Full name
-        </Label>
-        <Input
-          id="fullName"
-          placeholder="John Doe"
-          value={data.fullName}
-          onChange={(e) => handleChange('fullName', e.target.value)}
-          className="bg-white/5 border-white/10 h-9 text-xs text-white placeholder:text-white/40 rounded-lg focus-visible:ring-1 focus-visible:ring-blue-500"
-        />
-      </div>
+    <div className="space-y-5">
+      
+      {/* Background click interceptors for closing select dropdowns */}
+      {isPhoneOpen && (
+        <div className="fixed inset-0 z-40" onClick={() => setIsPhoneOpen(false)} />
+      )}
+      {isCountryOpen && (
+        <div className="fixed inset-0 z-40" onClick={() => setIsCountryOpen(false)} />
+      )}
 
-      {/* Email */}
-      <div>
-        <Label htmlFor="email" className="text-xs font-medium text-white/80 mb-1.5 block">
-          Email address
-        </Label>
-        <Input
-          id="email"
-          type="email"
-          placeholder="email@example.com"
-          value={data.email}
-          onChange={(e) => handleChange('email', e.target.value)}
-          className="bg-white/5 border-white/10 h-9 text-xs text-white placeholder:text-white/40 rounded-lg focus-visible:ring-1 focus-visible:ring-blue-500"
-        />
-      </div>
-
-      {/* Phone */}
-      <div>
-        <Label htmlFor="phone" className="text-xs font-medium text-white/80 mb-1.5 block">
-          Phone number
-        </Label>
-        <div className="flex bg-white/5 border border-white/10 rounded-lg focus-within:ring-1 focus-within:ring-blue-500 overflow-hidden h-9">
-          <select 
-            value={data.phonePrefix}
-            onChange={(e) => handleChange('phonePrefix', e.target.value)}
-            className="bg-transparent border-r border-white/10 text-xs text-white/80 px-2 focus:outline-none appearance-none cursor-pointer"
-          >
-            <option value="+1" className="bg-[#111]">🇺🇸 +1</option>
-            <option value="+34" className="bg-[#111]">🇪🇸 +34</option>
-            <option value="+52" className="bg-[#111]">🇲🇽 +52</option>
-            <option value="+54" className="bg-[#111]">🇦🇷 +54</option>
-            <option value="+57" className="bg-[#111]">🇨🇴 +57</option>
-            <option value="+51" className="bg-[#111]">🇵🇪 +51</option>
-            <option value="+56" className="bg-[#111]">🇨🇱 +56</option>
-            <option value="+58" className="bg-[#111]">🇻🇪 +58</option>
-            <option value="+593" className="bg-[#111]">🇪🇨 +593</option>
-            <option value="+507" className="bg-[#111]">🇵🇦 +507</option>
-            <option value="+506" className="bg-[#111]">🇨🇷 +506</option>
-            <option value="+502" className="bg-[#111]">🇬🇹 +502</option>
-            <option value="+503" className="bg-[#111]">🇸🇻 +503</option>
-            <option value="+504" className="bg-[#111]">🇭🇳 +504</option>
-            <option value="+505" className="bg-[#111]">🇳🇮 +505</option>
-            <option value="+591" className="bg-[#111]">🇧🇴 +591</option>
-            <option value="+595" className="bg-[#111]">🇵🇾 +595</option>
-            <option value="+598" className="bg-[#111]">🇺🇾 +598</option>
-            <option value="+1" className="bg-[#111]">🇵🇷 +1</option>
-            <option value="+53" className="bg-[#111]">🇨🇺 +53</option>
-          </select>
-          <Input
-            id="phone"
-            type="tel"
-            placeholder="555 123 4567"
-            value={data.phone}
-            onChange={(e) => handleChange('phone', e.target.value)}
-            className="flex-1 border-none bg-transparent h-9 text-xs text-white placeholder:text-white/40 focus-visible:ring-0 rounded-none shadow-none px-3"
-          />
-        </div>
-      </div>
-
-      {/* Billing Address Group */}
-      <div>
-        <Label className="text-xs font-medium text-white/80 mb-1.5 block">
-          Billing address
-        </Label>
-        <div className="flex flex-col border border-white/10 rounded-lg overflow-hidden bg-white/5 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
+      {/* Datos de contacto */}
+      <div className={`relative ${isPhoneOpen ? 'z-50' : 'z-30'}`}>
+        <LabelHeader text="Datos de contacto" />
+        <div className="flex flex-col border border-white/10 rounded-xl bg-white/[0.02]">
           
-          {/* Country */}
-          <select
-            value={data.country}
-            onChange={(e) => handleChange('country', e.target.value)}
-            className="w-full h-9 bg-transparent px-3 text-xs text-white focus:outline-none border-b border-white/10 appearance-none cursor-pointer"
-          >
-            <option value="" disabled className="bg-[#111]">Select country</option>
-            {COUNTRIES.map((country) => (
-              <option key={country} value={country} className="bg-[#111]">
-                {country}
-              </option>
-            ))}
-          </select>
-
-          {/* Address Line 1 */}
-          <input
-            type="text"
-            placeholder="Address line 1"
-            value={data.addressLine1}
-            onChange={(e) => handleChange('addressLine1', e.target.value)}
-            className="w-full h-9 bg-transparent px-3 text-xs text-white placeholder:text-white/40 border-b border-white/10 focus:outline-none"
-          />
-
-          {/* Address Line 2 */}
-          <input
-            type="text"
-            placeholder="Address line 2"
-            value={data.addressLine2}
-            onChange={(e) => handleChange('addressLine2', e.target.value)}
-            className="w-full h-9 bg-transparent px-3 text-xs text-white placeholder:text-white/40 border-b border-white/10 focus:outline-none"
-          />
-
-          {/* City and Zip Split */}
-          <div className="flex border-b border-white/10">
+          {/* Email Input */}
+          <div className="relative flex items-center border-b border-white/5 h-11 px-3.5 rounded-t-xl">
+            <Mail className="w-4 h-4 text-white/35 mr-3 shrink-0" />
             <input
-              type="text"
-              placeholder="City"
-              value={data.city}
-              onChange={(e) => handleChange('city', e.target.value)}
-              className="w-1/2 h-9 bg-transparent px-3 text-xs text-white placeholder:text-white/40 border-r border-white/10 focus:outline-none"
-            />
-            <input
-              type="text"
-              placeholder="ZIP code"
-              value={data.zipCode}
-              onChange={(e) => handleChange('zipCode', e.target.value)}
-              className="w-1/2 h-9 bg-transparent px-3 text-xs text-white placeholder:text-white/40 focus:outline-none"
+              type="email"
+              placeholder="correoelectrónico@ejemplo.com"
+              value={data.email}
+              onChange={(e) => handleChange('email', e.target.value)}
+              className="w-full bg-transparent text-xs text-white placeholder:text-white/30 focus:outline-none"
             />
           </div>
 
-          {/* State */}
-          <input
-            type="text"
-            placeholder="State"
-            value={data.state}
-            onChange={(e) => handleChange('state', e.target.value)}
-            className="w-full h-9 bg-transparent px-3 text-xs text-white placeholder:text-white/40 focus:outline-none"
-          />
+          {/* Full Name Input */}
+          <div className="relative flex items-center border-b border-white/5 h-11 px-3.5">
+            <User className="w-4 h-4 text-white/35 mr-3 shrink-0" />
+            <input
+              type="text"
+              placeholder="Nombre completo"
+              value={data.fullName}
+              onChange={(e) => handleChange('fullName', e.target.value)}
+              className="w-full bg-transparent text-xs text-white placeholder:text-white/30 focus:outline-none"
+            />
+          </div>
+
+          {/* Phone Prefix & Input */}
+          <div className="relative flex items-center h-11 px-3.5 rounded-b-xl">
+            <div className="flex items-center border-r border-white/5 pr-3 mr-3 shrink-0 relative z-50">
+              <button
+                type="button"
+                onClick={() => setIsPhoneOpen(!isPhoneOpen)}
+                className="flex items-center gap-1.5 focus:outline-none"
+              >
+                <img 
+                  src={`https://flagcdn.com/w40/${currentPhoneIso}.png`}
+                  alt={currentPhoneIso}
+                  className="w-5 h-3.5 object-cover rounded-sm shrink-0 border border-white/10" 
+                />
+                <span className="text-xs text-white/80">{data.phonePrefix}</span>
+                <ChevronDown className="w-3 h-3 text-white/30 pointer-events-none" />
+              </button>
+
+              {/* Custom phone prefix select list */}
+              {isPhoneOpen && (
+                <div className="absolute left-0 top-full mt-2 w-32 bg-[#121214] border border-white/10 rounded-xl shadow-2xl overflow-y-auto max-h-52 z-[99] py-1 no-scrollbar animate-in fade-in slide-in-from-top-1 duration-200">
+                  {PHONE_PREFIXES.map((prefix) => {
+                    const iso = PHONE_ISO_MAP[prefix] || 'us';
+                    return (
+                      <button
+                        key={prefix}
+                        type="button"
+                        onClick={() => {
+                          handleChange('phonePrefix', prefix);
+                          setIsPhoneOpen(false);
+                        }}
+                        className="w-full px-3 py-2.5 text-left text-xs text-white hover:bg-white/5 flex items-center gap-2 border-b border-white/[0.02] last:border-0 transition-colors"
+                      >
+                        <img 
+                          src={`https://flagcdn.com/w40/${iso}.png`}
+                          alt={iso}
+                          className="w-5 h-3.5 object-cover rounded-sm border border-white/15" 
+                        />
+                        <span>{prefix}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <input
+              type="tel"
+              placeholder="Número de teléfono"
+              value={data.phone}
+              onChange={(e) => handleChange('phone', e.target.value)}
+              className="w-full bg-transparent text-xs text-white placeholder:text-white/30 focus:outline-none"
+            />
+          </div>
+
         </div>
       </div>
+
+      {/* Dirección de facturación */}
+      <div className={`relative ${isCountryOpen ? 'z-50' : 'z-20'}`}>
+        <LabelHeader text="Dirección de facturación" />
+        <div className="flex flex-col border border-white/10 rounded-xl bg-white/[0.02]">
+          
+          {/* Country Selection */}
+          <div className="relative flex items-center border-b border-white/5 h-11 px-3.5 z-50 rounded-t-xl">
+            <button
+              type="button"
+              onClick={() => setIsCountryOpen(!isCountryOpen)}
+              className="w-full flex items-center justify-between text-left focus:outline-none"
+            >
+              <div className="flex items-center gap-2.5">
+                {currentCountryIso === 'globe' ? (
+                  <span className="text-sm shrink-0">🌐</span>
+                ) : (
+                  <img 
+                    src={`https://flagcdn.com/w40/${currentCountryIso}.png`}
+                    alt={currentCountryIso}
+                    className="w-5 h-3.5 object-cover rounded-sm shrink-0 border border-white/10" 
+                  />
+                )}
+                <span className="text-xs text-white">{data.country}</span>
+              </div>
+              <ChevronDown className="w-4 h-4 text-white/35 shrink-0" />
+            </button>
+
+            {/* Custom country select list */}
+            {isCountryOpen && (
+              <div className="absolute left-0 right-0 top-full mt-2 bg-[#121214] border border-white/10 rounded-xl shadow-2xl overflow-y-auto max-h-60 z-[99] py-1 no-scrollbar animate-in fade-in slide-in-from-top-1 duration-200">
+                {COUNTRIES.map((country) => {
+                  const iso = COUNTRY_ISO_MAP[country] || 'us';
+                  return (
+                    <button
+                      key={country}
+                      type="button"
+                      onClick={() => {
+                        handleChange('country', country);
+                        setIsCountryOpen(false);
+                      }}
+                      className="w-full px-3.5 py-2.5 text-left text-xs text-white hover:bg-white/5 flex items-center gap-2.5 border-b border-white/[0.02] last:border-0 transition-colors"
+                    >
+                      {iso === 'globe' ? (
+                        <span className="text-sm shrink-0">🌐</span>
+                      ) : (
+                        <img 
+                          src={`https://flagcdn.com/w40/${iso}.png`}
+                          alt={iso}
+                          className="w-5 h-3.5 object-cover rounded-sm border border-white/15" 
+                        />
+                      )}
+                      <span>{country}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Address Line (Input styled like dropdown) */}
+          <div className="relative flex items-center h-11 px-3.5 rounded-b-xl">
+            <input
+              type="text"
+              placeholder="Ingresar dirección"
+              value={data.addressLine1}
+              onChange={(e) => handleChange('addressLine1', e.target.value)}
+              className="w-full bg-transparent text-xs text-white placeholder:text-white/30 focus:outline-none pr-8"
+            />
+            <ChevronDown className="w-4 h-4 text-white/35 absolute right-3.5 top-3.5 pointer-events-none" />
+          </div>
+
+        </div>
+      </div>
+
     </div>
+  );
+}
+
+function LabelHeader({ text }: { text: string }) {
+  return (
+    <p className="text-xs font-semibold text-white/60 mb-2 tracking-wide">
+      {text}
+    </p>
   );
 }

@@ -5,7 +5,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { QRCodeSVG } from 'qrcode.react';
 import { getAssociatedTokenAddressSync } from '@solana/spl-token';
 import { Connection, PublicKey } from '@solana/web3.js';
-import { AlertCircle, CheckCircle2, Clock, Loader2, RefreshCw, Smartphone } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, Loader2, RefreshCw, Smartphone, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { usePriceFromJupiter } from '@/hooks/usePriceFromJupiter';
@@ -500,8 +500,13 @@ export default function QrTokenPayment({
 
   const showPriceLoader = needsPriceFeed && loadingPrice;
 
+  const handleCopyAddress = () => {
+    navigator.clipboard.writeText(SUBSCRIPTION_TREASURY_WALLET);
+    toast.success('Dirección copiada');
+  };
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {discountLabel ? (
         <div className="bg-green-600/10 border border-green-600/30 rounded-lg px-3 py-2 text-xs text-green-300">
           {discountLabel}
@@ -515,36 +520,40 @@ export default function QrTokenPayment({
         </div>
       ) : preciseAmount ? (
         <>
-          <div className="bg-blue-600/10 border border-blue-600/20 rounded-lg px-3 py-2.5 flex items-center gap-2">
-            <Clock className="w-3.5 h-3.5 text-blue-400" />
-            <p className="text-xs text-blue-300">
-              {paymentMethod === 'usdc'
-                ? 'Fixed amount in USDC'
-                : `Market quote refreshed every ${secondsRemaining}s`}
-            </p>
+          <div className="bg-blue-600/10 border border-blue-600/20 rounded-xl p-3 flex items-center gap-2.5 mb-4 text-xs font-medium">
+            <Clock className="w-4 h-4 text-[#0055ff] shrink-0" />
+            {paymentMethod === 'usdc' || paymentMethod === 'usdt' ? (
+              <span className="bg-gradient-to-r from-[#53a7ff] to-[#0055ff] bg-clip-text text-transparent font-semibold">
+                Monto fijo en stablecoin
+              </span>
+            ) : (
+              <span className="bg-gradient-to-r from-[#53a7ff] to-[#0055ff] bg-clip-text text-transparent font-semibold">
+                La cotización se actualizará cada 60 segundos
+              </span>
+            )}
           </div>
 
-          <div className="bg-white/5 border border-white/10 rounded-lg p-3 space-y-2">
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-white/60">Amount in USD</span>
-              <span className="text-sm font-medium text-white">${priceUSD.toFixed(2)}</span>
+          <div className="bg-white/[0.02] border border-white/5 rounded-xl p-4 mb-4 space-y-3">
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-white/50 font-normal">Monto en USD</span>
+              <span className="text-white font-semibold">${priceUSD.toFixed(2)}</span>
             </div>
-            <div className="h-px bg-white/10" />
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-white/60 font-medium">Scan and pay</span>
-              <span className="text-lg font-medium text-white">
+            <div className="h-px bg-white/5" />
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-white/50 font-normal">Escanea y paga</span>
+              <span className="bg-gradient-to-r from-[#53a7ff] to-[#0055ff] bg-clip-text text-transparent font-bold">
                 {preciseAmount.uiAmount} {config.label}
               </span>
             </div>
           </div>
 
           {paymentRequest ? (
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-3">
+            <div className="rounded-2xl border border-white/10 bg-[#0f0f11] p-4 space-y-4">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white">QR ready</p>
-                  <p className="text-[11px] text-white/50 mt-1 leading-4">
-                    This code is bound to your active entity and this exact checkout session.
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white">QR listo</p>
+                  <p className="text-[10px] text-white/40 mt-1 leading-normal">
+                    Este código QR está vinculado únicamente a esta orden.
                   </p>
                 </div>
                 <Button
@@ -552,100 +561,117 @@ export default function QrTokenPayment({
                   variant="ghost"
                   onClick={() => handleGenerateQr(false)}
                   disabled={isProcessing}
-                  className="h-8 px-3 text-[11px] text-white/70 hover:text-white hover:bg-white/10"
+                  className="h-8 px-3 text-[10px] text-white/70 hover:text-white hover:bg-white/10 border border-white/5 rounded-lg"
                 >
-                  <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-                  Refresh
+                  <RefreshCw className="w-3 h-3 mr-1.5" />
+                  Actualizar
                 </Button>
               </div>
 
-              <div className="bg-white rounded-2xl p-3 flex justify-center">
-                <QRCodeSVG value={paymentRequest.qrUrl} size={190} bgColor="#ffffff" fgColor="#111111" />
+              <div className="bg-white rounded-2xl p-4 flex justify-center shadow-lg">
+                <QRCodeSVG value={paymentRequest.qrUrl} size={180} bgColor="#ffffff" fgColor="#111111" />
               </div>
 
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-xl border border-white/10 bg-black/20 p-2.5">
-                  <p className="text-[11px] uppercase tracking-[0.25em] text-white/35">Status</p>
-                  <div className="mt-1.5 flex items-center gap-2 text-xs text-white">
+              {isStable ? (
+                <div className="w-full rounded-xl border border-white/5 bg-black/40 p-2.5">
+                  <p className="text-[9px] uppercase tracking-wider text-white/35 font-semibold">Estado</p>
+                  <div className="mt-1 flex items-center gap-1.5 text-[11px] text-white">
                     {paymentRequest.status === 'paid' ? (
                       <>
-                        <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
-                        Payment confirmed
+                        <CheckCircle2 className="w-3 h-3 text-green-400" />
+                        Confirmado
                       </>
                     ) : paymentRequest.status === 'expired' ? (
                       <>
-                        <AlertCircle className="w-3.5 h-3.5 text-red-400" />
-                        QR expired
+                        <AlertCircle className="w-3 h-3 text-red-400" />
+                        Expirado
                       </>
                     ) : (
                       <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
-                        Waiting for Phantom payment
+                        <Loader2 className="w-3 h-3 animate-spin text-blue-400" />
+                        Esperando pago
                       </>
                     )}
                   </div>
                 </div>
+              ) : (
+                <div className="grid gap-3 grid-cols-2 w-full">
+                  <div className="rounded-xl border border-white/5 bg-black/40 p-2.5">
+                    <p className="text-[9px] uppercase tracking-wider text-white/35 font-semibold">Estado</p>
+                    <div className="mt-1 flex items-center gap-1.5 text-[11px] text-white">
+                      {paymentRequest.status === 'paid' ? (
+                        <>
+                          <CheckCircle2 className="w-3 h-3 text-green-400" />
+                          Confirmado
+                        </>
+                      ) : paymentRequest.status === 'expired' ? (
+                        <>
+                          <AlertCircle className="w-3 h-3 text-red-400" />
+                          Expirado
+                        </>
+                      ) : (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin text-blue-400" />
+                          Esperando pago
+                        </>
+                      )}
+                    </div>
+                  </div>
 
-                <div className="rounded-xl border border-white/10 bg-black/20 p-2.5">
-                  <p className="text-[11px] uppercase tracking-[0.25em] text-white/35">Expires</p>
-                  <p className="mt-1.5 text-xs text-white">
-                    {secondsUntilExpiry > 0 ? `${secondsUntilExpiry}s remaining` : 'Expired'}
-                  </p>
+                  <div className="rounded-xl border border-white/5 bg-black/40 p-2.5">
+                    <p className="text-[9px] uppercase tracking-wider text-white/35 font-semibold">Actualiza en</p>
+                    <p className="mt-1 text-[11px] text-white font-medium">
+                      {secondsRemaining > 0 ? `${secondsRemaining}s` : 'Actualizando...'}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div className="rounded-xl border border-blue-600/20 bg-blue-600/10 p-3 space-y-1.5">
-                <div className="flex items-center gap-2 text-blue-200">
-                  <Smartphone className="w-3.5 h-3.5" />
-                  <span className="text-xs font-semibold uppercase tracking-[0.18em]">Use Phantom mobile</span>
-                </div>
-                <p className="text-[11px] leading-4 text-blue-100/80">
-                  Scan the QR from Phantom on your phone, approve the transaction, and we will verify it automatically.
+              {/* Treasury Address Manual Copy Input */}
+              <div className="pt-2 border-t border-white/5 space-y-2">
+                <p className="text-[10px] text-white/40 leading-normal">
+                  Toca para copiar la dirección de la wallet. Pégala en Phantom y envía el pago manualmente si no puedes escanear el código QR.
                 </p>
-                <a
-                  href={paymentRequest.qrUrl}
-                  className="inline-flex text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-200 hover:text-white"
+                <div 
+                  onClick={handleCopyAddress}
+                  className="flex items-center justify-between bg-black/40 border border-white/10 rounded-xl p-2.5 text-xs text-white/80 select-all cursor-pointer hover:bg-white/5 transition-all"
                 >
-                  Open payment link
-                </a>
+                  <span className="truncate font-mono text-[10px] mr-2">{SUBSCRIPTION_TREASURY_WALLET}</span>
+                  <Copy className="w-3.5 h-3.5 text-white/45 shrink-0" />
+                </div>
               </div>
             </div>
           ) : (
-            <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] p-4 space-y-3">
-              <div className="bg-white rounded-2xl p-3 flex items-center justify-center min-h-[216px]">
+            <div className="rounded-2xl border border-white/10 bg-[#0f0f11] p-5">
+              <div className="border border-dashed border-white/10 bg-[#000000]/40 rounded-xl p-6 flex flex-col items-center justify-center min-h-[190px] text-center gap-3">
                 {isProcessing ? (
-                  <div className="flex flex-col items-center gap-2 text-center">
-                    <Loader2 className="w-5 h-5 animate-spin text-black" />
-                    <p className="text-xs text-black/70">Generating your unique Phantom QR...</p>
-                  </div>
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
+                    <p className="text-xs text-white/60">Generando tu código QR de Phantom...</p>
+                  </>
                 ) : (
-                  <div className="flex flex-col items-center gap-2 text-center">
-                    <Smartphone className="w-6 h-6 text-black/60" />
-                    <p className="text-xs text-black/70">
-                      {isBillingValid
-                        ? 'Preparing your QR automatically...'
-                        : 'Complete billing details to generate the QR'}
+                  <>
+                    <Smartphone className="w-6 h-6 text-white/30" />
+                    <p className="text-xs text-white/50 max-w-[280px] leading-relaxed">
+                      Completa nombre, correo y teléfono para generar el QR
                     </p>
-                  </div>
+                  </>
                 )}
               </div>
-              {!isBillingValid ? (
-                <p className="text-[11px] text-white/55 leading-4">
-                  The payment QR is created as soon as your billing details are complete.
-                </p>
-              ) : null}
             </div>
           )}
 
           {!isBillingValid && (
-            <div className="flex items-center gap-2 p-2.5 bg-yellow-600/10 border border-yellow-600/30 rounded-lg">
-              <AlertCircle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
-              <p className="text-xs text-yellow-300">Complete billing details to continue</p>
+            <div className="flex items-center gap-2 py-1 px-0.5">
+              <AlertCircle className="w-4 h-4 text-[#0055ff] flex-shrink-0" />
+              <p className="text-xs font-semibold bg-gradient-to-r from-[#53a7ff] to-[#0055ff] bg-clip-text text-transparent">
+                Completa los datos de facturación para continuar
+              </p>
             </div>
           )}
         </>
       ) : (
-        <p className="text-center text-red-400 py-4">Error loading {config.label} price</p>
+        <p className="text-center text-red-400 py-4">Error al cargar cotización de {config.label}</p>
       )}
     </div>
   );

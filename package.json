@@ -4,8 +4,9 @@
   "description": "itsroosevelt - Plataforma SaaS Multi-Tenant para Gestión y Automatización de Negocios.",
   "main": "index.js",
   "scripts": {
-    "dev": "next dev -H 0.0.0.0 -p 3000",
-    "dev:full": "next dev -H 0.0.0.0 -p 3000",
+    "dev": "WATCHPACK_POLLING=true next dev -H 0.0.0.0 -p 3000",
+    "dev:turbo": "next dev -H 0.0.0.0 -p 3000",
+    "dev:webpack": "WATCHPACK_POLLING=true next dev -H 0.0.0.0 -p 3000 --webpack",
     "build": "next build",
     "start": "next start",
     "lint": "next lint --dir src",
