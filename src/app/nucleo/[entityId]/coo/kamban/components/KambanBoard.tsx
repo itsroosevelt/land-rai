@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   DndContext,
   closestCorners,
@@ -27,7 +27,7 @@ import { toast } from 'sonner';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { resolveCardChannel } from '@/lib/omnichannel/resolveCardChannel';
-export default function KambanBoard() {
+export default function KambanBoard({ boardMode = 'all' }: { boardMode?: 'bot' | 'all' }) {
     const { currentUser, activeEntity } = useAuth();
     const getTenantPath = () => {
         if (!currentUser?.uid || !activeEntity) return '';
@@ -44,10 +44,12 @@ export default function KambanBoard() {
   const [isGlobalSelectContactOpen, setIsGlobalSelectContactOpen] = useState(false);
   const [isGlobalCreateClientOpen, setIsGlobalCreateClientOpen] = useState(false);
   const [contacts, setContacts] = useState<any[]>([]);
+  const [isSyncingBotGroups, setIsSyncingBotGroups] = useState(false);
+  const hasAttemptedAutoSync = useRef(false);
   const router = useRouter();
 
   const { isCollapsed, toggleSidebar } = useSidebar();
-  const { groups, cards, loading, handleDragEnd, handleUpdateColor, handleAddGroup } = useKambanBoard(searchTerm);
+  const { groups, cards, loading, handleDragEnd, handleUpdateColor, handleAddGroup } = useKambanBoard(searchTerm, boardMode);
 
   useEffect(() => {
     const tenantPath = getTenantPath();
@@ -138,6 +140,41 @@ export default function KambanBoard() {
     setIsModalOpen(true);
   };
 
+  const handleSyncBotGroups = async () => {
+    if (!currentUser?.uid || !activeEntity) return;
+    setIsSyncingBotGroups(true);
+    try {
+      const res = await fetch('/api/kanban/sync-bot-groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUser.uid,
+          entityId: activeEntity,
+          botId: '00000003',
+          relocateCards: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Sync failed');
+      toast.success(
+        `Kanban sincronizado: +${data.groups?.created || 0} grupos, ${data.relocation?.moved || 0} tarjetas movidas`
+      );
+    } catch (error: any) {
+      console.error('[KambanBoard] sync bot groups failed:', error);
+      toast.error(error?.message || 'No se pudo sincronizar con el chatbot');
+    } finally {
+      setIsSyncingBotGroups(false);
+    }
+  };
+
+  useEffect(() => {
+    if (loading || hasAttemptedAutoSync.current || !currentUser?.uid || !activeEntity) return;
+    const hasBotGroups = groups.some((g) => g.autoManaged && g.botId === '00000003');
+    if (hasBotGroups) return;
+    hasAttemptedAutoSync.current = true;
+    handleSyncBotGroups();
+  }, [loading, groups, currentUser?.uid, activeEntity]);
+
   const activeCard = useMemo(() => cards.find(c => c.id === activeId), [cards, activeId]);
 
   const channelStats = useMemo(() => {
@@ -178,6 +215,8 @@ export default function KambanBoard() {
         toggleSidebar={toggleSidebar}
         onNewChat={() => setIsGlobalSelectContactOpen(true)}
         onSettings={() => router.push(`/nucleo/${activeEntity}/cto/integrations`)}
+        onSyncBotGroups={handleSyncBotGroups}
+        isSyncingBotGroups={isSyncingBotGroups}
       />
 
       <div className="flex-1 overflow-x-auto overflow-y-auto">
@@ -201,7 +240,7 @@ export default function KambanBoard() {
               />
             ))}
 
-            {/* Add Group Button */}
+            {boardMode !== 'bot' && (
             <button
               onClick={onAddGroup}
               className="flex items-center gap-2 px-4 py-3 rounded-2xl border border-dashed border-white/5 text-neutral-500 hover:text-neutral-300 hover:bg-white/5 transition-all h-fit w-72 flex-shrink-0"
@@ -209,6 +248,7 @@ export default function KambanBoard() {
               <Plus size={16} />
               <span className="text-[13px] font-medium">Add group</span>
             </button>
+            )}
           </div>
 
           <DragOverlay dropAnimation={dropAnimation}>

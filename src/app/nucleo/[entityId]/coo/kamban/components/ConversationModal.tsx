@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { isInstagramCard, resolveCardChannel } from '@/lib/omnichannel/resolveCardChannel';
+import ChatArea from '../../omnichannel/components/ChatArea';
 export interface ConversationModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -220,7 +221,7 @@ function FileRow({
 }
 
 export default function ConversationModal({
-  isOpen, onClose, card,
+  isOpen, onClose, card, groupName, groups = [], allConversations = [],
 }: ConversationModalProps) {
     const { currentUser, activeEntity } = useAuth();
     const getTenantPath = () => {
@@ -315,12 +316,35 @@ export default function ConversationModal({
     comments: base.comments || contactData?.comments       || '',
   };
 
+  const chatCard = liveData
+    ? { ...card, ...liveData, groupId: card?.groupId || liveData.groupId }
+    : card;
+
   return (
     <div className="fixed inset-0 z-[1000] pointer-events-none">
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={onClose}
         className="absolute inset-0 bg-black/50 pointer-events-auto backdrop-blur-[3px]" />
       <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} transition={{ type: 'spring', damping: 28 }}
-        className="absolute top-0 right-0 h-full w-full sm:w-[500px] md:w-1/2 bg-black border-l border-white/[0.07] flex flex-col pointer-events-auto shadow-2xl">
+        className="absolute top-0 right-0 h-full w-full md:w-[900px] lg:w-[960px] bg-black border-l border-white/[0.07] flex flex-col md:flex-row pointer-events-auto shadow-2xl overflow-hidden">
+
+        {/* Chat — mismo componente que omnichannel */}
+        <div className="flex flex-col w-full md:w-[420px] lg:w-[460px] flex-shrink-0 min-h-0 border-b md:border-b-0 md:border-r border-white/[0.07] bg-[#111111] h-[52vh] md:h-full">
+          {chatCard ? (
+            <ChatArea
+              card={chatCard}
+              groups={groups}
+              groupName={groupName || ''}
+              allConversations={allConversations}
+            />
+          ) : (
+            <div className="flex flex-1 items-center justify-center text-neutral-500 text-sm">
+              Cargando conversación...
+            </div>
+          )}
+        </div>
+
+        {/* Detalles de la tarjeta */}
+        <div className="flex flex-col flex-1 min-w-0 min-h-0 h-[48vh] md:h-full">
         <header className="h-12 flex items-center justify-between px-5 border-b border-white/[0.06] flex-shrink-0">
           <div className="flex gap-2">
             <button onClick={onClose} className="p-1.5 text-neutral-600 hover:text-white rounded"><X size={16} /></button>
@@ -374,6 +398,7 @@ export default function ConversationModal({
               />
             ))}
           </div>
+        </div>
         </div>
       </motion.div>
     </div>

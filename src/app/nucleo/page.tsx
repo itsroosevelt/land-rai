@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { auth, db } from '@/lib/firebase';
 import { signOut } from 'firebase/auth';
 import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
+import { provisionEntityMold } from '@/lib/mold/entityMold';
 
 interface Entity {
     id: string;
@@ -129,6 +130,8 @@ export default function NucleoPage() {
             theme: 'dark',
             branding: inputValue
         });
+
+        await provisionEntityMold(db, currentUser.uid, randomId);
 
         setIsCreating(false);
         setInputValue('');

@@ -10,6 +10,7 @@ import {
 } from './flowRouting';
 import { isIsolatedBotCollection, resolveBotsCollectionName } from './automation/botStorage';
 import axios from 'axios';
+import { buildBotNodeGroupMap, syncCardToBotNodeAdmin } from '@/lib/kanban/kanbanBotSyncAdmin';
 
 function evaluateCondition(varValue: any, operator: string, targetValue: any, fuzzy: boolean = true): boolean {
     let v = varValue === undefined || varValue === null ? '' : String(varValue);
@@ -198,7 +199,7 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
 
             try {
                 // --- 3. INNER ENGINE CORE ---
-                await runEngineCycle(cardRef, cardData, currentMsg, entityPath, entityId, userId, botsCollection);
+                await runEngineCycle(cardRef, cardData, currentMsg, entityPath, entityId, userId, cardId, botsCollection);
             } catch (cycleErr: any) {
                 console.error(`[ChatbotEngine] ❌ Cycle Error [${msgId}]:`, cycleErr.message);
                 // Log error to card but DON'T stop the whole runner
@@ -220,8 +221,18 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
     } catch (err: any) {
         console.error(`[ChatbotEngine] 💥 Runner Crash:`, err.message);
     } finally {
-        // --- 5. FINAL RELEASE ---
+        // --- 5. FINAL RELEASE + KANBAN PLACEMENT ---
         try {
+            const activeBots = await db.collection(`${entityPath}/chatbots`).where('isActive', 'in', [true, 'true']).limit(1).get();
+            const botId = activeBots.docs[0]?.id || '00000003';
+            const { ensureCardKanbanPlacement } = await import('@/lib/kanban/kanbanBotSyncAdmin');
+            await ensureCardKanbanPlacement({
+                db,
+                tenantPath: entityPath,
+                cardId,
+                botId,
+                preferredGroupId: groupId,
+            });
             await cardRef.update({ botLock: admin.firestore.FieldValue.delete() });
             console.log(`[ChatbotEngine] 🏁 RUNNER FINISHED for ${cardId}`);
         } catch (e) {}
@@ -238,6 +249,7 @@ async function runEngineCycle(
     entityPath: string,
     entityId: string,
     userId: string,
+    cardId: string,
     botsCollection?: string
 ) {
     const text = msg.text || '';
@@ -456,6 +468,31 @@ async function runEngineCycle(
     console.log(`[ChatbotEngine] 🤖 Selected Bot: "${botData.name}" (Score: ${botData._score}) for ${platform}`);
     const flow = botData.flow || { nodes: [], edges: [] };
 
+    let nodeGroupMap: Map<string, string> | undefined;
+    try {
+        nodeGroupMap = await buildBotNodeGroupMap(db, entityPath, botData.id);
+    } catch (err: any) {
+        console.warn(`[ChatbotEngine] Kanban group map unavailable: ${err?.message || err}`);
+    }
+    let currentKanbanGroupId: string = cardData.groupId;
+    const syncKanbanToNode = async (nodeId: string | null | undefined) => {
+        if (!nodeId || !cardId || !currentKanbanGroupId) return;
+        try {
+            const newGroupId = await syncCardToBotNodeAdmin({
+                db,
+                tenantPath: entityPath,
+                cardId,
+                currentGroupId: currentKanbanGroupId,
+                botId: botData.id,
+                nodeId: String(nodeId),
+                nodeGroupMap,
+            });
+            if (newGroupId) currentKanbanGroupId = newGroupId;
+        } catch (err: any) {
+            console.warn(`[ChatbotEngine] Kanban auto-move failed: ${err?.message || err}`);
+        }
+    };
+
     const replaceVars = (val: string, overlay: any = {}) => {
         if (!val) return '';
         const context: any = { ...sessionVars, ...overlay };
@@ -559,6 +596,7 @@ async function runEngineCycle(
                 await cardRef.update(updatePayload);
 
                 currentNodeId = nextId;
+                await syncKanbanToNode(nextId);
             } else if (node?.type === 'quickReplyNode') {
                 const buttons = sanitizeFlowButtons(node.data?.buttons || []);
                 const resolution = resolveQuickReplyEdge(flow.edges, node.id, buttons, text);
@@ -639,6 +677,7 @@ async function runEngineCycle(
              const start = flow.nodes.find((n: any) => n.type === 'start' || n.type === 'startNode');
              currentNodeId = start ? start.id : null;
              console.log(`[ChatbotEngine] 🆕 Starting/Restarting flow at node ${currentNodeId}`);
+             if (currentNodeId) await syncKanbanToNode(currentNodeId);
         }
     }
 
@@ -677,6 +716,7 @@ async function runEngineCycle(
         }
 
         await cardRef.update({ 'botState.currentNodeId': node.id, 'botState.lastStep': `${node.type}` });
+        await syncKanbanToNode(node.id);
 
         // 1. TEXT MESSAGE
         if (node.type === 'textMessageNode') {
@@ -776,6 +816,7 @@ async function runEngineCycle(
                     }
                 })
             });
+            await syncKanbanToNode(node.id);
             return;
         }
 
@@ -827,6 +868,7 @@ async function runEngineCycle(
             }
             
             await cardRef.update(updatePayload);
+            await syncKanbanToNode(node.id);
             return; // EXIT loop, wait for user
         }
 
@@ -1099,5 +1141,18 @@ async function runEngineCycle(
         const edge = resolveDefaultNextEdge(flow.edges, node.id);
         currentNodeId = edge ? edge.target : null;
         if (!edge) break;
+    }
+
+    try {
+        const { ensureCardKanbanPlacement } = await import('@/lib/kanban/kanbanBotSyncAdmin');
+        await ensureCardKanbanPlacement({
+            db,
+            tenantPath: entityPath,
+            cardId,
+            botId: botData.id,
+            preferredGroupId: currentKanbanGroupId,
+        });
+    } catch (err: any) {
+        console.warn(`[ChatbotEngine] Final kanban placement failed: ${err?.message || err}`);
     }
 }

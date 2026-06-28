@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, doc, deleteDoc, updateDoc, serverTimestamp, writeBatch, Timestamp } from 'firebase/firestore';
 import Card from './Card';
-import { Plus, Trash2, MoreVertical, Palette, Upload, Search } from 'lucide-react';
+import { Plus, Trash2, MoreVertical, Palette, Upload, Search, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -26,6 +26,7 @@ import { SelectContactModal } from './SelectContactModal';
 import { CreateClientModal } from './CreateClientModal';
 import { sortCardsByArrival } from '@/lib/omnichannel/cardSort';
 import { cardMatchesColumnSearch } from '@/lib/omnichannel/columnSearch';
+import { getBotNodeTypeLabel, type KanbanNodeDetails } from '@/lib/kanban/botNodeGroups';
 
 // --- Types ---
 interface CardData {
@@ -78,7 +79,15 @@ export const kambanColumn = ({
     const [isSelectContactOpen, setIsSelectContactOpen] = useState(false);
     const [isCreateClientOpen, setIsCreateClientOpen] = useState(false);
     const [columnSearch, setColumnSearch] = useState('');
+    const [isNodeInfoOpen, setIsNodeInfoOpen] = useState(false);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+    const toggleNodeInfo = () => setIsNodeInfoOpen((prev) => !prev);
+
+    const nodeDetails = group.botNodeDetails as KanbanNodeDetails | undefined;
+    const isBotColumn = !!(nodeDetails || group.autoManaged || group.botNodeId);
+    const displayName = group.name === 'Inbox' || group.name === 'Bandeja de Entrada' ? 'Inbox' : group.name;
+    const nodeTypeLabel = nodeDetails?.typeLabel || getBotNodeTypeLabel(group.botNodeType);
 
     // Droppable for receiving cards
     const { setNodeRef } = useDroppable({
@@ -226,27 +235,23 @@ export const kambanColumn = ({
                 selectedColor.value
             )}
         >
-            {/* Header */}
-            <div className="p-3 pb-1 flex flex-col">
-                <div className="flex justify-between items-center group/header">
-                <div className="flex items-center gap-2 px-1">
-                    <div className={cn("px-2 py-0.5 rounded-md text-[11px] font-bold tracking-tight truncate text-white", selectedColor.pill)}>
-                        {group.name === 'Inbox' || group.name === 'Bandeja de Entrada' ? 'Inbox' : group.name}
+            <div className="p-3 pb-1 flex flex-col gap-2">
+                {/* Fila principal del grupo */}
+                <div className="flex justify-between items-center gap-2">
+                    <div className={cn("px-2 py-0.5 rounded-md text-[11px] font-bold tracking-tight truncate text-white max-w-[65%]", selectedColor.pill)}>
+                        {displayName}
                     </div>
-                    <span className={cn("font-medium text-[12px] opacity-40", selectedColor.textColor.replace('text-', 'text-'))}>
-                        {isFiltering ? `${visibleCards.length}/${sortedCards.length}` : sortedCards.length}
-                    </span>
-                </div>
-
-
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                        <span className={cn("font-medium text-[12px] opacity-40 tabular-nums", selectedColor.textColor)}>
+                            {isFiltering ? `${visibleCards.length}/${sortedCards.length}` : sortedCards.length}
+                        </span>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-colors ml-auto">
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-colors">
                                     <MoreVertical size={16} />
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="bg-neutral-900 border-neutral-800 text-white shadow-2xl rounded-xl p-1 w-56">
-                                {/* Edit Name */}
                                 <DropdownMenuItem
                                     onClick={() => {
                                         const newName = window.prompt('Editar nombre de la bandeja:', group.name);
@@ -259,8 +264,6 @@ export const kambanColumn = ({
                                     <Palette className="mr-3 text-neutral-400" size={16} />
                                     <span>Edit Name</span>
                                 </DropdownMenuItem>
-
-                                {/* Color Picker */}
                                 <DropdownMenuSub>
                                     <DropdownMenuSubTrigger className="hover:bg-blue-600 focus:bg-blue-600 data-[state=open]:bg-blue-600 rounded-lg transition-colors py-2">
                                         <Palette className="mr-3 text-neutral-400" size={16} />
@@ -282,8 +285,6 @@ export const kambanColumn = ({
                                         </DropdownMenuSubContent>
                                     </DropdownMenuPortal>
                                 </DropdownMenuSub>
-
-                                {/* Import CSV */}
                                 <DropdownMenuItem
                                     onClick={() => fileInputRef.current?.click()}
                                     className="cursor-pointer hover:bg-neutral-800 rounded-lg py-2"
@@ -291,8 +292,6 @@ export const kambanColumn = ({
                                     <Upload className="mr-3 text-neutral-400" size={16} />
                                     <span>Import CSV</span>
                                 </DropdownMenuItem>
-
-                                {/* Delete Group (only if not the last one) */}
                                 {allGroups.length > 1 && (
                                     <>
                                         <div className="h-px bg-neutral-800 my-1 mx-1" />
@@ -307,9 +306,80 @@ export const kambanColumn = ({
                                 )}
                             </DropdownMenuContent>
                         </DropdownMenu>
+                    </div>
                 </div>
 
-                <div className="relative mt-2 px-1">
+                {/* Detalle del nodo (colapsable con ☰) */}
+                {isBotColumn && (
+                    <div className="rounded-xl border border-white/10 bg-black/25 overflow-hidden">
+                        <button
+                            type="button"
+                            onClick={toggleNodeInfo}
+                            className="w-full flex items-center gap-2 px-2.5 py-2 text-left hover:bg-white/[0.04] transition-colors"
+                        >
+                            <Menu size={14} className="text-neutral-400 flex-shrink-0" />
+                            <span className={cn("text-[10px] font-bold uppercase tracking-wide truncate", selectedColor.textColor)}>
+                                {nodeTypeLabel}
+                            </span>
+                            <span className="ml-auto text-[10px] text-neutral-600">
+                                {isNodeInfoOpen ? 'Ocultar' : 'Ver nodo'}
+                            </span>
+                        </button>
+
+                        {isNodeInfoOpen && (
+                            <div className="px-3 pb-3 pt-0 space-y-2.5 border-t border-white/5">
+                                {!nodeDetails ? (
+                                    <p className="text-[10px] text-neutral-500 leading-relaxed pt-2">
+                                        Pulsa <strong className="text-neutral-400">Sync bot</strong> en el header para cargar la pregunta y respuestas de este nodo.
+                                    </p>
+                                ) : (
+                                    <>
+                                        {nodeDetails.prompt && (
+                                            <div>
+                                                <p className="text-[9px] font-bold uppercase tracking-wider text-neutral-500 mb-1">
+                                                    Pregunta / mensaje del bot
+                                                </p>
+                                                <p className="text-[11px] text-neutral-200 leading-relaxed whitespace-pre-wrap">
+                                                    {nodeDetails.prompt}
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {nodeDetails.expectedAnswers && nodeDetails.expectedAnswers.length > 0 && (
+                                            <div>
+                                                <p className="text-[9px] font-bold uppercase tracking-wider text-neutral-500 mb-1.5">
+                                                    Respuestas esperadas
+                                                </p>
+                                                <ul className="space-y-1">
+                                                    {nodeDetails.expectedAnswers.map((answer, idx) => (
+                                                        <li
+                                                            key={`${answer}-${idx}`}
+                                                            className="text-[11px] text-neutral-300 bg-white/[0.04] border border-white/5 rounded-lg px-2 py-1.5 leading-snug"
+                                                        >
+                                                            {answer}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+
+                                        {nodeDetails.notes && nodeDetails.notes.length > 0 && (
+                                            <div className="space-y-1 pt-0.5">
+                                                {nodeDetails.notes.map((note, idx) => (
+                                                    <p key={idx} className="text-[10px] text-neutral-500 leading-relaxed">
+                                                        {note}
+                                                    </p>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                <div className="relative px-1">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-600 pointer-events-none" size={12} />
                     <input
                         type="text"

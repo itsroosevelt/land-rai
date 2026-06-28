@@ -20,7 +20,9 @@ export const KambanHeader = ({
     isSidebarCollapsed,
     toggleSidebar,
     onNewChat,
-    onSettings
+    onSettings,
+    onSyncBotGroups,
+    isSyncingBotGroups
 }: any) => {
     return (
         <div className="h-[52px] border-b border-white/5 bg-black/40 backdrop-blur-xl flex items-center justify-between px-4 flex-shrink-0 z-20">
@@ -152,6 +154,18 @@ export const KambanHeader = ({
                 </div>
 
                 <div className="flex items-center gap-0.5">
+
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={onSyncBotGroups}
+                        disabled={isSyncingBotGroups}
+                        title="Crear/actualizar columnas según nodos del chatbot y reorganizar tarjetas"
+                        className="h-7 px-2 text-neutral-400 hover:text-white border border-transparent hover:border-white/5 hover:bg-white/5 gap-1.5"
+                    >
+                        <RefreshCw size={13} className={isSyncingBotGroups ? 'animate-spin' : ''} />
+                        <span className="hidden lg:inline text-[11px]">Sync bot</span>
+                    </Button>
 
                     <Button 
                         variant="ghost" 

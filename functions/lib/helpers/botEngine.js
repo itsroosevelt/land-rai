@@ -9,6 +9,7 @@ const functions = require("firebase-functions");
 const axios_1 = require("axios");
 const factory_1 = require("./platforms/factory");
 const flowRouting_1 = require("./flowRouting");
+const kanbanBotSync_1 = require("./kanbanBotSync");
 // Delay helper
 const delay = (ms) => new Promise(res => setTimeout(res, ms));
 // --- LOCK SYSTEM: Prevents duplicate processing when user sends multiple messages quickly ---
@@ -289,7 +290,7 @@ function sanitizeButtonsData(buttons) {
  * Handles checking for active bots, session lifecycle, and command overrides.
  */
 async function tryTriggerBot(userId, entityId, platform, externalId, messageText, messageId, metadata) {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g;
     functions.logger.info(`[Bot Engine] 📥 Incoming message from ${externalId} on ${platform} for tenant ${userId}/${entityId}`);
     await logBotTrace(userId, entityId, {
         step: 'incoming_webhook', status: 'info', platform, externalId,
@@ -315,7 +316,7 @@ async function tryTriggerBot(userId, entityId, platform, externalId, messageText
     await logBotTrace(userId, entityId, { step: 'card_resolution', status: 'success', platform, externalId, details: `Resolved card path: ${cardRef.path}` });
     const cardSnap = await cardRef.get();
     const cardData = Object.assign({ id: cardRef.id }, cardSnap.data());
-    if (cardData.humanTakeover && cardData.humanTakeover.active === true) {
+    if (((_a = cardData.humanTakeover) === null || _a === void 0 ? void 0 : _a.active) === true) {
         functions.logger.info(`[Bot Engine] Human takeover active — skipping bot for ${externalId}`);
         await logBotTrace(userId, entityId, {
             step: 'human_takeover', status: 'info', platform, externalId,
@@ -324,7 +325,7 @@ async function tryTriggerBot(userId, entityId, platform, externalId, messageText
         return;
     }
     // Next.js queue engine owns bot execution for this card — avoid duplicate WhatsApp replies.
-    if (((_a = cardData.botState) === null || _a === void 0 ? void 0 : _a.engine) === 'queue') {
+    if (((_b = cardData.botState) === null || _b === void 0 ? void 0 : _b.engine) === 'queue') {
         functions.logger.info(`[Bot Engine] Skipping legacy engine for ${externalId} — queue engine active.`);
         await logBotTrace(userId, entityId, {
             step: 'engine_skip', status: 'info', platform, externalId,
@@ -332,7 +333,7 @@ async function tryTriggerBot(userId, entityId, platform, externalId, messageText
         });
         return;
     }
-    if (messageId && ((_b = cardData.botState) === null || _b === void 0 ? void 0 : _b.lastProcessedMessageId) === messageId) {
+    if (messageId && ((_c = cardData.botState) === null || _c === void 0 ? void 0 : _c.lastProcessedMessageId) === messageId) {
         functions.logger.info(`[Bot Engine] Skipping duplicate message ${messageId} for ${externalId}`);
         return;
     }
@@ -347,8 +348,8 @@ async function tryTriggerBot(userId, entityId, platform, externalId, messageText
     // Combined command flag
     const isCommand = isReset || isMenu || isStop;
     // BILINGUAL STATUS RESOLUTION: Read both new and legacy state
-    const botStatus = ((_c = cardData.botState) === null || _c === void 0 ? void 0 : _c.status) || ((_d = cardData.chatbotState) === null || _d === void 0 ? void 0 : _d.status) || 'none';
-    const lastInteraction = ((_e = cardData.botState) === null || _e === void 0 ? void 0 : _e.lastInteraction) || ((_f = cardData.chatbotState) === null || _f === void 0 ? void 0 : _f.lastInteraction);
+    const botStatus = ((_d = cardData.botState) === null || _d === void 0 ? void 0 : _d.status) || ((_e = cardData.chatbotState) === null || _e === void 0 ? void 0 : _e.status) || 'none';
+    const lastInteraction = ((_f = cardData.botState) === null || _f === void 0 ? void 0 : _f.lastInteraction) || ((_g = cardData.chatbotState) === null || _g === void 0 ? void 0 : _g.lastInteraction);
     let shouldTrigger = false;
     if (isCommand) {
         // Command always triggers
@@ -416,6 +417,19 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
         functions.logger.warn(`[executeBotFlow] Could not resolve cardRef for ${to}`);
         return;
     }
+    const tenantPath = `users/${userId}/entities/${entityId}`;
+    let nodeGroupMap;
+    try {
+        nodeGroupMap = await (0, kanbanBotSync_1.buildBotNodeGroupMap)(admin.firestore(), tenantPath, bot.id);
+    }
+    catch (err) {
+        functions.logger.warn(`[KanbanSync] Could not load node group map: ${(err === null || err === void 0 ? void 0 : err.message) || err}`);
+    }
+    const kanbanContext = {
+        botId: bot.id,
+        nodeGroupMap,
+        currentGroupId: cardData.groupId,
+    };
     let lockAcquired = false;
     // Wrap everything in try/finally to ALWAYS release the lock
     try {
@@ -577,7 +591,7 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                         await adapter.sendMessage(to, errorMsg);
                         await logBotMessage(to, errorMsg, cardData.id, cardData.groupId, cardRef, 'text');
                         // Update retry count in state
-                        await updateBotState(to, Object.assign(Object.assign({}, cardData.botState), { retryCount: currentRetries + 1, lastInteraction: admin.firestore.Timestamp.now() }), cardData.id, cardData.groupId, cardRef);
+                        await updateBotState(to, Object.assign(Object.assign({}, cardData.botState), { retryCount: currentRetries + 1, lastInteraction: admin.firestore.Timestamp.now() }), cardData.id, cardData.groupId, cardRef, userId, entityId, platform, kanbanContext);
                         return;
                     }
                 }
@@ -655,7 +669,7 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                     nextNodeId = selectedEdge.target;
             }
             else {
-                await updateBotState(to, { status: 'completed', currentNodeId: null }, cardData.id, cardData.groupId, cardRef);
+                await updateBotState(to, { status: 'completed', currentNodeId: null }, cardData.id, cardData.groupId, cardRef, userId, entityId, platform, kanbanContext);
                 return;
             }
         }
@@ -707,11 +721,11 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                     finishedAt: new Date()
                 };
                 await cardRef.update({ botOutcome });
-                await updateBotState(to, { status: 'completed', currentNodeId: nextNodeId, lastInteraction: new Date() }, cardData.id, cardData.groupId, cardRef);
+                await updateBotState(to, { status: 'completed', currentNodeId: nextNodeId, lastInteraction: new Date() }, cardData.id, cardData.groupId, cardRef, userId, entityId, platform, kanbanContext);
                 shouldContinue = false;
                 break;
             }
-            await updateBotState(to, { status: 'active', currentNodeId: nextNodeId, lastInteraction: new Date() }, cardData.id, cardData.groupId, cardRef);
+            await updateBotState(to, { status: 'active', currentNodeId: nextNodeId, lastInteraction: new Date() }, cardData.id, cardData.groupId, cardRef, userId, entityId, platform, kanbanContext);
             // Simulación Humana (Typing Delay) - CONTROLADO POR UI
             if (['textMessageNode', 'mediaMessageNode', 'quickReplyNode', 'listMessageNode'].includes(nextNode.type)) {
                 // Por defecto es TRUE (Humano) a menos que se desactive explícitamente en el editor
@@ -747,7 +761,7 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                         currentNodeId: nextNodeId,
                         retryCount: 0,
                         lastInteraction: admin.firestore.Timestamp.now()
-                    }, cardData.id, cardData.groupId, cardRef);
+                    }, cardData.id, cardData.groupId, cardRef, userId, entityId, platform, kanbanContext);
                     shouldContinue = false;
                     break;
                 case 'mediaMessageNode':
@@ -779,7 +793,7 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                             status: 'active',
                             currentNodeId: nextNodeId,
                             lastInteraction: admin.firestore.Timestamp.now()
-                        }, cardData.id, cardData.groupId, cardRef);
+                        }, cardData.id, cardData.groupId, cardRef, userId, entityId, platform, kanbanContext);
                         shouldContinue = false;
                     }
                     else {
@@ -800,7 +814,7 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                             status: 'active',
                             currentNodeId: nextNodeId,
                             lastInteraction: admin.firestore.Timestamp.now()
-                        }, cardData.id, cardData.groupId, cardRef);
+                        }, cardData.id, cardData.groupId, cardRef, userId, entityId, platform, kanbanContext);
                         shouldContinue = false;
                     }
                     else {
@@ -812,7 +826,7 @@ async function executeBotFlow(bot, userId, entityId, to, cardData, rawUserMessag
                             status: 'active',
                             currentNodeId: nextNodeId,
                             lastInteraction: admin.firestore.Timestamp.now()
-                        }, cardData.id, cardData.groupId, cardRef);
+                        }, cardData.id, cardData.groupId, cardRef, userId, entityId, platform, kanbanContext);
                         shouldContinue = false;
                     }
                     break;
@@ -1192,11 +1206,37 @@ async function saveVariable(contactNumber, variable, value, cardId, groupId, exi
         */
     }
 }
-async function updateBotState(contactNumber, state, cardId, groupId, existingRef, userId, entityId, platform) {
-    // Use pre-resolved ref if available, otherwise fall back to lookup
+async function updateBotState(contactNumber, state, cardId, groupId, existingRef, userId, entityId, platform, kanbanContext) {
     const docRef = existingRef || (userId && entityId ? await resolveCardRef(userId, entityId, contactNumber, platform || 'whatsapp') : null);
     if (docRef) {
-        await docRef.update({ botState: state, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+        const nextState = (kanbanContext === null || kanbanContext === void 0 ? void 0 : kanbanContext.botId) ? Object.assign(Object.assign({}, state), { botId: kanbanContext.botId }) : state;
+        await docRef.update({ botState: nextState, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+        const activeGroupId = (kanbanContext === null || kanbanContext === void 0 ? void 0 : kanbanContext.currentGroupId) || groupId;
+        if ((state === null || state === void 0 ? void 0 : state.currentNodeId) &&
+            (kanbanContext === null || kanbanContext === void 0 ? void 0 : kanbanContext.botId) &&
+            cardId &&
+            activeGroupId &&
+            userId &&
+            entityId) {
+            try {
+                const tenantPath = `users/${userId}/entities/${entityId}`;
+                const newGroupId = await (0, kanbanBotSync_1.syncCardToBotNodeAdmin)({
+                    db: admin.firestore(),
+                    tenantPath,
+                    cardId,
+                    currentGroupId: activeGroupId,
+                    botId: kanbanContext.botId,
+                    nodeId: String(state.currentNodeId),
+                    nodeGroupMap: kanbanContext.nodeGroupMap,
+                });
+                if (newGroupId && kanbanContext) {
+                    kanbanContext.currentGroupId = newGroupId;
+                }
+            }
+            catch (err) {
+                functions.logger.warn(`[KanbanSync] Auto-move failed: ${(err === null || err === void 0 ? void 0 : err.message) || err}`);
+            }
+        }
     }
 }
 async function logBotMessage(contactNumber, message, cardId, groupId, existingRef, type = 'text', metadata, userId, entityId, platform) {

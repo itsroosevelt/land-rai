@@ -90,7 +90,7 @@ const layers = [
         id: 'coo', label: 'Chief Operations Officer', path: '../coo', icon: Settings, theme: 'blue',
         subLayers: [
             { id: 'coo-omnichannel', label: 'Omnichannel Inbox', path: '../coo/omnichannel', icon: MessageSquare, theme: 'blue' },
-            { id: 'coo-kamban', label: 'Kamban Leads', path: '../coo/kamban', icon: Contact, theme: 'blue' }
+            { id: 'coo-kamban', label: 'Kamban Leads', path: '../workspace/hub', icon: Contact, theme: 'blue' }
         ]
     },
     { 

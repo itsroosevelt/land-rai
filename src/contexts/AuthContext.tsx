@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { provisionEntityMold } from '@/lib/mold/entityMold';
 
 import { usePathname } from 'next/navigation';
 
@@ -71,8 +72,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                             ];
 
                             // Seed entities and settings in parallel
-                            await Promise.all(initialEntities.map((entity) =>
-                                Promise.all([
+                            await Promise.all(initialEntities.map(async (entity) => {
+                                await Promise.all([
                                     setDoc(doc(db, `users/${user.uid}/entities/${entity.id}`), {
                                         initialized: true,
                                         name: entity.name,
@@ -87,8 +88,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                                         encrypted: false,
                                         updatedAt: new Date()
                                     })
-                                ])
-                            ));
+                                ]);
+                                await provisionEntityMold(db, user.uid, entity.id);
+                            }));
                         } else {
                             // If user already exists, only update their last login
                             await updateDoc(userDocRef, {

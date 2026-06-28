@@ -74,6 +74,17 @@ function FlowPage() {
         }
       }, { merge: true });
 
+      await fetch('/api/kanban/sync-bot-groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUser.uid,
+          entityId: activeEntity,
+          botId: chatbotId,
+          relocateCards: true,
+        }),
+      }).catch((err) => console.warn('[Chatbot] Kanban sync after save failed:', err));
+
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 3000);
     } catch (error) {

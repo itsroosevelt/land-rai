@@ -28,6 +28,8 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { ensureEntityMoldUpToDate } from '@/lib/mold/entityMold';
+import { MOLD_WORKSPACE_ROUTES } from '@/lib/mold/routes';
 
 // --- CONSTANTS ---
 const PIXELS_PER_INCH = 96;
@@ -73,7 +75,7 @@ const DEPARTMENTS_DATA: Record<string, { title: string, layers: any[] }> = {
         { id: 'visas', label: 'Global Visas', path: 'visas', icon: Globe, theme: 'cyan' },
         { id: 'logistics', label: 'Neural Logistics', path: 'logistics', icon: Share2, theme: 'cyan' },
         { id: 'omnichannel', label: 'Omnichannel Engine', path: 'omnichannel', icon: MessageSquare, theme: 'cyan' },
-        { id: 'kamban', label: 'Operational Kamban', path: 'kamban', icon: Layout, theme: 'cyan' },
+        { id: 'kamban', label: 'Operational Kamban', fullPath: MOLD_WORKSPACE_ROUTES.kambanLayerFullPath, icon: Layout, theme: 'cyan' },
         { id: 'team', label: 'Operations Team', path: 'team', icon: Users, theme: 'cyan' },
         { id: 'quality', label: 'Quality Assurance', path: 'quality', icon: Award, theme: 'cyan' },
         { id: 'supply', label: 'Supply Chain', path: 'supply', icon: Truck, theme: 'cyan' },
@@ -354,6 +356,13 @@ function WorkspaceContent() {
     const [isMobile, setIsMobile] = useState(false);
 
     useEffect(() => {
+        if (!currentUser?.uid || !entityId) return;
+        ensureEntityMoldUpToDate(db, currentUser.uid, entityId).catch((err) => {
+            console.error('[Workspace] mold upgrade failed:', err);
+        });
+    }, [currentUser?.uid, entityId]);
+
+    useEffect(() => {
         const checkMobile = () => setIsMobile(window.innerWidth < 768);
         checkMobile();
         window.addEventListener('resize', checkMobile);
@@ -420,7 +429,9 @@ function WorkspaceContent() {
                 data: {
                     id: layer.id, label: layer.label, icon: layer.icon,
                     origin: parentPos, // Pass parentPos as origin for the entry animation
-                    url: `/nucleo/${entityId}/${layer.role || activeRole}/${layer.path}`,
+                    url: layer.fullPath
+                        ? `/nucleo/${entityId}/${layer.fullPath}`
+                        : `/nucleo/${entityId}/${layer.role || activeRole}/${layer.path}`,
                     onClose: () => {
                         setOpenWindows(prev => prev.filter(id => id !== uniqueId));
                         setNodes(currNodes => currNodes.filter(n => n.id !== uniqueId));

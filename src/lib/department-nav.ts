@@ -121,7 +121,7 @@ export const CMO_MENU = [
 // --- OPERATIONS & PEOPLE ---
 export const COO_MENU = [
     { href: "/nucleo/{entity}/coo/omnichannel", icon: MessageSquare, label: "Omnichannel Inbox" },
-    { href: "/nucleo/{entity}/coo/kamban", icon: Contact, label: "Kamban Leads" },
+    { href: "/nucleo/{entity}/workspace/hub", icon: Contact, label: "Kamban Leads" },
     { href: "/nucleo/{entity}/coo/visas", icon: Briefcase, label: "Visas & Immigration" },
     { href: "/nucleo/{entity}/coo/cx", icon: Users, label: "Customer Experience" },
     { href: "/nucleo/{entity}/coo/projects", icon: Layout, label: "Project Management" },

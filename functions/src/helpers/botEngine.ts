@@ -8,6 +8,7 @@ import {
     resolveQuickReplyEdge,
     sanitizeFlowButtons,
 } from './flowRouting';
+import { buildBotNodeGroupMap, syncCardToBotNodeAdmin } from './kanbanBotSync';
 
 // Delay helper
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
@@ -486,6 +487,19 @@ export async function executeBotFlow(
         return;
     }
 
+    const tenantPath = `users/${userId}/entities/${entityId}`;
+    let nodeGroupMap: Map<string, string> | undefined;
+    try {
+        nodeGroupMap = await buildBotNodeGroupMap(admin.firestore(), tenantPath, bot.id);
+    } catch (err: any) {
+        functions.logger.warn(`[KanbanSync] Could not load node group map: ${err?.message || err}`);
+    }
+    const kanbanContext: KanbanSyncContext = {
+        botId: bot.id,
+        nodeGroupMap,
+        currentGroupId: cardData.groupId,
+    };
+
     let lockAcquired = false;
 
     // Wrap everything in try/finally to ALWAYS release the lock
@@ -663,7 +677,7 @@ export async function executeBotFlow(
                             ...cardData.botState,
                             retryCount: currentRetries + 1,
                             lastInteraction: admin.firestore.Timestamp.now()
-                        }, cardData.id, cardData.groupId, cardRef);
+                        }, cardData.id, cardData.groupId, cardRef, userId, entityId, platform, kanbanContext);
                         return;
                     }
                 } else {
@@ -745,7 +759,7 @@ export async function executeBotFlow(
                 if (selectedEdge) nextNodeId = selectedEdge.target;
 
             } else {
-                await updateBotState(to, { status: 'completed', currentNodeId: null }, cardData.id, cardData.groupId, cardRef);
+                await updateBotState(to, { status: 'completed', currentNodeId: null }, cardData.id, cardData.groupId, cardRef, userId, entityId, platform, kanbanContext);
                 return;
             }
         } else {
@@ -798,11 +812,11 @@ export async function executeBotFlow(
                 };
                 await cardRef.update({ botOutcome });
 
-                await updateBotState(to, { status: 'completed', currentNodeId: nextNodeId, lastInteraction: new Date() }, cardData.id, cardData.groupId, cardRef);
+                await updateBotState(to, { status: 'completed', currentNodeId: nextNodeId, lastInteraction: new Date() }, cardData.id, cardData.groupId, cardRef, userId, entityId, platform, kanbanContext);
                 shouldContinue = false;
                 break;
             }
-            await updateBotState(to, { status: 'active', currentNodeId: nextNodeId, lastInteraction: new Date() }, cardData.id, cardData.groupId, cardRef);
+            await updateBotState(to, { status: 'active', currentNodeId: nextNodeId, lastInteraction: new Date() }, cardData.id, cardData.groupId, cardRef, userId, entityId, platform, kanbanContext);
 
             // Simulación Humana (Typing Delay) - CONTROLADO POR UI
             if (['textMessageNode', 'mediaMessageNode', 'quickReplyNode', 'listMessageNode'].includes(nextNode.type)) {
@@ -844,7 +858,7 @@ export async function executeBotFlow(
                         currentNodeId: nextNodeId,
                         retryCount: 0,
                         lastInteraction: admin.firestore.Timestamp.now()
-                    }, cardData.id, cardData.groupId, cardRef);
+                    }, cardData.id, cardData.groupId, cardRef, userId, entityId, platform, kanbanContext);
                     shouldContinue = false;
                     break;
 
@@ -881,7 +895,7 @@ export async function executeBotFlow(
                             status: 'active',
                             currentNodeId: nextNodeId,
                             lastInteraction: admin.firestore.Timestamp.now()
-                        }, cardData.id, cardData.groupId, cardRef);
+                        }, cardData.id, cardData.groupId, cardRef, userId, entityId, platform, kanbanContext);
 
                         shouldContinue = false;
                     } else {
@@ -904,7 +918,7 @@ export async function executeBotFlow(
                             status: 'active',
                             currentNodeId: nextNodeId,
                             lastInteraction: admin.firestore.Timestamp.now()
-                        }, cardData.id, cardData.groupId, cardRef);
+                        }, cardData.id, cardData.groupId, cardRef, userId, entityId, platform, kanbanContext);
 
                         shouldContinue = false;
                     } else {
@@ -917,7 +931,7 @@ export async function executeBotFlow(
                             status: 'active',
                             currentNodeId: nextNodeId,
                             lastInteraction: admin.firestore.Timestamp.now()
-                        }, cardData.id, cardData.groupId, cardRef);
+                        }, cardData.id, cardData.groupId, cardRef, userId, entityId, platform, kanbanContext);
 
                         shouldContinue = false;
                     }
@@ -1309,12 +1323,56 @@ async function saveVariable(contactNumber: string, variable: string, value: stri
     }
 }
 
-async function updateBotState(contactNumber: string, state: any, cardId?: string, groupId?: string, existingRef?: FirebaseFirestore.DocumentReference | null, userId?: string, entityId?: string, platform?: string) {
-    // Use pre-resolved ref if available, otherwise fall back to lookup
+interface KanbanSyncContext {
+    botId?: string;
+    nodeGroupMap?: Map<string, string>;
+    currentGroupId?: string;
+}
+
+async function updateBotState(
+    contactNumber: string,
+    state: any,
+    cardId?: string,
+    groupId?: string,
+    existingRef?: FirebaseFirestore.DocumentReference | null,
+    userId?: string,
+    entityId?: string,
+    platform?: string,
+    kanbanContext?: KanbanSyncContext
+) {
     const docRef = existingRef || (userId && entityId ? await resolveCardRef(userId, entityId, contactNumber, platform || 'whatsapp') : null);
 
     if (docRef) {
-        await docRef.update({ botState: state, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+        const nextState = kanbanContext?.botId ? { ...state, botId: kanbanContext.botId } : state;
+        await docRef.update({ botState: nextState, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+
+        const activeGroupId = kanbanContext?.currentGroupId || groupId;
+        if (
+            state?.currentNodeId &&
+            kanbanContext?.botId &&
+            cardId &&
+            activeGroupId &&
+            userId &&
+            entityId
+        ) {
+            try {
+                const tenantPath = `users/${userId}/entities/${entityId}`;
+                const newGroupId = await syncCardToBotNodeAdmin({
+                    db: admin.firestore(),
+                    tenantPath,
+                    cardId,
+                    currentGroupId: activeGroupId,
+                    botId: kanbanContext.botId,
+                    nodeId: String(state.currentNodeId),
+                    nodeGroupMap: kanbanContext.nodeGroupMap,
+                });
+                if (newGroupId && kanbanContext) {
+                    kanbanContext.currentGroupId = newGroupId;
+                }
+            } catch (err: any) {
+                functions.logger.warn(`[KanbanSync] Auto-move failed: ${err?.message || err}`);
+            }
+        }
     }
 }
 

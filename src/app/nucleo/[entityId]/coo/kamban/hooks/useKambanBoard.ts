@@ -6,7 +6,7 @@ import { collection, query, orderBy, onSnapshot, doc, updateDoc, Timestamp, addD
 import { toast } from 'sonner';
 import { moveCardBetweenGroups } from '@/lib/kanban/moveCardClient';
 
-export const useKambanBoard = (filterTerm: string = '') => {
+export const useKambanBoard = (filterTerm: string = '', boardMode: 'bot' | 'all' = 'all') => {
     const { currentUser, activeEntity } = useAuth();
     const getTenantPath = () => {
         if (!currentUser?.uid || !activeEntity) return '';
@@ -21,14 +21,17 @@ export const useKambanBoard = (filterTerm: string = '') => {
     useEffect(() => {
         const q = query(collection(db, `${getTenantPath()}/kanban-groups`), orderBy('order', 'asc'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const groupsData = snapshot.docs.map(doc => ({
+            let groupsData = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
             }));
+            if (boardMode === 'bot') {
+                groupsData = groupsData.filter((g: any) => g.autoManaged === true);
+            }
             setGroups(groupsData);
         });
         return () => unsubscribe();
-    }, []);
+    }, [currentUser?.uid, activeEntity, boardMode]);
 
     // Load Cards
     useEffect(() => {
