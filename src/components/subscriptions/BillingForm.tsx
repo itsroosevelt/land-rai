@@ -137,7 +137,7 @@ export default function BillingForm({
               placeholder="correoelectrónico@ejemplo.com"
               value={data.email}
               onChange={(e) => handleChange('email', e.target.value)}
-              className="w-full bg-transparent text-xs text-white placeholder:text-white/30 focus:outline-none"
+              className="w-full bg-transparent text-sm font-sans text-white placeholder:text-white/30 focus:outline-none"
             />
           </div>
 
@@ -149,7 +149,7 @@ export default function BillingForm({
               placeholder="Nombre completo"
               value={data.fullName}
               onChange={(e) => handleChange('fullName', e.target.value)}
-              className="w-full bg-transparent text-xs text-white placeholder:text-white/30 focus:outline-none"
+              className="w-full bg-transparent text-sm font-sans text-white placeholder:text-white/30 focus:outline-none"
             />
           </div>
 
@@ -166,7 +166,7 @@ export default function BillingForm({
                   alt={currentPhoneIso}
                   className="w-5 h-3.5 object-cover rounded-sm shrink-0 border border-white/10" 
                 />
-                <span className="text-xs text-white/80">{data.phonePrefix}</span>
+                <span className="text-sm font-sans text-white/80">{data.phonePrefix}</span>
                 <ChevronDown className="w-3 h-3 text-white/30 pointer-events-none" />
               </button>
 
@@ -183,7 +183,7 @@ export default function BillingForm({
                           handleChange('phonePrefix', prefix);
                           setIsPhoneOpen(false);
                         }}
-                        className="w-full px-3 py-2.5 text-left text-xs text-white hover:bg-white/5 flex items-center gap-2 border-b border-white/[0.02] last:border-0 transition-colors"
+                        className="w-full px-3 py-2.5 text-left text-sm font-sans text-white hover:bg-white/5 flex items-center gap-2 border-b border-white/[0.02] last:border-0 transition-colors"
                       >
                         <img 
                           src={`https://flagcdn.com/w40/${iso}.png`}
@@ -202,7 +202,7 @@ export default function BillingForm({
               placeholder="Número de teléfono"
               value={data.phone}
               onChange={(e) => handleChange('phone', e.target.value)}
-              className="w-full bg-transparent text-xs text-white placeholder:text-white/30 focus:outline-none"
+              className="w-full bg-transparent text-sm font-sans text-white placeholder:text-white/30 focus:outline-none"
             />
           </div>
 
@@ -231,7 +231,7 @@ export default function BillingForm({
                     className="w-5 h-3.5 object-cover rounded-sm shrink-0 border border-white/10" 
                   />
                 )}
-                <span className="text-xs text-white">{data.country}</span>
+                <span className="text-sm font-sans text-white">{data.country}</span>
               </div>
               <ChevronDown className="w-4 h-4 text-white/35 shrink-0" />
             </button>
@@ -249,7 +249,7 @@ export default function BillingForm({
                         handleChange('country', country);
                         setIsCountryOpen(false);
                       }}
-                      className="w-full px-3.5 py-2.5 text-left text-xs text-white hover:bg-white/5 flex items-center gap-2.5 border-b border-white/[0.02] last:border-0 transition-colors"
+                      className="w-full px-3.5 py-2.5 text-left text-sm font-sans text-white hover:bg-white/5 flex items-center gap-2.5 border-b border-white/[0.02] last:border-0 transition-colors"
                     >
                       {iso === 'globe' ? (
                         <span className="text-sm shrink-0">🌐</span>
@@ -275,7 +275,7 @@ export default function BillingForm({
               placeholder="Ingresar dirección"
               value={data.addressLine1}
               onChange={(e) => handleChange('addressLine1', e.target.value)}
-              className="w-full bg-transparent text-xs text-white placeholder:text-white/30 focus:outline-none pr-8"
+              className="w-full bg-transparent text-sm font-sans text-white placeholder:text-white/30 focus:outline-none pr-8"
             />
             <ChevronDown className="w-4 h-4 text-white/35 absolute right-3.5 top-3.5 pointer-events-none" />
           </div>
