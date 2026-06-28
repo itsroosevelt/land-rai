@@ -8,9 +8,9 @@ const Footer = () => {
         <div className="grid grid-cols-1 md:grid-cols-5 gap-12">
           {/* Left Section */}
           <div className="md:col-span-1">
-            <p className="text-white text-2xl font-medium tracking-tight">Haciendo que Udreamms sea útil para todos</p>
+            <p className="text-white text-2xl font-medium tracking-tight">Haciendo que Roosevelt sea útil para todos</p>
             <div className="mt-8">
-              <img src="/assets/Logo Udreamms.png" alt="Udreamms Logo" className="w-16 h-auto opacity-80 mb-4" />
+              <img src="/assets/newlogo.png" alt="Roosevelt Logo" className="w-16 h-auto opacity-80 mb-4" />
               <p className="text-gray-500 text-sm">
                 Tu puente seguro a los Estados Unidos.
                 <br />

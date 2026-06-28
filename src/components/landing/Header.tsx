@@ -134,9 +134,9 @@ export default function Header() {
           <div className="flex items-center gap-12 h-full">
             <Link href="/" className="flex items-center gap-3 z-50 shrink-0 group">
               <div className="w-9 h-9 relative transition-transform duration-300 group-hover:scale-110">
-                <img src="/assets/Logo Udreamms.png" alt="Udreamms" className="object-contain w-full h-full drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]" />
+                <img src="/assets/newlogo.png" alt="Roosevelt" className="object-contain w-full h-full drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]" />
               </div>
-              <span className="text-xl font-medium tracking-tight text-white group-hover:text-primary transition-colors">Udreamms</span>
+              <span className="text-xl font-medium tracking-tight text-white group-hover:text-primary transition-colors">Roosevelt</span>
             </Link>
 
             {/* DESKTOP NAV - Ocultar en landings de visa */}
