@@ -1,13 +1,22 @@
 import * as admin from 'firebase-admin';
 import { MANUAL_KANBAN_COLUMNS } from './mold/manualKanbanColumns';
 
-export const ENTITY_MOLD_VERSION = 2;
+export const ENTITY_MOLD_VERSION = 4;
 
 const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
     botKanban: true,
     manualKanban: true,
+    whatsappOutbound: true,
+    whatsappBroadcast: true,
 } as const;
+
+const MOLD_WHATSAPP_MESSAGING = {
+    blockOutboundAfter24h: false,
+    outboundTemplateName: 'hello_world',
+    outboundTemplateLanguage: 'en_US',
+    outboundTemplateUsesBodyParam: false,
+};
 
 type AdminDb = admin.firestore.Firestore;
 
@@ -64,6 +73,7 @@ export async function provisionEntityMoldAdmin(
         {
             moldVersion: ENTITY_MOLD_VERSION,
             features: ENTITY_MOLD_FEATURES,
+            whatsappMessaging: MOLD_WHATSAPP_MESSAGING,
             moldProvisionedAt: admin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true }

@@ -5,6 +5,7 @@ export const MOLD_WORKSPACE_ROUTES = {
     hub: (entityId: string) => `/nucleo/${entityId}/workspace/hub`,
     botKanban: (entityId: string) => `/nucleo/${entityId}/workspace/bot`,
     manualKanban: (entityId: string) => `/nucleo/${entityId}/workspace/manual`,
+    broadcastList: (entityId: string) => `/nucleo/${entityId}/cmo/broadcast/list`,
     /** Lámina COO en el diagrama (fullPath relativo a /nucleo/{entityId}/) */
     kambanLayerFullPath: 'workspace/hub',
 } as const;
@@ -12,4 +13,5 @@ export const MOLD_WORKSPACE_ROUTES = {
 export const MOLD_NAV_HREFS = {
     kambanLeads: '/nucleo/{entity}/workspace/hub',
     cooWorkspace: '/nucleo/{entity}/workspace?role=coo',
+    broadcastList: '/nucleo/{entity}/cmo/broadcast/list',
 } as const;

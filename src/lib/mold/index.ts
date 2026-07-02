@@ -6,3 +6,9 @@ export {
 } from './entityMold';
 
 export { MOLD_WORKSPACE_ROUTES, MOLD_NAV_HREFS } from './routes';
+
+export {
+    MOLD_WHATSAPP_MESSAGING,
+    resolveWhatsAppMessagingSettings,
+    type WhatsAppMessagingSettings,
+} from './whatsappMessaging';

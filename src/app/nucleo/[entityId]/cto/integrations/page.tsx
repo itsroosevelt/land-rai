@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, Zap, ArrowRight, Settings2, MessageSquare } from 'lucide-react';
+import { Search, Zap, ArrowRight, Settings2, MessageSquare, Megaphone } from 'lucide-react';
 import Link from 'next/link';
 import { getWhatsAppIntegrationHealth } from '@/lib/omnichannel/whatsappIntegrationStatus';
 import { useAuth } from '@/contexts/AuthContext';
@@ -170,13 +170,22 @@ export default function IntegrationsPage() {
                             </div>
                             <div className="flex flex-wrap gap-2 shrink-0">
                                 {whatsappHealth.canSend && (
-                                    <Link
-                                        href={`/nucleo/${activeEntity}/coo/omnichannel`}
-                                        className="inline-flex items-center gap-2 h-11 px-5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wider transition-colors"
-                                    >
-                                        <MessageSquare className="w-4 h-4" />
-                                        Abrir Omnicanal
-                                    </Link>
+                                    <>
+                                        <Link
+                                            href={`/nucleo/${activeEntity}/coo/omnichannel`}
+                                            className="inline-flex items-center gap-2 h-11 px-5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wider transition-colors"
+                                        >
+                                            <MessageSquare className="w-4 h-4" />
+                                            Abrir Omnicanal
+                                        </Link>
+                                        <Link
+                                            href={`/nucleo/${activeEntity}/cmo/broadcast/list`}
+                                            className="inline-flex items-center gap-2 h-11 px-5 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold uppercase tracking-wider transition-colors"
+                                        >
+                                            <Megaphone className="w-4 h-4" />
+                                            Abrir Difusiones
+                                        </Link>
+                                    </>
                                 )}
                                 <button
                                     type="button"

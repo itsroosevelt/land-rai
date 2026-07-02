@@ -1,13 +1,16 @@
 import { doc, getDoc, setDoc, serverTimestamp, Firestore } from 'firebase/firestore';
 import { ensureManualKanbanInitialized } from '@/lib/kanban/manualKanban';
+import { MOLD_WHATSAPP_MESSAGING } from './whatsappMessaging';
 
 /** Incrementar cuando el molde multitenant gane nuevas estructuras obligatorias. */
-export const ENTITY_MOLD_VERSION = 2;
+export const ENTITY_MOLD_VERSION = 4;
 
 export const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
     botKanban: true,
     manualKanban: true,
+    whatsappOutbound: true,
+    whatsappBroadcast: true,
 } as const;
 
 function tenantPath(userId: string, entityId: string) {
@@ -32,6 +35,7 @@ export async function provisionEntityMold(
         {
             moldVersion: ENTITY_MOLD_VERSION,
             features: ENTITY_MOLD_FEATURES,
+            whatsappMessaging: MOLD_WHATSAPP_MESSAGING,
             moldProvisionedAt: serverTimestamp(),
         },
         { merge: true }

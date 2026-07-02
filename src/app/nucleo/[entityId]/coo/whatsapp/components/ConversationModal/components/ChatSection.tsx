@@ -269,7 +269,11 @@ export const ChatSection: React.FC<ChatSectionProps> = ({
                                         handleSendMessage();
                                     }
                                 }}
-                                placeholder={!isWithin24Hours ? "Escribe un mensaje de reapertura..." : "Escribe un mensaje..."}
+                                placeholder={
+                                    !isWithin24Hours
+                                        ? 'Mensaje de reapertura (se enviará como plantilla de WhatsApp)...'
+                                        : 'Escribe un mensaje...'
+                                }
                                 className="bg-transparent border-none text-[11px] h-7 min-h-0 resize-none py-1.5 px-2 focus-visible:ring-0 placeholder:text-neutral-600 font-medium disabled:opacity-50"
                                 rows={1}
                             />

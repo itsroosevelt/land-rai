@@ -115,7 +115,7 @@ const DEPARTMENTS_DATA: Record<string, { title: string, layers: any[] }> = {
         { id: 'loyalty', label: 'Loyalty Programs', path: 'loyalty', icon: Gift, theme: 'orange' },
         { id: 'analytics', label: 'Market Analytics', path: 'analytics', icon: BarChart, theme: 'orange' },
         { id: 'goals', label: 'Marketing Goals', path: 'goals', icon: Target, theme: 'orange' },
-        { id: 'campaigns', label: 'Omni Campaigns', path: 'campaigns', icon: Megaphone, theme: 'orange' },
+        { id: 'campaigns', label: 'Broadcasts', path: 'broadcast/list', icon: Megaphone, theme: 'orange' },
         { id: 'market-share', label: 'Market Share', path: 'market-share', icon: PieChart, theme: 'orange' },
         { id: 'seo', label: 'SEO Engine', path: 'seo', icon: Search, theme: 'orange' },
         { id: 'social', label: 'Social Media', path: 'social', icon: Share2, theme: 'orange' }
@@ -511,6 +511,7 @@ function WorkspaceContent() {
                     style: { zIndex: 1000 - index, pointerEvents: 'none' },
                     data: { 
                         ...item, 
+                        onClick: () => spawnWindow(item, canvasPos),
                         onDoubleClick: () => spawnWindow(item, canvasPos)
                     }
                 });

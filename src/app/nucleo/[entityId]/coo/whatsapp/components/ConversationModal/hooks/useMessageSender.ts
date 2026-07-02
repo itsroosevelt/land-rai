@@ -1,12 +1,19 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { toast } from 'sonner';
 import { useFileUpload } from '@/lib/hooks/useFileUpload';
 import { normalizePhoneNumber } from '@/lib/phoneUtils';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp, doc, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { CardData, Message } from '../types';
 import { socialPlatforms } from '../constants';
 import { useAuth } from '@/contexts/AuthContext';
+import { resolveWhatsAppMessagingSettings } from '@/lib/mold/whatsappMessaging';
+import {
+    buildWhatsAppTemplatePayload,
+    isWithinWhatsAppSessionWindow,
+    requiresWhatsAppTemplate,
+} from '@/lib/omnichannel/whatsappSessionWindow';
 
 interface UseMessageSenderProps {
     currentCardId: string | null;
@@ -35,8 +42,21 @@ export const useMessageSender = ({
     const [isSending, setIsSending] = useState(false);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
+    const [whatsappMessaging, setWhatsappMessaging] = useState(() => resolveWhatsAppMessagingSettings());
 
     const { uploading, progress, uploadFile } = useFileUpload();
+
+    useEffect(() => {
+        if (!currentUser?.uid || !activeEntity) {
+            setWhatsappMessaging(resolveWhatsAppMessagingSettings());
+            return;
+        }
+
+        const entityRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}`);
+        return onSnapshot(entityRef, (snap) => {
+            setWhatsappMessaging(resolveWhatsAppMessagingSettings(snap.data()));
+        });
+    }, [currentUser?.uid, activeEntity]);
 
     const resolveRecipientId = () => {
         const platform = activePlatform.toLowerCase();
@@ -84,41 +104,17 @@ export const useMessageSender = ({
         return recipientId;
     };
 
-    // 24h Window Check (Improved Resilience)
-    const isWithin24Hours = useMemo(() => {
-        const messages = liveCardData?.messages || card?.messages || [];
-        if (messages.length === 0) return true; // Default to true for new conversations to avoid template errors
+    const conversationMessages = liveCardData?.messages || card?.messages || [];
 
-        const userMessages = messages.filter((m: any) => m.sender !== 'agent');
-        if (userMessages.length === 0) return true;
+    const isWithin24Hours = useMemo(
+        () => isWithinWhatsAppSessionWindow(conversationMessages),
+        [conversationMessages]
+    );
 
-        const lastUserMsg = userMessages[userMessages.length - 1];
-        if (!lastUserMsg.timestamp) return false;
-
-        try {
-            const now = new Date();
-            let lastMsgDate: Date;
-
-            if (lastUserMsg.timestamp.toDate) {
-                lastMsgDate = lastUserMsg.timestamp.toDate();
-            } else if (lastUserMsg.timestamp.seconds) {
-                lastMsgDate = new Date(lastUserMsg.timestamp.seconds * 1000);
-            } else if (lastUserMsg.timestamp instanceof Date) {
-                lastMsgDate = lastUserMsg.timestamp;
-            } else if (typeof lastUserMsg.timestamp === 'string' || typeof lastUserMsg.timestamp === 'number') {
-                lastMsgDate = new Date(lastUserMsg.timestamp);
-            } else {
-                // Fallback for objects that might NOT have toDate but are still timestamps
-                lastMsgDate = new Date();
-            }
-
-            const diffHours = (now.getTime() - lastMsgDate.getTime()) / (1000 * 60 * 60);
-            return diffHours < 24;
-        } catch (e) {
-            console.warn('[useMessageSender] Error parsing timestamp for 24h check:', e);
-            return true; // Default to true to try sending text instead of failing on template
-        }
-    }, [liveCardData?.messages]);
+    const needsTemplateMessage = useMemo(
+        () => requiresWhatsAppTemplate(conversationMessages),
+        [conversationMessages]
+    );
 
     const handleSendMessage = async () => {
         if (isSending || (!newMessage.trim() && !selectedFile)) return;
@@ -130,6 +126,18 @@ export const useMessageSender = ({
 
         const recipientId = resolveRecipientId();
         if (!recipientId) return;
+
+        if (
+            activePlatform === 'WhatsApp' &&
+            needsTemplateMessage &&
+            whatsappMessaging.blockOutboundAfter24h
+        ) {
+            toast.error(
+                'La ventana de 24 h está cerrada y tu empresa tiene bloqueados los envíos de reapertura para evitar costos de plantilla.',
+                { duration: 8000 }
+            );
+            return;
+        }
 
         setIsSending(true);
 
@@ -188,17 +196,11 @@ export const useMessageSender = ({
                 } : {})
             };
 
-            if (activePlatform === 'WhatsApp' && !isWithin24Hours) {
+            if (activePlatform === 'WhatsApp' && needsTemplateMessage) {
+                const templatePayload = buildWhatsAppTemplatePayload(messageToSend, whatsappMessaging);
                 payload = {
                     ...payload,
-                    type: 'template',
-                    template: {
-                        name: 'custom_message',
-                        language: { code: 'es' },
-                        components: [
-                            { type: 'body', parameters: [{ type: 'text', text: messageToSend }] }
-                        ]
-                    }
+                    ...templatePayload,
                 };
             }
 
@@ -277,7 +279,11 @@ export const useMessageSender = ({
         }
     };
 
-    const sendTemplateMessage = async (templateName: string = 'hello_world') => {
+    const sendTemplateMessage = async (templateName?: string) => {
+        const resolvedTemplateName = templateName || whatsappMessaging.outboundTemplateName;
+        const resolvedLanguage = templateName === 'hello_world'
+            ? 'en_US'
+            : whatsappMessaging.outboundTemplateLanguage;
         // Platform-aware recipient ID (templates only for WhatsApp, but safeguard here)
         const platform = activePlatform.toLowerCase();
         const isMetaPlatform = platform === 'messenger' || platform === 'facebook' || platform === 'instagram';
@@ -299,7 +305,7 @@ export const useMessageSender = ({
 
         setIsSending(true);
         const tempMsg: Message = {
-            text: `[PLANTILLA] ${templateName}`,
+            text: `[PLANTILLA] ${resolvedTemplateName}`,
             sender: 'agent',
             timestamp: Timestamp.now()
         };
@@ -314,12 +320,12 @@ export const useMessageSender = ({
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    message: `Plantilla enviada: ${templateName}`,
+                    message: `Plantilla enviada: ${resolvedTemplateName}`,
                     toNumber: phoneNumber,
                     cardId: currentCardId?.startsWith('temp-') ? undefined : currentCardId,
                     groupId: currentGroupId,
                     type: 'template',
-                    template: { name: templateName, language: { code: templateName === 'hello_world' ? 'en_US' : 'es' } },
+                    template: { name: resolvedTemplateName, language: { code: resolvedLanguage } },
                     userId: currentUser?.uid,
                     entityId: activeEntity
                 })
@@ -422,6 +428,8 @@ export const useMessageSender = ({
         uploading,
         progress,
         isWithin24Hours,
+        needsTemplateMessage,
+        whatsappMessaging,
         handleSendMessage,
         sendTemplateMessage,
         handleDisplayFileSend,

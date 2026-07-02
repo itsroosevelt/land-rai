@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import { MANUAL_KANBAN_COLUMNS } from '@/lib/kanban/manualKanbanColumns';
 import { ENTITY_MOLD_FEATURES, ENTITY_MOLD_VERSION } from './entityMold';
+import { MOLD_WHATSAPP_MESSAGING } from './whatsappMessaging';
 
 type AdminDb = admin.firestore.Firestore;
 
@@ -60,6 +61,7 @@ export async function provisionEntityMoldAdmin(
         {
             moldVersion: ENTITY_MOLD_VERSION,
             features: ENTITY_MOLD_FEATURES,
+            whatsappMessaging: MOLD_WHATSAPP_MESSAGING,
             moldProvisionedAt: admin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true }
