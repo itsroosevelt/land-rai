@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, doc, deleteDoc, updateDoc, serverTimestamp, writeBatch, Timestamp } from 'firebase/firestore';
 import Card from './Card';
-import { Plus, Trash2, MoreVertical, Palette, Upload, Search, Menu } from 'lucide-react';
+import { Plus, Trash2, MoreVertical, Palette, Upload, Download, Search, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -27,6 +27,7 @@ import { CreateClientModal } from './CreateClientModal';
 import { sortCardsByArrival } from '@/lib/omnichannel/cardSort';
 import { cardMatchesColumnSearch } from '@/lib/omnichannel/columnSearch';
 import { getBotNodeTypeLabel, type KanbanNodeDetails } from '@/lib/kanban/botNodeGroups';
+import { getContactHeaderNames } from '@/lib/omnichannel/contactHeaderInfo';
 
 // --- Types ---
 interface CardData {
@@ -178,6 +179,89 @@ export const kambanColumn = ({
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
+    // --- EXPORT TO VCARD (.VCF) ---
+    const handleExportVCF = () => {
+        if (!cards || cards.length === 0) {
+            toast.error("No hay contactos en esta columna para exportar.");
+            return;
+        }
+
+        let vcfContent = '';
+
+        cards.forEach((card) => {
+            vcfContent += 'BEGIN:VCARD\n';
+            vcfContent += 'VERSION:3.0\n';
+
+            const { whatsappName, botName } = getContactHeaderNames(card);
+            const fullName = (botName || whatsappName || 'No Name').trim();
+            const parts = fullName.split(/\s+/);
+            let firstName = '';
+            let lastName = '';
+            if (parts.length > 1) {
+                lastName = parts.pop() || '';
+                firstName = parts.join(' ');
+            } else {
+                firstName = parts[0] || '';
+            }
+
+            vcfContent += `N:${lastName};${firstName};;;\n`;
+            vcfContent += `FN:${fullName}\n`;
+
+            if (card.company || card.organization) {
+                vcfContent += `ORG:${card.company || card.organization}\n`;
+            }
+
+            if (card.title || card.role) {
+                vcfContent += `TITLE:${card.title || card.role}\n`;
+            }
+
+            const rawPhone = card.contactNumber || '';
+            if (rawPhone) {
+                let cleanPhone = rawPhone.replace(/[^\d+]/g, '');
+                if (cleanPhone) {
+                    if (!cleanPhone.startsWith('+')) {
+                        cleanPhone = '+' + cleanPhone;
+                    }
+                    vcfContent += `TEL;TYPE=CELL,VOICE:${cleanPhone}\n`;
+                }
+            }
+
+            if (card.email) {
+                vcfContent += `EMAIL;TYPE=PREF,INTERNET:${card.email}\n`;
+            }
+
+            if (card.address) {
+                vcfContent += `ADR;TYPE=WORK:;;${card.address}\n`;
+            }
+
+            let note = '';
+            if (card.lastMessage) {
+                note += `Ultimo mensaje: ${card.lastMessage}`;
+            }
+            if (card.channel) {
+                note += note ? ` - Canal: ${card.channel}` : `Canal: ${card.channel}`;
+            }
+            if (note) {
+                vcfContent += `NOTE:${note}\n`;
+            }
+
+            vcfContent += 'END:VCARD\n';
+        });
+
+        const blob = new Blob([vcfContent], { type: 'text/vcard;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const safeGroupName = (group.name || 'contactos').toLowerCase().replace(/[^a-z0-9]/g, '_');
+        link.setAttribute('download', `${safeGroupName}_contactos.vcf`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        toast.success(`✅ ${cards.length} contactos exportados a vCard`);
+    };
+
     // --- DELETE GROUP ---
     const handleDeleteGroup = async () => {
         if (allGroups.length <= 1) {
@@ -291,6 +375,13 @@ export const kambanColumn = ({
                                 >
                                     <Upload className="mr-3 text-neutral-400" size={16} />
                                     <span>Import CSV</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    onClick={handleExportVCF}
+                                    className="cursor-pointer hover:bg-neutral-800 rounded-lg py-2"
+                                >
+                                    <Download className="mr-3 text-neutral-400" size={16} />
+                                    <span>Exportar</span>
                                 </DropdownMenuItem>
                                 {allGroups.length > 1 && (
                                     <>

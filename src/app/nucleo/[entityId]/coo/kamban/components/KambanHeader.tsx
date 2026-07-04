@@ -22,7 +22,8 @@ export const KambanHeader = ({
     onNewChat,
     onSettings,
     onSyncBotGroups,
-    isSyncingBotGroups
+    isSyncingBotGroups,
+    onExportAll
 }: any) => {
     return (
         <div className="h-[52px] border-b border-white/5 bg-black/40 backdrop-blur-xl flex items-center justify-between px-4 flex-shrink-0 z-20">
@@ -174,6 +175,17 @@ export const KambanHeader = ({
                         className="h-7 w-7 p-0 text-neutral-400 hover:text-white border border-transparent hover:border-white/5 hover:bg-white/5"
                     >
                         <Settings size={13} />
+                    </Button>
+
+                    <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={onExportAll}
+                        title="Exportar todos los contactos del tablero a vCard"
+                        className="h-7 px-2 text-neutral-400 hover:text-white border border-transparent hover:border-white/5 hover:bg-white/5 gap-1.5"
+                    >
+                        <Download size={13} />
+                        <span className="hidden lg:inline text-[11px]">Exportar todo</span>
                     </Button>
                 </div>
 

@@ -27,6 +27,7 @@ import { toast } from 'sonner';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { resolveCardChannel } from '@/lib/omnichannel/resolveCardChannel';
+import { getContactHeaderNames } from '@/lib/omnichannel/contactHeaderInfo';
 export default function KambanBoard({ boardMode = 'all' }: { boardMode?: 'bot' | 'all' }) {
     const { currentUser, activeEntity } = useAuth();
     const getTenantPath = () => {
@@ -167,6 +168,87 @@ export default function KambanBoard({ boardMode = 'all' }: { boardMode?: 'bot' |
     }
   };
 
+  const handleExportAllVCF = () => {
+    if (!cards || cards.length === 0) {
+      toast.error("No hay contactos para exportar.");
+      return;
+    }
+
+    let vcfContent = '';
+
+    cards.forEach((card) => {
+      vcfContent += 'BEGIN:VCARD\n';
+      vcfContent += 'VERSION:3.0\n';
+
+      const { whatsappName, botName } = getContactHeaderNames(card);
+      const fullName = (botName || whatsappName || 'No Name').trim();
+      const parts = fullName.split(/\s+/);
+      let firstName = '';
+      let lastName = '';
+      if (parts.length > 1) {
+        lastName = parts.pop() || '';
+        firstName = parts.join(' ');
+      } else {
+        firstName = parts[0] || '';
+      }
+
+      vcfContent += `N:${lastName};${firstName};;;\n`;
+      vcfContent += `FN:${fullName}\n`;
+
+      if (card.company || card.organization) {
+        vcfContent += `ORG:${card.company || card.organization}\n`;
+      }
+
+      if (card.title || card.role) {
+        vcfContent += `TITLE:${card.title || card.role}\n`;
+      }
+
+      const rawPhone = card.contactNumber || '';
+      if (rawPhone) {
+        let cleanPhone = rawPhone.replace(/[^\d+]/g, '');
+        if (cleanPhone) {
+          if (!cleanPhone.startsWith('+')) {
+            cleanPhone = '+' + cleanPhone;
+          }
+          vcfContent += `TEL;TYPE=CELL,VOICE:${cleanPhone}\n`;
+        }
+      }
+
+      if (card.email) {
+        vcfContent += `EMAIL;TYPE=PREF,INTERNET:${card.email}\n`;
+      }
+
+      if (card.address) {
+        vcfContent += `ADR;TYPE=WORK:;;${card.address}\n`;
+      }
+
+      let note = '';
+      if (card.lastMessage) {
+        note += `Ultimo mensaje: ${card.lastMessage}`;
+      }
+      if (card.channel) {
+        note += note ? ` - Canal: ${card.channel}` : `Canal: ${card.channel}`;
+      }
+      if (note) {
+        vcfContent += `NOTE:${note}\n`;
+      }
+
+      vcfContent += 'END:VCARD\n';
+    });
+
+    const blob = new Blob([vcfContent], { type: 'text/vcard;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `todos_los_contactos.vcf`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast.success(`✅ ${cards.length} contactos exportados a vCard`);
+  };
+
   useEffect(() => {
     if (loading || hasAttemptedAutoSync.current || !currentUser?.uid || !activeEntity) return;
     const hasBotGroups = groups.some((g) => g.autoManaged && g.botId === '00000003');
@@ -217,6 +299,7 @@ export default function KambanBoard({ boardMode = 'all' }: { boardMode?: 'bot' |
         onSettings={() => router.push(`/nucleo/${activeEntity}/cto/integrations`)}
         onSyncBotGroups={handleSyncBotGroups}
         isSyncingBotGroups={isSyncingBotGroups}
+        onExportAll={handleExportAllVCF}
       />
 
       <div className="flex-1 overflow-x-auto overflow-y-auto">
