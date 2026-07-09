@@ -115,7 +115,7 @@ export default function LandingPage() {
       <BlueParticles />
 
       {/* Main Content Container */}
-      <div className="relative z-[10] w-full px-[76px] flex flex-col xl:flex-row items-center xl:items-end justify-between min-h-screen pb-[76px] gap-12 xl:gap-8">
+      <div className="relative z-[10] w-full px-6 md:px-12 xl:px-[76px] flex flex-col xl:flex-row items-center xl:items-end justify-end xl:justify-between min-h-screen pb-12 md:pb-16 xl:pb-[76px] gap-8 xl:gap-8">
         
         {/* Left Column: Hero Text */}
         <motion.div
