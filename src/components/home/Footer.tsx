@@ -154,7 +154,7 @@ export default function Footer() {
                 { name: "Roosevelt", href: "/" },
                 { name: "Royalty Wallet", href: "#" },
                 { name: "Intelligent Glasses", href: "#" },
-                { name: "ROOSEVELT UTILITY ASSET", href: "#" },
+                { name: "LUXOR UTILITY ASSET | $LXR", href: "#" },
                 { name: "USDX STABLECOIN ASSET | $USDX", href: "#" },
                 { name: "ROOSEVELT | ARTIFICIAL INTELLIGENCE", href: "https://www.byroosevelt.com/", target: "_blank" },
                 { name: "EXCELSIOR REAL WORLD ASSET | $XLS", href: "#" }

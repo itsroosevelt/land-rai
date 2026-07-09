@@ -10,11 +10,11 @@ export function PhilosophySection() {
         },
         { 
             title: "Backing and Stability", 
-            desc: "Built on Solana's ultra-fast infrastructure, Roosevelt integrates digital dollar efficiency so the global economy reaches every corner." 
+            desc: "Built on Solana's ultra-fast infrastructure, Luxor integrates digital dollar efficiency so the global economy reaches every corner." 
         },
         { 
             title: "For All Generations", 
-            desc: "From digital natives to those looking to modernize centuries-old businesses. Roosevelt is easy, accessible, and universal." 
+            desc: "From digital natives to those looking to modernize centuries-old businesses. Luxor is easy, accessible, and universal." 
         },
     ];
 
