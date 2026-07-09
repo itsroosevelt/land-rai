@@ -13,10 +13,10 @@ export function CTASection() {
             >
 
                 <h2 className="text-4xl lg:text-6xl font-medium font-sans text-white mb-12 md:mb-16 tracking-tight relative z-20">
-                    Join the Luxor Movement!
+                    Join the Roosevelt Movement!
                 </h2>
                 <p className="text-zinc-300 text-xl leading-relaxed mb-16 md:mb-24 max-w-3xl mx-auto relative z-20">
-                    Are you someone who stays to watch the future happen, or someone who writes it? Luxor is the bridge. We are the catalyst for Latin talent and American innovation capital to converge. We invite you to be part of this new era.
+                    Are you someone who stays to watch the future happen, or someone who writes it? Roosevelt is the bridge. We are the catalyst for Latin talent and American innovation capital to converge. We invite you to be part of this new era.
                 </p>
 
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-6">

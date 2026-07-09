@@ -61,7 +61,7 @@ export default function Footer() {
                 { name: "Payments Engine", href: "#" },
                 { name: "Radar (Fraud protection)", href: "#" },
                 { name: "Revenue Recognition", href: "#" },
-                { name: "Luxor Pay Sigma Analytics", href: "#" },
+                { name: "Roosevelt Sigma Analytics", href: "#" },
                 { name: "Subscriptions", href: "#" },
                 { name: "Tax Automation", href: "#" },
                 { name: "POS Terminal", href: "#" },
@@ -134,7 +134,7 @@ export default function Footer() {
             links: [
                 { name: "Jobs / Careers", href: "#" },
                 { name: "Newsroom", href: "#" },
-                { name: "Luxor Pay Press Publications", href: "#" },
+                { name: "Roosevelt Press Publications", href: "#" },
                 { name: "Contact Sales", href: "mailto:services@byluxor.com" }
             ]
         },
@@ -151,10 +151,10 @@ export default function Footer() {
             title: "Ecosystem",
             links: [
                 { name: "POS", href: "#" },
-                { name: "Luxor Pay", href: "/" },
+                { name: "Roosevelt", href: "/" },
                 { name: "Royalty Wallet", href: "#" },
                 { name: "Intelligent Glasses", href: "#" },
-                { name: "LUXOR UTILITY ASSET | $LXR", href: "#" },
+                { name: "ROOSEVELT UTILITY ASSET", href: "#" },
                 { name: "USDX STABLECOIN ASSET | $USDX", href: "#" },
                 { name: "ROOSEVELT | ARTIFICIAL INTELLIGENCE", href: "https://www.byroosevelt.com/", target: "_blank" },
                 { name: "EXCELSIOR REAL WORLD ASSET | $XLS", href: "#" }
@@ -202,7 +202,7 @@ export default function Footer() {
                     <div className="flex flex-col gap-5 w-full max-w-[440px]">
                         <div className="space-y-1">
                             <h3 className="text-white text-lg font-sans font-medium tracking-tight">Newsletter</h3>
-                            <p className="text-white/40 text-xs leading-relaxed">Subscribe to receive the latest Luxor Pay ecosystem updates.</p>
+                            <p className="text-white/40 text-xs leading-relaxed">Subscribe to receive the latest Roosevelt ecosystem updates.</p>
                         </div>
                         <div className="flex gap-2 w-full">
                             <input
