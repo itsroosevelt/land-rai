@@ -105,7 +105,7 @@ export default function LandingPage() {
         <img
           src="/assets/Roosevelt Ai.gif"
           alt="Roosevelt AI"
-          className="absolute top-[47%] left-[53%] -translate-x-1/2 -translate-y-1/2 w-full max-w-[110vw] md:max-w-[90vw] xl:max-w-6xl h-auto scale-[1.55] md:scale-[1.35] xl:scale-[1.35] object-cover"
+          className="absolute top-[32%] md:top-[38%] xl:top-[47%] left-1/2 xl:left-[53%] -translate-x-1/2 -translate-y-1/2 w-full max-w-[110vw] md:max-w-[90vw] xl:max-w-6xl h-auto scale-[1.3] md:scale-[1.35] xl:scale-[1.35] object-cover"
           loading="lazy"
           decoding="async"
         />
