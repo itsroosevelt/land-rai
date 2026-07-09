@@ -29,6 +29,9 @@ const config = {
         sans: ['var(--font-outfit)', ...fontFamily.sans],
         'open-sans': ['var(--font-outfit)', ...fontFamily.sans],
         outfit: ['var(--font-outfit)', ...fontFamily.sans],
+        montserrat: ['var(--font-outfit)', ...fontFamily.sans],
+        jakarta: ['var(--font-outfit)', ...fontFamily.sans],
+        inter: ['var(--font-outfit)', ...fontFamily.sans],
       },
       colors: {
         border: 'hsl(var(--border))',

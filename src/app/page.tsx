@@ -4,10 +4,23 @@ import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import Image from 'next/image';
+import { ArrowRight } from 'lucide-react';
 
 
 import { LandingNavbar } from '@/components/landing/LandingNavbar';
 import { useLanguage } from '@/contexts/LanguageContext';
+
+import { InnovationSection } from '@/components/home/InnovationSection';
+import { PhilosophySection } from '@/components/home/PhilosophySection';
+import { ArchitectureSection } from '@/components/home/ArchitectureSection';
+import BracketsSectionClient from '@/components/home/BracketsSectionClient';
+import { JoinSection } from '@/components/home/JoinSection';
+import { ShowcaseSection } from '@/components/home/ShowcaseSection';
+import { PillarsSection } from '@/components/home/PillarsSection';
+import { GiantsSection } from '@/components/home/GiantsSection';
+import { CTASection } from '@/components/home/CTASection';
+import { ReviewsSection } from '@/components/home/ReviewsSection';
+import Footer from '@/components/home/Footer';
 
 interface Particle {
   x: number;
@@ -81,18 +94,18 @@ const BlueParticles = () => {
 };
 
 export default function LandingPage() {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
 
   return (
     <div className="min-h-screen bg-black text-white relative flex flex-col selection:bg-white/10 overflow-x-hidden">
       <LandingNavbar />
 
       {/* Central Roosevelt AI GIF - Low Z-index */}
-      <div className="relative xl:absolute xl:inset-0 pointer-events-none z-0 opacity-100 min-h-[85svh] xl:min-h-0 overflow-hidden">
+      <div className="absolute top-0 left-0 w-full h-screen pointer-events-none z-0 opacity-100 overflow-hidden">
         <img
           src="/assets/Roosevelt Ai.gif"
           alt="Roosevelt AI"
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[110vw] md:max-w-[90vw] xl:max-w-6xl h-auto scale-[1.4] md:scale-[1.2] xl:scale-[1.2] object-cover"
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[110vw] md:max-w-[90vw] xl:max-w-6xl h-auto scale-[1.55] md:scale-[1.35] xl:scale-[1.35] object-cover"
           loading="lazy"
           decoding="async"
         />
@@ -102,31 +115,75 @@ export default function LandingPage() {
       <BlueParticles />
 
       {/* Main Content Container */}
-      <div className="relative z-[10] w-full px-6 md:px-16 xl:px-28 pt-10 xl:pt-0 flex flex-col xl:flex-row items-center xl:items-end justify-between min-h-0 xl:min-h-[85vh] pb-20 xl:pb-32 gap-12 xl:gap-8">
+      <div className="relative z-[10] w-full px-[76px] flex flex-col xl:flex-row items-center xl:items-end justify-between min-h-screen pb-[76px] gap-12 xl:gap-8">
         
         {/* Left Column: Hero Text */}
         <motion.div
           initial={{ opacity: 0, x: -50 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
-          className="w-full xl:w-1/2 flex flex-col items-center xl:items-start text-center xl:text-left justify-center mt-4 md:mt-8 xl:mt-[55vh] relative top-0 xl:top-20"
+          className="w-full xl:w-2/3 flex flex-col items-center xl:items-start text-center xl:text-left justify-center mt-4 md:mt-8 relative top-0"
         >
-          <span className="text-blue-500 text-[9px] md:text-[10px] tracking-[0.3em] uppercase font-normal mb-4 md:mb-5 block">
+          <span className="text-blue-500 text-[10px] md:text-xs tracking-[0.3em] uppercase font-normal mb-5 block">
             {t('hero.tag')}
           </span>
-          <h1 className="text-2xl md:text-4xl xl:text-5xl font-semibold tracking-tight text-white mb-6 md:mb-8 leading-[1.15]">
+          <h1 className="text-3xl md:text-5xl xl:text-6xl font-normal tracking-tight text-white mb-6 md:mb-8 leading-[1.1]">
             {t('hero.titleLine1')} <br className="hidden xl:block" />
             {t('hero.titleLine2')} <br className="hidden xl:block" />
             {t('hero.titleLine3')}{' '}
-            <span className="bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent font-semibold">Roosevelt</span>
+            <span className="bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent font-normal">Roosevelt</span>
           </h1>
-          <p className="text-[10px] md:text-xs text-white/60 font-normal leading-relaxed max-w-lg">
+          <p className="text-xs md:text-sm text-white/60 font-normal leading-relaxed max-w-lg">
             {t('hero.description')}
           </p>
         </motion.div>
 
+        {/* Right Column: Styled Call to Action Button */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
+          className="w-full xl:w-1/3 flex xl:justify-end justify-center xl:mr-[37px] xl:mb-[37px] mb-4 shrink-0 animate-in fade-in duration-700"
+        >
+          <Link href="/login?register=true">
+            <button 
+              className="px-8 py-2.5 text-base font-normal bg-transparent text-white border border-white/30 rounded-full hover:scale-105 hover:bg-white/5 transition-all shadow-lg"
+            >
+              {language === 'es' ? 'Iniciar Asistente Personal' : 'Connect Personal Assistant'}
+            </button>
+          </Link>
+        </motion.div>
+
       </div>
 
+      <main className="w-full">
+        <InnovationSection />
+        <PhilosophySection />
+        <ArchitectureSection />
+        <BracketsSectionClient />
+        <JoinSection />
+        {/* ShowcaseSection and PillarsSection with Roosevelt AI Background */}
+        <div className="relative overflow-hidden w-full">
+          <div className="absolute inset-0 pointer-events-none z-0 opacity-80 overflow-hidden flex items-center justify-center">
+            <img
+              src="/assets/Roosevelt Ai.gif"
+              alt="Roosevelt AI Background"
+              className="w-full max-w-[110vw] md:max-w-[90vw] xl:max-w-6xl h-auto scale-[1.55] md:scale-[1.35] xl:scale-[1.35] object-cover opacity-80"
+              loading="lazy"
+              decoding="async"
+            />
+          </div>
+          <div className="relative z-10">
+            <ShowcaseSection />
+            <PillarsSection />
+          </div>
+        </div>
+        <GiantsSection />
+        <CTASection />
+        <ReviewsSection />
+      </main>
+
+      <Footer />
     </div>
   );
 }

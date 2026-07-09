@@ -136,7 +136,7 @@ export default function Header() {
               <div className="w-9 h-9 relative transition-transform duration-300 group-hover:scale-110">
                 <img src="/assets/newlogo.png" alt="Roosevelt" className="object-contain w-full h-full drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]" />
               </div>
-              <span className="text-xl font-medium tracking-tight text-white group-hover:text-primary transition-colors">Roosevelt</span>
+              <span className="text-xl font-normal tracking-tight text-white">Roosevelt</span>
             </Link>
 
             {/* DESKTOP NAV - Ocultar en landings de visa */}
