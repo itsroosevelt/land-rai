@@ -1,13 +1,15 @@
 import * as admin from 'firebase-admin';
 import {
-    getBotNodeLabel,
+    getBotNodeContentName,
     getGroupColorForIndex,
     getKanbanEligibleNodes,
-    isInboxLikeGroupName,
     orderNodesForKanban,
     resolveCardBotId,
     resolveCardBotNodeId,
     extractBotNodeDetails,
+    isInboxGroup,
+    SYSTEM_INBOX_GROUP_ID,
+    SYSTEM_INBOX_NAME,
 } from './botNodeGroups';
 
 type AdminDb = admin.firestore.Firestore;
@@ -152,13 +154,10 @@ export async function syncKanbanGroupsFromBotAdmin(params: {
     const existing: KanbanGroupRecord[] = existingSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
     const byBotNodeId = new Map<string, { id: string; data: any }>();
-    const manualGroups: { id: string; data: any }[] = [];
 
     existing.forEach((g) => {
         if (g.botId === botId && g.botNodeId) {
             byBotNodeId.set(String(g.botNodeId), { id: g.id, data: g });
-        } else if (!g.autoManaged) {
-            manualGroups.push({ id: g.id, data: g });
         }
     });
 
@@ -173,7 +172,7 @@ export async function syncKanbanGroupsFromBotAdmin(params: {
         const nodeId = String(node.id);
         seenNodeIds.add(nodeId);
         const nodeDetails = extractBotNodeDetails(node);
-        const name = nodeDetails.title || getBotNodeLabel(node);
+        const name = getBotNodeContentName(node);
         const color = getGroupColorForIndex(i);
         const payload = {
             name,
@@ -197,19 +196,6 @@ export async function syncKanbanGroupsFromBotAdmin(params: {
             continue;
         }
 
-        if (node.type === 'startNode' || node.type === 'start') {
-            const inbox = manualGroups.find((g) => isInboxLikeGroupName(g.data?.name || ''));
-            if (inbox) {
-                await groupsRef.doc(inbox.id).set(
-                    { ...payload, order: inbox.data?.order ?? 0 },
-                    { merge: true }
-                );
-                nodeGroupMap[nodeId] = inbox.id;
-                linked++;
-                continue;
-            }
-        }
-
         const createdRef = await groupsRef.add({
             ...payload,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -218,9 +204,37 @@ export async function syncKanbanGroupsFromBotAdmin(params: {
         created++;
     }
 
+    // Permanent reception column: always available so messages arrive even when the bot
+    // is off. Never absorbed into a bot node and never deleted by the cleanup below.
+    const existingInbox = existing.find((g) => isInboxGroup(g));
+    const inboxPayload = {
+        name: existingInbox?.name || SYSTEM_INBOX_NAME,
+        isInbox: true,
+        system: true,
+        autoManaged: false,
+        boardType: 'inbox',
+        order: -1,
+        color: existingInbox?.color || 'bg-[#161616]',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (existingInbox) {
+        await groupsRef.doc(existingInbox.id).set(inboxPayload, { merge: true });
+    } else {
+        await groupsRef.doc(SYSTEM_INBOX_GROUP_ID).set(
+            { ...inboxPayload, createdAt: admin.firestore.FieldValue.serverTimestamp() },
+            { merge: true }
+        );
+    }
+
     let removed = 0;
     for (const g of existing) {
-        if (g.botId === botId && g.autoManaged && g.botNodeId && !seenNodeIds.has(String(g.botNodeId))) {
+        if (
+            g.botId === botId &&
+            g.autoManaged &&
+            g.botNodeId &&
+            !seenNodeIds.has(String(g.botNodeId)) &&
+            !isInboxGroup(g)
+        ) {
             await groupsRef.doc(g.id).delete();
             removed++;
         }

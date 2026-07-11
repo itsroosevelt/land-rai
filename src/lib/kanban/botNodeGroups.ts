@@ -5,6 +5,21 @@ export interface BotFlowNode {
     data?: Record<string, any>;
 }
 
+/** Permanent reception column. Messages always land here, even when the bot is off. */
+export const SYSTEM_INBOX_GROUP_ID = 'default_inbox';
+export const SYSTEM_INBOX_NAME = 'Recepción';
+
+/** Base fields for the permanent reception column in `kanban-groups`. */
+export const SYSTEM_INBOX_GROUP_FIELDS = {
+    name: SYSTEM_INBOX_NAME,
+    isInbox: true,
+    system: true,
+    autoManaged: false,
+    boardType: 'inbox',
+    order: -1,
+    color: 'bg-[#161616]',
+} as const;
+
 const TYPE_LABELS: Record<string, string> = {
     startNode: 'Inicio',
     endNode: 'Fin',
@@ -182,6 +197,35 @@ export function getBotNodeLabel(node: BotFlowNode): string {
     return TYPE_LABELS[node.type] || node.type;
 }
 
+/**
+ * Column name that reflects the LITERAL node content (the message/prompt the bot
+ * actually sends) instead of the friendly label. This makes it obvious which node
+ * a kanban column maps to, and lets campaigns target the exact step of the flow.
+ */
+export function getBotNodeContentName(node: BotFlowNode, maxLength = 60): string {
+    const d = node.data || {};
+    const truncate = (value: string) => {
+        const clean = value.trim().replace(/\s+/g, ' ');
+        return clean.length > maxLength ? `${clean.slice(0, maxLength)}…` : clean;
+    };
+
+    const content = readNodePrompt(d, node.type);
+    if (content) return truncate(content);
+
+    if (node.type === 'startNode' || node.type === 'start') {
+        return (typeof d.label === 'string' && d.label.trim()) || 'Inicio';
+    }
+    if (node.type === 'captureInputNode' && d.variableName) {
+        return `Captura: ${d.variableName}`;
+    }
+    if (node.type === 'endNode') {
+        return String(d.outcomeLabel || d.label || 'Fin de flujo').trim();
+    }
+
+    if (typeof d.label === 'string' && d.label.trim()) return truncate(d.label);
+    return TYPE_LABELS[node.type] || node.type;
+}
+
 /** Every flow node gets a kanban column so cards track exact bot position. */
 export function getKanbanEligibleNodes(nodes: BotFlowNode[]): BotFlowNode[] {
     return (nodes || []).filter((n) => n?.id && n?.type);
@@ -227,7 +271,45 @@ export function getGroupColorForIndex(index: number): string {
 
 export function isInboxLikeGroupName(name: string): boolean {
     const lower = (name || '').toLowerCase();
-    return lower.includes('inbox') || lower.includes('bandeja') || lower === 'inicio' || lower.includes('entrada');
+    return (
+        lower.includes('inbox') ||
+        lower.includes('bandeja') ||
+        lower === 'inicio' ||
+        lower.includes('entrada') ||
+        lower.includes('recepci')
+    );
+}
+
+/** True if the group is the permanent reception column (bot-independent). */
+export function isInboxGroup(group: Record<string, any> | null | undefined): boolean {
+    if (!group) return false;
+    return (
+        group.isInbox === true ||
+        group.id === SYSTEM_INBOX_GROUP_ID ||
+        group.boardType === 'inbox' ||
+        (!group.autoManaged && !group.botNodeId && isInboxLikeGroupName(group.name || ''))
+    );
+}
+
+/**
+ * Header label for a kanban column. Bot columns show the LITERAL node content so it's
+ * obvious which step of the flow they represent; the reception column keeps its name.
+ * Works from the stored `botNodeDetails` so it updates instantly without a re-sync.
+ */
+export function getKanbanColumnDisplayName(
+    group: Record<string, any> | null | undefined,
+    maxLength = 60
+): string {
+    if (!group) return 'Sin nombre';
+    if (isInboxGroup(group)) return group.name || SYSTEM_INBOX_NAME;
+
+    const details = group.botNodeDetails as KanbanNodeDetails | undefined;
+    const content = details?.prompt;
+    if (content && content.trim()) {
+        const clean = content.trim().replace(/\s+/g, ' ');
+        return clean.length > maxLength ? `${clean.slice(0, maxLength)}…` : clean;
+    }
+    return group.name || 'Sin nombre';
 }
 
 export function resolveCardBotNodeId(cardData: Record<string, any> | null | undefined): string | null {

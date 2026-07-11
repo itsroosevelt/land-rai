@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import { MANUAL_KANBAN_COLUMNS } from '@/lib/kanban/manualKanbanColumns';
 import { ENTITY_MOLD_FEATURES, ENTITY_MOLD_VERSION } from './entityMold';
 import { MOLD_WHATSAPP_MESSAGING } from './whatsappMessaging';
+import { SYSTEM_INBOX_GROUP_FIELDS, SYSTEM_INBOX_GROUP_ID } from '@/lib/kanban/botNodeGroups';
 
 type AdminDb = admin.firestore.Firestore;
 
@@ -48,6 +49,17 @@ async function ensureManualKanbanInitializedAdmin(db: AdminDb, path: string): Pr
     );
 }
 
+async function ensureReceptionColumnAdmin(db: AdminDb, path: string): Promise<void> {
+    await db.doc(`${path}/kanban-groups/${SYSTEM_INBOX_GROUP_ID}`).set(
+        {
+            ...SYSTEM_INBOX_GROUP_FIELDS,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+    );
+}
+
 /** Versión servidor del aprovisionamiento del molde (webhooks, API, scripts). */
 export async function provisionEntityMoldAdmin(
     db: AdminDb,
@@ -56,6 +68,7 @@ export async function provisionEntityMoldAdmin(
 ): Promise<void> {
     const path = tenantPath(userId, entityId);
     await ensureManualKanbanInitializedAdmin(db, path);
+    await ensureReceptionColumnAdmin(db, path);
 
     await db.doc(path).set(
         {

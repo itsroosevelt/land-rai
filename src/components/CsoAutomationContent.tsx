@@ -61,23 +61,23 @@ function FeatureCard({
 }) {
   return (
     <div
-      className="group relative flex flex-col bg-neutral-900 border border-neutral-800 rounded-lg shadow-sm hover:border-blue-500/50 transition-all duration-300 transform hover:-translate-y-0.5 cursor-pointer"
+      className="group relative flex flex-col bg-white/[0.02] border border-white/8 rounded-2xl hover:border-white/20 transition-all duration-300 transform hover:-translate-y-0.5 cursor-pointer backdrop-blur-sm"
       onClick={onClick}
     >
       <div className="p-4 flex-grow">
         <div className="mb-3 flex items-center justify-between">
           {icon}
           {badge && (
-            <span className="text-[8px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <span className="text-[8px] uppercase font-normal tracking-wider px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
               {badge}
             </span>
           )}
         </div>
-        <h2 className="text-sm font-bold text-white uppercase tracking-wide">{title}</h2>
-        <p className="text-neutral-400 mt-1.5 text-xs leading-relaxed">{description}</p>
+        <h2 className="text-base font-normal text-white tracking-tight">{title}</h2>
+        <p className="text-neutral-400 mt-1.5 text-xs leading-relaxed font-normal">{description}</p>
       </div>
       <div className="p-4 pt-0 mt-auto">
-        <div className="flex items-center text-blue-500 font-bold text-[10px] uppercase tracking-wider">
+        <div className="flex items-center text-blue-500 font-normal text-[10px] uppercase tracking-wider">
           <span>{action}</span>
           <ArrowRight className="w-3 h-3 ml-1.5 transform transition-transform duration-300 group-hover:translate-x-1" />
         </div>
@@ -95,15 +95,15 @@ export function CsoAutomationContent() {
   };
 
   return (
-    <main className="flex-1 p-6 bg-neutral-950 text-white">
+    <main className="flex-1 p-6 bg-black text-white font-sans">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">Centro de Automatización</h1>
-        <p className="text-neutral-400 mt-1 text-sm">
+        <h1 className="text-3xl font-normal tracking-tight">Centro de Automatización</h1>
+        <p className="text-neutral-400 mt-1 text-sm font-normal">
           Configura herramientas para agilizar tu comunicación y ahorrar tiempo.
         </p>
       </div>
 
-      <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-neutral-500 mb-3">
+      <h2 className="text-[10px] font-normal uppercase tracking-[0.25em] text-neutral-500 mb-3">
         Bots por canal
       </h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-10">
@@ -128,7 +128,7 @@ export function CsoAutomationContent() {
         })}
       </div>
 
-      <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-neutral-500 mb-3">
+      <h2 className="text-[10px] font-normal uppercase tracking-[0.25em] text-neutral-500 mb-3">
         Herramientas
       </h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

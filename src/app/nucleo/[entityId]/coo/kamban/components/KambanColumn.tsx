@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, doc, deleteDoc, updateDoc, serverTimestamp, writeBatch, Timestamp } from 'firebase/firestore';
 import Card from './Card';
-import { Plus, Trash2, MoreVertical, Palette, Upload, Download, Search, Menu } from 'lucide-react';
+import { Plus, Trash2, MoreVertical, Palette, Upload, Download, Search, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -26,7 +26,7 @@ import { SelectContactModal } from './SelectContactModal';
 import { CreateClientModal } from './CreateClientModal';
 import { sortCardsByArrival } from '@/lib/omnichannel/cardSort';
 import { cardMatchesColumnSearch } from '@/lib/omnichannel/columnSearch';
-import { getBotNodeTypeLabel, type KanbanNodeDetails } from '@/lib/kanban/botNodeGroups';
+import { getBotNodeTypeLabel, getKanbanColumnDisplayName, isInboxGroup, type KanbanNodeDetails } from '@/lib/kanban/botNodeGroups';
 import { getContactHeaderNames } from '@/lib/omnichannel/contactHeaderInfo';
 
 // --- Types ---
@@ -85,9 +85,10 @@ export const kambanColumn = ({
 
     const toggleNodeInfo = () => setIsNodeInfoOpen((prev) => !prev);
 
+    const isInbox = isInboxGroup(group);
     const nodeDetails = group.botNodeDetails as KanbanNodeDetails | undefined;
-    const isBotColumn = !!(nodeDetails || group.autoManaged || group.botNodeId);
-    const displayName = group.name === 'Inbox' || group.name === 'Bandeja de Entrada' ? 'Inbox' : group.name;
+    const isBotColumn = !isInbox && !!(nodeDetails || group.autoManaged || group.botNodeId);
+    const displayName = getKanbanColumnDisplayName(group);
     const nodeTypeLabel = nodeDetails?.typeLabel || getBotNodeTypeLabel(group.botNodeType);
 
     // Droppable for receiving cards
@@ -322,8 +323,24 @@ export const kambanColumn = ({
             <div className="p-3 pb-1 flex flex-col gap-2">
                 {/* Fila principal del grupo */}
                 <div className="flex justify-between items-center gap-2">
-                    <div className={cn("px-2 py-0.5 rounded-md text-[11px] font-bold tracking-tight truncate text-white max-w-[65%]", selectedColor.pill)}>
-                        {displayName}
+                    <div className="flex items-center gap-1 min-w-0 max-w-[70%]">
+                        {isBotColumn && (
+                            <button
+                                type="button"
+                                onClick={toggleNodeInfo}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                aria-label={isNodeInfoOpen ? 'Ocultar detalles' : 'Ver detalles'}
+                                className="flex-shrink-0 text-white/50 hover:text-white transition-colors"
+                            >
+                                <ChevronRight
+                                    size={14}
+                                    className={cn("transition-transform duration-200", isNodeInfoOpen && "rotate-90")}
+                                />
+                            </button>
+                        )}
+                        <div className={cn("px-2 py-0.5 rounded-md text-[11px] font-bold tracking-tight truncate text-white", selectedColor.pill)}>
+                            {displayName}
+                        </div>
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
                         <span className={cn("font-medium text-[12px] opacity-40 tabular-nums", selectedColor.textColor)}>
@@ -400,27 +417,27 @@ export const kambanColumn = ({
                     </div>
                 </div>
 
-                {/* Detalle del nodo (colapsable con ☰) */}
-                {isBotColumn && (
+                {/* Detalle del nodo (colapsable con la flecha del nombre) */}
+                {isBotColumn && isNodeInfoOpen && (
                     <div className="rounded-xl border border-white/10 bg-black/25 overflow-hidden">
-                        <button
-                            type="button"
-                            onClick={toggleNodeInfo}
-                            className="w-full flex items-center gap-2 px-2.5 py-2 text-left hover:bg-white/[0.04] transition-colors"
-                        >
-                            <Menu size={14} className="text-neutral-400 flex-shrink-0" />
+                        <div className="flex items-center gap-2 px-2.5 py-2 border-b border-white/5">
                             <span className={cn("text-[10px] font-bold uppercase tracking-wide truncate", selectedColor.textColor)}>
                                 {nodeTypeLabel}
                             </span>
-                            <span className="ml-auto text-[10px] text-neutral-600">
-                                {isNodeInfoOpen ? 'Ocultar' : 'Ver nodo'}
-                            </span>
-                        </button>
+                        </div>
 
-                        {isNodeInfoOpen && (
-                            <div className="px-3 pb-3 pt-0 space-y-2.5 border-t border-white/5">
+                        <div className="px-3 pb-3 pt-2 space-y-2.5">
+                                <div>
+                                    <p className="text-[9px] font-bold uppercase tracking-wider text-neutral-500 mb-1">
+                                        Nombre completo
+                                    </p>
+                                    <p className="text-[11px] text-neutral-100 leading-relaxed whitespace-pre-wrap break-words">
+                                        {displayName}
+                                    </p>
+                                </div>
+
                                 {!nodeDetails ? (
-                                    <p className="text-[10px] text-neutral-500 leading-relaxed pt-2">
+                                    <p className="text-[10px] text-neutral-500 leading-relaxed">
                                         Pulsa <strong className="text-neutral-400">Sync bot</strong> en el header para cargar la pregunta y respuestas de este nodo.
                                     </p>
                                 ) : (
@@ -465,8 +482,7 @@ export const kambanColumn = ({
                                         )}
                                     </>
                                 )}
-                            </div>
-                        )}
+                        </div>
                     </div>
                 )}
 

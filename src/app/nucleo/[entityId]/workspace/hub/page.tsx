@@ -13,7 +13,7 @@ export default function KanbanHubPage() {
     const base = `/nucleo/${entityId}/workspace`;
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white flex flex-col">
+        <div className="min-h-screen bg-[#050505] text-white flex flex-col font-sans tracking-tight">
             <header className="border-b border-white/5 bg-black/40 backdrop-blur-xl px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center gap-4">
                     <Link
@@ -23,8 +23,8 @@ export default function KanbanHubPage() {
                         <ArrowLeft size={18} />
                     </Link>
                     <div>
-                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-neutral-500">COO · Kamban</p>
-                        <h1 className="text-lg font-semibold tracking-tight">Hub</h1>
+                        <p className="text-[10px] font-normal uppercase tracking-[0.2em] text-neutral-500">COO · Kamban</p>
+                        <h1 className="text-lg font-normal tracking-tight">Hub</h1>
                     </div>
                 </div>
             </header>
@@ -107,7 +107,7 @@ function HubCard({
                     {badge}
                 </span>
             </div>
-            <h2 className="text-xl font-semibold mb-2 group-hover:text-white transition-colors">{title}</h2>
+            <h2 className="text-xl font-normal tracking-tight mb-2 group-hover:text-white transition-colors">{title}</h2>
             <p className="text-sm text-neutral-500 leading-relaxed mb-4">{description}</p>
             <span className="inline-flex items-center gap-1.5 text-xs font-medium text-neutral-400 group-hover:text-white transition-colors">
                 <LayoutGrid size={14} />

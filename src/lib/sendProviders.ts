@@ -455,8 +455,12 @@ export async function sendWhatsAppMessage(
         const msgType = mediaType === 'document' ? 'document' : mediaType;
         payload.type = msgType;
 
-        // Build media object — link is required for WhatsApp Cloud API
-        const mediaData: any = { link: url, caption: message || '' };
+        // Build media object — link is required for WhatsApp Cloud API.
+        // Meta rejects `caption` on audio messages.
+        const mediaData: any = { link: url };
+        if (msgType !== 'audio' && message) {
+            mediaData.caption = message;
+        }
         if (msgType === 'document' && options.filename) {
             mediaData.filename = options.filename;
         }

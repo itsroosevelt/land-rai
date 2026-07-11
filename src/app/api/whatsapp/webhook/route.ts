@@ -10,6 +10,7 @@ import {
     phoneLookupVariants,
     resolveWhatsAppTenant,
 } from '@/lib/whatsappTenant';
+import { isInboxGroup, SYSTEM_INBOX_GROUP_ID, SYSTEM_INBOX_GROUP_FIELDS } from '@/lib/kanban/botNodeGroups';
 
 const DEBUG_FILE = '/tmp/webhook.log';
 
@@ -162,6 +163,32 @@ export async function POST(req: Request) {
             });
 
             await Promise.all(updatePromises);
+
+            // --- Broadcast delivery/read tracking (best-effort, fully isolated) ---
+            try {
+                if (messageId && (status === 'delivered' || status === 'read')) {
+                    const idxSnap = await db.doc(`${entityPath}/broadcast_msg_index/${messageId}`).get();
+                    if (idxSnap.exists) {
+                        const { broadcastId, recipientId } = idxSnap.data() as any;
+                        const recRef = db.doc(`${entityPath}/broadcasts/${broadcastId}/recipients/${recipientId}`);
+                        const recSnap = await recRef.get();
+                        if (recSnap.exists) {
+                            const cur = recSnap.data() as any;
+                            const rank: Record<string, number> = { sent: 1, delivered: 2, read: 3 };
+                            if (cur.status !== 'replied' && (rank[status] || 0) > (rank[cur.status] || 0)) {
+                                await recRef.update({ status });
+                                const field = status === 'delivered' ? 'stats.delivered' : 'stats.read';
+                                await db.doc(`${entityPath}/broadcasts/${broadcastId}`).update({
+                                    [field]: admin.firestore.FieldValue.increment(1),
+                                });
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                debugLog('[POST] Broadcast status tracking skipped (non-fatal).');
+            }
+
             return NextResponse.json({ success: true });
         }
 
@@ -192,6 +219,33 @@ export async function POST(req: Request) {
                 if (!cleanFrom || cleanFrom.length < 5) {
                     debugLog('[POST] Ignoring message: Missing or invalid phone number from Meta.');
                     return NextResponse.json({ success: true, ignored: 'invalid_sender_format' });
+                }
+
+                // --- Broadcast reply tracking (best-effort, fully isolated) ---
+                try {
+                    const replyKey = cleanFrom.replace(/\D/g, '');
+                    if (replyKey) {
+                        const replyIdxRef = db.doc(`${entityPath}/broadcast_reply_index/${replyKey}`);
+                        const replyIdxSnap = await replyIdxRef.get();
+                        if (replyIdxSnap.exists) {
+                            const { broadcastId, recipientId } = replyIdxSnap.data() as any;
+                            const recRef = db.doc(`${entityPath}/broadcasts/${broadcastId}/recipients/${recipientId}`);
+                            const recSnap = await recRef.get();
+                            if (recSnap.exists && (recSnap.data() as any).status !== 'replied') {
+                                await recRef.update({
+                                    status: 'replied',
+                                    repliedAt: admin.firestore.FieldValue.serverTimestamp(),
+                                });
+                                await db.doc(`${entityPath}/broadcasts/${broadcastId}`).update({
+                                    'stats.replied': admin.firestore.FieldValue.increment(1),
+                                });
+                            }
+                            // Consume the index so subsequent messages aren't recounted.
+                            await replyIdxRef.delete().catch(() => {});
+                        }
+                    }
+                } catch (e) {
+                    debugLog('[POST] Broadcast reply tracking skipped (non-fatal).');
                 }
 
                 // OPTIMIZED O(1) Search: Find group and card via indexed Contacts context
@@ -318,21 +372,23 @@ export async function POST(req: Request) {
                     // Create NEW card
                     let destinationGroupId = targetGroupId;
                     
-                    // SAFEGUARD: Ensure a group exists to receive the card
+                    // SAFEGUARD: Always drop new conversations into the permanent reception
+                    // column so messages arrive even when no bot is active.
                     if (!destinationGroupId) {
-                        const fallbackGroup = groupsSnapshot.docs.find(g => (g.data().name || '').toLowerCase().includes('inbox')) || groupsSnapshot.docs[0];
-                        if (fallbackGroup) {
-                            destinationGroupId = fallbackGroup.id;
+                        const inboxDoc =
+                            groupsSnapshot.docs.find(g => g.id === SYSTEM_INBOX_GROUP_ID) ||
+                            groupsSnapshot.docs.find(g => isInboxGroup({ id: g.id, ...g.data() })) ||
+                            groupsSnapshot.docs[0];
+                        if (inboxDoc) {
+                            destinationGroupId = inboxDoc.id;
                         } else {
-                            // Rule 5: Failsafe group creation if entity is empty
-                            const newGroupRef = db.collection(`${entityPath}/kanban-groups`).doc('default_inbox');
+                            // Failsafe: create the reception column if the entity is empty.
+                            const newGroupRef = db.collection(`${entityPath}/kanban-groups`).doc(SYSTEM_INBOX_GROUP_ID);
                             await newGroupRef.set({
-                                name: 'Inbox',
-                                order: 0,
-                                color: '#3B82F6',
+                                ...SYSTEM_INBOX_GROUP_FIELDS,
                                 createdAt: admin.firestore.FieldValue.serverTimestamp()
                             }, { merge: true });
-                            destinationGroupId = 'default_inbox';
+                            destinationGroupId = SYSTEM_INBOX_GROUP_ID;
                         }
                     }
 

@@ -1,7 +1,6 @@
 'use client';
-import React, { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Plus, Loader2, Power, ArrowLeft, Trash2, MessageCircle } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, Loader2, Power, Trash2, MessageCircle, Check, Link2, Settings2, Phone } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { collection, onSnapshot, doc, deleteDoc, runTransaction } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,22 +12,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from '@/components/ui/input';
 import { db } from '@/lib/firebase';
 import { toast } from 'sonner';
-import { getPrimaryPlatform, normalizeTargetPlatforms, updateExclusiveBotPlatform } from './utils';
+import { isBotActiveValue, toggleBotForNumber } from './utils';
+import {
+  subscribeSlotConnections,
+  saveSlotConnection,
+  disconnectSlot,
+  SLOTS,
+  type NumberSlot,
+  type SlotConnections,
+  type WhatsAppNumberConnection,
+} from '@/lib/whatsapp/numbers';
 
 interface Bot {
   id: string;
   name: string;
   isActive: boolean;
-  targetPlatforms?: string[];
+  numberId?: string;
 }
 
 const WhatsAppIcon = ({ className }: { className?: string }) => (
@@ -37,9 +39,18 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-const PLATFORMS = [
-  { id: 'whatsapp', icon: WhatsAppIcon, color: 'text-[#25D366]', label: 'WA', activeBg: 'bg-[#25D366]/10', activeBorder: 'border-[#25D366]/30' },
-];
+// Legacy bots (no numberId) belong to the "general" tab.
+const botSlot = (bot: Bot): NumberSlot => {
+  const v = (bot.numberId || '').trim();
+  if (v === 'support' || v === 'broadcast') return v;
+  return 'general';
+};
+
+const emptyConnections = (): SlotConnections => ({
+  general: { connected: false },
+  support: { connected: false },
+  broadcast: { connected: false },
+});
 
 const ChatbotsPage = () => {
   const router = useRouter();
@@ -48,472 +59,463 @@ const ChatbotsPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [updatingBots, setUpdatingBots] = useState<string[]>([]);
   const [botToDelete, setBotToDelete] = useState<Bot | null>(null);
-  const [botToActivate, setBotToActivate] = useState<Bot | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
-  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'offline' | 'loading'>('loading');
-  const [activeChannelsCount, setActiveChannelsCount] = useState(0);
-  const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
+
+  const [connections, setConnections] = useState<SlotConnections>(emptyConnections());
+  const [activeSlot, setActiveSlot] = useState<NumberSlot>('general');
+  const [connectSlot, setConnectSlot] = useState<NumberSlot | null>(null);
+
+  const tenantPath = currentUser?.uid && activeEntity
+    ? `users/${currentUser.uid}/entities/${activeEntity}`
+    : '';
 
   useEffect(() => {
     if (!currentUser || !activeEntity) return;
-
     const botsCollection = collection(db, 'users', currentUser.uid, 'entities', activeEntity, 'chatbots');
-
     const unsubscribe = onSnapshot(
       botsCollection,
       (querySnapshot) => {
-        const botsData = querySnapshot.docs.map(
-          (doc) =>
-          ({
-            id: doc.id,
-            name: doc.data().name || 'Unnamed Bot',
-            isActive: doc.data().isActive === true || doc.data().isActive === 'true',
-            targetPlatforms: normalizeTargetPlatforms(doc.data().targetPlatforms),
-            ...doc.data(),
-          } as Bot)
-        );
-        setBots(botsData);
-        
-        // Count active chatbots
-        const activeBotsCount = botsData.filter(bot => bot.isActive).length;
-        setActiveChannelsCount(activeBotsCount);
-        setConnectionStatus(activeBotsCount > 0 ? 'connected' : 'offline');
+        setBots(querySnapshot.docs.map((d) => ({
+          id: d.id,
+          name: d.data().name || 'Unnamed Bot',
+          isActive: isBotActiveValue(d.data().isActive),
+          numberId: d.data().numberId || undefined,
+        } as Bot)));
         setIsLoading(false);
       },
       (error) => {
-        console.error('Error fetching bots with snapshot: ', error);
-        toast.error('Could not load bots.');
+        console.error('Error fetching bots:', error);
+        toast.error('No se pudieron cargar los bots.');
         setIsLoading(false);
       }
     );
-
     return () => unsubscribe();
   }, [currentUser, activeEntity]);
 
-  // Fetch connected integrations to filter options
   useEffect(() => {
-    if (!currentUser || !activeEntity) return;
+    if (!tenantPath) return;
+    const unsub = subscribeSlotConnections(tenantPath, setConnections);
+    return () => unsub();
+  }, [tenantPath]);
 
-    const integrationsRef = collection(db, 'users', currentUser.uid, 'entities', activeEntity, 'integrations');
-    const unsubscribe = onSnapshot(integrationsRef, (snapshot) => {
-      const connected = snapshot.docs
-        .filter(d => d.id !== '_init' && d.data().status === 'Connected')
-        .map(d => {
-            if (d.id === 'whatsapp_internal') return 'whatsapp';
-            return d.id;
-        });
-      setConnectedPlatforms(connected);
-    });
+  const activeConnection = connections[activeSlot];
 
-    return () => unsubscribe();
-  }, [currentUser, activeEntity]);
+  const botsForActiveSlot = useMemo(
+    () => bots.filter((b) => botSlot(b) === activeSlot),
+    [bots, activeSlot]
+  );
 
-  const handleGoBack = () => {
-    router.push(`/nucleo/${activeEntity}/cto/automation`);
-  };
+  const activeCountForSlot = (slot: NumberSlot) =>
+    bots.filter((b) => botSlot(b) === slot && b.isActive).length;
 
   const handleCreateNewBot = async () => {
     if (!currentUser || !activeEntity) return;
-    setIsLoading(true);
-
-    try {
-        const counterRef = doc(db, 'users', currentUser.uid, 'entities', activeEntity, 'system_metadata', 'chatbot_counter');
-        
-        const newBotId = await runTransaction(db, async (transaction) => {
-            const counterDoc = await transaction.get(counterRef);
-            let currentCount = 0;
-            if (counterDoc.exists()) {
-                currentCount = counterDoc.data().count || 0;
-            }
-            
-            const nextCount = currentCount + 1;
-            transaction.set(counterRef, { count: nextCount }, { merge: true });
-            const formattedId = String(nextCount).padStart(8, '0');
-            
-            const botRef = doc(db, 'users', currentUser.uid, 'entities', activeEntity, 'chatbots', formattedId);
-            transaction.set(botRef, {
-                id: formattedId,
-                name: 'New WhatsApp Bot',
-                isActive: false,
-                channel: 'whatsapp',
-                botType: 'dm',
-                targetPlatforms: ['whatsapp'],
-                createdAt: new Date(),
-                flow: {
-                    nodes: [{ id: '1', type: 'startNode', position: { x: 250, y: 5 }, data: { label: 'Start' } }],
-                    edges: []
-                }
-            });
-            
-            return formattedId;
-        });
-
-        router.push(`/nucleo/${activeEntity}/cto/automation/chatbots/${newBotId}`);
-    } catch (error) {
-        console.error("Error creating bot:", error);
-        toast.error("Could not create chatbot.");
-        setIsLoading(false);
+    if (!activeConnection.connected) {
+      toast.error('Primero conecta un número a esta pestaña.');
+      setConnectSlot(activeSlot);
+      return;
     }
-  };
-
-  const handleBotClick = (botId: string) => {
-    router.push(`/nucleo/${activeEntity}/cto/automation/chatbots/${botId}`);
+    setIsLoading(true);
+    try {
+      const counterRef = doc(db, 'users', currentUser.uid, 'entities', activeEntity, 'system_metadata', 'chatbot_counter');
+      const newBotId = await runTransaction(db, async (transaction) => {
+        const counterDoc = await transaction.get(counterRef);
+        const currentCount = counterDoc.exists() ? (counterDoc.data().count || 0) : 0;
+        const nextCount = currentCount + 1;
+        transaction.set(counterRef, { count: nextCount }, { merge: true });
+        const formattedId = String(nextCount).padStart(8, '0');
+        const botRef = doc(db, 'users', currentUser.uid, 'entities', activeEntity, 'chatbots', formattedId);
+        transaction.set(botRef, {
+          id: formattedId,
+          name: 'New WhatsApp Bot',
+          isActive: false,
+          channel: 'whatsapp',
+          botType: 'dm',
+          targetPlatforms: ['whatsapp'],
+          numberId: activeSlot,
+          createdAt: new Date(),
+          flow: {
+            nodes: [{ id: '1', type: 'startNode', position: { x: 250, y: 5 }, data: { label: 'Start' } }],
+            edges: [],
+          },
+        });
+        return formattedId;
+      });
+      router.push(`/nucleo/${activeEntity}/cto/automation/chatbots/${newBotId}`);
+    } catch (error) {
+      console.error('Error creating bot:', error);
+      toast.error('No se pudo crear el chatbot.');
+      setIsLoading(false);
+    }
   };
 
   const handleToggleBotStatus = async (bot: Bot) => {
-    if (!bot.isActive && (!bot.targetPlatforms || bot.targetPlatforms.length === 0)) {
-        setBotToActivate(bot);
-        return;
-    }
-
-    const primaryPlatform = getPrimaryPlatform(bot.targetPlatforms);
-    if (!bot.isActive && primaryPlatform && !connectedPlatforms.includes(primaryPlatform)) {
-      toast.error(`You cannot activate this bot because ${primaryPlatform.toUpperCase()} is not connected. Connect the integration and try again.`);
-      return;
-    }
-
+    if (!currentUser || !activeEntity) return;
     setUpdatingBots((prev) => [...prev, bot.id]);
     try {
       const newStatus = !bot.isActive;
-
-      await updateExclusiveBotPlatform({
+      await toggleBotForNumber({
         db,
-        userId: currentUser!.uid,
-        entityId: activeEntity!,
+        userId: currentUser.uid,
+        entityId: activeEntity,
         botId: bot.id,
-        platformId: primaryPlatform,
-        activate: newStatus
+        numberId: botSlot(bot),
+        activate: newStatus,
       });
-      
-      toast.success(
-        `Bot "${bot.name}" ${newStatus ? 'activated' : 'deactivated'}.`
-      );
+      toast.success(`Bot "${bot.name}" ${newStatus ? 'activado' : 'desactivado'}.`);
     } catch (error) {
       console.error('Error updating bot status:', error);
-      toast.error('Could not update bot status.');
+      toast.error('No se pudo actualizar el estado del bot.');
     } finally {
       setUpdatingBots((prev) => prev.filter((id) => id !== bot.id));
     }
-  };
-
-  const handleQuickAssignAndActivate = async (platformId: string) => {
-    if (!botToActivate) return;
-    const bot = botToActivate;
-    setBotToActivate(null);
-    setUpdatingBots((prev) => [...prev, bot.id]);
-
-    try {
-        await updateExclusiveBotPlatform({
-            db,
-            userId: currentUser!.uid,
-            entityId: activeEntity!,
-            botId: bot.id,
-            platformId,
-            activate: true
-        });
-        toast.success(`Bot "${bot.name}" assigned to ${platformId.toUpperCase()} and activated.`);
-    } catch (error) {
-        console.error('Error in quick activation:', error);
-        toast.error('Could not activate bot.');
-    } finally {
-        setUpdatingBots((prev) => prev.filter((id) => id !== bot.id));
-    }
-  };
-
-  const handleTogglePlatform = async (bot: Bot, platformId: string) => {
-    setUpdatingBots((prev) => [...prev, bot.id]);
-    try {
-      const currentPlatform = getPrimaryPlatform(bot.targetPlatforms);
-      const isRemoving = currentPlatform === platformId;
-
-      if (!isRemoving && !connectedPlatforms.includes(platformId)) {
-        toast.error(`You cannot assign ${platformId.toUpperCase()} because it is not connected.`);
-        return;
-      }
-
-      await updateExclusiveBotPlatform({
-        db,
-        userId: currentUser!.uid,
-        entityId: activeEntity!,
-        botId: bot.id,
-        platformId: isRemoving ? null : platformId,
-        // Assigning a channel activates the bot; removing the channel deactivates it.
-        activate: isRemoving ? false : true
-      });
-      toast.success(`${platformId.toUpperCase()} ${!isRemoving ? 'assigned' : 'removed'} in "${bot.name}"`);
-    } catch (error) {
-      toast.error('Could not update platform.');
-    } finally {
-      setUpdatingBots((prev) => prev.filter((id) => id !== bot.id));
-    }
-  };
-
-  const handleDeleteClick = (e: React.MouseEvent, bot: Bot) => {
-    e.stopPropagation();
-    setBotToDelete(bot);
-    setDeleteConfirmation('');
   };
 
   const confirmDelete = async () => {
     if (!botToDelete || deleteConfirmation !== 'delete') return;
-
     try {
       await deleteDoc(doc(db, 'users', currentUser!.uid, 'entities', activeEntity!, 'chatbots', botToDelete.id));
-      toast.success(`Bot "${botToDelete.name}" deleted successfully.`);
+      toast.success(`Bot "${botToDelete.name}" eliminado.`);
       setBotToDelete(null);
     } catch (error) {
       console.error('Error deleting bot:', error);
-      toast.error('Error deleting bot.');
+      toast.error('Error al eliminar el bot.');
     }
   };
 
+  const activeSlotDef = SLOTS.find((s) => s.id === activeSlot)!;
+
   return (
-    <div className="p-6 bg-neutral-900 text-white min-h-screen overflow-y-auto">
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center gap-3">
-          <Button variant="outline" size="icon" onClick={handleGoBack} className="h-8 w-8">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <h1 className="text-xl font-medium tracking-tight">WhatsApp Bots</h1>
-          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${
-            connectionStatus === 'connected' 
-              ? 'bg-green-500/10 border-green-500/20 text-green-400' 
-              : connectionStatus === 'loading'
-                ? 'bg-neutral-800 border-neutral-700 text-neutral-500'
-                : 'bg-red-500/10 border-red-500/20 text-red-400'
-          }`}>
-            <div className={`w-1.5 h-1.5 rounded-full ${
-              connectionStatus === 'connected' ? 'bg-green-500 animate-pulse' : 'bg-red-500'
-            }`} />
-            <span className="text-[10px] uppercase tracking-wider font-bold">
-              {connectionStatus === 'connected' ? `OMNICHANNEL: ${activeChannelsCount} ACTIVE` : connectionStatus === 'loading' ? 'Checking...' : 'OFFLINE'}
-            </span>
-          </div>
-        </div>
-        <Button
-          onClick={handleCreateNewBot}
-          className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium py-1.5 px-3 rounded-lg shadow-md transform transition-transform duration-200 hover:scale-105 h-8"
-        >
-          <Plus className="mr-1.5 h-4 w-4" /> Create New Bot
-        </Button>
-      </div>
+    <div className="min-h-screen bg-black text-white font-sans overflow-y-auto">
+      {/* Top bar */}
+      <header className="sticky top-0 z-30 bg-black/80 backdrop-blur-xl border-b border-white/5">
+        <div className="px-5 md:px-8 py-4 flex items-center gap-4 flex-wrap">
+          <button
+            onClick={() => router.push(`/nucleo/${activeEntity}/cto/automation`)}
+            className="text-2xl leading-none text-neutral-500 hover:text-white transition-colors font-light -mt-1"
+            aria-label="Volver"
+          >
+            &lt;
+          </button>
 
-      {isLoading ? (
-        <div className="flex flex-col justify-center items-center mt-32 gap-3">
-          <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
-          <p className="text-neutral-500 text-[10px] font-bold uppercase tracking-widest">Loading...</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {bots.length > 0 ? (
-            bots.map((bot) => (
-              <div
-                key={bot.id}
-                className="bg-neutral-800 border border-neutral-700 rounded-lg shadow-sm hover:shadow-blue-500/10 transition-all duration-300 flex flex-col group relative"
-              >
-                <div
-                  onClick={() => handleBotClick(bot.id)}
-                  className="p-4 cursor-pointer flex-grow"
+          <h1 className="text-xl md:text-2xl font-normal tracking-tight text-white">WhatsApp Bots</h1>
+
+          {/* Fixed tabs */}
+          <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
+            {SLOTS.map((slot) => {
+              const conn = connections[slot.id];
+              const isActive = slot.id === activeSlot;
+              const activeCount = activeCountForSlot(slot.id);
+              return (
+                <button
+                  key={slot.id}
+                  onClick={() => setActiveSlot(slot.id)}
+                  className={`group flex items-center gap-2 pl-3 pr-3 py-1.5 rounded-full border text-xs transition-all ${
+                    isActive
+                      ? 'border-white/25 bg-white/[0.06] text-white'
+                      : 'border-white/5 text-neutral-500 hover:text-white hover:border-white/15'
+                  }`}
                 >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                <button className={`p-1.5 rounded-lg transition-all duration-300 hover:scale-105 active:scale-95 outline-none ${
-                                    bot.targetPlatforms && bot.targetPlatforms.length > 0 
-                                    ? PLATFORMS.find(p => p.id === getPrimaryPlatform(bot.targetPlatforms))?.activeBg || 'bg-neutral-700/50'
-                                    : 'bg-neutral-700/50'
-                                }`}>
-                                    {bot.targetPlatforms && bot.targetPlatforms.length > 0 ? (
-                                        (() => {
-                                            const p = PLATFORMS.find(p => p.id === getPrimaryPlatform(bot.targetPlatforms));
-                                            if (p) return <p.icon className={`w-5 h-5 ${p.color}`} />;
-                                            return <MessageCircle className="w-5 h-5 text-blue-400" />;
-                                        })()
-                                    ) : (
-                                        <MessageCircle className="w-5 h-5 text-blue-400" />
-                                    )}
-                                </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent className="bg-neutral-900 border-neutral-700 rounded-xl p-1.5 shadow-2xl z-[100] min-w-[160px]">
-                                {PLATFORMS.filter(p => connectedPlatforms.includes(p.id)).map((p) => {
-                                    const isCurrent = getPrimaryPlatform(bot.targetPlatforms) === p.id;
-                                    return (
-                                        <DropdownMenuItem
-                                            key={p.id}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleTogglePlatform(bot, p.id);
-                                            }}
-                                            className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all cursor-pointer ${
-                                                isCurrent ? p.activeBg + ' text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'
-                                            }`}
-                                        >
-                                            <p.icon className={`w-3.5 h-3.5 ${p.color}`} />
-                                            <span className="text-[11px] font-bold uppercase tracking-wider">{p.id}</span>
-                                            {isCurrent && <div className="ml-auto w-1 h-1 rounded-full bg-blue-500" />}
-                                        </DropdownMenuItem>
-                                    );
-                                })}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
+                  <WhatsAppIcon className={`w-3.5 h-3.5 ${conn.connected ? 'text-[#25D366]' : isActive ? 'text-neutral-400' : 'text-neutral-700'}`} />
+                  <span className="font-normal tracking-tight">{slot.label}</span>
+                  {conn.connected ? (
+                    activeCount > 0 && <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.8)]" />
+                  ) : (
+                    <span className="w-1.5 h-1.5 rounded-full border border-neutral-600" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
 
-                    <div className="flex items-center gap-2">
-                        <span
-                          className={`px-2 py-0.5 text-[10px] uppercase font-bold tracking-wider rounded-full ${bot.isActive
-                            ? 'bg-green-500/20 text-green-300'
-                            : 'bg-neutral-600/50 text-neutral-400'
-                            }`}
-                        >
-                          {bot.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 text-neutral-500 hover:text-red-400 hover:bg-red-500/10"
-                          onClick={(e) => handleDeleteClick(e, bot)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                    </div>
-                  </div>
-                  <h2 className="text-sm font-medium text-white truncate mb-1">
-                    {bot.name}
-                  </h2>
-                  <p className="text-[10px] text-neutral-500 font-mono break-all leading-tight">
-                    {bot.id}
-                  </p>
-                </div>
+          <button
+            onClick={handleCreateNewBot}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-full border border-white/15 bg-transparent text-white text-xs font-normal tracking-tight hover:bg-white/5 hover:border-white/30 transition-all"
+          >
+            <Plus className="w-4 h-4" /> Crear Bot
+          </button>
+        </div>
+      </header>
 
-                <div className="px-6 py-4 bg-neutral-800/50 rounded-b-lg border-t border-neutral-700">
-                  <Button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleToggleBotStatus(bot);
-                    }}
-                    className={`w-full font-bold text-[10px] uppercase tracking-widest transition-colors duration-200 flex items-center justify-center ${bot.isActive
-                      ? 'bg-red-600 hover:bg-red-700 text-white'
-                      : 'bg-green-600 hover:bg-green-700 text-white'
-                      }`}
-                    disabled={updatingBots.includes(bot.id)}
-                  >
-                    {updatingBots.includes(bot.id) ? (
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                    ) : (
-                      <>
-                        <Power className="mr-2 h-4 w-4" />
-                        {bot.isActive ? 'Deactivate' : 'Activate'}
-                      </>
-                    )}
-                  </Button>
-                </div>
+      <main className="px-5 md:px-8 py-8">
+        {/* Slot header + connection status */}
+        <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h2 className="text-2xl md:text-3xl font-normal tracking-tight text-white mb-1">{activeSlotDef.label}</h2>
+            <p className="text-xs text-neutral-500 font-normal">{activeSlotDef.description}</p>
+          </div>
+
+          {/* Number connection pill */}
+          {activeConnection.connected ? (
+            <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl border border-white/8 bg-white/[0.02]">
+              <div className="flex items-center gap-2">
+                <Phone className="w-3.5 h-3.5 text-[#25D366]" />
+                <span className="text-sm text-white font-normal tracking-tight">
+                  {activeConnection.displayPhoneNumber || activeConnection.phoneNumberId}
+                </span>
               </div>
-            ))
-          ) : (
-            <div className="col-span-full text-center py-20 bg-neutral-800 rounded-xl border border-dashed border-neutral-700">
-              <MessageCircle size={32} className="text-neutral-700 mx-auto mb-4" />
-              <h3 className="text-sm font-bold text-white mb-2">No Chatbots</h3>
-              <p className="text-neutral-600 text-[10px] mb-6">You don't have any flows configured.</p>
-              <Button onClick={handleCreateNewBot} className="bg-blue-600 hover:bg-blue-700 font-bold px-6 py-2 rounded-lg h-8 text-[10px]">
-                Create Now
-              </Button>
+              <button
+                onClick={() => setConnectSlot(activeSlot)}
+                className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-neutral-500 hover:text-white transition-colors"
+              >
+                <Settings2 className="w-3 h-3" /> Editar
+              </button>
             </div>
+          ) : (
+            <button
+              onClick={() => setConnectSlot(activeSlot)}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-2xl border border-[#25D366]/30 bg-[#25D366]/5 text-[#25D366] text-xs font-normal tracking-tight hover:bg-[#25D366]/10 transition-all"
+            >
+              <Link2 className="w-4 h-4" /> Conectar número a {activeSlotDef.label}
+            </button>
           )}
         </div>
-      )}
+
+        {/* Bots grid */}
+        {isLoading ? (
+          <div className="flex flex-col justify-center items-center mt-32 gap-3">
+            <Loader2 className="h-10 w-10 animate-spin text-neutral-500" />
+            <p className="text-neutral-500 text-[10px] font-normal uppercase tracking-widest">Cargando...</p>
+          </div>
+        ) : !activeConnection.connected ? (
+          <div className="text-center py-20 bg-white/[0.02] rounded-2xl border border-dashed border-white/10">
+            <Link2 size={32} className="text-neutral-700 mx-auto mb-4" />
+            <h3 className="text-sm font-normal tracking-tight text-white mb-2">Sin número conectado</h3>
+            <p className="text-neutral-600 text-[11px] mb-6 font-normal max-w-sm mx-auto">
+              Conecta un número de WhatsApp a la pestaña <b className="text-neutral-400">{activeSlotDef.label}</b> para crear y activar bots aquí.
+            </p>
+            <button
+              onClick={() => setConnectSlot(activeSlot)}
+              className="inline-flex items-center gap-1.5 border border-[#25D366]/30 text-[#25D366] hover:bg-[#25D366]/10 font-normal px-6 py-2 rounded-full h-9 text-[11px] transition-all"
+            >
+              <Link2 className="w-3.5 h-3.5" /> Conectar número
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {botsForActiveSlot.length > 0 ? (
+              botsForActiveSlot.map((bot) => (
+                <div
+                  key={bot.id}
+                  className="bg-white/[0.02] border border-white/8 rounded-2xl hover:border-white/20 transition-all duration-300 flex flex-col group relative backdrop-blur-sm"
+                >
+                  <div onClick={() => router.push(`/nucleo/${activeEntity}/cto/automation/chatbots/${bot.id}`)} className="p-5 cursor-pointer flex-grow">
+                    <div className="flex items-center justify-between mb-4">
+                      <WhatsAppIcon className="w-6 h-6 text-[#25D366]" />
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2.5 py-0.5 text-[10px] uppercase font-normal tracking-wider rounded-full ${bot.isActive ? 'bg-green-500/15 text-green-300' : 'bg-white/5 text-neutral-500'}`}>
+                          {bot.isActive ? 'Activo' : 'Inactivo'}
+                        </span>
+                        <button
+                          className="h-6 w-6 flex items-center justify-center text-neutral-600 hover:text-red-400 transition-colors"
+                          onClick={(e) => { e.stopPropagation(); setBotToDelete(bot); setDeleteConfirmation(''); }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    <h3 className="text-lg font-normal tracking-tight text-white truncate mb-1.5 leading-tight">{bot.name}</h3>
+                    <p className="text-[10px] text-neutral-600 font-mono break-all leading-tight tracking-tight">{bot.id}</p>
+                  </div>
+                  <div className="px-5 py-4 border-t border-white/5">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleToggleBotStatus(bot); }}
+                      disabled={updatingBots.includes(bot.id)}
+                      className={`w-full h-9 rounded-full font-normal text-[10px] uppercase tracking-widest transition-all flex items-center justify-center border ${bot.isActive ? 'border-red-500/30 text-red-300 hover:bg-red-500/10' : 'border-green-500/30 text-green-300 hover:bg-green-500/10'}`}
+                    >
+                      {updatingBots.includes(bot.id) ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <Power className="mr-2 h-3.5 w-3.5" />
+                          {bot.isActive ? 'Desactivar' : 'Activar'}
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="col-span-full text-center py-20 bg-white/[0.02] rounded-2xl border border-dashed border-white/10">
+                <MessageCircle size={32} className="text-neutral-700 mx-auto mb-4" />
+                <h3 className="text-sm font-normal tracking-tight text-white mb-2">Sin bots en {activeSlotDef.label}</h3>
+                <p className="text-neutral-600 text-[11px] mb-6 font-normal">Crea un flujo para esta pestaña.</p>
+                <button
+                  onClick={handleCreateNewBot}
+                  className="inline-flex items-center gap-1.5 border border-white/15 hover:bg-white/5 font-normal px-6 py-2 rounded-full h-9 text-[11px] transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Crear ahora
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </main>
 
       {/* Delete Dialog */}
       <Dialog open={!!botToDelete} onOpenChange={(open) => !open && setBotToDelete(null)}>
-        <DialogContent className="bg-neutral-900 border-neutral-700 text-white sm:max-w-md rounded-xl">
+        <DialogContent className="bg-[#0a0a0a] border-white/10 text-white sm:max-w-md rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Delete Chatbot</DialogTitle>
+            <DialogTitle className="font-normal tracking-tight">Eliminar Chatbot</DialogTitle>
             <DialogDescription className="text-neutral-400 text-xs">
-              Confirm by typing <span className="text-white font-bold italic">"delete"</span> to remove <span className="text-white font-bold">"{botToDelete?.name}"</span>.
+              Confirma escribiendo <span className="text-white font-bold italic">"delete"</span> para eliminar <span className="text-white font-bold">"{botToDelete?.name}"</span>.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <Input
-                value={deleteConfirmation}
-                onChange={(e) => setDeleteConfirmation(e.target.value)}
-                className="bg-neutral-800 border-neutral-700 text-white rounded-lg py-5 px-4 placeholder:text-neutral-800 text-sm font-mono text-center tracking-widest"
-                placeholder="delete"
-                autoComplete="off"
-              />
+              value={deleteConfirmation}
+              onChange={(e) => setDeleteConfirmation(e.target.value)}
+              className="bg-white/5 border-white/10 text-white rounded-xl py-5 px-4 text-sm font-mono text-center tracking-widest"
+              placeholder="delete"
+              autoComplete="off"
+            />
           </div>
           <DialogFooter className="flex gap-3">
-            <Button
-              variant="secondary"
-              onClick={() => setBotToDelete(null)}
-              className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-white border-neutral-700 rounded-lg text-xs"
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={deleteConfirmation !== 'delete'}
-              onClick={confirmDelete}
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-xs"
-            >
-              Delete
-            </Button>
+            <button onClick={() => setBotToDelete(null)} className="flex-1 h-11 bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded-xl text-xs font-normal">
+              Cancelar
+            </button>
+            <button disabled={deleteConfirmation !== 'delete'} onClick={confirmDelete} className="flex-1 h-11 border border-red-500/30 text-red-300 hover:bg-red-500/10 rounded-xl font-normal text-xs disabled:opacity-40">
+              Eliminar
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Quick Activation Platform Selection */}
-      <Dialog open={!!botToActivate} onOpenChange={(open) => !open && setBotToActivate(null)}>
-        <DialogContent className="bg-neutral-900 border-neutral-700 text-white max-w-sm rounded-xl p-8">
-            <DialogHeader className="mb-4">
-                <DialogTitle className="text-xl font-bold">Select Channel</DialogTitle>
-                <DialogDescription className="text-neutral-400 text-xs">
-                    Choose which channel <span className="text-white font-bold">"{botToActivate?.name}"</span> will respond to.
-                </DialogDescription>
-            </DialogHeader>
-            <div className="grid grid-cols-1 gap-3">
-                {PLATFORMS.filter(p => connectedPlatforms.includes(p.id)).map((p) => (
-                    <button
-                        key={p.id}
-                        onClick={() => handleQuickAssignAndActivate(p.id)}
-                        className={`group flex items-center justify-between p-4 rounded-xl border border-neutral-700 hover:border-neutral-600 transition-all ${p.activeBg}`}
-                    >
-                        <div className="flex items-center gap-4">
-                            <div className={`p-3 rounded-xl ${p.activeBg} border ${p.activeBorder}`}>
-                                <p.icon className={`w-5 h-5 ${p.color}`} />
-                            </div>
-                            <span className="font-bold text-sm">{p.id.toUpperCase()}</span>
-                        </div>
-                        <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Plus className="w-4 h-4 text-blue-400" />
-                        </div>
-                    </button>
-                ))}
-                {connectedPlatforms.length === 0 && (
-                    <div className="py-8 text-center bg-neutral-800 rounded-xl border border-dashed border-neutral-700">
-                        <p className="text-xs text-neutral-500 mb-4">You don't have any connected integrations to activate this bot.</p>
-                        <Button 
-                            variant="outline" 
-                            className="text-[10px] font-bold rounded-xl h-8 border-blue-500/30 text-blue-400"
-                            onClick={() => router.push(`/nucleo/${activeEntity}/cto/integrations`)}
-                        >
-                            Go to Integrations
-                        </Button>
-                    </div>
-                )}
-            </div>
-            <DialogFooter className="mt-6">
-                <Button 
-                    variant="ghost" 
-                    onClick={() => setBotToActivate(null)}
-                    className="w-full bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-white rounded-xl py-6"
-                >
-                    Cancel
-                </Button>
-            </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Connect number dialog */}
+      <ConnectNumberDialog
+        open={!!connectSlot}
+        slot={connectSlot}
+        connection={connectSlot ? connections[connectSlot] : null}
+        tenantPath={tenantPath}
+        onClose={() => setConnectSlot(null)}
+      />
     </div>
   );
 };
+
+// --- Connect / edit a number for a slot ---
+function ConnectNumberDialog({
+  open,
+  slot,
+  connection,
+  tenantPath,
+  onClose,
+}: {
+  open: boolean;
+  slot: NumberSlot | null;
+  connection: WhatsAppNumberConnection | null;
+  tenantPath: string;
+  onClose: () => void;
+}) {
+  const [phoneNumberId, setPhoneNumberId] = useState('');
+  const [wabaId, setWabaId] = useState('');
+  const [accessToken, setAccessToken] = useState('');
+  const [displayPhoneNumber, setDisplayPhoneNumber] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open && connection) {
+      setPhoneNumberId(connection.phoneNumberId || '');
+      setWabaId(connection.wabaId || '');
+      setAccessToken(connection.accessToken || '');
+      setDisplayPhoneNumber(connection.displayPhoneNumber || '');
+    } else if (open) {
+      setPhoneNumberId('');
+      setWabaId('');
+      setAccessToken('');
+      setDisplayPhoneNumber('');
+    }
+  }, [open, connection]);
+
+  const slotDef = SLOTS.find((s) => s.id === slot);
+
+  const handleSave = async () => {
+    if (!tenantPath || !slot) return;
+    if (!phoneNumberId.trim() || !accessToken.trim()) {
+      toast.error('Necesitas Phone Number ID y Access Token.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await saveSlotConnection(tenantPath, slot, {
+        phoneNumberId,
+        wabaId,
+        accessToken,
+        displayPhoneNumber,
+      });
+      toast.success(`Número conectado a ${slotDef?.label}.`);
+      onClose();
+    } catch (e: any) {
+      toast.error(e.message || 'No se pudo guardar.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (!tenantPath || !slot) return;
+    setSaving(true);
+    try {
+      await disconnectSlot(tenantPath, slot);
+      toast.success('Número desconectado.');
+      onClose();
+    } catch (e: any) {
+      toast.error(e.message || 'No se pudo desconectar.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="bg-[#0a0a0a] border-white/10 text-white sm:max-w-md rounded-2xl">
+        <DialogHeader>
+          <DialogTitle className="font-normal tracking-tight">
+            Conectar número · {slotDef?.label}
+          </DialogTitle>
+          <DialogDescription className="text-neutral-400 text-xs">
+            Ingresa las credenciales de WhatsApp Cloud API para este número. Cada pestaña maneja su propio número y su propio bot activo.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-[10px] uppercase tracking-widest text-neutral-500 font-normal">Phone Number ID</label>
+              <Input value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value.replace(/[^0-9]/g, ''))} placeholder="6768377..." className="bg-white/5 border-white/10 text-white rounded-xl text-xs font-mono" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] uppercase tracking-widest text-neutral-500 font-normal">Número visible</label>
+              <Input value={displayPhoneNumber} onChange={(e) => setDisplayPhoneNumber(e.target.value)} placeholder="+1 385 ..." className="bg-white/5 border-white/10 text-white rounded-xl text-xs" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] uppercase tracking-widest text-neutral-500 font-normal">WABA ID</label>
+            <Input value={wabaId} onChange={(e) => setWabaId(e.target.value.replace(/[^0-9]/g, ''))} placeholder="2530479..." className="bg-white/5 border-white/10 text-white rounded-xl text-xs font-mono" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] uppercase tracking-widest text-neutral-500 font-normal">Access Token</label>
+            <textarea value={accessToken} onChange={(e) => setAccessToken(e.target.value)} placeholder="EAA..." className="w-full h-20 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[10px] text-white font-mono resize-none outline-none focus:border-white/25" />
+          </div>
+        </div>
+
+        <DialogFooter className="flex gap-3">
+          {connection?.connected && (
+            <button onClick={handleDisconnect} disabled={saving} className="h-11 px-4 border border-red-500/30 text-red-300 hover:bg-red-500/10 rounded-xl text-xs font-normal disabled:opacity-40">
+              Desconectar
+            </button>
+          )}
+          <button onClick={onClose} className="flex-1 h-11 bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded-xl text-xs font-normal">
+            Cancelar
+          </button>
+          <button onClick={handleSave} disabled={saving} className="flex-1 h-11 border border-white/20 text-white hover:bg-white/10 rounded-xl font-normal text-xs disabled:opacity-40 flex items-center justify-center gap-1.5">
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+            Guardar
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export default ChatbotsPage;

@@ -28,7 +28,8 @@ import {
     Users,
     Sliders,
     Eye,
-    MessageSquare
+    MessageSquare,
+    Bot
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,18 +44,30 @@ import SidebarFilters from "./components/SidebarFilters";
 import BroadcastsTable from "./components/BroadcastsTable";
 import PhoneMockup from "./components/PhoneMockup";
 import DeleteBroadcastModal from "./components/DeleteBroadcastModal";
+import CampaignResults from "./components/CampaignResults";
+import LaunchConfirmModal from "./components/LaunchConfirmModal";
 
-export interface Broadcast {
-    id: string;
-    status: "Draft" | "Scheduled" | "In Progress" | "Completed" | "Failed";
-    broadcastTime: string;
-    name: string;
-    labels: string;
-    channel: string;
-    segment: string;
-    recipients: number;
-    totalMessages: number;
-}
+// Firestore + campaign backend
+import { db } from "@/lib/firebase";
+import { collection, onSnapshot } from "firebase/firestore";
+import type { Broadcast, SegmentConfig, BroadcastMessage, BroadcastRecipient } from "./lib/types";
+import {
+    createBroadcast,
+    subscribeBroadcasts,
+    subscribeRecipients,
+    deleteBroadcast as deleteBroadcastDoc,
+    renameBroadcast,
+    launchBroadcast,
+} from "./lib/broadcastService";
+import {
+    subscribeKanbanGroups,
+    subscribeAvailableTags,
+    subscribeAvailableCountries,
+    estimateRecipients,
+    type KanbanGroupInfo,
+} from "./lib/segments";
+
+export type { Broadcast } from "./lib/types";
 
 interface ContentBlock {
     id: string;
@@ -89,8 +102,39 @@ export default function BroadcastsListPage() {
     // Delete Modal state
     const [deleteTarget, setDeleteTarget] = useState<Broadcast | null>(null);
 
-    // Data table state (Starts empty as requested)
+    // Data table state (loaded from Firestore)
     const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
+
+    // Tenant path
+    const tenantPath = currentUser?.uid && entityId
+        ? `users/${currentUser.uid}/entities/${entityId}`
+        : "";
+
+    // Real segmentation data
+    const [kanbanGroups, setKanbanGroups] = useState<KanbanGroupInfo[]>([]);
+    const [availableTags, setAvailableTags] = useState<string[]>([]);
+    const [availableCountries, setAvailableCountries] = useState<
+        { iso: string; country: string; flag: string; count: number }[]
+    >([]);
+    const [formSegmentConfig, setFormSegmentConfig] = useState<SegmentConfig | null>(null);
+
+    // Message composition (kind + media)
+    const [messageKind, setMessageKind] = useState<"template" | "text" | "media">("template");
+    const [textBody, setTextBody] = useState<string>("");
+    const [mediaType, setMediaType] = useState<"image" | "audio" | "document" | "video">("image");
+    const [mediaUrl, setMediaUrl] = useState<string>("");
+    const [mediaCaption, setMediaCaption] = useState<string>("");
+
+    // Bots
+    const [chatbots, setChatbots] = useState<any[]>([]);
+    const [selectedBotId, setSelectedBotId] = useState<string>("");
+
+    // Launch + results state
+    const [launchTarget, setLaunchTarget] = useState<Broadcast | null>(null);
+    const [launching, setLaunching] = useState(false);
+    const [creating, setCreating] = useState(false);
+    const [resultsBroadcast, setResultsBroadcast] = useState<Broadcast | null>(null);
+    const [resultsRecipients, setResultsRecipients] = useState<BroadcastRecipient[]>([]);
 
     // Right Sidebar form states
     const [formName, setFormName] = useState<string>("");
@@ -174,25 +218,85 @@ export default function BroadcastsListPage() {
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    // Estimate Recipients based on selected Segment
+    // Subscribe to persisted broadcasts (realtime).
     useEffect(() => {
-        if (formSegment) {
+        if (!tenantPath) return;
+        const unsub = subscribeBroadcasts(tenantPath, setBroadcasts);
+        return () => unsub();
+    }, [tenantPath]);
+
+    // Live segmentation data (Kanban columns, tags, countries, bots).
+    useEffect(() => {
+        if (!tenantPath) return;
+
+        const unsubKanban = subscribeKanbanGroups(tenantPath, setKanbanGroups);
+        const unsubTags = subscribeAvailableTags(tenantPath, setAvailableTags);
+        const unsubCountries = subscribeAvailableCountries(tenantPath, setAvailableCountries);
+
+        const botsRef = collection(db, `${tenantPath}/chatbots`);
+        const unsubBots = onSnapshot(
+            botsRef,
+            (snap) => setChatbots(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+            (err) => console.error("[Broadcast] subscribe bots error:", err)
+        );
+
+        return () => {
+            unsubKanban();
+            unsubTags();
+            unsubCountries();
+            unsubBots();
+        };
+    }, [tenantPath]);
+
+    // Keep selected Kanban segment label in sync when a column is renamed.
+    useEffect(() => {
+        if (!formSegmentConfig?.kanbanGroupId) return;
+        const group = kanbanGroups.find((g) => g.id === formSegmentConfig.kanbanGroupId);
+        if (!group) return;
+
+        const newLabel = `Kanban: ${group.name}`;
+        if (formSegmentConfig.kanbanGroupName === group.name && formSegment === newLabel) return;
+
+        setFormSegment(newLabel);
+        setFormSegmentConfig((prev) =>
+            prev
+                ? { ...prev, kanbanGroupName: group.name, label: newLabel }
+                : prev
+        );
+    }, [kanbanGroups, formSegmentConfig?.kanbanGroupId, formSegmentConfig?.kanbanGroupName, formSegment]);
+
+    // Subscribe to recipients when a results view is open.
+    useEffect(() => {
+        if (!tenantPath || !resultsBroadcast) {
+            setResultsRecipients([]);
+            return;
+        }
+        const unsub = subscribeRecipients(tenantPath, resultsBroadcast.id, setResultsRecipients);
+        return () => unsub();
+    }, [tenantPath, resultsBroadcast]);
+
+    // Estimate recipients using the real resolver based on the selected segment.
+    useEffect(() => {
+        if (formSegmentConfig && tenantPath) {
             setEstimatingCount(true);
-            const timer = setTimeout(() => {
-                let total = 85;
-                if (formSegment.includes("All")) total = 425;
-                if (formSegment.includes("<7 days")) total = 112;
-                if (formSegment.includes(">30 days")) total = 230;
-                setEstimatedRecipients(total);
-                setEstimatedWhatsAppCount(Math.round(total * 0.92));
-                setEstimatingCount(false);
-            }, 800);
+            const timer = setTimeout(async () => {
+                try {
+                    const total = await estimateRecipients(tenantPath, formSegmentConfig);
+                    setEstimatedRecipients(total);
+                    setEstimatedWhatsAppCount(total);
+                } catch (e) {
+                    setEstimatedRecipients(0);
+                    setEstimatedWhatsAppCount(0);
+                } finally {
+                    setEstimatingCount(false);
+                }
+            }, 500);
             return () => clearTimeout(timer);
         } else {
             setEstimatedRecipients(null);
             setEstimatedWhatsAppCount(null);
         }
-    }, [formSegment]);
+    }, [formSegmentConfig, tenantPath]);
 
     // Fetch Meta templates when WhatsApp is selected as channel
     useEffect(() => {
@@ -265,18 +369,9 @@ export default function BroadcastsListPage() {
         { name: "All", dotColor: "bg-blue-500" },
         { name: "Draft", dotColor: "bg-neutral-400" },
         { name: "Scheduled", dotColor: "bg-amber-500" },
-        { name: "In Progress", dotColor: "bg-emerald-500" },
+        { name: "Sending", dotColor: "bg-emerald-500" },
         { name: "Completed", dotColor: "bg-green-500" },
         { name: "Failed", dotColor: "bg-rose-500" }
-    ];
-
-    const segmentOptions = [
-        "All",
-        "Contacts created <7 days ago",
-        "Contacts inactive >30 days",
-        "Contacts with tags",
-        "Country known",
-        "Language known"
     ];
 
     const channelOptions = [
@@ -340,15 +435,16 @@ export default function BroadcastsListPage() {
 
     // Helper to get status badge colors
     const getStatusBadge = (status: Broadcast["status"]) => {
-        const styles = {
+        const styles: Record<string, string> = {
             Draft: "bg-neutral-800 text-neutral-300 border-neutral-700",
             Scheduled: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-            "In Progress": "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+            Sending: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 animate-pulse",
             Completed: "bg-green-500/10 text-green-400 border-green-500/20",
-            Failed: "bg-rose-500/10 text-rose-400 border-rose-500/20"
+            Failed: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+            Paused: "bg-orange-500/10 text-orange-400 border-orange-500/20",
         };
         return (
-            <span className={`px-2 py-0.5 text-[11px] font-medium rounded border ${styles[status]}`}>
+            <span className={`px-2 py-0.5 text-[11px] font-medium rounded border ${styles[status] || styles.Draft}`}>
                 {status}
             </span>
         );
@@ -360,9 +456,16 @@ export default function BroadcastsListPage() {
         setFormName("");
         setFormLabel("");
         setFormSegment("");
+        setFormSegmentConfig(null);
         setFormChannelType("specific");
         setFormChannel("");
         setFormContentBlocks([]);
+        setMessageKind("template");
+        setTextBody("");
+        setMediaType("image");
+        setMediaUrl("");
+        setMediaCaption("");
+        setSelectedBotId("");
         setSelectedTemplate(null);
         setTemplateVariables([]);
         setTemplateParamValues({});
@@ -387,30 +490,32 @@ export default function BroadcastsListPage() {
         setFormSegment(broadcast.segment !== "-" ? broadcast.segment : "");
         setFormChannelType("specific");
         setFormChannel(broadcast.channel !== "-" ? broadcast.channel : "");
-        setAutomationPrompts(["Reserva una cita", "Ver catálogo", "Hablar con un agente", ""]);
-        setAutomationCommands([
-            { command_name: "imagine", command_description: "Generar imagen mediante IA" },
-            { command_name: "ayuda", command_description: "Mostrar menú de asistencia" }
-        ]);
-        setIsAutomationSectionOpen(true);
+        setFormSegmentConfig(broadcast.segmentConfig || null);
+        setSelectedBotId(broadcast.botId || "");
+        setAutomationPrompts(["", "", "", ""]);
+        setAutomationCommands([]);
+        setIsAutomationSectionOpen(false);
         setSyncingAutomation(false);
-        
-        if (broadcast.channel.toLowerCase().includes("whatsapp")) {
+
+        // Hydrate message composer from the persisted campaign.
+        const msg = broadcast.message;
+        if (msg?.kind === "text") {
+            setMessageKind("text");
+            setTextBody(msg.text || "");
+        } else if (msg?.kind === "media") {
+            setMessageKind("media");
+            setMediaType(msg.mediaType || "image");
+            setMediaUrl(msg.mediaUrl || "");
+            setMediaCaption(msg.caption || "");
+        } else if (msg?.kind === "template") {
+            setMessageKind("template");
             setSelectedTemplate({
-                name: "custom_message_template",
-                language: "es",
-                components: [
-                    {
-                        type: "BODY",
-                        text: "Hola {{1}}, gracias por tu interés en Roosevelt. Tu código de descuento es {{2}}."
-                    }
-                ]
+                name: msg.templateName,
+                language: msg.templateLanguage || "es",
+                components: [{ type: "BODY", text: "" }],
             });
-            setTemplateVariables(["{{1}}", "{{2}}"]);
-            setTemplateParamValues({
-                "{{1}}": "{{Nombre}}",
-                "{{2}}": "PROMO2026"
-            });
+            setTemplateVariables(msg.templateVariables || []);
+            setTemplateParamValues(msg.templateParamValues || {});
         }
         
         setSendImmediately(broadcast.status !== "Scheduled");
@@ -422,36 +527,105 @@ export default function BroadcastsListPage() {
         setActiveRowMenuId(null);
     };
 
-    // Submit form and create broadcast
-    const handleCreateBroadcast = () => {
-        if (!formName.trim() || !formSegment) {
+    // Build the BroadcastMessage payload from the current form state.
+    const buildMessagePayload = (): BroadcastMessage => {
+        if (isWhatsAppSelected && messageKind === "template" && selectedTemplate) {
+            return {
+                kind: "template",
+                templateName: selectedTemplate.name,
+                templateLanguage: selectedTemplate.language || "es",
+                templateVariables: templateVariables,
+                templateParamValues: templateParamValues,
+            };
+        }
+        if (messageKind === "media") {
+            return {
+                kind: "media",
+                mediaType,
+                mediaUrl,
+                caption: mediaCaption,
+            };
+        }
+        return { kind: "text", text: textBody };
+    };
+
+    // Submit form and create broadcast (persisted in Firestore).
+    const handleCreateBroadcast = async () => {
+        if (!formName.trim() || !formSegmentConfig) {
             setShowErrors(true);
+            toast.error("Completa el nombre y el segmento.");
             return;
         }
-        const newBroadcast: Broadcast = {
-            id: Date.now().toString(),
-            status: sendImmediately ? "Draft" : "Scheduled",
-            broadcastTime: sendImmediately ? "-" : `${scheduleDate} ${scheduleTime}`,
-            name: formName,
-            labels: formLabel || "-",
-            channel: formChannelType === "last_interacted" ? "Last Interacted" : (formChannel || "-"),
-            segment: formSegment,
-            recipients: estimatedWhatsAppCount || 0,
-            totalMessages: estimatedWhatsAppCount || 0
-        };
-        setBroadcasts(prev => [newBroadcast, ...prev]);
-        setIsRightSidebarOpen(false);
+        if (!tenantPath) {
+            toast.error("Sesión no lista. Intenta de nuevo.");
+            return;
+        }
+
+        // Validate message content.
+        if (isWhatsAppSelected && messageKind === "template" && !selectedTemplate) {
+            toast.error("Selecciona una plantilla de WhatsApp.");
+            return;
+        }
+        if (messageKind === "text" && !textBody.trim()) {
+            toast.error("Escribe el mensaje de texto.");
+            return;
+        }
+        if (messageKind === "media" && !mediaUrl.trim()) {
+            toast.error("Agrega la URL del archivo multimedia.");
+            return;
+        }
+
+        setCreating(true);
+        try {
+            const bot = chatbots.find((b) => b.id === selectedBotId);
+            const { recipientCount } = await createBroadcast(tenantPath, {
+                name: formName,
+                labels: formLabel || "-",
+                channel: formChannelType === "last_interacted" ? "Last Interacted" : (formChannel || "-"),
+                segment: formSegment,
+                segmentConfig: formSegmentConfig,
+                message: buildMessagePayload(),
+                botId: selectedBotId || null,
+                botName: bot?.name || null,
+                deliverySpeed,
+                sendImmediately,
+                scheduleAt: sendImmediately ? null : `${scheduleDate} ${scheduleTime}`.trim(),
+            });
+            toast.success(`Campaña creada con ${recipientCount} destinatarios.`);
+            setIsRightSidebarOpen(false);
+        } catch (e: any) {
+            console.error(e);
+            toast.error(`Error al crear la campaña: ${e.message}`);
+        } finally {
+            setCreating(false);
+        }
     };
 
     // Action handlers
-    const handleClone = (broadcast: Broadcast) => {
-        const cloned: Broadcast = {
-            ...broadcast,
-            id: Date.now().toString() + Math.random(),
-            name: `${broadcast.name} (Copy)`
-        };
-        setBroadcasts(prev => [cloned, ...prev]);
+    const handleClone = async (broadcast: Broadcast) => {
         setActiveRowMenuId(null);
+        if (!tenantPath || !broadcast.segmentConfig || !broadcast.message) {
+            toast.error("No se puede clonar esta campaña.");
+            return;
+        }
+        try {
+            await createBroadcast(tenantPath, {
+                name: `${broadcast.name} (Copia)`,
+                labels: broadcast.labels,
+                channel: broadcast.channel,
+                segment: broadcast.segment,
+                segmentConfig: broadcast.segmentConfig,
+                message: broadcast.message,
+                botId: broadcast.botId,
+                botName: broadcast.botName,
+                deliverySpeed: broadcast.deliverySpeed,
+                sendImmediately: true,
+                scheduleAt: null,
+            });
+            toast.success("Campaña clonada.");
+        } catch (e: any) {
+            toast.error(`Error al clonar: ${e.message}`);
+        }
     };
 
     const handleDeleteClick = (broadcast: Broadcast) => {
@@ -459,10 +633,57 @@ export default function BroadcastsListPage() {
         setActiveRowMenuId(null);
     };
 
-    const confirmDelete = () => {
-        if (deleteTarget) {
-            setBroadcasts(prev => prev.filter(b => b.id !== deleteTarget.id));
+    const confirmDelete = async () => {
+        if (deleteTarget && tenantPath) {
+            try {
+                await deleteBroadcastDoc(tenantPath, deleteTarget.id);
+                toast.success("Campaña eliminada.");
+            } catch (e: any) {
+                toast.error(`Error al eliminar: ${e.message}`);
+            }
             setDeleteTarget(null);
+        }
+    };
+
+    // Launch a campaign (opens confirmation first).
+    const handleRequestLaunch = (broadcast: Broadcast) => {
+        setActiveRowMenuId(null);
+        setLaunchTarget(broadcast);
+    };
+
+    const confirmLaunch = async () => {
+        if (!launchTarget || !currentUser?.uid) return;
+        setLaunching(true);
+        try {
+            const result = await launchBroadcast(currentUser.uid, entityId, launchTarget.id);
+            if (result.ok) {
+                toast.success(
+                    `Campaña iniciada: ${result.summary?.sent || 0} enviados, ${result.summary?.failed || 0} fallidos.`
+                );
+                setLaunchTarget(null);
+            } else {
+                toast.error(result.error || "Error al iniciar la campaña.");
+            }
+        } catch (e: any) {
+            toast.error(e.message);
+        } finally {
+            setLaunching(false);
+        }
+    };
+
+    // Open the per-recipient results view.
+    const handleViewResults = (broadcast: Broadcast) => {
+        setActiveRowMenuId(null);
+        setResultsBroadcast(broadcast);
+    };
+
+    // Rename a campaign (persisted).
+    const handleRename = async (broadcast: Broadcast, name: string) => {
+        if (!tenantPath) return;
+        try {
+            await renameBroadcast(tenantPath, broadcast.id, name);
+        } catch (e: any) {
+            toast.error(`Error al renombrar: ${e.message}`);
         }
     };
 
@@ -573,8 +794,57 @@ export default function BroadcastsListPage() {
 
     const isWhatsAppSelected = formChannel.toLowerCase().includes("whatsapp");
 
+    const selectSegment = (label: string, config: SegmentConfig) => {
+        setFormSegment(label);
+        setFormSegmentConfig({ ...config, label });
+        setIsSegmentDropdownOpen(false);
+    };
+
+    const segmentSectionLabel = "px-3 pt-2 pb-1 text-[9px] uppercase tracking-wider text-neutral-600 font-bold";
+    const segmentOptionClass = "w-full text-left px-3 py-2 text-xs hover:bg-white/5 text-neutral-300 hover:text-white";
+
+    const renderSegmentOptions = () => (
+        <>
+            <div className={segmentSectionLabel}>General</div>
+            <button onClick={() => selectSegment("Todos los contactos", { type: "all" })} className={segmentOptionClass}>
+                Todos los contactos con WhatsApp
+            </button>
+            <button onClick={() => selectSegment("Creados en los últimos 7 días", { type: "created_recent", days: 7 })} className={segmentOptionClass}>
+                Creados en los últimos 7 días
+            </button>
+            <button onClick={() => selectSegment("Inactivos hace +30 días", { type: "inactive", days: 30 })} className={segmentOptionClass}>
+                Inactivos hace +30 días
+            </button>
+
+            {kanbanGroups.length > 0 && <div className={segmentSectionLabel}>Etapa del Kanban</div>}
+            {kanbanGroups.map((g) => (
+                <button
+                    key={g.id}
+                    onClick={() => selectSegment(`Kanban: ${g.name}`, { type: "kanban_group", kanbanGroupId: g.id, kanbanGroupName: g.name })}
+                    className={segmentOptionClass}
+                >
+                    {g.name}
+                </button>
+            ))}
+
+            {availableTags.length > 0 && <div className={segmentSectionLabel}>Etiquetas</div>}
+            {availableTags.map((t) => (
+                <button key={t} onClick={() => selectSegment(`Etiqueta: ${t}`, { type: "tag", tag: t })} className={segmentOptionClass}>
+                    {t}
+                </button>
+            ))}
+
+            {availableCountries.length > 0 && <div className={segmentSectionLabel}>País</div>}
+            {availableCountries.map((c) => (
+                <button key={c.iso} onClick={() => selectSegment(`País: ${c.country}`, { type: "country", countryIso: c.iso })} className={segmentOptionClass}>
+                    {c.flag} {c.country} <span className="text-neutral-600">({c.count})</span>
+                </button>
+            ))}
+        </>
+    );
+
     return (
-        <div className="flex h-screen bg-[#090a0f] text-white overflow-hidden font-sans relative p-3">
+        <div className="flex h-screen bg-[#090a0f] text-white overflow-hidden font-sans tracking-tight relative p-3">
             {/* Sidebar Filters - Left Floating Panel Component */}
             <SidebarFilters 
                 isSidebarOpen={isSidebarOpen}
@@ -669,9 +939,11 @@ export default function BroadcastsListPage() {
                             activeRowMenuId={activeRowMenuId}
                             setActiveRowMenuId={setActiveRowMenuId}
                             rowMenuRef={rowMenuRef}
-                            setBroadcasts={setBroadcasts}
                             handleClone={handleClone}
                             handleDeleteClick={handleDeleteClick}
+                            onLaunch={handleRequestLaunch}
+                            onViewResults={handleViewResults}
+                            handleRename={handleRename}
                         />
                     ) : (
                         <div className="flex flex-col items-center justify-center py-20 text-center text-neutral-500 border border-white/5 rounded-xl bg-[#0b0c10]/40">
@@ -769,7 +1041,7 @@ export default function BroadcastsListPage() {
 
                                 <div className="h-px bg-white/5 my-2" />
 
-                                <h3 className="text-xs font-semibold text-white/90 uppercase tracking-wider flex items-center gap-1">
+                                <h3 className="text-xs font-normal text-white/90 uppercase tracking-wider flex items-center gap-1">
                                     <Sliders className="w-3.5 h-3.5 text-neutral-500" />
                                     <span>Configuration</span>
                                 </h3>
@@ -811,19 +1083,8 @@ export default function BroadcastsListPage() {
                                     )}
 
                                     {isSegmentDropdownOpen && sidebarMode !== "view" && (
-                                        <div className="absolute top-[100%] left-0 right-0 z-50 mt-1 bg-[#13151a] border border-white/10 rounded-lg shadow-xl py-1 max-h-40 overflow-y-auto custom-scrollbar">
-                                            <button className="w-full text-left px-3 py-1.5 text-xs text-blue-400 hover:bg-white/5 font-medium border-b border-white/5">
-                                                + Add Segment
-                                            </button>
-                                            {segmentOptions.map(seg => (
-                                                <button
-                                                    key={seg}
-                                                    onClick={() => { setFormSegment(seg); setIsSegmentDropdownOpen(false); }}
-                                                    className="w-full text-left px-3 py-2 text-xs hover:bg-white/5 text-neutral-300 hover:text-white"
-                                                >
-                                                    {seg}
-                                                </button>
-                                            ))}
+                                        <div className="absolute top-[100%] left-0 right-0 z-50 mt-1 bg-[#13151a] border border-white/10 rounded-lg shadow-xl py-1 max-h-60 overflow-y-auto custom-scrollbar">
+                                            {renderSegmentOptions()}
                                         </div>
                                     )}
                                 </div>
@@ -923,7 +1184,111 @@ export default function BroadcastsListPage() {
 
                                 <div className="h-px bg-white/5 my-2" />
 
+                                {/* Message Type Toggle */}
+                                <div className="space-y-2">
+                                    <label className="block text-[11px] font-medium text-neutral-400">Tipo de mensaje</label>
+                                    <div className="grid grid-cols-3 gap-1.5 bg-[#13151a]/60 p-1 rounded-lg border border-white/5">
+                                        {(["template", "text", "media"] as const).map((k) => (
+                                            <button
+                                                key={k}
+                                                disabled={sidebarMode === "view"}
+                                                onClick={() => setMessageKind(k)}
+                                                className={cn(
+                                                    "py-1.5 rounded-md text-[10px] font-medium transition-all capitalize",
+                                                    messageKind === k ? "bg-blue-600 text-white" : "text-neutral-400 hover:text-white"
+                                                )}
+                                            >
+                                                {k === "template" ? "Plantilla" : k === "text" ? "Texto" : "Multimedia"}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <p className="text-[9px] text-neutral-600">
+                                        Plantilla: aprobada por Meta (envíos en frío). Texto/Multimedia: solo dentro de la ventana de 24h del contacto.
+                                    </p>
+                                </div>
+
+                                {/* Plain Text Composer */}
+                                {messageKind === "text" && (
+                                    <div className="space-y-1.5">
+                                        <label className="block text-[11px] font-medium text-neutral-400">Mensaje de texto</label>
+                                        <textarea
+                                            value={textBody}
+                                            disabled={sidebarMode === "view"}
+                                            onChange={(e) => setTextBody(e.target.value)}
+                                            rows={4}
+                                            placeholder="Escribe tu mensaje. Usa {{Nombre}} para personalizar."
+                                            className="w-full bg-[#13151a]/80 border border-white/5 text-xs rounded-lg p-2.5 focus:ring-1 focus:ring-blue-500 outline-none resize-none text-neutral-200 placeholder-neutral-600"
+                                        />
+                                        {sidebarMode !== "view" && (
+                                            <div className="flex gap-1">
+                                                <button type="button" onClick={() => setTextBody((t) => t + "{{Nombre}}")} className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 text-[9px] border border-blue-500/10 hover:bg-blue-500/20">+ Nombre</button>
+                                                <button type="button" onClick={() => setTextBody((t) => t + "{{País}}")} className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 text-[9px] border border-blue-500/10 hover:bg-blue-500/20">+ País</button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Media Composer */}
+                                {messageKind === "media" && (
+                                    <div className="space-y-2">
+                                        <div>
+                                            <label className="block text-[11px] font-medium text-neutral-400 mb-1">Tipo de archivo</label>
+                                            <select
+                                                value={mediaType}
+                                                disabled={sidebarMode === "view"}
+                                                onChange={(e) => setMediaType(e.target.value as any)}
+                                                className="w-full bg-[#13151a] border border-white/5 text-xs text-neutral-300 rounded-lg p-2 outline-none"
+                                            >
+                                                <option value="image">Imagen</option>
+                                                <option value="video">Video</option>
+                                                <option value="audio">Audio</option>
+                                                <option value="document">Documento</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[11px] font-medium text-neutral-400 mb-1">URL del archivo (pública)</label>
+                                            <Input value={mediaUrl} disabled={sidebarMode === "view"} onChange={(e) => setMediaUrl(e.target.value)} placeholder="https://..." className="bg-[#13151a]/80 border-white/5 text-xs rounded-lg" />
+                                        </div>
+                                        {mediaType !== "audio" && (
+                                            <div>
+                                                <label className="block text-[11px] font-medium text-neutral-400 mb-1">Descripción (opcional)</label>
+                                                <Input value={mediaCaption} disabled={sidebarMode === "view"} onChange={(e) => setMediaCaption(e.target.value)} placeholder="Texto que acompaña al archivo" className="bg-[#13151a]/80 border-white/5 text-xs rounded-lg" />
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Bot Auto-Reply Attach */}
+                                <div className="space-y-2 bg-emerald-500/5 border border-emerald-500/10 p-3.5 rounded-xl">
+                                    <h4 className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                                        <Bot className="w-3.5 h-3.5" /> Bot de respuesta automática
+                                    </h4>
+                                    <p className="text-[10px] text-neutral-400">
+                                        Conecta un bot para responder automáticamente a quienes contesten esta campaña.
+                                    </p>
+                                    <select
+                                        value={selectedBotId}
+                                        disabled={sidebarMode === "view"}
+                                        onChange={(e) => setSelectedBotId(e.target.value)}
+                                        className="w-full bg-[#13151a] border border-white/5 text-xs text-neutral-300 rounded-lg p-2 outline-none"
+                                    >
+                                        <option value="">Sin bot (no responder automáticamente)</option>
+                                        {chatbots.map((b) => (
+                                            <option key={b.id} value={b.id}>
+                                                {(b.name || b.id) + (b.isActive ? " • activo" : "")}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {chatbots.length === 0 && (
+                                        <p className="text-[9px] text-neutral-600">No hay bots creados. Créalos en Automatización → Chatbots.</p>
+                                    )}
+                                    {selectedBotId && (
+                                        <p className="text-[9px] text-emerald-400/80">Al iniciar la campaña, este bot se activará automáticamente.</p>
+                                    )}
+                                </div>
+
                                 {/* Meta Templates Section */}
+                                {messageKind === "template" && (
                                 <div className="space-y-4 bg-blue-500/5 border border-blue-500/10 p-3.5 rounded-xl">
                                     <div className="flex items-center justify-between">
                                         <h4 className="text-[11px] font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -1204,6 +1569,7 @@ export default function BroadcastsListPage() {
                                         </div>
                                     )}
                                 </div>
+                                )}
                             </div>
 
                             {/* Right Column: Modularized Phone Mockup Component */}
@@ -1270,7 +1636,7 @@ export default function BroadcastsListPage() {
 
                             <div className="h-px bg-white/5 my-2" />
 
-                            <h3 className="text-xs font-semibold text-white/90 uppercase tracking-wider">Configuration</h3>
+                            <h3 className="text-xs font-normal text-white/90 uppercase tracking-wider">Configuration</h3>
 
                             {/* Segment Select */}
                             <div className="space-y-1.5 relative" ref={segmentRef}>
@@ -1297,19 +1663,8 @@ export default function BroadcastsListPage() {
                                 )}
 
                                 {isSegmentDropdownOpen && sidebarMode !== "view" && (
-                                    <div className="absolute top-[100%] left-0 right-0 z-50 mt-1 bg-[#13151a] border border-white/10 rounded-lg shadow-xl py-1 max-h-40 overflow-y-auto custom-scrollbar">
-                                        <button className="w-full text-left px-3 py-1.5 text-xs text-blue-400 hover:bg-white/5 font-medium border-b border-white/5">
-                                            + Add Segment
-                                        </button>
-                                        {segmentOptions.map(seg => (
-                                            <button
-                                                key={seg}
-                                                onClick={() => { setFormSegment(seg); setIsSegmentDropdownOpen(false); }}
-                                                className="w-full text-left px-3 py-2 text-xs hover:bg-white/5 text-neutral-300 hover:text-white"
-                                            >
-                                                {seg}
-                                            </button>
-                                        ))}
+                                    <div className="absolute top-[100%] left-0 right-0 z-50 mt-1 bg-[#13151a] border border-white/10 rounded-lg shadow-xl py-1 max-h-60 overflow-y-auto custom-scrollbar">
+                                        {renderSegmentOptions()}
                                     </div>
                                 )}
                             </div>
@@ -1371,9 +1726,16 @@ export default function BroadcastsListPage() {
                                 </Button>
                                 <Button
                                     onClick={handleCreateBroadcast}
-                                    className="bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs px-4 py-1.5 rounded-lg shadow-lg active:scale-95 transition-all"
+                                    disabled={creating}
+                                    className="bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs px-4 py-1.5 rounded-lg shadow-lg active:scale-95 transition-all disabled:opacity-60 flex items-center gap-1.5"
                                 >
-                                    Create
+                                    {creating ? (
+                                        <>
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Creando...
+                                        </>
+                                    ) : (
+                                        "Crear campaña"
+                                    )}
                                 </Button>
                             </>
                         )}
@@ -1387,6 +1749,27 @@ export default function BroadcastsListPage() {
                     deleteTarget={deleteTarget}
                     setDeleteTarget={setDeleteTarget}
                     confirmDelete={confirmDelete}
+                />
+            )}
+
+            {/* Launch confirmation */}
+            {launchTarget && (
+                <LaunchConfirmModal
+                    broadcast={launchTarget}
+                    launching={launching}
+                    onCancel={() => setLaunchTarget(null)}
+                    onConfirm={confirmLaunch}
+                />
+            )}
+
+            {/* Per-recipient results */}
+            {resultsBroadcast && (
+                <CampaignResults
+                    broadcast={resultsBroadcast}
+                    recipients={resultsRecipients}
+                    userId={currentUser?.uid}
+                    entityId={entityId}
+                    onClose={() => setResultsBroadcast(null)}
                 />
             )}
         </div>

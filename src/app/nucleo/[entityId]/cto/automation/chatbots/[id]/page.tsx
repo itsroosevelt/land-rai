@@ -257,10 +257,10 @@ function FlowPage() {
             <Input
               value={chatbotName}
               onChange={(e) => setChatbotName(e.target.value)}
-              className="bg-transparent border-transparent hover:border-neutral-700 focus:border-neutral-600 focus:bg-neutral-900 text-lg font-medium text-white w-[300px] h-9 px-2 transition-all"
+              className="bg-transparent border-transparent hover:border-neutral-700 focus:border-neutral-600 focus:bg-neutral-900 text-lg font-normal tracking-tight text-white w-[300px] h-9 px-2 transition-all"
               placeholder="Nombre del Chatbot"
             />
-            <span className="opacity-0 group-hover:opacity-100 text-neutral-600 text-[10px] ml-2 transition-opacity uppercase tracking-wider font-medium">
+            <span className="opacity-0 group-hover:opacity-100 text-neutral-600 text-[10px] ml-2 transition-opacity uppercase tracking-wider font-normal">
               Editar
             </span>
           </div>
@@ -276,7 +276,7 @@ function FlowPage() {
                     ? 'bg-white/5 border-white/5' 
                     : 'bg-red-500/5 border-red-500/10'
                 }`}>
-                    <span className={`text-[10px] font-bold uppercase tracking-tighter ${
+                    <span className={`text-[10px] font-normal uppercase tracking-tight ${
                         targetPlatforms.length > 0 ? 'text-neutral-500' : 'text-red-400/80'
                     }`}>
                         {targetPlatforms.length > 0 ? 'Canales' : 'Desconectado'}
@@ -297,7 +297,7 @@ function FlowPage() {
             </DropdownMenuTrigger>
             <DropdownMenuContent className="bg-neutral-900 border-neutral-800 rounded-xl p-1.5 shadow-2xl z-[100] min-w-[180px]">
                 <div className="px-3 py-2 border-b border-white/5 mb-1.5">
-                    <p className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest">Gestionar Conexión</p>
+                    <p className="text-[9px] font-normal text-neutral-500 uppercase tracking-widest">Gestionar Conexión</p>
                 </div>
                 {Object.keys(PLATFORMS_MAP).filter(pId => connectedPlatforms.includes(pId)).map((pId) => {
                     const p = PLATFORMS_MAP[pId];
@@ -311,11 +311,11 @@ function FlowPage() {
                             }`}
                         >
                             <p.icon className={`w-4 h-4 ${p.color}`} />
-                            <span className="text-xs font-medium">{pId.toUpperCase()}</span>
+                            <span className="text-xs font-normal tracking-tight">{pId.toUpperCase()}</span>
                             {isCurrent && (
                                 <div className="ml-auto flex items-center gap-1">
                                     <div className="w-1 h-1 rounded-full bg-green-500" />
-                                    <span className="text-[8px] text-green-500 font-bold">VINCULADO</span>
+                                    <span className="text-[8px] text-green-500 font-normal">VINCULADO</span>
                                 </div>
                             )}
                         </DropdownMenuItem>

@@ -5,6 +5,7 @@ import { db } from '@/lib/firebase';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, Timestamp, addDoc } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { moveCardBetweenGroups } from '@/lib/kanban/moveCardClient';
+import { isInboxGroup } from '@/lib/kanban/botNodeGroups';
 
 export const useKambanBoard = (filterTerm: string = '', boardMode: 'bot' | 'all' = 'all') => {
     const { currentUser, activeEntity } = useAuth();
@@ -26,7 +27,8 @@ export const useKambanBoard = (filterTerm: string = '', boardMode: 'bot' | 'all'
                 ...doc.data()
             }));
             if (boardMode === 'bot') {
-                groupsData = groupsData.filter((g: any) => g.autoManaged === true);
+                // Bot columns + the permanent reception column (so messages are always visible).
+                groupsData = groupsData.filter((g: any) => g.autoManaged === true || isInboxGroup(g));
             }
             setGroups(groupsData);
         });

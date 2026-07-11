@@ -28,6 +28,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { resolveCardChannel } from '@/lib/omnichannel/resolveCardChannel';
 import { getContactHeaderNames } from '@/lib/omnichannel/contactHeaderInfo';
+import { isInboxGroup } from '@/lib/kanban/botNodeGroups';
 export default function KambanBoard({ boardMode = 'all' }: { boardMode?: 'bot' | 'all' }) {
     const { currentUser, activeEntity } = useAuth();
     const getTenantPath = () => {
@@ -252,7 +253,9 @@ export default function KambanBoard({ boardMode = 'all' }: { boardMode?: 'bot' |
   useEffect(() => {
     if (loading || hasAttemptedAutoSync.current || !currentUser?.uid || !activeEntity) return;
     const hasBotGroups = groups.some((g) => g.autoManaged && g.botId === '00000003');
-    if (hasBotGroups) return;
+    const hasInbox = groups.some((g) => isInboxGroup(g));
+    // Sync when the bot columns are missing OR when the permanent reception column is gone.
+    if (hasBotGroups && hasInbox) return;
     hasAttemptedAutoSync.current = true;
     handleSyncBotGroups();
   }, [loading, groups, currentUser?.uid, activeEntity]);

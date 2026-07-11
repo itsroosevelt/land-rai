@@ -69,3 +69,68 @@ export const updateExclusiveBotForChannel = async ({
 
     await batch.commit();
 };
+
+interface UpdateExclusiveBotForNumberOptions {
+    db: Firestore;
+    userId: string;
+    entityId: string;
+    botId: string;
+    botsCollection: string;
+    numberId: string;
+    activate: boolean;
+}
+
+// Treat a missing numberId as the primary number so legacy bots stay grouped.
+const effectiveNumberId = (value: unknown): string => {
+    const v = String(value || '').trim();
+    return v || 'primary';
+};
+
+/**
+ * Exclusive activation scoped to ONE WhatsApp number: activating a bot only
+ * deactivates other active bots bound to the SAME number, so each number can
+ * run its own bot without colliding.
+ */
+export const updateExclusiveBotForNumber = async ({
+    db,
+    userId,
+    entityId,
+    botId,
+    botsCollection,
+    numberId,
+    activate,
+}: UpdateExclusiveBotForNumberOptions) => {
+    const targetNumber = effectiveNumberId(numberId);
+    const botsRef = collection(db, 'users', userId, 'entities', entityId, botsCollection);
+    const snapshot = await getDocs(botsRef);
+    const batch = writeBatch(db);
+    const now = new Date();
+
+    snapshot.docs.forEach((botDoc) => {
+        const data = botDoc.data();
+        const isCurrentBot = botDoc.id === botId;
+        const botNumber = effectiveNumberId(data.numberId);
+        const currentlyActive = isBotActiveValue(data.isActive);
+
+        if (isCurrentBot) {
+            batch.set(
+                botDoc.ref,
+                {
+                    isActive: activate,
+                    numberId: targetNumber,
+                    targetPlatforms: ['whatsapp'],
+                    updatedAt: now,
+                },
+                { merge: true }
+            );
+            return;
+        }
+
+        // Deactivate any other active bot on the SAME number only.
+        if (activate === true && currentlyActive && botNumber === targetNumber) {
+            batch.set(botDoc.ref, { isActive: false, updatedAt: now }, { merge: true });
+        }
+    });
+
+    await batch.commit();
+};
