@@ -3,8 +3,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import { provisionEntityMold } from '@/lib/mold/entityMold';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
+import { provisionEntityMold, ensureEntityMoldUpToDate } from '@/lib/mold/entityMold';
 
 import { usePathname } from 'next/navigation';
 
@@ -92,10 +92,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                                 await provisionEntityMold(db, user.uid, entity.id);
                             }));
                         } else {
-                            // If user already exists, only update their last login
+                            // If user already exists, update last login...
                             await updateDoc(userDocRef, {
                                 lastLogin: new Date()
                             });
+
+                            // ...and migrate ALL their entities to the latest platform mold
+                            // version, so every client gets the newest data structures
+                            // (reception column, starter bot, etc.) without visiting a
+                            // specific page. Cheap: skips entities already up to date.
+                            try {
+                                const entitiesSnap = await getDocs(collection(db, `users/${user.uid}/entities`));
+                                await Promise.all(
+                                    entitiesSnap.docs.map((entityDoc) =>
+                                        ensureEntityMoldUpToDate(db, user.uid, entityDoc.id).catch((err) =>
+                                            console.error(`Mold migration failed for entity ${entityDoc.id}:`, err)
+                                        )
+                                    )
+                                );
+                            } catch (err) {
+                                console.error('Mold migration sweep failed:', err);
+                            }
                         }
                     } catch (error) {
                         console.error("Error creating isolated user document:", error);
