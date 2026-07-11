@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Search, Filter, Trash2, List, LayoutGrid } from 'lucide-react';
+import { Search, Filter, Trash2, List, LayoutGrid, Tag } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -40,6 +40,7 @@ interface ContactFiltersProps {
     filteredCount: number;
     selectedCount: number;
     handleBulkDelete: () => void;
+    openBulkTag: () => void;
     currentView: 'all' | 'Prospecting' | 'In Progress' | 'Closed';
     setCurrentView: (view: 'all' | 'Prospecting' | 'In Progress' | 'Closed') => void;
 }
@@ -66,6 +67,7 @@ export const ContactFilters: React.FC<ContactFiltersProps> = ({
     filteredCount,
     selectedCount,
     handleBulkDelete,
+    openBulkTag,
     currentView,
     setCurrentView
 }) => {
@@ -269,15 +271,26 @@ export const ContactFilters: React.FC<ContactFiltersProps> = ({
                     </div>
 
                     {!isChatOpen && selectedCount > 0 && (
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={handleBulkDelete}
-                            className="text-white h-10 px-3 w-auto bg-red-600/80 hover:bg-red-600 rounded-xl flex gap-2 items-center transition-all shadow-lg shadow-red-900/20"
-                        >
-                            <Trash2 className="w-4 h-4" />
-                            <span className="text-[10px] font-bold uppercase tracking-widest sm:block hidden">({selectedCount})</span>
-                        </Button>
+                        <>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={openBulkTag}
+                                className="text-white h-10 px-3 w-auto bg-blue-600/80 hover:bg-blue-600 rounded-xl flex gap-2 items-center transition-all shadow-lg shadow-blue-900/20"
+                            >
+                                <Tag className="w-4 h-4" />
+                                <span className="text-[10px] font-bold uppercase tracking-widest sm:block hidden">Tag ({selectedCount})</span>
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={handleBulkDelete}
+                                className="text-white h-10 px-3 w-auto bg-red-600/80 hover:bg-red-600 rounded-xl flex gap-2 items-center transition-all shadow-lg shadow-red-900/20"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                                <span className="text-[10px] font-bold uppercase tracking-widest sm:block hidden">({selectedCount})</span>
+                            </Button>
+                        </>
                     )}
                 </div>
             </div>

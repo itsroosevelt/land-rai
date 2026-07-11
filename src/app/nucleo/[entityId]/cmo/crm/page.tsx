@@ -1,18 +1,27 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 
 import { AnimatePresence, Variants, motion } from 'framer-motion';
 
 import { db } from '@/lib/firebase';
-import { collection, getDocs, collectionGroup, setDoc, doc, deleteDoc, serverTimestamp, query, where, updateDoc, addDoc, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, getDocs, collectionGroup, setDoc, doc, deleteDoc, serverTimestamp, query, where, updateDoc, addDoc, onSnapshot, orderBy, runTransaction, writeBatch } from 'firebase/firestore';
 import { Plus, Search, X, Users, RefreshCw, Filter, MoreHorizontal, ArrowLeft, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import ConversationModal from '../../coo/whatsapp/components/ConversationModal';
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+} from '@/components/ui/dialog';
 import { normalizePhoneNumber } from '@/lib/phoneUtils';
 import { useRouter } from 'next/navigation';
 
@@ -117,6 +126,24 @@ const HEADER_MAPPING: { [key: string]: string[] } = {
     invoiceLink: ['invoicelink', 'factura'],
 };
 
+// Robust timestamp extractor (Firestore Timestamp | {seconds} | Date | ISO string)
+const getTimeValue = (ts: any): number => {
+    if (!ts) return 0;
+    if (typeof ts.toMillis === 'function') return ts.toMillis();
+    if (ts.seconds !== undefined) return ts.seconds * 1000;
+    if (ts instanceof Date) return ts.getTime();
+    if (typeof ts === 'string') return new Date(ts).getTime();
+    return 0;
+};
+
+// Display helper for the sequential numeric ID (e.g. #000123)
+export const formatContactNumber = (contact: any): string => {
+    if (contact?.contactNumber !== undefined && contact?.contactNumber !== null && contact?.contactNumber !== '') {
+        return `#${String(contact.contactNumber).padStart(6, '0')}`;
+    }
+    return contact?.clientId || '—';
+};
+
 const itemVariants: Variants = {
     hidden: { y: 20, opacity: 0 },
     visible: {
@@ -169,6 +196,8 @@ export default function ContactsPage() {
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<{ type: 'single' | 'bulk', id?: string }>({ type: 'single' });
     const [currentView, setCurrentView] = useState<'all' | 'Prospecting' | 'In Progress' | 'Closed'>('all');
+    const [isBulkTagOpen, setIsBulkTagOpen] = useState(false);
+    const [bulkTagValue, setBulkTagValue] = useState('');
 
     // Handle client-side mounting and localStorage
     useEffect(() => {
@@ -235,22 +264,17 @@ export default function ContactsPage() {
 
             // Robust in-memory sort by multiple possible timestamp fields
             const sortedContacts = [...allContacts].sort((a: any, b: any) => {
-                const getTime = (ts: any) => {
-                    if (!ts) return 0;
-                    if (typeof ts.toMillis === 'function') return ts.toMillis();
-                    if (ts.seconds !== undefined) return ts.seconds * 1000;
-                    if (ts instanceof Date) return ts.getTime();
-                    if (typeof ts === 'string') return new Date(ts).getTime();
-                    return 0;
-                };
-                const timeA = getTime(a.createdAt) || getTime(a.importedAt) || getTime(a.lastUpdated) || 0;
-                const timeB = getTime(b.createdAt) || getTime(b.importedAt) || getTime(b.lastUpdated) || 0;
+                const timeA = getTimeValue(a.createdAt) || getTimeValue(a.importedAt) || getTimeValue(a.lastUpdated) || 0;
+                const timeB = getTimeValue(b.createdAt) || getTimeValue(b.importedAt) || getTimeValue(b.lastUpdated) || 0;
                 return timeB - timeA;
             });
 
             setRawContacts(sortedContacts);
             setContacts(processContacts(sortedContacts));
             setIsLoadingContacts(false);
+
+            // Assign sequential numeric IDs to any legacy contacts missing one.
+            maybeBackfillNumbers(sortedContacts);
         }, (error) => {
             console.error("Error fetching contacts:", error);
             setIsLoadingContacts(false);
@@ -331,6 +355,64 @@ export default function ContactsPage() {
             result += chars.charAt(Math.floor(Math.random() * chars.length));
         }
         return result;
+    };
+
+    // --- SEQUENTIAL NUMERIC IDs (per entity counter) ---
+    const backfillRunning = useRef(false);
+
+    // Reserve a block of `count` sequential numbers, returns the FIRST number in the block.
+    const reserveContactNumbers = async (count: number): Promise<number> => {
+        const tenantPath = getTenantPath();
+        if (!tenantPath || count < 1) return 0;
+        const counterRef = doc(db, `${tenantPath}/counters/contactCounter`);
+        const start = await runTransaction(db, async (tx) => {
+            const snap = await tx.get(counterRef);
+            const current = snap.exists() ? (snap.data().seq || 0) : 0;
+            tx.set(counterRef, { seq: current + count, updatedAt: serverTimestamp() }, { merge: true });
+            return current + 1;
+        });
+        return start;
+    };
+
+    // Convenience: reserve a single next number.
+    const getNextContactNumber = async (): Promise<number> => {
+        return reserveContactNumbers(1);
+    };
+
+    // One-time backfill: assign numeric IDs to legacy contacts that don't have one.
+    const maybeBackfillNumbers = async (list: any[]) => {
+        if (backfillRunning.current) return;
+        const tenantPath = getTenantPath();
+        if (!tenantPath) return;
+
+        const missing = list.filter(c => c.id && (c.contactNumber === undefined || c.contactNumber === null || c.contactNumber === ''));
+        if (missing.length === 0) return;
+
+        backfillRunning.current = true;
+        try {
+            // Oldest contacts get the lowest numbers.
+            const sorted = [...missing].sort((a, b) => {
+                const ta = getTimeValue(a.createdAt) || getTimeValue(a.importedAt) || getTimeValue(a.lastUpdated) || 0;
+                const tb = getTimeValue(b.createdAt) || getTimeValue(b.importedAt) || getTimeValue(b.lastUpdated) || 0;
+                return ta - tb;
+            });
+
+            const start = await reserveContactNumbers(sorted.length);
+
+            // Firestore batches cap at 500 writes; chunk to be safe.
+            const CHUNK = 450;
+            for (let i = 0; i < sorted.length; i += CHUNK) {
+                const batch = writeBatch(db);
+                const slice = sorted.slice(i, i + CHUNK);
+                slice.forEach((c, j) => {
+                    batch.update(doc(db, `${tenantPath}/contacts`, c.id), { contactNumber: start + i + j });
+                });
+                await batch.commit();
+            }
+        } catch (e) {
+            console.error('[CRM] Error during numeric ID backfill:', e);
+            backfillRunning.current = false; // allow retry on next snapshot if it failed
+        }
     };
 
     // Helper to process contacts: deduplicate and ensure clientId
@@ -511,6 +593,10 @@ export default function ContactsPage() {
                 let importedCount = 0;
                 let skippedCount = 0;
 
+                // Reserve a contiguous block of numeric IDs for this import batch.
+                // Skipped rows simply leave gaps, which is acceptable.
+                let numberCursor = await reserveContactNumbers(rows.length);
+
                 for (const row of rows) {
                     if (!row || row.length === 0) continue;
 
@@ -591,7 +677,8 @@ export default function ContactsPage() {
                         createdAt: serverTimestamp(),
                         lastUpdated: serverTimestamp(),
                         importedFrom: 'excel',
-                        clientId: generateClientId()
+                        clientId: generateClientId(),
+                        contactNumber: numberCursor++
                     };
 
                     await setDoc(doc(db, `${getTenantPath()}/contacts`, contactId), sanitizeData(finalContact));
@@ -629,6 +716,9 @@ export default function ContactsPage() {
 
             let importedCount = 0;
             let updatedCount = 0;
+
+            // Reserve numeric IDs for potentially-new contacts (gaps are fine).
+            let numberCursor = await reserveContactNumbers(allCardDocs.length);
 
             for (const cardData of allCardDocs) {
                 // Identity Resolution
@@ -713,7 +803,8 @@ export default function ContactsPage() {
                         id: newId,
                         createdAt: serverTimestamp(),
                         date: new Date().toISOString().split('T')[0],
-                        clientId: generateClientId()
+                        clientId: generateClientId(),
+                        contactNumber: numberCursor++
                     };
                     await setDoc(doc(db, `${tenantPath}/contacts`, newId), sanitizeData(finalData));
                     importedCount++;
@@ -850,9 +941,13 @@ export default function ContactsPage() {
             // Derive clientId from Firestore ID (same as CreateClientModal)
             const derivedClientId = `RY${contactId.substring(0, 5).toUpperCase()}`;
 
-            // Update the contact with the clientId
+            // Reserve a sequential numeric ID (e.g. #000123)
+            const contactNumber = await getNextContactNumber();
+
+            // Update the contact with the clientId + numeric ID
             await updateDoc(contactRef, {
-                clientId: derivedClientId
+                clientId: derivedClientId,
+                contactNumber: contactNumber
             });
 
             // Add to local state
@@ -860,6 +955,7 @@ export default function ContactsPage() {
                 id: contactId,
                 ...contactToSave,
                 clientId: derivedClientId,
+                contactNumber: contactNumber,
                 date: new Date().toISOString().split('T')[0]
             };
 
@@ -1076,6 +1172,76 @@ export default function ContactsPage() {
         setIsDeleteDialogOpen(true);
     };
 
+    // Add a tag to every currently selected contact.
+    const handleBulkAddTag = async () => {
+        const tag = bulkTagValue.trim();
+        if (!tag || selectedContactIds.length === 0) return;
+        try {
+            const tenantPath = getTenantPath();
+            if (!tenantPath) return;
+            const targets = contacts.filter(c => selectedContactIds.includes(c.id));
+            const CHUNK = 450;
+            for (let i = 0; i < targets.length; i += CHUNK) {
+                const batch = writeBatch(db);
+                targets.slice(i, i + CHUNK).forEach(c => {
+                    const newTags = Array.from(new Set([...(c.tags || []), tag]));
+                    batch.update(doc(db, `${tenantPath}/contacts`, c.id), { tags: newTags, lastUpdated: serverTimestamp() });
+                });
+                await batch.commit();
+            }
+            toast.success(`Etiqueta "${tag}" añadida a ${targets.length} contactos.`);
+            setBulkTagValue('');
+            setIsBulkTagOpen(false);
+            setSelectedContactIds([]);
+        } catch (e) {
+            console.error('[CRM] Bulk tag error:', e);
+            toast.error('Error al etiquetar contactos.');
+        }
+    };
+
+    // Export contacts to an .xlsx file. Scope controls which set is exported.
+    const handleExport = async (scope: 'all' | 'filtered' | 'selected' = 'filtered') => {
+        try {
+            let dataToExport: any[] = [];
+            if (scope === 'all') dataToExport = contacts;
+            else if (scope === 'selected') dataToExport = contacts.filter(c => selectedContactIds.includes(c.id));
+            else dataToExport = filteredContacts;
+
+            if (dataToExport.length === 0) {
+                toast.error('No hay contactos para exportar.');
+                return;
+            }
+
+            const XLSX = await import('xlsx');
+            const rows = dataToExport.map(c => ({
+                ID: formatContactNumber(c),
+                'ID Interno': c.clientId || c.id || '',
+                Nombre: c.name || '',
+                Email: c.email || '',
+                'Teléfono': c.phone || '',
+                Fuente: c.source || '',
+                Etapa: c.stage || '',
+                Tags: Array.isArray(c.tags) ? c.tags.join(', ') : '',
+                Ciudad: c.city || '',
+                'País': c.country || '',
+                'Profesión': c.profession || '',
+                Pasaporte: c.passportNumber || c.passport || '',
+                Nacionalidad: c.nationality || '',
+                'Fecha de Creación': getDateString(c.createdAt) !== '---' ? getDateString(c.createdAt) : (c.date || ''),
+            }));
+
+            const worksheet = XLSX.utils.json_to_sheet(rows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Contactos');
+            const stamp = new Date().toISOString().split('T')[0];
+            XLSX.writeFile(workbook, `contactos_${stamp}.xlsx`);
+            toast.success(`${dataToExport.length} contactos exportados.`);
+        } catch (e) {
+            console.error('[CRM] Export error:', e);
+            toast.error('Error al exportar.');
+        }
+    };
+
     const handleUpdateStage = (stage: string) => {
         if (!selectedContact) return;
         setSelectedContact({ ...selectedContact, stage });
@@ -1214,6 +1380,9 @@ export default function ContactsPage() {
                         setNewContact={setNewContact}
                         handleAddContact={handleAddContact}
                         setIsDuplicateManagerOpen={setIsDuplicateManagerOpen}
+                        handleExport={handleExport}
+                        selectedCount={selectedContactIds.length}
+                        filteredCount={filteredContacts.length}
                     />
 
                     {syncStatus && (
@@ -1259,6 +1428,7 @@ export default function ContactsPage() {
                         filteredCount={filteredContacts.length}
                         selectedCount={selectedContactIds.length}
                         handleBulkDelete={handleBulkDelete}
+                        openBulkTag={() => setIsBulkTagOpen(true)}
                         currentView={currentView}
                         setCurrentView={setCurrentView}
                     />
@@ -1287,6 +1457,8 @@ export default function ContactsPage() {
                                     handleDeleteContact={handleDeleteContact}
                                     selectedContactIds={selectedContactIds}
                                     setSelectedContactIds={setSelectedContactIds}
+                                    formatContactNumber={formatContactNumber}
+                                    getDateString={getDateString}
                                 />
                             ) : (
                                 <ContactGrid
@@ -1302,6 +1474,8 @@ export default function ContactsPage() {
                                     handleDeleteContact={handleDeleteContact}
                                     selectedContactIds={selectedContactIds}
                                     setSelectedContactIds={setSelectedContactIds}
+                                    formatContactNumber={formatContactNumber}
+                                    getDateString={getDateString}
                                 />
                             )}
                         </AnimatePresence>
@@ -1355,6 +1529,8 @@ export default function ContactsPage() {
                 getDateString={getDateString}
                 getDateInputValue={getDateInputValue}
                 getAge={getAge}
+                formatContactNumber={formatContactNumber}
+                handleOpenChat={handleOpenChat}
             />
 
             <DuplicateManager
@@ -1379,6 +1555,46 @@ export default function ContactsPage() {
                 }
                 itemCount={deleteTarget.type === 'bulk' ? selectedContactIds.length : 1}
             />
+
+            <Dialog open={isBulkTagOpen} onOpenChange={setIsBulkTagOpen}>
+                <DialogContent className="bg-[#0a0a0a] border-white/5 text-white sm:max-w-md rounded-[2rem] p-6 backdrop-blur-3xl">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-bold tracking-tight uppercase text-white">Etiquetar selección</DialogTitle>
+                        <DialogDescription className="text-neutral-500 font-medium text-sm">
+                            Añade una etiqueta a los {selectedContactIds.length} contactos seleccionados.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4 space-y-3">
+                        <Input
+                            autoFocus
+                            value={bulkTagValue}
+                            onChange={(e) => setBulkTagValue(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleBulkAddTag()}
+                            placeholder="Nombre de la etiqueta..."
+                            className="h-12 bg-white/5 border-white/10 rounded-xl px-4 text-sm font-medium"
+                        />
+                        {availableTags.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                                {availableTags.slice(0, 12).map(tag => (
+                                    <button
+                                        key={tag}
+                                        onClick={() => setBulkTagValue(tag)}
+                                        className="px-3 py-1.5 bg-white/5 hover:bg-blue-600/20 border border-white/10 hover:border-blue-500/50 text-[10px] uppercase tracking-wider font-medium rounded-full transition-all"
+                                    >
+                                        {tag}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <DialogFooter className="flex flex-col sm:flex-row gap-2">
+                        <Button variant="ghost" onClick={() => setIsBulkTagOpen(false)} className="text-neutral-400 hover:text-white rounded-xl px-6 w-full sm:w-auto">Cancelar</Button>
+                        <Button onClick={handleBulkAddTag} disabled={!bulkTagValue.trim()} className="bg-blue-600 hover:bg-blue-500 px-8 rounded-xl font-bold shadow-lg shadow-blue-600/20 w-full sm:w-auto uppercase tracking-widest text-[10px] disabled:opacity-40">
+                            Aplicar etiqueta
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

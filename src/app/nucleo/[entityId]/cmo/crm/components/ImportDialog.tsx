@@ -9,8 +9,23 @@ import {
     DialogFooter
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Upload } from 'lucide-react';
+import { Upload, FileDown } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
+
+const TEMPLATE_HEADERS = ['name', 'email', 'phone', 'source', 'stage', 'city', 'country', 'profession', 'birthDate', 'passportNumber', 'nationality', 'tags'];
+const TEMPLATE_EXAMPLE = ['Juan Pérez', 'juan@correo.com', '+52 55 1234 5678', 'Instagram', 'Prospecting', 'CDMX', 'México', 'Ingeniero', '1995-04-19', 'G12345678', 'Mexicana', 'vip, referido'];
+
+const downloadTemplate = () => {
+    const escape = (v: string) => /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+    const csv = [TEMPLATE_HEADERS.join(','), TEMPLATE_EXAMPLE.map(escape).join(',')].join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'plantilla_contactos.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+};
 
 interface ImportDialogProps {
     isOpen: boolean;
@@ -59,13 +74,24 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
                     <p className="text-base text-neutral-400 font-medium mb-1">
                         {isDragActive ? 'Suelte el archivo aquí' : 'Haz clic o arrastra un archivo'}
                     </p>
-                    <p className="text-xs text-neutral-400">CSV (Standard contact format)</p>
+                    <p className="text-xs text-neutral-400">Excel (.xlsx, .xls) o CSV</p>
                 </div>
                 <div className="mt-4 p-4 bg-neutral-900/50 rounded-xl border border-white/5">
-                    <h4 className="text-[10px] font-medium uppercase tracking-widest text-blue-500 mb-2">Formato Requerido (CSV)</h4>
+                    <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-[10px] font-medium uppercase tracking-widest text-blue-500">Formato sugerido (Excel / CSV)</h4>
+                        <button
+                            onClick={downloadTemplate}
+                            className="flex items-center gap-1.5 text-[10px] font-medium text-neutral-300 hover:text-blue-400 transition-colors"
+                        >
+                            <FileDown className="w-3.5 h-3.5" /> Descargar plantilla
+                        </button>
+                    </div>
                     <code className="text-[9px] text-neutral-400 break-all leading-relaxed">
-                        name, email, phone, source, stage, city, profession, company
+                        name, email, phone, source, stage, city, country, profession, tags
                     </code>
+                    <p className="text-[9px] text-neutral-500 mt-2 leading-relaxed">
+                        No necesitas usar exactamente estas columnas: el importador detecta y mapea encabezados automáticamente. Las columnas no reconocidas se guardan como datos extra.
+                    </p>
                 </div>
                 <DialogFooter className="mt-8">
                     <Button variant="ghost" onClick={() => onOpenChange(false)} className="text-neutral-300 hover:text-white rounded-xl">Cancelar</Button>

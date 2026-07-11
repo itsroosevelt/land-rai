@@ -35,9 +35,20 @@ interface ContactListProps {
     handleDeleteContact: (id: string) => void;
     selectedContactIds: string[];
     setSelectedContactIds: (ids: string[] | ((prev: string[]) => string[])) => void;
+    formatContactNumber: (contact: any) => string;
+    getDateString: (value: any) => string;
 }
 
 const columnHelper = createColumnHelper<any>();
+
+const getTimeValue = (ts: any): number => {
+    if (!ts) return 0;
+    if (typeof ts.toMillis === 'function') return ts.toMillis();
+    if (ts.seconds !== undefined) return ts.seconds * 1000;
+    if (ts instanceof Date) return ts.getTime();
+    if (typeof ts === 'string') return new Date(ts).getTime();
+    return 0;
+};
 
 export const ContactList: React.FC<ContactListProps> = ({
     contacts,
@@ -51,14 +62,17 @@ export const ContactList: React.FC<ContactListProps> = ({
     setIsEditingProfile,
     handleDeleteContact,
     selectedContactIds,
-    setSelectedContactIds
+    setSelectedContactIds,
+    formatContactNumber,
+    getDateString
 }) => {
     const columns = [
         columnHelper.accessor('id', {
             header: 'Selection',
             cell: info => info.getValue(),
         }),
-        columnHelper.accessor('clientId', {
+        columnHelper.accessor(row => (typeof row.contactNumber === 'number' ? row.contactNumber : Number.MAX_SAFE_INTEGER), {
+            id: 'clientId',
             header: 'ID',
             cell: info => info.getValue(),
         }),
@@ -84,6 +98,11 @@ export const ContactList: React.FC<ContactListProps> = ({
         }),
         columnHelper.accessor('tags', {
             header: 'Tags',
+            cell: info => info.getValue(),
+        }),
+        columnHelper.accessor(row => getTimeValue(row.createdAt) || getTimeValue(row.importedAt) || getTimeValue(row.lastUpdated) || 0, {
+            id: 'created',
+            header: 'Created',
             cell: info => info.getValue(),
         }),
     ];
@@ -132,7 +151,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                         "grid px-4 sm:px-6 py-3 border-b border-white/5 text-[9px] sm:text-[10px] font-medium text-neutral-500 uppercase tracking-widest bg-white/[0.01]",
                         isChatOpen
                             ? "grid-cols-[40px_1fr_40px]"
-                            : "grid-cols-[40px_60px_2fr_1.8fr_1.5fr_1fr_1fr_1fr_80px] gap-2 md:gap-4"
+                            : "grid-cols-[40px_60px_2fr_1.8fr_1.5fr_1fr_1fr_1fr_1.1fr_80px] gap-2 md:gap-4"
                     )}>
                         <div className="flex justify-center items-center cursor-pointer" onClick={toggleAll}>
                             <div className={cn(
@@ -192,6 +211,13 @@ export const ContactList: React.FC<ContactListProps> = ({
                                     }[table.getColumn('stage')?.getIsSorted() as string] ?? <ArrowUpDown className="w-2 h-2 inline ml-1 opacity-0 group-hover:opacity-100 transition-opacity" />}
                                 </div>
                                 <div className="truncate">Tags</div>
+                                <div className="truncate group cursor-pointer select-none" onClick={table.getColumn('created')?.getToggleSortingHandler()}>
+                                    Created
+                                    {{
+                                        asc: <ArrowUp className="w-2 h-2 inline ml-1 text-blue-500" />,
+                                        desc: <ArrowDown className="w-2 h-2 inline ml-1 text-blue-500" />,
+                                    }[table.getColumn('created')?.getIsSorted() as string] ?? <ArrowUpDown className="w-2 h-2 inline ml-1 opacity-0 group-hover:opacity-100 transition-opacity" />}
+                                </div>
                             </>
                         )}
                         <div className="text-right pr-2">Actions</div>
@@ -210,7 +236,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                                         "grid items-center hover:bg-white/[0.02] transition-colors group",
                                         isChatOpen
                                             ? "grid-cols-[40px_1fr_40px] px-3 py-2"
-                                            : "grid-cols-[40px_60px_2fr_1.8fr_1.5fr_1fr_1fr_1fr_80px] px-4 sm:px-6 py-2 gap-2 md:gap-4",
+                                            : "grid-cols-[40px_60px_2fr_1.8fr_1.5fr_1fr_1fr_1fr_1.1fr_80px] px-4 sm:px-6 py-2 gap-2 md:gap-4",
                                         selectedContactIds.includes(contact.id) && "bg-blue-500/5 hover:bg-blue-500/10"
                                     )}
                                 >
@@ -226,8 +252,8 @@ export const ContactList: React.FC<ContactListProps> = ({
                                     </div>
 
                                     {!isChatOpen && (
-                                        <div className="text-neutral-500 font-mono text-[9px] text-center">
-                                            {contact.clientId || (contact.id ? `RY${contact.id.substring(0, 5).toUpperCase()}` : '—')}
+                                        <div className="text-blue-400/80 font-mono text-[9px] text-center font-semibold">
+                                            {formatContactNumber(contact)}
                                         </div>
                                     )}
 
@@ -246,7 +272,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                                                 {contact.name || 'Sin Nombre'}
                                             </div>
                                             <span className="text-[9px] text-neutral-500 font-mono truncate">
-                                                {contact.clientId || (contact.id ? `RY${contact.id.substring(0, 5).toUpperCase()}` : '—')}
+                                                {formatContactNumber(contact)}
                                             </span>
                                         </div>
                                     </div>
@@ -271,6 +297,9 @@ export const ContactList: React.FC<ContactListProps> = ({
                                                     <span key={tag} className="px-1.5 py-0.5 bg-neutral-900 text-[8px] text-neutral-500 rounded border border-white/5 uppercase font-medium">{tag}</span>
                                                 ))}
                                                 {contact.tags?.length > 1 && <span className="text-[8px] text-neutral-600 font-medium">+{contact.tags.length - 1}</span>}
+                                            </div>
+                                            <div className="text-neutral-500 text-[9px] font-mono truncate">
+                                                {getDateString(contact.createdAt) !== '---' ? getDateString(contact.createdAt) : (contact.date || '—')}
                                             </div>
                                         </>
                                     )}

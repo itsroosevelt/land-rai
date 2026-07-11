@@ -36,6 +36,8 @@ interface ContactDetailsModalProps {
     getDateString: (value: any) => string;
     getDateInputValue: (value: any) => string;
     getAge: (birthDate: any) => number | null;
+    formatContactNumber: (contact: any) => string;
+    handleOpenChat: (contact: any) => void;
 }
 
 export const ContactDetailsModal: React.FC<ContactDetailsModalProps> = ({
@@ -55,9 +57,15 @@ export const ContactDetailsModal: React.FC<ContactDetailsModalProps> = ({
     setIsAddingTag,
     getDateString,
     getDateInputValue,
-    getAge
+    getAge,
+    formatContactNumber,
+    handleOpenChat
 }) => {
     if (!selectedContact) return null;
+
+    const createdLabel = getDateString(selectedContact.createdAt) !== '---'
+        ? getDateString(selectedContact.createdAt)
+        : (selectedContact.date || '—');
 
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -120,11 +128,16 @@ export const ContactDetailsModal: React.FC<ContactDetailsModalProps> = ({
                             <h1 className="text-xl sm:text-2xl font-semibold tracking-tight mb-2 text-white">
                                 {selectedContact.name}
                             </h1>
-                            <div className="flex items-center justify-center sm:justify-start space-x-3">
+                            <div className="flex items-center justify-center sm:justify-start flex-wrap gap-2 sm:gap-3">
                                 <Badge variant="outline" className="px-3 py-1 border-blue-500/50 text-blue-400 bg-blue-500/10 font-medium tracking-wider text-[9px] uppercase rounded-full">
                                     <Activity className="w-3 h-3 mr-1.5" /> {selectedContact.stage === 'Closed' ? 'Completado' : selectedContact.stage}
                                 </Badge>
-                                <span className="text-neutral-500 font-medium text-[9px] uppercase tracking-widest hidden sm:inline">ESTABLISHED {selectedContact.date}</span>
+                                <Badge variant="outline" className="px-3 py-1 border-white/10 text-neutral-300 bg-white/5 font-mono tracking-wider text-[9px] rounded-full">
+                                    {formatContactNumber(selectedContact)}
+                                </Badge>
+                                <span className="text-neutral-500 font-medium text-[9px] uppercase tracking-widest hidden sm:inline flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" /> Creado {createdLabel}
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -315,10 +328,13 @@ export const ContactDetailsModal: React.FC<ContactDetailsModalProps> = ({
                                     </div>
                                 </div>
 
-                                <Button className="w-full mt-4 bg-gradient-to-r from-blue-600/80 to-blue-800/80 hover:from-blue-600 hover:to-blue-800 text-white font-medium py-6 rounded-2xl shadow-xl relative group overflow-hidden active:scale-95 transition-all">
+                                <Button
+                                    onClick={() => handleOpenChat(selectedContact)}
+                                    className="w-full mt-4 bg-gradient-to-r from-blue-600/80 to-blue-800/80 hover:from-blue-600 hover:to-blue-800 text-white font-medium py-6 rounded-2xl shadow-xl relative group overflow-hidden active:scale-95 transition-all"
+                                >
                                     <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-10 transition-opacity" />
                                     <span className="flex items-center text-sm font-semibold tracking-wide">
-                                        <ExternalLink className="w-4 h-4 mr-2" /> OPEN ARCHIVE
+                                        <ExternalLink className="w-4 h-4 mr-2" /> ABRIR CONVERSACIÓN
                                     </span>
                                 </Button>
                             </div>

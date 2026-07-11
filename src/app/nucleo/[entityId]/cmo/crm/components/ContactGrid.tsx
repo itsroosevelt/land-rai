@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { MoreVertical, Phone, ExternalLink, UserPlus, MessageSquare, Trash2 } from 'lucide-react';
+import { MoreVertical, Phone, ExternalLink, UserPlus, MessageSquare, Trash2, Calendar } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from "@/lib/utils";
@@ -28,6 +28,8 @@ interface ContactGridProps {
     handleDeleteContact: (id: string) => void;
     selectedContactIds: string[];
     setSelectedContactIds: (ids: string[] | ((prev: string[]) => string[])) => void;
+    formatContactNumber: (contact: any) => string;
+    getDateString: (value: any) => string;
 }
 
 const columnHelper = createColumnHelper<any>();
@@ -43,7 +45,9 @@ export const ContactGrid: React.FC<ContactGridProps> = ({
     setIsEditingProfile,
     handleDeleteContact,
     selectedContactIds,
-    setSelectedContactIds
+    setSelectedContactIds,
+    formatContactNumber,
+    getDateString
 }) => {
     const columns = [
         columnHelper.accessor('id', { header: 'ID' }),
@@ -85,7 +89,22 @@ export const ContactGrid: React.FC<ContactGridProps> = ({
                             selectedContactIds.includes(contact.id) && "border-blue-500/50 bg-blue-500/5"
                         )}
                     >
-                        {/* Simplified layout - removed top-left bubbles */}
+                        <div className="flex items-center justify-between mb-3 pr-8">
+                            <div
+                                className="cursor-pointer"
+                                onClick={(e) => toggleSelection(e, contact.id)}
+                            >
+                                <div className={cn(
+                                    "w-4 h-4 border rounded-md flex items-center justify-center transition-all shadow-sm",
+                                    selectedContactIds.includes(contact.id) ? "bg-blue-600 border-blue-600 shadow-blue-500/20" : "bg-neutral-900/70 border-neutral-700 hover:border-neutral-500"
+                                )}>
+                                    {selectedContactIds.includes(contact.id) && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                                </div>
+                            </div>
+                            <span className="text-[9px] font-mono font-semibold text-blue-400/80">
+                                {formatContactNumber(contact)}
+                            </span>
+                        </div>
 
                         <div className="absolute top-4 right-4 z-20">
                             <DropdownMenu>
@@ -133,7 +152,19 @@ export const ContactGrid: React.FC<ContactGridProps> = ({
                             <div className="flex items-center text-[10px] text-neutral-500">
                                 <ExternalLink className="w-2.5 h-2.5 mr-2" /> {contact.source}
                             </div>
+                            <div className="flex items-center text-[10px] text-neutral-500">
+                                <Calendar className="w-2.5 h-2.5 mr-2" /> {getDateString(contact.createdAt) !== '---' ? getDateString(contact.createdAt) : (contact.date || '—')}
+                            </div>
                         </div>
+
+                        {contact.tags?.length > 0 && (
+                            <div className="flex flex-wrap gap-1 items-center mt-auto pt-2 border-t border-white/5">
+                                {contact.tags.slice(0, 3).map((tag: string) => (
+                                    <span key={tag} className="px-1.5 py-0.5 bg-neutral-900 text-[8px] text-neutral-400 rounded border border-white/5 uppercase font-medium truncate max-w-[80px]">{tag}</span>
+                                ))}
+                                {contact.tags.length > 3 && <span className="text-[8px] text-neutral-600 font-medium">+{contact.tags.length - 3}</span>}
+                            </div>
+                        )}
                     </motion.div>
                 );
             })}

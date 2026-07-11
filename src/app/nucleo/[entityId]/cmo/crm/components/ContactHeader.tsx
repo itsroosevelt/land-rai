@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { RefreshCw, UserPlus, Trash2 } from 'lucide-react';
+import { RefreshCw, UserPlus, Trash2, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -11,6 +11,12 @@ import {
     DialogDescription,
     DialogFooter
 } from '@/components/ui/dialog';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ImportDialog } from './ImportDialog';
 import { EnhancedContactForm } from './EnhancedContactForm';
 import { cn } from "@/lib/utils";
@@ -28,6 +34,9 @@ interface ContactHeaderProps {
     setNewContact: (contact: any) => void;
     handleAddContact: () => void;
     setIsDuplicateManagerOpen: (open: boolean) => void;
+    handleExport: (scope: 'all' | 'filtered' | 'selected') => void;
+    selectedCount: number;
+    filteredCount: number;
 }
 
 export const ContactHeader: React.FC<ContactHeaderProps> = ({
@@ -42,7 +51,10 @@ export const ContactHeader: React.FC<ContactHeaderProps> = ({
     newContact,
     setNewContact,
     handleAddContact,
-    setIsDuplicateManagerOpen
+    setIsDuplicateManagerOpen,
+    handleExport,
+    selectedCount,
+    filteredCount
 }) => {
     return (
         <motion.div
@@ -81,6 +93,31 @@ export const ContactHeader: React.FC<ContactHeaderProps> = ({
                     onOpenChange={setIsImportModalOpen}
                     onDrop={onImportDrop}
                 />
+
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button
+                            variant="outline"
+                            className="h-10 w-10 sm:w-auto sm:px-4 bg-white/5 border-white/10 hover:bg-white/10 text-white rounded-xl transition-all uppercase tracking-wider flex items-center justify-center gap-2"
+                        >
+                            <Download className="w-4 h-4" />
+                            <span className="hidden sm:inline text-[10px]">Export</span>
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="bg-neutral-900 border-neutral-800 text-white rounded-xl py-1 shadow-2xl">
+                        {selectedCount > 0 && (
+                            <DropdownMenuItem onClick={() => handleExport('selected')} className="hover:bg-blue-600 rounded-lg cursor-pointer mx-1 text-xs font-medium uppercase tracking-wider py-2">
+                                <Download className="w-3.5 h-3.5 mr-2" /> Seleccionados ({selectedCount})
+                            </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem onClick={() => handleExport('filtered')} className="hover:bg-blue-600 rounded-lg cursor-pointer mx-1 text-xs font-medium uppercase tracking-wider py-2">
+                            <Download className="w-3.5 h-3.5 mr-2" /> Vista actual ({filteredCount})
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleExport('all')} className="hover:bg-blue-600 rounded-lg cursor-pointer mx-1 text-xs font-medium uppercase tracking-wider py-2">
+                            <Download className="w-3.5 h-3.5 mr-2" /> Toda la base
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
 
                 <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
                     <DialogTrigger asChild>
