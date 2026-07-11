@@ -2,9 +2,14 @@ import { doc, getDoc, setDoc, serverTimestamp, Firestore } from 'firebase/firest
 import { ensureManualKanbanInitialized } from '@/lib/kanban/manualKanban';
 import { MOLD_WHATSAPP_MESSAGING } from './whatsappMessaging';
 import { SYSTEM_INBOX_GROUP_FIELDS, SYSTEM_INBOX_GROUP_ID } from '@/lib/kanban/botNodeGroups';
+import {
+    STARTER_CHATBOT_COUNTER,
+    STARTER_CHATBOT_FIELDS,
+    STARTER_CHATBOT_ID,
+} from './starterChatbot';
 
 /** Incrementar cuando el molde multitenant gane nuevas estructuras obligatorias. */
-export const ENTITY_MOLD_VERSION = 5;
+export const ENTITY_MOLD_VERSION = 6;
 
 export const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
@@ -35,6 +40,29 @@ async function ensureReceptionColumn(db: Firestore, path: string): Promise<void>
 }
 
 /**
+ * Bot de bienvenida de arranque. Solo se crea si aún no existe (no destructivo:
+ * nunca sobrescribe un bot editado o borrado a propósito por el usuario).
+ */
+async function ensureStarterChatbot(db: Firestore, path: string): Promise<void> {
+    const botRef = doc(db, `${path}/chatbots`, STARTER_CHATBOT_ID);
+    const existing = await getDoc(botRef);
+    if (existing.exists()) return;
+
+    await setDoc(botRef, {
+        ...STARTER_CHATBOT_FIELDS,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+    });
+
+    // El contador arranca en 3 para que el primer bot del usuario sea 00000004.
+    await setDoc(
+        doc(db, `${path}/system_metadata`, 'chatbot_counter'),
+        { count: STARTER_CHATBOT_COUNTER },
+        { merge: true }
+    );
+}
+
+/**
  * Aprovisiona estructuras CRM/Kanban del molde maestro para una empresa (tenant).
  * Idempotente — seguro llamar varias veces.
  */
@@ -47,6 +75,7 @@ export async function provisionEntityMold(
 
     await ensureManualKanbanInitialized(db, path);
     await ensureReceptionColumn(db, path);
+    await ensureStarterChatbot(db, path);
 
     await setDoc(
         doc(db, path),
@@ -54,6 +83,7 @@ export async function provisionEntityMold(
             moldVersion: ENTITY_MOLD_VERSION,
             features: ENTITY_MOLD_FEATURES,
             whatsappMessaging: MOLD_WHATSAPP_MESSAGING,
+            kanbanBotSyncId: STARTER_CHATBOT_ID,
             moldProvisionedAt: serverTimestamp(),
         },
         { merge: true }
