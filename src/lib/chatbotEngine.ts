@@ -582,6 +582,26 @@ async function runEngineCycle(
     let currentNodeId: string | null = cardData.botState?.currentNodeId || null;
     let waitingForInput = cardData.botState?.waitingForInput || false;
 
+    // SELF-HEAL interrupted runs (e.g. serverless timeout mid-flow):
+    // If the bot is parked on a wait node (captureInput/quickReply/list/poll) but the
+    // `waitingForInput` flag desynced to false, a previous run was killed after advancing to the
+    // node. Two sub-cases:
+    //   (a) The prompt was already sent (lastStep === node type) → treat as WAITING so the reply
+    //       is CAPTURED (don't re-ask).
+    //   (b) The prompt was never sent (lastStep is a previous node) → leave waiting=false so the
+    //       forward loop re-executes the node and finally SENDS the pending question.
+    // Without this, replies land on a parked-but-not-waiting node and are silently dropped.
+    if (!waitingForInput && currentNodeId && !isReset && !shouldApplyStartTrigger) {
+        const parkedNode = flow.nodes.find((n: any) => String(n.id) === String(currentNodeId));
+        const parkedIsWait = ['captureInputNode', 'quickReplyNode', 'listMessageNode', 'pollNode']
+            .includes(parkedNode?.type || '');
+        const promptAlreadySent = cardData.botState?.lastStep === parkedNode?.type;
+        if (parkedIsWait && promptAlreadySent) {
+            console.log(`[ChatbotEngine] 🩹 Self-heal: re-syncing waitingForInput=true on parked ${parkedNode?.type} (${currentNodeId})`);
+            waitingForInput = true;
+        }
+    }
+
     // Re-engagement rule (balanced to avoid double replies / flow mixing):
     //  - If the bot is actively waiting for an answer on a valid node → CONTINUE (capture input),
     //    even if the customer replies days later. Never restart here.

@@ -6,6 +6,9 @@ import { processChatbotFlow } from '@/lib/chatbotEngine';
 import { buildBotQueueItem, createQueuedBotState, isDuplicateQueueMessage } from '@/lib/botQueue';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+// Give the chatbot engine room to finish a full flow step (see whatsapp/webhook for details).
+export const maxDuration = 300;
 
 function extractHeader(headers: any[] = [], name: string) {
     return headers.find((header: any) => String(header?.name || '').toLowerCase() === name.toLowerCase())?.value || '';

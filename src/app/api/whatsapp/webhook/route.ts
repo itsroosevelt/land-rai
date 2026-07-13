@@ -26,6 +26,13 @@ function debugLog(msg: string) {
 
 // Meta Webhook Verification (Handshake)
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+// CRITICAL: the chatbot engine runs synchronously inside this webhook (sending several
+// WhatsApp messages, Firestore transactions and kanban syncs per inbound message). Without
+// an explicit limit the function is killed at the platform default (~10-15s), which leaves the
+// flow half-executed: the queue item is never drained and the next question is never sent, so
+// the customer's replies pile up unanswered. Give the engine room to finish a full flow step.
+export const maxDuration = 300;
 
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
@@ -104,6 +111,19 @@ export async function POST(req: Request) {
 
         if (!tenant) {
             debugLog(`[POST] ❌ ABORT: Could not resolve tenant for Phone ID ${recipientPhoneNumberId}`);
+            // DIAGNOSTIC: leave a visible trace so unmapped numbers can be identified.
+            // Without this, dropped inbound messages are completely invisible.
+            try {
+                const inboundFrom = value?.messages?.[0]?.from || value?.statuses?.[0]?.recipient_id || 'unknown';
+                await db.doc(`webhook_diagnostics/unmapped_${recipientPhoneNumberId || 'unknown'}`).set({
+                    phoneNumberId: recipientPhoneNumberId || 'unknown',
+                    lastFrom: inboundFrom,
+                    payloadType: value?.messages ? 'message' : (value?.statuses ? 'status' : 'other'),
+                    displayPhoneNumber: metadata?.display_phone_number || null,
+                    lastSeenAt: admin.firestore.FieldValue.serverTimestamp(),
+                    hits: admin.firestore.FieldValue.increment(1),
+                }, { merge: true });
+            } catch (e) {}
             return NextResponse.json({ success: true, ignored: 'tenant_not_mapped' });
         }
 

@@ -79,23 +79,23 @@ export async function POST(req: Request) {
 
         const { sendWhatsAppMessage } = await import("@/lib/sendProviders");
 
-        // MULTI-NUMBER: send from the number the user picked when configuring the campaign
-        // (broadcast.senderSlot / senderPhoneNumberId). Replies land on that number and the
-        // bot answers from it. Falls back to the legacy "broadcast" slot, then the default number.
+        // MULTI-NUMBER: send from the number the user explicitly picked when configuring the
+        // campaign (broadcast.senderSlot / senderPhoneNumberId). If the campaign has NO explicit
+        // choice, we DO NOT change anything — it sends from the default number and the attached
+        // bot is left exactly as it was configured (no re-binding).
         let broadcastFromPhoneId: string | undefined;
         let broadcastSlot: string | undefined = broadcast.senderSlot || undefined;
         try {
             if (broadcast.senderPhoneNumberId) {
                 broadcastFromPhoneId = String(broadcast.senderPhoneNumberId);
             }
-            if (!broadcastFromPhoneId) {
-                const slotToRead = broadcastSlot || "broadcast";
-                const slotSnap = await db.doc(`${tenantPath}/whatsapp_numbers/${slotToRead}`).get();
+            if (!broadcastFromPhoneId && broadcastSlot) {
+                // Only resolve a number when the user explicitly chose a slot for this campaign.
+                const slotSnap = await db.doc(`${tenantPath}/whatsapp_numbers/${broadcastSlot}`).get();
                 const slotData = slotSnap.data();
                 const slotPhoneId = slotData?.phoneNumberId || slotData?.phone_number_id;
                 if (slotPhoneId && slotData?.status !== "Disconnected") {
                     broadcastFromPhoneId = String(slotPhoneId);
-                    broadcastSlot = slotToRead;
                 }
             }
             if (broadcastFromPhoneId) {

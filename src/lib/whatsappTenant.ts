@@ -116,7 +116,15 @@ export async function resolveWhatsAppTenant(
     if (!recipientPhoneNumberId) return null;
 
     const fromIntegrations = await queryIntegrationsByPhoneId(recipientPhoneNumberId);
-    if (fromIntegrations) return fromIntegrations;
+    if (fromIntegrations) {
+        // Self-heal: cache the mapping so future lookups are fast and index-independent.
+        registerWhatsAppTenantMapping(
+            recipientPhoneNumberId,
+            fromIntegrations.userId,
+            fromIntegrations.entityId
+        ).catch(() => {});
+        return fromIntegrations;
+    }
 
     try {
         const mappingRef = db.doc(

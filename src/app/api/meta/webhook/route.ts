@@ -38,6 +38,9 @@ function buildMetaFallbackName(provider: 'messenger' | 'instagram', senderId: st
 }
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+// Give the chatbot engine room to finish a full flow step (see whatsapp/webhook for details).
+export const maxDuration = 300;
 
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);

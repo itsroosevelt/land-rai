@@ -3,6 +3,11 @@ import { db, admin } from '@/lib/firebase-admin';
 import { processChatbotFlow } from '@/lib/chatbotEngine';
 import { buildBotQueueItem, createQueuedBotState, isDuplicateQueueMessage } from '@/lib/botQueue';
 
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+// Give the chatbot engine room to finish a full flow step (see whatsapp/webhook for details).
+export const maxDuration = 300;
+
 export async function POST(req: Request) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('u');
