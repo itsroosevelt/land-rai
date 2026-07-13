@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db, admin } from "@/lib/firebase-admin";
+import { registerWhatsAppTenantMapping } from "@/lib/whatsappTenant";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -78,6 +79,24 @@ export async function POST(req: Request) {
 
         const { sendWhatsAppMessage } = await import("@/lib/sendProviders");
 
+        // MULTI-NUMBER: campaigns go out from the dedicated "broadcast" number when connected,
+        // so replies land on that number and the bot answers from it. Falls back to the
+        // default number if no broadcast slot is configured.
+        let broadcastFromPhoneId: string | undefined;
+        try {
+            const slotSnap = await db.doc(`${tenantPath}/whatsapp_numbers/broadcast`).get();
+            const slotData = slotSnap.data();
+            const slotPhoneId = slotData?.phoneNumberId || slotData?.phone_number_id;
+            if (slotPhoneId && slotData?.status !== "Disconnected") {
+                broadcastFromPhoneId = String(slotPhoneId);
+                // Register so the inbound webhook resolves this number to the tenant (index-free).
+                await registerWhatsAppTenantMapping(broadcastFromPhoneId, userId, entityId).catch(() => {});
+                console.log(`[Broadcast] 📤 Sending from dedicated broadcast number ${broadcastFromPhoneId}`);
+            }
+        } catch (e) {
+            console.warn("[Broadcast] Broadcast number resolution skipped:", e);
+        }
+
         const delay = delayForSpeed(broadcast.deliverySpeed);
         let sent = 0;
         let failed = 0;
@@ -121,6 +140,7 @@ export async function POST(req: Request) {
                     filename,
                     userId,
                     entityId,
+                    ...(broadcastFromPhoneId ? { fromPhoneNumberId: broadcastFromPhoneId } : {}),
                 });
 
                 const messageId = resp?.messages?.[0]?.id || null;

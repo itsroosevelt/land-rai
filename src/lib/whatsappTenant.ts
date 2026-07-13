@@ -59,6 +59,20 @@ async function queryIntegrationsByPhoneId(phoneId: string | number): Promise<Wha
         } catch (e) {
             console.warn('[WhatsApp Tenant] phone_number_id lookup failed:', e);
         }
+
+        // MULTI-NUMBER: connected slot numbers live in `whatsapp_numbers/{slot}`.
+        try {
+            const snap = await db.collectionGroup('whatsapp_numbers')
+                .where('phoneNumberId', '==', id)
+                .limit(1)
+                .get();
+            if (!snap.empty) {
+                const parsed = parseTenantFromIntegrationPath(snap.docs[0].ref.path);
+                if (parsed) return parsed;
+            }
+        } catch (e) {
+            console.warn('[WhatsApp Tenant] whatsapp_numbers lookup failed:', e);
+        }
     }
 
     return null;

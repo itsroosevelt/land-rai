@@ -69,6 +69,29 @@ export async function POST(req: Request) {
                 let sendOptions: any = { type, template, url, filename, userId, entityId };
                 const cleanSearch = toNumber.replace(/\D/g, '');
 
+                // MULTI-NUMBER: reply FROM the same business number the conversation is on.
+                if (cleanSearch) {
+                    try {
+                        const groupsSnap = await db
+                            .collection(`users/${userId}/entities/${entityId}/kanban-groups`)
+                            .get();
+                        for (const groupDoc of groupsSnap.docs) {
+                            const cardSnap = await groupDoc.ref
+                                .collection('cards')
+                                .where('contactNumberClean', '==', cleanSearch)
+                                .limit(1)
+                                .get();
+                            if (!cardSnap.empty) {
+                                const bizNumber = cardSnap.docs[0].data()?.whatsappPhoneNumberId;
+                                if (bizNumber) sendOptions.fromPhoneNumberId = String(bizNumber);
+                                break;
+                            }
+                        }
+                    } catch (numErr) {
+                        console.warn('[Omnichannel API] Business number lookup skipped:', numErr);
+                    }
+                }
+
                 if ((!type || type === 'text') && !template && cleanSearch) {
                     try {
                         let cardMessages: any[] = [];

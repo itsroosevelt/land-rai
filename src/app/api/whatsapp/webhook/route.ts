@@ -362,6 +362,11 @@ export async function POST(req: Request) {
                         status: 'open'
                     };
 
+                    // Remember which business number this conversation belongs to (multi-number).
+                    if (recipientPhoneNumberId) {
+                        cardUpdate.whatsappPhoneNumberId = String(recipientPhoneNumberId);
+                    }
+
                     if (!alreadyQueued) {
                         cardUpdate['botState.messageQueue'] = admin.firestore.FieldValue.arrayUnion(queueItem);
                     } else {
@@ -432,7 +437,8 @@ export async function POST(req: Request) {
                             status: 'open',
                             source: 'WHATSAPP',
                             primary_channel: 'whatsapp',
-                            platform_ids: { whatsapp: from }
+                            platform_ids: { whatsapp: from },
+                            ...(recipientPhoneNumberId ? { whatsappPhoneNumberId: String(recipientPhoneNumberId) } : {})
                         });
 
                         // 3. Update or Create Contact Reference
@@ -467,7 +473,8 @@ export async function POST(req: Request) {
                     debugLog(`[POST] Triggering universal chatbot for whatsapp in tenant ${entityId}...`);
                     await processChatbotFlow({
                         userId, entityId, groupId, cardId, platform: 'whatsapp', from: from, text: text,
-                        messageId: messageId
+                        messageId: messageId,
+                        channelAccountId: recipientPhoneNumberId
                     }).catch(botError => {
                         debugLog(`[POST] Chatbot Async Error: ${botError?.message || String(botError)}`);
                     });

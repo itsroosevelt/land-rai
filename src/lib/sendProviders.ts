@@ -324,6 +324,8 @@ interface WhatsAppSendOptions {
     forceTemplate?: boolean;
     userId?: string;
     entityId?: string;
+    /** Business phone_number_id to send FROM (multi-number). Replies use the number the customer wrote to. */
+    fromPhoneNumberId?: string;
 }
 
 /**
@@ -392,6 +394,40 @@ export async function sendWhatsAppMessage(
             }
         } catch (err) {
             console.error(`[sendWhatsAppMessage] Error resolving config:`, err);
+        }
+    }
+
+    // 1b. MULTI-NUMBER: reply FROM the exact number the customer wrote to.
+    // Looks for a connected slot number (whatsapp_numbers) or integration whose
+    // phoneNumberId matches, and uses its own access token. Falls back to the default
+    // sender if that number has no stored token (keeps single-number setups working).
+    if (options.fromPhoneNumberId && options.userId && options.entityId) {
+        try {
+            const targetId = String(options.fromPhoneNumberId).trim();
+            const entityPath = `users/${options.userId}/entities/${options.entityId}`;
+            const [slotsSnap, integrationsSnap] = await Promise.all([
+                db.collection(`${entityPath}/whatsapp_numbers`).get(),
+                db.collection(`${entityPath}/integrations`).get(),
+            ]);
+            const findMatch = (docs: any[]) => {
+                for (const d of docs) {
+                    const data = d.data() || {};
+                    const pid = String(data.phoneNumberId || data.phone_number_id || data.phoneId || '');
+                    if (pid && pid === targetId) return data;
+                }
+                return null;
+            };
+            const match = findMatch(slotsSnap.docs) || findMatch(integrationsSnap.docs);
+            const matchToken = match?.accessToken || match?.token || match?.access_token || match?.pageAccessToken;
+            if (match && typeof matchToken === 'string' && matchToken.startsWith('EAA')) {
+                token = matchToken;
+                phoneNumberId = targetId;
+                console.log(`[WhatsApp] 🎯 Replying from customer's own number ${targetId}`);
+            } else {
+                console.warn(`[WhatsApp] ⚠️ No stored token for number ${targetId}; using default sender number.`);
+            }
+        } catch (e) {
+            console.warn('[WhatsApp] fromPhoneNumberId resolution failed:', e);
         }
     }
 

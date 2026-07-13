@@ -53,6 +53,8 @@ export interface ChatbotContext {
     messageId?: string;
     /** Firestore subcollection for channel-isolated bots (e.g. messenger-bots). WhatsApp uses chatbots. */
     botsCollection?: string;
+    /** Business account/number that received the message (WhatsApp phone_number_id) — used to reply from the same number. */
+    channelAccountId?: string;
 }
 
 const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
@@ -72,7 +74,7 @@ function dedupeQueueItems(queue: any[]): any[] {
  * Implements a FIFO queue consumer pattern to prevent race conditions and duplicate responses.
  */
 export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
-    const { userId, entityId, groupId, cardId, platform, from, text, messageId, botsCollection } = ctx;
+    const { userId, entityId, groupId, cardId, platform, from, text, messageId, botsCollection, channelAccountId } = ctx;
     const triggerMessageId = messageId ? String(messageId).trim() : '';
     const entityPath = `users/${userId}/entities/${entityId}`;
     const cardRef = db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`);
@@ -199,7 +201,7 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
 
             try {
                 // --- 3. INNER ENGINE CORE ---
-                await runEngineCycle(cardRef, cardData, currentMsg, entityPath, entityId, userId, cardId, botsCollection);
+                await runEngineCycle(cardRef, cardData, currentMsg, entityPath, entityId, userId, cardId, botsCollection, channelAccountId);
             } catch (cycleErr: any) {
                 console.error(`[ChatbotEngine] ❌ Cycle Error [${msgId}]:`, cycleErr.message);
                 // Log error to card but DON'T stop the whole runner
@@ -250,7 +252,8 @@ async function runEngineCycle(
     entityId: string,
     userId: string,
     cardId: string,
-    botsCollection?: string
+    botsCollection?: string,
+    channelAccountId?: string
 ) {
     const text = msg.text || '';
     const platform = msg.platform;
@@ -270,7 +273,7 @@ async function runEngineCycle(
 
     // --- A. HELPERS (Essentials) ---
     const dispatchMessage = async (content: string, options: any = {}) => {
-        const opts = { userId, entityId, ...options };
+        const opts = { userId, entityId, ...(channelAccountId ? { fromPhoneNumberId: channelAccountId } : {}), ...options };
         if (platform === 'whatsapp') {
             const isSessionMessage =
                 !opts.type ||
@@ -525,12 +528,13 @@ async function runEngineCycle(
     let currentNodeId: string | null = cardData.botState?.currentNodeId || null;
     let waitingForInput = cardData.botState?.waitingForInput || false;
 
-    // FIX: Only restart if NOT explicitly waiting for user input.
-    // If the flow is marked as 'completed', DO NOT restart automatically.
-    // It must only restart if the user explicitly types 'reiniciar' (isReset = true).
-    const shouldRestart = (isReset || isMenu)
-        ? true
-        : (!waitingForInput && cardData.botState?.status !== 'completed' && (!currentNodeId || cardData.botState?.status === 'inactive' || !cardData.botState?.status));
+    // ALWAYS re-engage: the bot must answer every inbound message. Whenever a message
+    // arrives and the bot is not mid-question (i.e. not actively waiting for input on a
+    // valid node), it (re)starts the flow from the beginning — even if the previous flow
+    // already reached an End node. This keeps the conversation (and the payment funnel)
+    // always reachable for the customer, on every number.
+    const isActivelyWaiting = waitingForInput && !!currentNodeId;
+    const shouldRestart = (isReset || isMenu) ? true : !isActivelyWaiting;
 
     // Handle incoming input for current node
     if (waitingForInput && currentNodeId) {
