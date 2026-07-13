@@ -4,7 +4,8 @@ import fs from 'fs';
 import path from 'path';
 import { processChatbotFlow } from '@/lib/chatbotEngine';
 import { buildBotQueueItem, createQueuedBotState, isDuplicateQueueMessage } from '@/lib/botQueue';
-import { extractWhatsAppInboundText } from '@/lib/whatsappInbound';
+import { extractWhatsAppInboundPayload } from '@/lib/whatsappInbound';
+import { buildInboundWhatsAppUserMessage } from '@/lib/whatsapp/inboundMessageBuilder';
 import {
     cleanWhatsAppSenderId,
     phoneLookupVariants,
@@ -201,7 +202,7 @@ export async function POST(req: Request) {
             }
 
             const from = message.from;
-            const { text, shouldProcess } = extractWhatsAppInboundText(message);
+            const { text, shouldProcess } = extractWhatsAppInboundPayload(message);
             let displayPrefText = text;
             if (message.type === 'interactive') {
                 displayPrefText = message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || text;
@@ -327,13 +328,13 @@ export async function POST(req: Request) {
                 const groupsRef = db.collection(`${entityPath}/kanban-groups`);
                 const groupsSnapshot = await groupsRef.get();
 
-                const newMessage = {
-                    sender: 'user' as const,
-                    text: displayPrefText,
-                    timestamp: new Date(),
-                    whatsappMessageId: messageId,
-                    platform: 'whatsapp'
-                };
+                const newMessage = await buildInboundWhatsAppUserMessage({
+                    message,
+                    userId,
+                    entityId,
+                    displayText: displayPrefText,
+                    messageId,
+                });
 
                 let cardId = targetCardDoc?.id;
                 let groupId = targetGroupId;

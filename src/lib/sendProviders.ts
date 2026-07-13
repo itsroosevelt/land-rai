@@ -307,7 +307,7 @@ export async function sendInstagramCommentReply(
 // --- WhatsApp Business Cloud API (Multi-Tenant Aware) ---
 
 interface WhatsAppSendOptions {
-    type?: 'text' | 'template' | 'quick_reply' | 'list' | 'media' | 'image' | 'video' | 'audio' | 'document';
+    type?: 'text' | 'template' | 'quick_reply' | 'list' | 'media' | 'multimedia' | 'image' | 'video' | 'audio' | 'document' | 'location' | 'contacts' | 'reaction';
     mediaType?: string;
     template?: any;
     buttons?: any[];
@@ -315,7 +315,13 @@ interface WhatsAppSendOptions {
     sections?: any[];
     url?: string;
     filename?: string;
-    // Multi-tenant context
+    mimeType?: string;
+    mediaId?: string;
+    preferMediaId?: boolean;
+    location?: { latitude: number; longitude: number; name?: string; address?: string };
+    contacts?: any[];
+    reaction?: { message_id: string; emoji: string };
+    forceTemplate?: boolean;
     userId?: string;
     entityId?: string;
 }
@@ -437,27 +443,51 @@ export async function sendWhatsAppMessage(
             }
         };
     } else if (['media', 'multimedia', 'image', 'video', 'audio', 'document'].includes((options.type || '').toLowerCase())) {
+        const { detectWhatsAppMediaType } = await import('@/lib/whatsapp/mediaUtils');
         const typeIn = (options.type || 'image').toLowerCase();
-        const url = options.url || '';
-        
-        // Auto-detect image type from extension for better WhatsApp rendering
-        let mediaType: 'image' | 'video' | 'audio' | 'document' | 'file' = 'document';
-        if (typeIn === 'image' || url.match(/\.(jpg|jpeg|png|webp|gif)$/i)) {
-            mediaType = 'image';
-        } else if (typeIn === 'video' || url.match(/\.(mp4|mov)$/i)) {
-            mediaType = 'video';
-        } else if (typeIn === 'audio' || url.match(/\.(mp3|ogg|wav)$/i)) {
-            mediaType = 'audio';
-        } else if (typeIn === 'document' || typeIn === 'media' || typeIn === 'multimedia') {
-            mediaType = 'document';
-        }
+        const mediaUrl = options.url || '';
+        const mediaType = detectWhatsAppMediaType({
+            explicit: options.mediaType || (typeIn === 'multimedia' || typeIn === 'media' ? undefined : typeIn),
+            url: mediaUrl,
+            filename: options.filename,
+            mimeType: options.mimeType,
+        });
 
-        const msgType = mediaType === 'document' ? 'document' : mediaType;
+        const msgType = mediaType;
         payload.type = msgType;
 
-        // Build media object — link is required for WhatsApp Cloud API.
-        // Meta rejects `caption` on audio messages.
-        const mediaData: any = { link: url };
+        const mediaData: any = {};
+        const shouldUseMediaId =
+            !!options.mediaId ||
+            (options.preferMediaId !== false && mediaUrl && options.userId && options.entityId);
+
+        if (options.mediaId) {
+            mediaData.id = options.mediaId;
+        } else if (shouldUseMediaId && mediaUrl) {
+            try {
+                const { uploadWhatsAppMediaToMeta } = await import('@/lib/whatsapp/mediaUpload');
+                const uploadedId = await uploadWhatsAppMediaToMeta({
+                    userId: options.userId!,
+                    entityId: options.entityId!,
+                    fileUrl: mediaUrl,
+                    mediaType,
+                    filename: options.filename,
+                    mimeType: options.mimeType,
+                });
+                mediaData.id = uploadedId;
+                console.log(`[sendWhatsAppMessage] 📦 Media uploaded to Meta: ${uploadedId}`);
+            } catch (uploadErr: any) {
+                console.warn('[sendWhatsAppMessage] Media upload failed, falling back to link:', uploadErr?.message);
+                if (!mediaUrl) throw uploadErr;
+                mediaData.link = mediaUrl;
+            }
+        } else if (mediaUrl) {
+            mediaData.link = mediaUrl;
+        } else {
+            throw new Error('Media message requires url or mediaId.');
+        }
+
+        // Meta rejects caption on audio messages.
         if (msgType !== 'audio' && message) {
             mediaData.caption = message;
         }
@@ -466,6 +496,20 @@ export async function sendWhatsAppMessage(
         }
 
         payload[msgType] = mediaData;
+    } else if (options.type === 'location' && options.location) {
+        payload.type = 'location';
+        payload.location = {
+            latitude: options.location.latitude,
+            longitude: options.location.longitude,
+            ...(options.location.name ? { name: options.location.name } : {}),
+            ...(options.location.address ? { address: options.location.address } : {}),
+        };
+    } else if (options.type === 'contacts' && options.contacts?.length) {
+        payload.type = 'contacts';
+        payload.contacts = options.contacts;
+    } else if (options.type === 'reaction' && options.reaction) {
+        payload.type = 'reaction';
+        payload.reaction = options.reaction;
     } else {
         console.warn(`[sendWhatsAppMessage] ⚠️ Falling back to TEXT. Received Type: "${options.type || 'undefined'}"`);
         payload.type = 'text';

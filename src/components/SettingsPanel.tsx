@@ -88,7 +88,7 @@ const SettingsPanel = ({ selectedNode, allNodes, allEdges, updateNodeConfig, del
 
   return (
     <aside className={cn(
-      "w-[360px] h-[calc(100%-48px)] my-6 mr-4 bg-neutral-950/90 backdrop-blur-md p-4 border border-neutral-800 text-white flex flex-col transition-transform duration-300 ease-in-out shadow-2xl rounded-2xl",
+      "w-[520px] max-w-[94vw] h-[calc(100%-48px)] my-6 mr-4 bg-neutral-950/90 backdrop-blur-md p-6 border border-neutral-800 text-white flex flex-col transition-transform duration-300 ease-in-out shadow-2xl rounded-2xl",
       isOpen ? "translate-x-0" : "translate-x-[calc(100%+16px)]"
     )}>
       <div className="flex items-center justify-between pb-2 flex-shrink-0 border-b border-neutral-800/50">
@@ -100,7 +100,7 @@ const SettingsPanel = ({ selectedNode, allNodes, allEdges, updateNodeConfig, del
 
       {selectedNode ? (
         <div className="flex-grow flex flex-col mt-3 overflow-hidden min-h-0 relative">
-          <div className="flex-grow overflow-y-auto space-y-4 pr-1 scrollbar-thin scrollbar-thumb-neutral-800/40 scrollbar-track-transparent min-h-0 pb-4">
+          <div className="flex-grow overflow-y-auto space-y-4 pr-3 custom-scrollbar min-h-0 pb-4">
             <GeneralSettings node={selectedNode} allNodes={allNodes} updateNodeConfig={updateNodeConfig} />
             
             {NodeSpecificSettings && (

@@ -212,7 +212,17 @@ function FlowPage() {
 
   const onNodesChange: OnNodesChange = useCallback((changes) => setNodes((nds) => applyNodeChanges(changes, nds)), [setNodes]);
   const onEdgesChange: OnEdgesChange = useCallback((changes) => setEdges((eds) => applyEdgeChanges(changes, eds)), [setEdges]);
-  const onConnect: OnConnect = useCallback((connection) => setEdges((eds) => addEdge({ ...connection, type: 'custom' }, eds)), [setEdges]);
+  const onConnect: OnConnect = useCallback(
+    (connection) =>
+      setEdges((eds) => {
+        // Cada punto de salida enruta a un solo destino: al reconectar, se reemplaza la anterior.
+        const withoutOldEdge = eds.filter(
+          (e) => !(e.source === connection.source && e.sourceHandle === connection.sourceHandle)
+        );
+        return addEdge({ ...connection, type: 'custom' }, withoutOldEdge);
+      }),
+    [setEdges]
+  );
 
   if (isLoading) {
     return (

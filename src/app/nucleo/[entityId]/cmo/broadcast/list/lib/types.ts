@@ -37,7 +37,8 @@ export interface SegmentConfig {
         | "kanban_group"
         | "created_recent"
         | "inactive"
-        | "stage";
+        | "stage"
+        | "manual";
     // Parameters depending on type
     tag?: string;
     countryIso?: string;
@@ -46,6 +47,7 @@ export interface SegmentConfig {
     stage?: string;
     days?: number; // for created_recent / inactive
     label?: string; // human readable label for display
+    manualRecipients?: BroadcastRecipient[];
 }
 
 export interface BroadcastStats {

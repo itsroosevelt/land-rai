@@ -6,7 +6,19 @@ import {
     Play,
     BarChart3,
     Loader2,
+    MessageSquare,
+    Instagram,
+    Facebook,
+    Calendar,
+    Clock,
+    Tag,
+    Globe,
+    Layers,
+    Bot,
+    Flame,
+    Pencil
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Broadcast } from "../page";
 
 type SortColumn = "status" | "broadcastTime" | "name";
@@ -19,6 +31,7 @@ interface BroadcastsTableProps {
     handleSort: (column: SortColumn) => void;
     getStatusBadge: (status: Broadcast["status"]) => React.ReactNode;
     handleViewBroadcast: (broadcast: Broadcast) => void;
+    handleEditBroadcast: (broadcast: Broadcast) => void;
     activeRowMenuId: string | null;
     setActiveRowMenuId: (id: string | null) => void;
     rowMenuRef: React.RefObject<HTMLDivElement>;
@@ -31,6 +44,7 @@ interface BroadcastsTableProps {
 
 const LAUNCHABLE = ["Draft", "Scheduled", "Failed", "Paused"];
 const HAS_RESULTS = ["Sending", "Completed", "Failed", "Paused"];
+const EDITABLE = ["Draft", "Scheduled"];
 
 export default function BroadcastsTable({
     processedBroadcasts,
@@ -39,6 +53,7 @@ export default function BroadcastsTable({
     handleSort,
     getStatusBadge,
     handleViewBroadcast,
+    handleEditBroadcast,
     activeRowMenuId,
     setActiveRowMenuId,
     rowMenuRef,
@@ -50,31 +65,143 @@ export default function BroadcastsTable({
 }: BroadcastsTableProps) {
     const sortIcon = (col: SortColumn) =>
         sortColumn === col ? (
-            sortOrder === "asc" ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />
+            sortOrder === "asc" ? <ChevronUp className="w-3.5 h-3.5 text-blue-400" /> : <ChevronDown className="w-3.5 h-3.5 text-blue-400" />
         ) : (
-            <ChevronDown className="w-3 h-3 text-neutral-500" />
+            <ChevronDown className="w-3.5 h-3.5 text-neutral-500 opacity-40" />
         );
 
+    const getMessagePreview = (broadcast: Broadcast) => {
+        const msg = broadcast.message;
+        if (!msg) return "";
+        if (msg.kind === "text" && msg.text) {
+            return msg.text.length > 60 ? msg.text.substring(0, 60) + "..." : msg.text;
+        }
+        if (msg.kind === "media") {
+            const typeEmoji: Record<string, string> = {
+                image: "📷 Imagen",
+                video: "🎥 Video",
+                audio: "🎵 Audio",
+                document: "📄 Documento"
+            };
+            const prefix = typeEmoji[msg.mediaType || "image"] || "📎 Archivo";
+            return msg.caption ? `${prefix}: ${msg.caption}` : prefix;
+        }
+        if (msg.kind === "template" && msg.templateName) {
+            return `Meta Template: ${msg.templateName}`;
+        }
+        return "";
+    };
+
+    const renderChannelBadge = (channel: string) => {
+        const norm = channel.toLowerCase();
+        if (norm.includes("whatsapp")) {
+            return (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-medium">
+                    <MessageSquare className="w-3 h-3 text-emerald-400" />
+                    WhatsApp
+                </span>
+            );
+        }
+        if (norm.includes("instagram")) {
+            return (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-pink-500/10 text-pink-400 border border-pink-500/20 text-[10px] font-medium">
+                    <Instagram className="w-3 h-3 text-pink-400" />
+                    Instagram
+                </span>
+            );
+        }
+        if (norm.includes("messenger") || norm.includes("facebook")) {
+            return (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] font-medium">
+                    <Facebook className="w-3 h-3 text-blue-400" />
+                    Messenger
+                </span>
+            );
+        }
+        return (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400 border border-neutral-700 text-[10px]">
+                {channel}
+            </span>
+        );
+    };
+
+    const renderSegmentBadge = (broadcast: Broadcast) => {
+        const label = broadcast.segment || "";
+        const config = broadcast.segmentConfig;
+        
+        let iconElement = <Layers className="w-3 h-3 text-neutral-400" />;
+        
+        if (config) {
+            if (config.type === "tag") {
+                iconElement = <Tag className="w-3 h-3 text-amber-400" />;
+            } else if (config.type === "country") {
+                iconElement = <Globe className="w-3 h-3 text-blue-400" />;
+            } else if (config.type === "kanban_group") {
+                iconElement = <Calendar className="w-3 h-3 text-purple-400" />;
+            }
+        }
+
+        return (
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[#13151a] border border-white/5 text-[10px] text-neutral-300 max-w-[150px] truncate">
+                {iconElement}
+                <span className="truncate">{label}</span>
+            </span>
+        );
+    };
+
+    const formatRelativeTime = (timeStr: string) => {
+        if (!timeStr) return "—";
+        try {
+            const date = new Date(timeStr);
+            if (isNaN(date.getTime())) return timeStr;
+            
+            const now = new Date();
+            const diffMs = now.getTime() - date.getTime();
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMs / 3600000);
+            const diffDays = Math.floor(diffMs / 86400000);
+
+            if (diffMs < 0) {
+                // Future time (scheduled)
+                const absDiffMs = Math.abs(diffMs);
+                const absDiffMins = Math.floor(absDiffMs / 60000);
+                const absDiffHours = Math.floor(absDiffMs / 3600000);
+                if (absDiffMins < 60) return `En ${absDiffMins} min`;
+                if (absDiffHours < 24) return `En ${absDiffHours}h`;
+                return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+            }
+
+            if (diffMins < 1) return "Hace un momento";
+            if (diffMins < 60) return `Hace ${diffMins}m`;
+            if (diffHours < 24) return `Hace ${diffHours}h`;
+            if (diffDays === 1) return "Ayer";
+            if (diffDays < 7) return `Hace ${diffDays}d`;
+            
+            return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+        } catch {
+            return timeStr;
+        }
+    };
+
     return (
-        <div className="border border-white/5 rounded-xl bg-[#0b0c10]/40">
+        <div className="border border-white/5 rounded-xl bg-[#0b0c10]/40 overflow-hidden shadow-2xl backdrop-blur-sm">
             <table className="w-full text-left border-collapse">
                 <thead>
                     <tr className="border-b border-white/5 bg-[#13151a]/30 text-[11px] font-normal uppercase tracking-wider text-neutral-400 select-none">
-                        <th onClick={() => handleSort("status")} className="px-4 py-3 font-medium cursor-pointer hover:text-white transition-colors">
-                            <div className="flex items-center gap-1">Status {sortIcon("status")}</div>
+                        <th onClick={() => handleSort("status")} className="px-4 py-3.5 font-medium cursor-pointer hover:text-white transition-colors">
+                            <div className="flex items-center gap-1.5">Estado / Progreso {sortIcon("status")}</div>
                         </th>
-                        <th onClick={() => handleSort("broadcastTime")} className="px-4 py-3 font-medium cursor-pointer hover:text-white transition-colors">
-                            <div className="flex items-center gap-1">Broadcast Time {sortIcon("broadcastTime")}</div>
+                        <th onClick={() => handleSort("broadcastTime")} className="px-4 py-3.5 font-medium cursor-pointer hover:text-white transition-colors">
+                            <div className="flex items-center gap-1.5">Broadcast Time {sortIcon("broadcastTime")}</div>
                         </th>
-                        <th onClick={() => handleSort("name")} className="px-4 py-3 font-medium cursor-pointer hover:text-white transition-colors">
-                            <div className="flex items-center gap-1">Name {sortIcon("name")}</div>
+                        <th onClick={() => handleSort("name")} className="px-4 py-3.5 font-medium cursor-pointer hover:text-white transition-colors">
+                            <div className="flex items-center gap-1.5">Name {sortIcon("name")}</div>
                         </th>
-                        <th className="px-4 py-3 font-medium text-neutral-400">Labels</th>
-                        <th className="px-4 py-3 font-medium text-neutral-400">Channel</th>
-                        <th className="px-4 py-3 font-medium text-neutral-400">Segment</th>
-                        <th className="px-4 py-3 font-medium text-neutral-400">Recipients</th>
-                        <th className="px-4 py-3 font-medium text-neutral-400">Progreso</th>
-                        <th className="px-4 py-3 font-medium text-right text-neutral-400">Actions</th>
+                        <th className="px-4 py-3.5 font-medium text-neutral-400">Labels</th>
+                        <th className="px-4 py-3.5 font-medium text-neutral-400">Channel</th>
+                        <th className="px-4 py-3.5 font-medium text-neutral-400">Segment</th>
+                        <th className="px-4 py-3.5 font-medium text-neutral-400">Recipients</th>
+                        <th className="px-4 py-3.5 font-medium text-right text-neutral-400">Actions</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5 text-xs text-neutral-300">
@@ -86,42 +213,107 @@ export default function BroadcastsTable({
                             const pct = total > 0 ? Math.round((done / total) * 100) : 0;
                             const canLaunch = LAUNCHABLE.includes(broadcast.status);
                             const canViewResults = HAS_RESULTS.includes(broadcast.status);
+                            const canEdit = EDITABLE.includes(broadcast.status);
                             const isSending = broadcast.status === "Sending";
 
+                            // Advanced Performance Metrics
+                            const deliveryRate = stats && stats.sent > 0 ? Math.round((stats.delivered / stats.sent) * 100) : 0;
+                            const replyRate = stats && stats.sent > 0 ? Math.round((stats.replied / stats.sent) * 100) : 0;
+
                             return (
-                                <tr key={broadcast.id} className="hover:bg-white/[0.01] transition-all relative">
-                                    <td className="px-4 py-3.5">{getStatusBadge(broadcast.status)}</td>
-                                    <td className="px-4 py-3.5 text-neutral-500">{broadcast.broadcastTime}</td>
+                                <tr key={broadcast.id} className="hover:bg-white/[0.015] active:bg-white/[0.005] transition-all relative group">
+                                    <td className="px-4 py-4 text-neutral-400 min-w-[200px]">
+                                        <div className="flex flex-col gap-1.5">
+                                            <div className="flex items-center gap-2">
+                                                {getStatusBadge(broadcast.status)}
+                                                {broadcast.botId && (
+                                                    <span className="p-0.5 bg-emerald-500/10 rounded border border-emerald-500/20 text-emerald-400" title={`Bot asignado: ${broadcast.botName || 'Auto-reply'}`}>
+                                                        <Bot className="w-3.5 h-3.5" />
+                                                    </span>
+                                                )}
+                                            </div>
+                                            
+                                            {stats && (isSending || done > 0) ? (
+                                                <div className="space-y-1 w-full max-w-[180px]">
+                                                    <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                                                        <div
+                                                            className={cn(
+                                                                "h-full rounded-full transition-all duration-500",
+                                                                isSending ? "bg-emerald-500 animate-pulse" : "bg-blue-500"
+                                                            )}
+                                                            style={{ width: `${pct}%` }}
+                                                        />
+                                                    </div>
+                                                    
+                                                    {/* Standard micro stats */}
+                                                    <div className="flex items-center justify-between text-[9px] text-neutral-500">
+                                                        <span>{pct}% ({done}/{total})</span>
+                                                        {stats.failed > 0 && <span className="text-rose-400 font-medium">{stats.failed} fall.</span>}
+                                                    </div>
+
+                                                    {/* Advanced engagement metrics */}
+                                                    <div className="flex flex-wrap gap-1 mt-1">
+                                                        {stats.sent > 0 && (
+                                                            <span className="px-1 py-0.5 rounded bg-blue-500/5 text-blue-400/90 text-[8px] border border-blue-500/10 font-mono">
+                                                                {deliveryRate}% Deliv.
+                                                            </span>
+                                                        )}
+                                                        {stats.sent > 0 && replyRate > 0 && (
+                                                            <span className={cn(
+                                                                "px-1 py-0.5 rounded text-[8px] font-mono border flex items-center gap-0.5",
+                                                                replyRate >= 15 
+                                                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 font-bold" 
+                                                                    : "bg-neutral-800/80 text-neutral-400 border-neutral-700"
+                                                            )}>
+                                                                {replyRate}% Resp. {replyRate >= 15 && <Flame className="w-2.5 h-2.5 text-emerald-400" />}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ) : broadcast.status === "Scheduled" && (broadcast.scheduleAt || broadcast.broadcastTime) ? (
+                                                <div className="text-[10px] text-neutral-500 flex items-center gap-1">
+                                                    <Clock className="w-3 h-3 text-neutral-600" />
+                                                    <span>Prog: {broadcast.scheduleAt || broadcast.broadcastTime}</span>
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    </td>
+                                    
+                                    <td className="px-4 py-4 text-neutral-500 font-mono text-[11px]">
+                                        {formatRelativeTime(broadcast.broadcastTime)}
+                                    </td>
+                                    
                                     <td
                                         onClick={() => (canViewResults ? onViewResults(broadcast) : handleViewBroadcast(broadcast))}
-                                        className="px-4 py-3.5 font-medium text-blue-400 hover:text-blue-300 cursor-pointer"
+                                        className="px-4 py-4 font-medium text-blue-400 hover:text-blue-300 cursor-pointer max-w-[200px]"
                                     >
-                                        {broadcast.name}
+                                        <div className="flex flex-col gap-0.5">
+                                            <span className="font-semibold text-white/95 group-hover:text-blue-400 transition-colors">
+                                                {broadcast.name}
+                                            </span>
+                                            <span className="text-[10px] text-neutral-500 truncate max-w-[220px]">
+                                                {getMessagePreview(broadcast) || "Sin mensaje configurado"}
+                                            </span>
+                                        </div>
                                     </td>
-                                    <td className="px-4 py-3.5 text-neutral-500">{broadcast.labels}</td>
-                                    <td className="px-4 py-3.5 text-neutral-500">{broadcast.channel}</td>
-                                    <td className="px-4 py-3.5 text-neutral-500 max-w-[160px] truncate">{broadcast.segment}</td>
-                                    <td className="px-4 py-3.5 text-neutral-400">{total}</td>
-                                    <td className="px-4 py-3.5 text-neutral-400 min-w-[130px]">
-                                        {stats && (isSending || done > 0) ? (
-                                            <div className="space-y-1">
-                                                <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                                                    <div
-                                                        className={`h-full rounded-full transition-all ${isSending ? "bg-emerald-500" : "bg-blue-500"}`}
-                                                        style={{ width: `${pct}%` }}
-                                                    />
-                                                </div>
-                                                <div className="flex items-center gap-2 text-[9px] text-neutral-500">
-                                                    <span className="text-blue-400">{stats.sent} env.</span>
-                                                    {stats.replied > 0 && <span className="text-green-400">{stats.replied} resp.</span>}
-                                                    {stats.failed > 0 && <span className="text-rose-400">{stats.failed} fall.</span>}
-                                                </div>
-                                            </div>
+                                    
+                                    <td className="px-4 py-4 text-neutral-500">
+                                        {broadcast.labels !== "-" ? (
+                                            <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/5 text-[10px] text-neutral-400">
+                                                {broadcast.labels}
+                                            </span>
                                         ) : (
-                                            <span className="text-neutral-600">—</span>
+                                            <span className="text-neutral-700">—</span>
                                         )}
                                     </td>
-                                    <td className="px-4 py-3.5 text-right relative">
+                                    
+                                    <td className="px-4 py-4">{renderChannelBadge(broadcast.channel)}</td>
+                                    
+                                    <td className="px-4 py-4">{renderSegmentBadge(broadcast)}</td>
+                                    
+                                    <td className="px-4 py-4 text-neutral-400 font-mono">{total}</td>
+                                    
+                                    <td className="px-4 py-4 text-right relative">
                                         <div className="flex items-center justify-end gap-1.5">
                                             {canLaunch && (
                                                 <button
@@ -183,6 +375,14 @@ export default function BroadcastsTable({
                                                         <BarChart3 className="w-3 h-3" /> Ver resultados
                                                     </button>
                                                 )}
+                                                {canEdit && (
+                                                    <button
+                                                        onClick={() => handleEditBroadcast(broadcast)}
+                                                        className="w-full px-3 py-1.5 text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 transition-colors flex items-center gap-2"
+                                                    >
+                                                        <Pencil className="w-3 h-3" /> Editar campaña
+                                                    </button>
+                                                )}
                                                 <button
                                                     onClick={() => {
                                                         const newName = prompt("Editar nombre:", broadcast.name);
@@ -220,7 +420,7 @@ export default function BroadcastsTable({
                         })
                     ) : (
                         <tr>
-                            <td colSpan={9} className="px-4 py-12 text-center text-neutral-500 text-xs">
+                            <td colSpan={8} className="px-4 py-12 text-center text-neutral-500 text-xs">
                                 No hay campañas. Crea una nueva para empezar.
                             </td>
                         </tr>

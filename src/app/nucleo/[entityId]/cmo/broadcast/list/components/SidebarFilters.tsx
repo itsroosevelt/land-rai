@@ -1,32 +1,58 @@
 import React from "react";
-import { Menu, Megaphone } from "lucide-react";
+import { 
+    Menu, 
+    Megaphone, 
+    ArrowLeft, 
+    Users, 
+    BarChart3, 
+    Search, 
+    Share2, 
+    Target, 
+    Link2, 
+    Award, 
+    PenTool, 
+    Calendar, 
+    Gift, 
+    PieChart 
+} from "lucide-react";
 import { cn } from "@/lib/utils";
-
-interface Category {
-    name: string;
-    dotColor: string;
-}
+import Link from "next/link";
+import { useParams, usePathname } from "next/navigation";
 
 interface SidebarFiltersProps {
     isSidebarOpen: boolean;
     setIsSidebarOpen: (open: boolean) => void;
-    selectedFilter: string;
-    setSelectedFilter: (filter: string) => void;
-    categories: Category[];
 }
 
 export default function SidebarFilters({
     isSidebarOpen,
-    setIsSidebarOpen,
-    selectedFilter,
-    setSelectedFilter,
-    categories
+    setIsSidebarOpen
 }: SidebarFiltersProps) {
+    const params = useParams();
+    const pathname = usePathname();
+    const entityId = params?.entityId as string;
+
+    const navItems = [
+        { id: "broadcast", label: "Broadcasts", path: `/nucleo/${entityId}/cmo/broadcast/list`, icon: Megaphone },
+        { id: "crm", label: "Customer Relations", path: `/nucleo/${entityId}/cmo/crm`, icon: Users },
+        { id: "analytics", label: "Market Analytics", path: `/nucleo/${entityId}/cmo/analytics`, icon: BarChart3 },
+        { id: "seo", label: "SEO Engine", path: `/nucleo/${entityId}/cmo/seo`, icon: Search },
+        { id: "social", label: "Social Media", path: `/nucleo/${entityId}/cmo/social`, icon: Share2 },
+        { id: "goals", label: "Marketing Goals", path: `/nucleo/${entityId}/cmo/goals`, icon: Target },
+        { id: "affiliates", label: "Affiliate Program", path: `/nucleo/${entityId}/cmo/affiliates`, icon: Link2 },
+        { id: "brand", label: "Brand Identity", path: `/nucleo/${entityId}/cmo/brand`, icon: Award },
+        { id: "content", label: "Content Factory", path: `/nucleo/${entityId}/cmo/content`, icon: PenTool },
+        { id: "events", label: "Corporate Events", path: `/nucleo/${entityId}/cmo/events`, icon: Calendar },
+        { id: "loyalty", label: "Loyalty Programs", path: `/nucleo/${entityId}/cmo/loyalty`, icon: Gift },
+        { id: "market-share", label: "Market Share", path: `/nucleo/${entityId}/cmo/market-share`, icon: PieChart },
+    ];
+
     return (
         <aside className={cn(
             "absolute left-3 top-3 bottom-3 z-40 w-56 bg-[#0b0c10]/95 backdrop-blur-xl border border-white/10 rounded-2xl flex flex-col transition-all duration-300 shadow-[0_20px_50px_rgba(0,0,0,0.5)]",
             isSidebarOpen ? "translate-x-0 opacity-100" : "-translate-x-64 opacity-0 pointer-events-none"
         )}>
+            {/* Header */}
             <div className="p-3 border-b border-white/5 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <button 
@@ -36,26 +62,43 @@ export default function SidebarFilters({
                     >
                         <Menu className="w-4 h-4" />
                     </button>
-                    <span className="font-normal text-xs tracking-wide text-white/90">Broadcasts</span>
+                    <span className="font-semibold text-xs tracking-wide text-white/90 uppercase">CMO / Marketing</span>
                 </div>
-                <Megaphone className="w-3.5 h-3.5 text-white/30" />
             </div>
-            <nav className="flex-1 p-2 space-y-0.5">
-                {categories.map((cat) => (
-                    <button
-                        key={cat.name}
-                        onClick={() => setSelectedFilter(cat.name)}
-                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-normal transition-all ${
-                            selectedFilter === cat.name
-                                ? "bg-white/5 text-white"
-                                : "text-neutral-400 hover:bg-white/[0.02] hover:text-white/80"
-                        }`}
-                    >
-                        <span className={`w-2 h-2 rounded-full ${cat.dotColor}`} />
-                        <span>{cat.name}</span>
-                    </button>
-                ))}
+
+            {/* Navigation links */}
+            <nav className="flex-1 p-2 space-y-1 overflow-y-auto custom-scrollbar">
+                {navItems.map((item) => {
+                    const isActive = pathname === item.path;
+                    const Icon = item.icon;
+                    return (
+                        <Link
+                            key={item.id}
+                            href={item.path}
+                            className={cn(
+                                "flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-normal transition-all duration-200",
+                                isActive
+                                    ? "bg-orange-500/15 text-orange-400 border border-orange-500/20 shadow-md shadow-orange-500/5 font-medium"
+                                    : "text-neutral-400 hover:bg-white/[0.02] hover:text-white/80 border border-transparent"
+                            )}
+                        >
+                            <Icon className={cn("w-4 h-4", isActive ? "text-orange-400" : "text-neutral-500")} />
+                            <span>{item.label}</span>
+                        </Link>
+                    );
+                })}
             </nav>
+
+            {/* Back to Workspace button at the bottom */}
+            <div className="p-2 border-t border-white/5">
+                <Link
+                    href={`/nucleo/${entityId}/workspace?role=cmo`}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium text-neutral-400 hover:bg-white/5 hover:text-white border border-white/5 transition-all duration-200"
+                >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Volver al Workspace</span>
+                </Link>
+            </div>
         </aside>
     );
 }

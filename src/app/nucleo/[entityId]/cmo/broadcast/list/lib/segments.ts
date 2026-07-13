@@ -160,6 +160,10 @@ export const resolveRecipients = async (
     tenantPath: string,
     segment: SegmentConfig
 ): Promise<BroadcastRecipient[]> => {
+    if (segment.type === "manual") {
+        return segment.manualRecipients || [];
+    }
+
     const byPhone = new Map<string, BroadcastRecipient>();
 
     const push = (r: BroadcastRecipient) => {

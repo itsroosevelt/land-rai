@@ -65,7 +65,42 @@ export async function POST(req: Request) {
             } else {
                 const { sendWhatsAppMessage } = await import('@/lib/sendProviders');
                 console.log(`[Omnichannel API] Attempting to send WhatsApp message to ${toNumber}...`);
-                responseData = await sendWhatsAppMessage(toNumber, message, { type, template, url, filename, userId, entityId });
+
+                let sendOptions: any = { type, template, url, filename, userId, entityId };
+                const cleanSearch = toNumber.replace(/\D/g, '');
+
+                if ((!type || type === 'text') && !template && cleanSearch) {
+                    try {
+                        let cardMessages: any[] = [];
+                        const groupsSnap = await db
+                            .collection(`users/${userId}/entities/${entityId}/kanban-groups`)
+                            .get();
+                        for (const groupDoc of groupsSnap.docs) {
+                            const cardSnap = await groupDoc.ref
+                                .collection('cards')
+                                .where('contactNumberClean', '==', cleanSearch)
+                                .limit(1)
+                                .get();
+                            if (!cardSnap.empty) {
+                                cardMessages = cardSnap.docs[0].data()?.messages || [];
+                                break;
+                            }
+                        }
+                        const entitySnap = await db.doc(`users/${userId}/entities/${entityId}`).get();
+                        const { resolveWhatsAppSendGuard } = await import('@/lib/whatsapp/sessionGuard');
+                        const guard = resolveWhatsAppSendGuard(cardMessages, message || '', entitySnap.data());
+                        if (guard.blockSend) {
+                            return NextResponse.json({ error: guard.blockReason }, { status: 400 });
+                        }
+                        if (guard.useTemplate && guard.templatePayload) {
+                            sendOptions = { ...sendOptions, ...guard.templatePayload };
+                        }
+                    } catch (guardErr) {
+                        console.warn('[Omnichannel API] Session guard skipped:', guardErr);
+                    }
+                }
+
+                responseData = await sendWhatsAppMessage(toNumber, message, sendOptions);
                 messageId = responseData?.messages?.[0]?.id;
                 cleanTo = responseData?.sentTo || toNumber;
                 console.log(`[Omnichannel API] [META RESPONSE]:`, JSON.stringify(responseData, null, 2));

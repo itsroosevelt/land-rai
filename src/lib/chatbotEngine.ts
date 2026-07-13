@@ -271,7 +271,25 @@ async function runEngineCycle(
     // --- A. HELPERS (Essentials) ---
     const dispatchMessage = async (content: string, options: any = {}) => {
         const opts = { userId, entityId, ...options };
-        if (platform === 'whatsapp') return await sendWhatsAppMessage(from, content, opts);
+        if (platform === 'whatsapp') {
+            const isSessionMessage =
+                !opts.type ||
+                opts.type === 'text' ||
+                (typeof opts.type === 'string' && !['template', 'location', 'contacts', 'reaction'].includes(opts.type));
+            if (isSessionMessage && !opts.forceTemplate) {
+                const entitySnap = await db.doc(entityPath).get();
+                const { resolveWhatsAppSendGuard } = await import('@/lib/whatsapp/sessionGuard');
+                const guard = resolveWhatsAppSendGuard(cardData.messages || [], content, entitySnap.data());
+                if (guard.blockSend) {
+                    console.warn(`[ChatbotEngine] WhatsApp blocked (24h): ${guard.blockReason}`);
+                    return { skipped: true, reason: guard.blockReason };
+                }
+                if (guard.useTemplate && guard.templatePayload) {
+                    return await sendWhatsAppMessage(from, content, { ...opts, ...guard.templatePayload });
+                }
+            }
+            return await sendWhatsAppMessage(from, content, opts);
+        }
         if (platform === 'messenger' || platform === 'facebook_comments') {
             return await sendMetaMessage(from, content, { ...opts, provider: 'messenger' });
         }
@@ -631,8 +649,18 @@ async function runEngineCycle(
                     currentNodeId = resolution.edge?.target || null;
                 }
                 await cardRef.update({ 'botState.waitingForInput': false });
-            } else if (node?.type === 'listMessageNode') {
-                const sections = node.data?.sections || [];
+            } else if (node?.type === 'listMessageNode' || node?.type === 'pollNode') {
+                const sections =
+                    node.type === 'pollNode'
+                        ? [{
+                            title: 'Opciones',
+                            rows: (node.data?.options || []).map((o: any) => ({
+                                id: o.id,
+                                title: o.text,
+                                description: '',
+                            })),
+                        }]
+                        : (node.data?.sections || []);
                 const resolution = resolveListMessageEdge(flow.edges, node.id, sections, text);
 
                 if (resolution.invalid) {
@@ -686,7 +714,7 @@ async function runEngineCycle(
     const preLoopState = preLoopSnap.data()?.botState || {};
     if (preLoopState.waitingForInput && preLoopState.currentNodeId) {
         const waitingNode = flow.nodes.find((n: any) => n.id === preLoopState.currentNodeId);
-        const isWaitNode = ['captureInputNode', 'quickReplyNode', 'listMessageNode'].includes(waitingNode?.type || '');
+        const isWaitNode = ['captureInputNode', 'quickReplyNode', 'listMessageNode', 'pollNode'].includes(waitingNode?.type || '');
         if (isWaitNode && String(preLoopState.currentNodeId) === String(currentNodeId)) {
             console.log(`[ChatbotEngine] 🛑 Already waiting on node ${currentNodeId} — skipping duplicate prompt send.`);
             return;
@@ -740,23 +768,32 @@ async function runEngineCycle(
             const rawUrl = node.data?.url || node.data?.attachment || node.data?.link || node.data?.content || '';
             const url = replaceVars(rawUrl);
             
-            // For caption, try caption, then body, then text, then content (only if content wasn't the URL)
             let rawCaption = node.data?.caption || node.data?.body || node.data?.text || '';
             if (!rawCaption && node.data?.content && node.data?.content !== rawUrl) {
                 rawCaption = node.data.content;
             }
             const caption = replaceVars(rawCaption);
+            const filename = node.data?.filename || 'archivo';
 
-            console.log(`[ChatbotEngine] 🖼️ Media Node Detected: URL=${url.substring(0, 30)}... Caption=${caption.substring(0, 20)}`);
+            const { detectWhatsAppMediaType } = await import('@/lib/whatsapp/mediaUtils');
+            const mediaType = detectWhatsAppMediaType({
+                explicit: node.data?.mediaType,
+                url,
+                filename,
+                mimeType: node.data?.mimeType,
+            });
+
+            console.log(`[ChatbotEngine] 🖼️ Media Node: type=${mediaType} URL=${url.substring(0, 40)}...`);
             
             if (url && url.startsWith('http')) {
-                // Determine type based on extension if possible, default to image
-                const type = url.match(/\.(mp4|mov|avi|webm)$/i) ? 'video' : (url.match(/\.(mp3|ogg|wav|m4a|opus)$/i) ? 'audio' : 'image');
-                
                 const sendResult = await dispatchMessage(caption, { 
-                    type, 
-                    url: url, 
-                    filename: node.data?.filename 
+                    type: mediaType,
+                    mediaType,
+                    url,
+                    filename,
+                    mimeType: node.data?.mimeType,
+                    mediaId: node.data?.metaMediaId,
+                    preferMediaId: node.data?.preferMediaId !== false,
                 });
                 console.log(`[ChatbotEngine] 📦 Dispatch Result:`, JSON.stringify(sendResult));
 
@@ -765,16 +802,16 @@ async function runEngineCycle(
                     messageId: `bot_media_${Date.now()}`,
                     type: 'media',
                     fileUrl: url,
-                    fileType: type === 'image' ? 'image/*' : type === 'video' ? 'video/*' : type === 'audio' ? 'audio/*' : 'application/octet-stream',
-                    fileName: node.data?.filename || null,
-                    metadata: {
-                        url,
-                        filename: node.data?.filename || null
-                    }
+                    fileType:
+                        mediaType === 'image' ? 'image/*' :
+                        mediaType === 'video' ? 'video/*' :
+                        mediaType === 'audio' ? 'audio/*' :
+                        'application/octet-stream',
+                    fileName: filename,
+                    metadata: { url, filename, mediaType },
                 });
 
-                // Crucial delay to allow media to be ingested before next node
-                await sleep(2000);
+                await sleep(mediaType === 'video' ? 3000 : 2000);
             } else if (caption) {
                 // FALLBACK: If URL is missing or invalid but we have text, send text so the flow doesn't look dead
                 console.warn(`[ChatbotEngine] ⚠️ Media URL missing or invalid "${url}". Sending caption as text fallback.`);
@@ -1087,6 +1124,226 @@ async function runEngineCycle(
             }
             const edge = resolveDefaultNextEdge(flow.edges, node.id);
             currentNodeId = edge ? edge.target : null;
+            continue;
+        }
+
+        if (node.type === 'templateNode') {
+            const tpl = node.data || {};
+            const components: any[] = [];
+            if (tpl.variables?.length) {
+                components.push({
+                    type: 'body',
+                    parameters: tpl.variables.map((v: any) => ({
+                        type: 'text',
+                        text: replaceVars(v.value || ''),
+                    })),
+                });
+            }
+            if (tpl.headerUrl) {
+                components.unshift({
+                    type: 'header',
+                    parameters: [{ type: 'image', image: { link: tpl.headerUrl } }],
+                });
+            }
+            await dispatchMessage('', {
+                type: 'template',
+                forceTemplate: true,
+                template: {
+                    name: tpl.templateName,
+                    language: { code: tpl.language || 'es' },
+                    components,
+                },
+            });
+            await appendAgentMessage({
+                text: `Plantilla: ${tpl.templateName || 'template'}`,
+                type: 'template',
+                messageId: `bot_tpl_${Date.now()}`,
+            });
+            const edge = resolveDefaultNextEdge(flow.edges, node.id);
+            currentNodeId = edge ? edge.target : null;
+            continue;
+        }
+
+        if (node.type === 'locationNode') {
+            const lat = parseFloat(replaceVars(String(node.data?.latitude || '')));
+            const lng = parseFloat(replaceVars(String(node.data?.longitude || '')));
+            if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
+                await dispatchMessage('', {
+                    type: 'location',
+                    location: {
+                        latitude: lat,
+                        longitude: lng,
+                        name: replaceVars(node.data?.name || ''),
+                        address: replaceVars(node.data?.address || ''),
+                    },
+                });
+                await appendAgentMessage({
+                    text: replaceVars(node.data?.name || node.data?.address || 'Ubicación'),
+                    type: 'location',
+                    messageId: `bot_loc_${Date.now()}`,
+                    metadata: { latitude: lat, longitude: lng },
+                });
+            }
+            const edge = resolveDefaultNextEdge(flow.edges, node.id);
+            currentNodeId = edge ? edge.target : null;
+            continue;
+        }
+
+        if (node.type === 'contactNode') {
+            const d = node.data || {};
+            const phones = (d.phones || [])
+                .filter((p: any) => p.number)
+                .map((p: any) => ({
+                    phone: p.number,
+                    type: (p.type || 'CELL').toLowerCase(),
+                    ...(p.wa_id ? { wa_id: p.number.replace(/\D/g, '') } : {}),
+                }));
+            const contactPayload = {
+                name: {
+                    formatted_name: d.formattedName || `${d.firstName || ''} ${d.lastName || ''}`.trim() || 'Contacto',
+                    first_name: d.firstName || '',
+                    last_name: d.lastName || '',
+                },
+                org: d.organization ? { company: d.organization } : undefined,
+                emails: d.email ? [{ email: d.email, type: 'WORK' }] : undefined,
+                urls: d.website ? [{ url: d.website, type: 'WORK' }] : undefined,
+                phones,
+            };
+            await dispatchMessage('', { type: 'contacts', contacts: [contactPayload] });
+            await appendAgentMessage({
+                text: contactPayload.name.formatted_name,
+                type: 'contacts',
+                messageId: `bot_contact_${Date.now()}`,
+            });
+            const edge = resolveDefaultNextEdge(flow.edges, node.id);
+            currentNodeId = edge ? edge.target : null;
+            continue;
+        }
+
+        if (node.type === 'pollNode') {
+            const question = replaceVars(node.data?.question || 'Selecciona una opción:');
+            const sections = buildWhatsAppListSections([{
+                title: 'Opciones',
+                rows: (node.data?.options || []).map((o: any) => ({
+                    id: o.id,
+                    title: o.text,
+                    description: '',
+                })),
+            }]);
+            await dispatchMessage(question, { type: 'list', button: 'Ver opciones', sections });
+            await cardRef.update({
+                'botState.status': 'active',
+                'botState.waitingForInput': true,
+                'botState.currentNodeId': node.id,
+                'botState.lastWaitStartedAt': admin.firestore.FieldValue.serverTimestamp(),
+                messages: admin.firestore.FieldValue.arrayUnion({
+                    sender: 'agent',
+                    text: question,
+                    platform,
+                    timestamp: new Date(),
+                    messageId: `bot_poll_${Date.now()}`,
+                    type: 'list',
+                    metadata: { buttonText: 'Ver opciones', sections },
+                }),
+            });
+            await syncKanbanToNode(node.id);
+            return;
+        }
+
+        if (node.type === 'transcriptionNode') {
+            const snap = await cardRef.get();
+            const fresh = snap.data() || {};
+            const messages = fresh.messages || [];
+            const lastAudio = [...messages].reverse().find(
+                (m: any) => m.sender === 'user' && (m.fileType?.startsWith('audio/') || m.metadata?.mediaKind === 'audio')
+            );
+            const outputVar = (node.data?.outputVariable || 'transcripcion').replace(/[\{\}]/g, '').trim();
+            let transcript = '';
+
+            if (lastAudio?.fileUrl) {
+                let apiKey = process.env.OPENAI_API_KEY;
+                try {
+                    const aiIntegration = await db.doc(`${entityPath}/integrations/openai`).get();
+                    if (aiIntegration.exists) apiKey = aiIntegration.data()?.apiKey || apiKey;
+                } catch {}
+                if (apiKey) {
+                    try {
+                        const audioRes = await axios.get(lastAudio.fileUrl, { responseType: 'arraybuffer', timeout: 60_000 });
+                        const formData = new FormData();
+                        formData.append('file', new Blob([Buffer.from(audioRes.data)], { type: 'audio/ogg' }), 'audio.ogg');
+                        formData.append('model', 'whisper-1');
+                        if (node.data?.language && node.data.language !== 'auto') {
+                            formData.append('language', node.data.language);
+                        }
+                        const whisperRes = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, {
+                            headers: { Authorization: `Bearer ${apiKey}` },
+                            timeout: 120_000,
+                        });
+                        transcript = whisperRes.data?.text || '';
+                    } catch (err: any) {
+                        console.error('[ChatbotEngine] Transcription error:', err?.message);
+                        transcript = node.data?.fallbackMessage || '';
+                    }
+                }
+            }
+
+            if (outputVar) {
+                await cardRef.update({ [`customFields.${outputVar}`]: transcript });
+                sessionVars[outputVar] = transcript;
+            } else if (transcript) {
+                await dispatchMessage(transcript);
+                await appendAgentMessage({ text: transcript, type: 'text', messageId: `bot_transcript_${Date.now()}` });
+            }
+            const edge = resolveDefaultNextEdge(flow.edges, node.id);
+            currentNodeId = edge ? edge.target : null;
+            continue;
+        }
+
+        if (node.type === 'sentimentAnalysisNode') {
+            const snap = await cardRef.get();
+            const fresh = snap.data() || {};
+            const inputVar = (node.data?.inputVariable || '{{last_message}}').replace(/[\{\}]/g, '').trim();
+            let textToAnalyze = fresh.lastMessage || text || '';
+            if (inputVar && inputVar !== 'last_message') {
+                textToAnalyze = fresh.customFields?.[inputVar] ?? fresh[inputVar] ?? textToAnalyze;
+            }
+
+            let sentiment: 'positive' | 'negative' | 'neutral' = 'neutral';
+            let apiKey = process.env.OPENAI_API_KEY;
+            try {
+                const aiIntegration = await db.doc(`${entityPath}/integrations/openai`).get();
+                if (aiIntegration.exists) apiKey = aiIntegration.data()?.apiKey || apiKey;
+            } catch {}
+
+            if (apiKey && textToAnalyze) {
+                try {
+                    const aiRes = await axios.post('https://api.openai.com/v1/chat/completions', {
+                        model: 'gpt-4o-mini',
+                        messages: [
+                            {
+                                role: 'system',
+                                content: `Clasifica el sentimiento como positive, negative o neutral. Contexto: ${node.data?.domainContext || 'atención al cliente'}. Responde solo una palabra.`,
+                            },
+                            { role: 'user', content: textToAnalyze },
+                        ],
+                        temperature: 0,
+                    }, {
+                        headers: { Authorization: `Bearer ${apiKey}` },
+                        timeout: 30_000,
+                    });
+                    const raw = (aiRes.data.choices[0].message.content || '').toLowerCase();
+                    if (raw.includes('positive')) sentiment = 'positive';
+                    else if (raw.includes('negative')) sentiment = 'negative';
+                } catch (err: any) {
+                    console.error('[ChatbotEngine] Sentiment error:', err?.message);
+                }
+            }
+
+            await cardRef.update({ 'customFields.last_sentiment': sentiment });
+            const routeEdge = flow.edges.find(
+                (e: any) => String(e.source) === String(node.id) && e.sourceHandle === sentiment
+            );
+            currentNodeId = routeEdge?.target || resolveDefaultNextEdge(flow.edges, node.id)?.target || null;
             continue;
         }
 

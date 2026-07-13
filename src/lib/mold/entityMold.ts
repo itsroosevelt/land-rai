@@ -9,7 +9,7 @@ import {
 } from './starterChatbot';
 
 /** Incrementar cuando el molde multitenant gane nuevas estructuras obligatorias. */
-export const ENTITY_MOLD_VERSION = 6;
+export const ENTITY_MOLD_VERSION = 8;
 
 export const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
@@ -17,6 +17,9 @@ export const ENTITY_MOLD_FEATURES = {
     manualKanban: true,
     whatsappOutbound: true,
     whatsappBroadcast: true,
+    whatsappMultiNumber: true,
+    whatsappInboundMedia: true,
+    botAdvancedNodes: true,
 } as const;
 
 function tenantPath(userId: string, entityId: string) {

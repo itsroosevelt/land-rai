@@ -13,6 +13,7 @@ import {
     Image as ImageIcon, Film, FileText, Music, Edit2, Copy, Check, AlertTriangle
 } from 'lucide-react';
 import { SettingsSection, Field, FileUploader } from '../SharedComponents';
+import { VoiceRecorder } from '../VoiceRecorder';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import EmojiPicker, { EmojiClickData, Theme } from 'emoji-picker-react';
@@ -36,7 +37,7 @@ export const MediaMessageSettings = ({ node, allNodes, updateNodeConfig }: NodeS
         filename: node.data.filename || '',
         mediaType: node.data.mediaType || 'image',
     });
-    const [inputType, setInputType] = useState<'upload' | 'url'>('upload');
+    const [inputType, setInputType] = useState<'upload' | 'url' | 'voice'>('upload');
     const [copied, setCopied] = useState(false);
     const captionRef = useRef<HTMLTextAreaElement>(null);
 
@@ -64,7 +65,18 @@ export const MediaMessageSettings = ({ node, allNodes, updateNodeConfig }: NodeS
 
     const handleUploadSuccess = (url: string, filename: string, fileType: string) => {
         const type = detectMediaType(fileType || filename);
-        handleUpdate({ url, filename, mediaType: type });
+        handleUpdate({ url, filename, mediaType: type, mimeType: fileType || undefined });
+    };
+
+    const handleVoiceSuccess = (url: string, filename: string, mimeType: string) => {
+        handleUpdate({
+            url,
+            filename,
+            mediaType: 'audio',
+            mimeType,
+            preferMediaId: true,
+        });
+        setInputType('upload');
     };
 
     const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -109,10 +121,11 @@ export const MediaMessageSettings = ({ node, allNodes, updateNodeConfig }: NodeS
         <SettingsSection title="🖼️ Mensaje Multimedia">
             
             {/* 1. Selección de Origen */}
-            <Tabs value={inputType} onValueChange={(v) => setInputType(v as 'upload' | 'url')} className="w-full mb-6">
-                <TabsList className="grid w-full grid-cols-2 bg-neutral-900">
-                    <TabsTrigger value="upload">Subir Archivo</TabsTrigger>
-                    <TabsTrigger value="url">Usar URL Pública</TabsTrigger>
+            <Tabs value={inputType} onValueChange={(v) => setInputType(v as 'upload' | 'url' | 'voice')} className="w-full mb-6">
+                <TabsList className="grid w-full grid-cols-3 bg-neutral-900">
+                    <TabsTrigger value="upload" className="text-[10px]">Subir</TabsTrigger>
+                    <TabsTrigger value="voice" className="text-[10px]">Grabar voz</TabsTrigger>
+                    <TabsTrigger value="url" className="text-[10px]">URL</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="upload" className="mt-4">
@@ -122,6 +135,14 @@ export const MediaMessageSettings = ({ node, allNodes, updateNodeConfig }: NodeS
                         </p>
                         <FileUploader onUploadSuccess={handleUploadSuccess} initialUrl={config.url} initialFilename={config.filename} />
                     </div>
+                </TabsContent>
+
+                <TabsContent value="voice" className="mt-4">
+                    <VoiceRecorder
+                        initialUrl={config.mediaType === 'audio' ? config.url : null}
+                        onUploadSuccess={handleVoiceSuccess}
+                        onClear={() => handleUpdate({ url: '', filename: '', mediaType: 'image' })}
+                    />
                 </TabsContent>
                 
                 <TabsContent value="url" className="mt-4 space-y-3">
@@ -160,6 +181,23 @@ export const MediaMessageSettings = ({ node, allNodes, updateNodeConfig }: NodeS
                 </TabsContent>
             </Tabs>
 
+            {/* Tipo de medio (override manual) */}
+            {config.url && (
+                <Field label="Tipo para WhatsApp" htmlFor="media-type-override">
+                    <select
+                        id="media-type-override"
+                        value={config.mediaType}
+                        onChange={(e) => handleUpdate({ mediaType: e.target.value })}
+                        className="w-full h-9 rounded-lg bg-neutral-900 border border-neutral-800 text-xs text-white px-3"
+                    >
+                        <option value="image">Imagen</option>
+                        <option value="video">Video</option>
+                        <option value="audio">Audio / nota de voz</option>
+                        <option value="document">Documento (PDF, etc.)</option>
+                    </select>
+                </Field>
+            )}
+
             {/* 2. Previsualización y Renombrado (Solo si hay URL) */}
             {config.url && (
                 <div className="bg-neutral-900/50 rounded-lg border border-neutral-800 p-3 mb-6 space-y-3 overflow-hidden">
@@ -171,7 +209,10 @@ export const MediaMessageSettings = ({ node, allNodes, updateNodeConfig }: NodeS
                             ) : config.mediaType === 'video' ? (
                                 <Film size={24} className="text-blue-400" />
                             ) : config.mediaType === 'audio' ? (
-                                <Music size={24} className="text-pink-400" />
+                                <div className="w-full h-full flex flex-col items-center justify-center gap-1 p-1">
+                                    <Music size={20} className="text-pink-400" />
+                                    <audio src={config.url} controls className="w-full h-6 scale-90" />
+                                </div>
                             ) : (
                                 <FileText size={24} className="text-orange-400" />
                             )}

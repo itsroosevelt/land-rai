@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, AlertCircle, CheckCircle2, ChevronLeft, Settings, Copy, ShieldCheck, QrCode, Lock, Circle } from 'lucide-react';
+import { X, AlertCircle, CheckCircle2, ChevronLeft, Settings, Copy, ShieldCheck, QrCode, Lock, Circle, Phone, Plus, Trash2, Pencil, Loader2, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { Integration } from '../../config';
 import { useAuth } from '@/contexts/AuthContext';
@@ -9,6 +9,14 @@ import { db } from '@/lib/firebase';
 import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
 import { getWhatsAppIntegrationHealth } from '@/lib/omnichannel/whatsappIntegrationStatus';
 import { WhatsAppReadinessPanel } from './WhatsAppReadinessPanel';
+import {
+    subscribeSlotConnections,
+    saveSlotConnection,
+    disconnectSlot,
+    SLOTS,
+    type NumberSlot,
+    type SlotConnections,
+} from '@/lib/whatsapp/numbers';
 
 interface Props {
     isOpen: boolean;
@@ -27,6 +35,17 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
     const [updatedAt, setUpdatedAt] = useState<any>(null);
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
     const [tempConfig, setTempConfig] = useState<any>(null);
+
+    // Multi-number (slot) management
+    const [slotConnections, setSlotConnections] = useState<SlotConnections>({
+        general: { connected: false },
+        support: { connected: false },
+        broadcast: { connected: false },
+    });
+    const [editingSlot, setEditingSlot] = useState<NumberSlot | null>(null);
+    const [slotForm, setSlotForm] = useState({ phoneNumberId: '', wabaId: '', accessToken: '', displayPhoneNumber: '' });
+    const [slotSaving, setSlotSaving] = useState(false);
+    const [showAdvanced, setShowAdvanced] = useState(false);
 
     // Meta Wizard States
     const [wizardPath, setWizardPath] = useState<'new' | 'existing' | null>(null);
@@ -180,9 +199,20 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
         loadWebhookMeta();
     }, [isOpen, currentUser?.uid, activeEntity, step]);
 
+    // Subscribe to all WhatsApp numbers (slots). The current/legacy connection
+    // surfaces automatically under the "General" slot, so nothing existing breaks.
+    useEffect(() => {
+        if (!isOpen || !currentUser?.uid || !activeEntity) return;
+        const tenantPath = `users/${currentUser.uid}/entities/${activeEntity}`;
+        const unsub = subscribeSlotConnections(tenantPath, setSlotConnections);
+        return () => unsub();
+    }, [isOpen, currentUser?.uid, activeEntity]);
+
     if (!activeIntegration || activeIntegration.id !== 'whatsapp') return null;
 
     const whatsappHealth = getWhatsAppIntegrationHealth(waConfig);
+    const connectedSlotCount = (['general', 'support', 'broadcast'] as NumberSlot[])
+        .filter((s) => slotConnections[s]?.connected).length;
 
     const tenantWebhookUrl = webhookMeta?.tenantWebhookUrl
         || (currentUser?.uid && activeEntity
@@ -417,6 +447,82 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
         } catch (error) {
             console.error(error);
             toast.error("Error al desconectar.", { id: "wa-config" });
+        }
+    };
+
+    // Open the editor for a given slot. "General" reuses the primary edit flow so
+    // the legacy `integrations/whatsapp` doc (used by webhook + omnichannel) stays authoritative.
+    const openSlotEditor = (slot: NumberSlot) => {
+        if (slot === 'general') {
+            setTempConfig({ ...waConfig });
+            setIsEditing(true);
+            return;
+        }
+        const conn = slotConnections[slot];
+        setSlotForm({
+            phoneNumberId: conn.phoneNumberId || '',
+            wabaId: conn.wabaId || '',
+            accessToken: conn.accessToken || '',
+            displayPhoneNumber: conn.displayPhoneNumber || '',
+        });
+        setEditingSlot(slot);
+    };
+
+    const handleSaveSlot = async () => {
+        if (!editingSlot || editingSlot === 'general' || !currentUser?.uid || !activeEntity) return;
+        if (!slotForm.phoneNumberId.trim() || !slotForm.accessToken.trim()) {
+            toast.error('Necesitas Phone Number ID y Access Token.');
+            return;
+        }
+        if (!slotForm.accessToken.trim().startsWith('EAA')) {
+            toast.error('El Access Token debe empezar con EAA.');
+            return;
+        }
+        setSlotSaving(true);
+        const tenantPath = `users/${currentUser.uid}/entities/${activeEntity}`;
+        toast.loading('Verificando número...', { id: 'wa-slot' });
+        try {
+            const vr = await fetch('/api/whatsapp/validate-phone-id', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    phoneNumberId: slotForm.phoneNumberId.trim(),
+                    userId: currentUser.uid,
+                    entityId: activeEntity,
+                }),
+            });
+            const vd = await vr.json();
+            if (!vd.valid) {
+                toast.error(vd.message || 'Ese número ya está en uso.', { id: 'wa-slot' });
+                setSlotSaving(false);
+                return;
+            }
+            await saveSlotConnection(tenantPath, editingSlot, {
+                phoneNumberId: slotForm.phoneNumberId.trim(),
+                wabaId: slotForm.wabaId.trim(),
+                accessToken: slotForm.accessToken.trim(),
+                displayPhoneNumber: slotForm.displayPhoneNumber.trim(),
+            });
+            toast.success('Número conectado.', { id: 'wa-slot' });
+            setEditingSlot(null);
+        } catch (error) {
+            console.error(error);
+            toast.error('No se pudo guardar el número.', { id: 'wa-slot' });
+        } finally {
+            setSlotSaving(false);
+        }
+    };
+
+    const handleDisconnectSlot = async (slot: NumberSlot) => {
+        if (slot === 'general' || !currentUser?.uid || !activeEntity) return;
+        if (!confirm('¿Desconectar este número?')) return;
+        const tenantPath = `users/${currentUser.uid}/entities/${activeEntity}`;
+        try {
+            await disconnectSlot(tenantPath, slot);
+            toast.success('Número desconectado.');
+        } catch (error) {
+            console.error(error);
+            toast.error('No se pudo desconectar.');
         }
     };
 
@@ -856,107 +962,280 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                                     </motion.div>
                                 ) : (
 
-                                    <motion.div key="connected" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex-1 flex flex-col items-center text-center pt-0 pb-6 font-sans">
-                                        <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mb-8 relative">
-                                            <div className="absolute inset-0 rounded-full border border-green-500/20 animate-pulse" />
-                                            <CheckCircle2 className="w-10 h-10 text-green-500" />
+                                    <motion.div key="connected" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="flex-1 flex flex-col text-left pt-0 pb-6 font-sans">
+                                        {/* Header */}
+                                        <div className="flex items-center gap-4 mb-6">
+                                            <div className="w-12 h-12 bg-green-500/10 rounded-2xl flex items-center justify-center relative shrink-0">
+                                                <div className="absolute inset-0 rounded-2xl border border-green-500/20 animate-pulse" />
+                                                <CheckCircle2 className="w-6 h-6 text-green-500" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h3 className="text-2xl font-extralight text-white tracking-tighter leading-none mb-1">Números de WhatsApp</h3>
+                                                <p className="text-[10px] text-white/30 uppercase tracking-[0.25em] font-bold">
+                                                    {connectedSlotCount} {connectedSlotCount === 1 ? 'número activo' : 'números activos'} · Red Roosevelt
+                                                </p>
+                                            </div>
                                         </div>
-                                        <h3 className="text-3xl font-extralight text-white tracking-tighter mb-2 italic uppercase">Canal Sincronizado</h3>
-                                        <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold mb-6">Nodo Activo en la Red Roosevelt</p>
 
                                         <div className="w-full mb-6">
                                             <WhatsAppReadinessPanel health={whatsappHealth} entityId={activeEntity} />
                                         </div>
 
-                                        <div className="w-full space-y-4 px-2">
-                                            <div className="h-24 bg-white/5 border border-white/10 rounded-[32px] flex items-center px-8 justify-between relative overflow-hidden backdrop-blur-sm">
-                                                <div className="text-left relative z-10">
-                                                    <span className="text-[9px] uppercase tracking-[0.2em] text-white/40 block mb-2 font-bold opacity-60">PUNTO DE ACCESO</span>
-                                                    <p className="text-2xl font-light text-white tracking-widest">{waConfig.displayPhoneNumber || "S/N"}</p>
-                                                </div>
-                                                <div className="p-4 bg-green-500/5 border border-green-500/10 rounded-2xl"><ShieldCheck className="w-6 h-6 text-green-500/40" /></div>
-                                            </div>
+                                        {/* Multi-number manager */}
+                                        <div className="flex items-center justify-between mb-3 px-1">
+                                            <span className="text-[9px] uppercase tracking-[0.25em] text-white/50 font-bold">Números conectados</span>
+                                            <span className="text-[9px] text-white/30 font-mono">{connectedSlotCount}/3</span>
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+                                            {SLOTS.map((slot) => {
+                                                const conn = slotConnections[slot.id];
+                                                const isConnected = conn?.connected;
+                                                return (
+                                                    <div
+                                                        key={slot.id}
+                                                        className={`rounded-2xl border p-4 flex flex-col gap-3 transition-all ${isConnected ? 'border-emerald-500/25 bg-emerald-500/[0.04]' : 'border-white/8 bg-white/[0.02] hover:border-white/15'}`}
+                                                    >
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center gap-2 min-w-0">
+                                                                <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${isConnected ? 'bg-emerald-500/15 text-emerald-400' : 'bg-white/5 text-white/30'}`}>
+                                                                    <Phone className="w-3.5 h-3.5" />
+                                                                </div>
+                                                                <div className="min-w-0">
+                                                                    <p className="text-[11px] font-bold text-white leading-none truncate">{slot.label}</p>
+                                                                    <p className="text-[8px] uppercase tracking-widest text-white/30 mt-1">{slot.id === 'general' ? 'Principal' : 'Adicional'}</p>
+                                                                </div>
+                                                            </div>
+                                                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isConnected ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)]' : 'bg-white/15'}`} />
+                                                        </div>
 
-                                            <div className="p-5 bg-amber-500/5 border border-amber-500/20 rounded-2xl text-left space-y-2">
-                                                <p className="text-[9px] text-amber-200/90 font-bold uppercase tracking-widest">Meta Developer Console</p>
-                                                <p className="text-[10px] text-white/50 leading-relaxed">
-                                                    Desactiva <strong className="text-white/70">“Adjunta un certificado de cliente”</strong> antes de verificar. Ese switch suele causar el error rojo si el servidor no está configurado para certificados.
-                                                </p>
-                                            </div>
+                                                        <p className="text-[9px] text-white/30 leading-relaxed min-h-[24px]">{slot.description}</p>
 
-                                            <div className="p-5 bg-white/[0.03] border border-emerald-500/20 rounded-2xl text-left space-y-3">
-                                                <span className="text-[9px] uppercase tracking-[0.2em] text-emerald-400/80 font-bold">Opción recomendada (copiar en Meta)</span>
-                                                <p className="text-[10px] text-white/50 font-mono break-all leading-relaxed">{globalWebhookUrl}</p>
-                                                <p className="text-[9px] text-white/40">Verify token: <span className="text-white/80 font-mono">{webhookMeta?.recommendedVerifyToken || 'vg37e'}</span></p>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        navigator.clipboard.writeText(globalWebhookUrl);
-                                                        toast.success('URL global copiada');
-                                                    }}
-                                                    className="w-full px-3 py-2 rounded-lg bg-emerald-600/20 border border-emerald-500/30 text-[9px] font-bold uppercase tracking-widest text-emerald-100"
+                                                        {isConnected ? (
+                                                            <>
+                                                                <p className="text-sm text-white font-light tracking-wide truncate">{conn.displayPhoneNumber || conn.phoneNumberId}</p>
+                                                                <div className="flex gap-2">
+                                                                    <button
+                                                                        onClick={() => openSlotEditor(slot.id)}
+                                                                        className="flex-1 h-8 rounded-lg border border-white/10 text-white/60 hover:text-white hover:bg-white/5 text-[9px] font-bold uppercase tracking-widest flex items-center justify-center gap-1 transition-all"
+                                                                    >
+                                                                        <Pencil className="w-3 h-3" /> Editar
+                                                                    </button>
+                                                                    {slot.id !== 'general' && (
+                                                                        <button
+                                                                            onClick={() => handleDisconnectSlot(slot.id)}
+                                                                            className="h-8 w-8 rounded-lg border border-red-500/20 text-red-400/70 hover:bg-red-500/10 flex items-center justify-center transition-all shrink-0"
+                                                                            title="Desconectar"
+                                                                        >
+                                                                            <Trash2 className="w-3 h-3" />
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            </>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => openSlotEditor(slot.id)}
+                                                                className="mt-auto h-8 rounded-lg border border-emerald-500/25 bg-emerald-500/5 text-emerald-400 text-[9px] font-bold uppercase tracking-widest flex items-center justify-center gap-1 hover:bg-emerald-500/10 transition-all"
+                                                            >
+                                                                <Plus className="w-3 h-3" /> Conectar
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        <p className="text-[9px] text-white/25 leading-relaxed mb-6 px-1">
+                                            Asigna un número distinto a cada propósito. Cada número mantiene su propio bot activo y sus conversaciones en Omnicanal.
+                                        </p>
+
+                                        {/* Advanced / webhook config (collapsible) */}
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowAdvanced((v) => !v)}
+                                            className="w-full flex items-center justify-between px-4 h-11 rounded-2xl border border-white/8 bg-white/[0.02] hover:bg-white/5 transition-all mb-3"
+                                        >
+                                            <span className="flex items-center gap-2 text-[9px] uppercase tracking-[0.2em] font-bold text-white/60">
+                                                <Settings className="w-3.5 h-3.5" /> Webhook y verificación
+                                            </span>
+                                            <ChevronDown className={`w-4 h-4 text-white/40 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
+                                        </button>
+
+                                        <AnimatePresence initial={false}>
+                                            {showAdvanced && (
+                                                <motion.div
+                                                    initial={{ height: 0, opacity: 0 }}
+                                                    animate={{ height: 'auto', opacity: 1 }}
+                                                    exit={{ height: 0, opacity: 0 }}
+                                                    className="overflow-hidden"
                                                 >
-                                                    <Copy className="w-3 h-3 inline mr-1" /> Copiar URL recomendada
-                                                </button>
-                                            </div>
+                                                    <div className="space-y-4 pt-1">
+                                                        <div className="p-5 bg-amber-500/5 border border-amber-500/20 rounded-2xl text-left space-y-2">
+                                                            <p className="text-[9px] text-amber-200/90 font-bold uppercase tracking-widest">Meta Developer Console</p>
+                                                            <p className="text-[10px] text-white/50 leading-relaxed">
+                                                                Desactiva <strong className="text-white/70">“Adjunta un certificado de cliente”</strong> antes de verificar. Ese switch suele causar el error rojo si el servidor no está configurado para certificados.
+                                                            </p>
+                                                        </div>
 
-                                            <div className="p-5 bg-white/[0.03] border border-white/10 rounded-2xl text-left space-y-3">
-                                                <span className="text-[9px] uppercase tracking-[0.2em] text-white/40 font-bold">Token personalizado (opcional)</span>
-                                                <input
-                                                    type="text"
-                                                    value={waConfig.verifyToken}
-                                                    onChange={(e) => setWaConfig({ ...waConfig, verifyToken: e.target.value.trim() })}
-                                                    className="w-full h-10 bg-white/[0.02] border border-white/10 rounded-xl px-3 text-xs text-white font-mono"
-                                                    placeholder="vg37e"
-                                                />
-                                                <button
-                                                    type="button"
-                                                    disabled={savingVerifyToken || !currentUser?.uid}
-                                                    onClick={async () => {
-                                                        if (!currentUser?.uid || !activeEntity) return;
-                                                        setSavingVerifyToken(true);
-                                                        try {
-                                                            const res = await fetch('/api/whatsapp/webhook-config', {
-                                                                method: 'POST',
-                                                                headers: { 'Content-Type': 'application/json' },
-                                                                body: JSON.stringify({
-                                                                    userId: currentUser.uid,
-                                                                    entityId: activeEntity,
-                                                                    verifyToken: waConfig.verifyToken || 'vg37e',
-                                                                }),
-                                                            });
-                                                            const data = await res.json();
-                                                            if (!res.ok) throw new Error(data.error || 'Error');
-                                                            toast.success('Token guardado. Úsalo igual en Meta.');
-                                                        } catch (err: any) {
-                                                            toast.error(err.message || 'No se pudo guardar');
-                                                        } finally {
-                                                            setSavingVerifyToken(false);
-                                                        }
-                                                    }}
-                                                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-[9px] font-bold uppercase tracking-widest text-white/70 disabled:opacity-40"
-                                                >
-                                                    {savingVerifyToken ? 'Guardando...' : 'Guardar token en Roosevelt'}
-                                                </button>
-                                                {tenantWebhookUrl && (
-                                                    <>
-                                                        <p className="text-[9px] text-white/30 pt-2">URL por tenant (solo si usas token personalizado arriba):</p>
-                                                        <p className="text-[10px] text-white/40 font-mono break-all">{tenantWebhookUrl}</p>
-                                                        <p className="text-[9px] text-red-300/80">Nunca uses “TU_UID” — debe ser tu UID real de Firebase ({currentUser?.uid?.slice(0, 8)}…).</p>
-                                                    </>
-                                                )}
-                                            </div>
+                                                        <div className="p-5 bg-white/[0.03] border border-emerald-500/20 rounded-2xl text-left space-y-3">
+                                                            <span className="text-[9px] uppercase tracking-[0.2em] text-emerald-400/80 font-bold">Opción recomendada (copiar en Meta)</span>
+                                                            <p className="text-[10px] text-white/50 font-mono break-all leading-relaxed">{globalWebhookUrl}</p>
+                                                            <p className="text-[9px] text-white/40">Verify token: <span className="text-white/80 font-mono">{webhookMeta?.recommendedVerifyToken || 'vg37e'}</span></p>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    navigator.clipboard.writeText(globalWebhookUrl);
+                                                                    toast.success('URL global copiada');
+                                                                }}
+                                                                className="w-full px-3 py-2 rounded-lg bg-emerald-600/20 border border-emerald-500/30 text-[9px] font-bold uppercase tracking-widest text-emerald-100"
+                                                            >
+                                                                <Copy className="w-3 h-3 inline mr-1" /> Copiar URL recomendada
+                                                            </button>
+                                                        </div>
 
-                                            <div className="flex items-center gap-4 pt-10">
-                                                <button onClick={onClose} className="flex-1 h-14 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all">TERMINAR</button>
-                                                <button onClick={handleDeleteConfig} className="flex-1 h-14 bg-red-500/5 hover:bg-red-500/10 text-red-500/50 border border-red-500/10 text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all">DESCONECTAR</button>
-                                            </div>
+                                                        <div className="p-5 bg-white/[0.03] border border-white/10 rounded-2xl text-left space-y-3">
+                                                            <span className="text-[9px] uppercase tracking-[0.2em] text-white/40 font-bold">Token personalizado (opcional)</span>
+                                                            <input
+                                                                type="text"
+                                                                value={waConfig.verifyToken}
+                                                                onChange={(e) => setWaConfig({ ...waConfig, verifyToken: e.target.value.trim() })}
+                                                                className="w-full h-10 bg-white/[0.02] border border-white/10 rounded-xl px-3 text-xs text-white font-mono"
+                                                                placeholder="vg37e"
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                disabled={savingVerifyToken || !currentUser?.uid}
+                                                                onClick={async () => {
+                                                                    if (!currentUser?.uid || !activeEntity) return;
+                                                                    setSavingVerifyToken(true);
+                                                                    try {
+                                                                        const res = await fetch('/api/whatsapp/webhook-config', {
+                                                                            method: 'POST',
+                                                                            headers: { 'Content-Type': 'application/json' },
+                                                                            body: JSON.stringify({
+                                                                                userId: currentUser.uid,
+                                                                                entityId: activeEntity,
+                                                                                verifyToken: waConfig.verifyToken || 'vg37e',
+                                                                            }),
+                                                                        });
+                                                                        const data = await res.json();
+                                                                        if (!res.ok) throw new Error(data.error || 'Error');
+                                                                        toast.success('Token guardado. Úsalo igual en Meta.');
+                                                                    } catch (err: any) {
+                                                                        toast.error(err.message || 'No se pudo guardar');
+                                                                    } finally {
+                                                                        setSavingVerifyToken(false);
+                                                                    }
+                                                                }}
+                                                                className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-[9px] font-bold uppercase tracking-widest text-white/70 disabled:opacity-40"
+                                                            >
+                                                                {savingVerifyToken ? 'Guardando...' : 'Guardar token en Roosevelt'}
+                                                            </button>
+                                                            {tenantWebhookUrl && (
+                                                                <>
+                                                                    <p className="text-[9px] text-white/30 pt-2">URL por tenant (solo si usas token personalizado arriba):</p>
+                                                                    <p className="text-[10px] text-white/40 font-mono break-all">{tenantWebhookUrl}</p>
+                                                                    <p className="text-[9px] text-red-300/80">Nunca uses “TU_UID” — debe ser tu UID real de Firebase ({currentUser?.uid?.slice(0, 8)}…).</p>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+
+                                        <div className="flex items-center gap-4 pt-8 mt-auto">
+                                            <button onClick={onClose} className="flex-1 h-14 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all">TERMINAR</button>
+                                            <button onClick={handleDeleteConfig} className="flex-1 h-14 bg-red-500/5 hover:bg-red-500/10 text-red-500/50 border border-red-500/10 text-[10px] font-bold uppercase tracking-[0.3em] rounded-full transition-all">DESCONECTAR PRINCIPAL</button>
                                         </div>
                                     </motion.div>
                                 )}
                             </AnimatePresence>
                         </div>
                     </motion.div>
+
+                    {/* Inline number editor for additional slots */}
+                    <AnimatePresence>
+                        {editingSlot && editingSlot !== 'general' && (
+                            <motion.div
+                                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                                className="absolute inset-0 z-[10001] flex items-center justify-center p-4"
+                            >
+                                <div className="absolute inset-0 bg-black/75 backdrop-blur-md" onClick={() => !slotSaving && setEditingSlot(null)} />
+                                <motion.div
+                                    initial={{ scale: 0.95, y: 20, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                                    className="relative w-full max-w-md bg-[#0d0d0d] border border-white/10 rounded-3xl p-6 shadow-2xl"
+                                >
+                                    <div className="flex items-center justify-between mb-1">
+                                        <h3 className="text-lg font-light text-white tracking-tight">
+                                            Número · {SLOTS.find((s) => s.id === editingSlot)?.label}
+                                        </h3>
+                                        <button onClick={() => !slotSaving && setEditingSlot(null)} className="p-1.5 hover:bg-white/5 rounded-full transition-colors">
+                                            <X className="w-4 h-4 text-white/40" />
+                                        </button>
+                                    </div>
+                                    <p className="text-[10px] text-white/30 mb-5">{SLOTS.find((s) => s.id === editingSlot)?.description}</p>
+
+                                    <div className="space-y-4">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div className="space-y-1.5">
+                                                <label className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Phone Number ID</label>
+                                                <input
+                                                    type="text" placeholder="Ej: 676837795516836"
+                                                    value={slotForm.phoneNumberId}
+                                                    onChange={(e) => setSlotForm({ ...slotForm, phoneNumberId: e.target.value.replace(/[^0-9]/g, '') })}
+                                                    className="w-full h-11 bg-white/[0.02] border border-white/10 rounded-xl px-4 text-xs text-white focus:border-blue-500/50 transition-all outline-none font-mono"
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <label className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Número visible</label>
+                                                <input
+                                                    type="text" placeholder="Ej: +1 385 888 2799"
+                                                    value={slotForm.displayPhoneNumber}
+                                                    onChange={(e) => setSlotForm({ ...slotForm, displayPhoneNumber: e.target.value })}
+                                                    className="w-full h-11 bg-white/[0.02] border border-white/10 rounded-xl px-4 text-xs text-white focus:border-blue-500/50 transition-all outline-none"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[9px] font-black uppercase tracking-widest text-neutral-500">WABA ID</label>
+                                            <input
+                                                type="text" placeholder="Ej: 25304791939521"
+                                                value={slotForm.wabaId}
+                                                onChange={(e) => setSlotForm({ ...slotForm, wabaId: e.target.value.replace(/[^0-9]/g, '') })}
+                                                className="w-full h-11 bg-white/[0.02] border border-white/10 rounded-xl px-4 text-xs text-white focus:border-blue-500/50 transition-all outline-none font-mono"
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Access Token (permanente)</label>
+                                            <textarea
+                                                placeholder="Ej: EAARnTi3ZAPNYBR..."
+                                                value={slotForm.accessToken}
+                                                onChange={(e) => setSlotForm({ ...slotForm, accessToken: e.target.value })}
+                                                className="w-full h-20 bg-white/[0.02] border border-white/10 rounded-xl px-4 py-3 text-[10px] text-white focus:border-blue-500/50 transition-all outline-none font-mono resize-none"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-3 mt-6">
+                                        <button
+                                            onClick={() => setEditingSlot(null)}
+                                            disabled={slotSaving}
+                                            className="flex-1 h-12 bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-40"
+                                        >
+                                            Cancelar
+                                        </button>
+                                        <button
+                                            onClick={handleSaveSlot}
+                                            disabled={slotSaving}
+                                            className="flex-1 h-12 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-600/20 disabled:opacity-40 flex items-center justify-center gap-2"
+                                        >
+                                            {slotSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                                            Guardar número
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </div>
             )}
         </AnimatePresence>

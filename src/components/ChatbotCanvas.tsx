@@ -1,6 +1,6 @@
 // src/components/ChatbotCanvas.tsx
 'use client';
-import React, { useState, useCallback, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
 import {
     ReactFlow,
     MiniMap,
@@ -8,6 +8,7 @@ import {
     Background,
     Edge,
     Node,
+    Connection,
     BackgroundVariant,
     OnNodesChange,
     OnEdgesChange,
@@ -15,6 +16,7 @@ import {
     OnConnect,
     ReactFlowProvider,
     updateEdge,
+    MarkerType,
     Position,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
@@ -44,20 +46,20 @@ const sidebarNodeGroups = [
             { type: 'mediaMessageNode', label: 'Mensaje Multimedia', icon: <ImageIcon className="text-yellow-400" /> },
             { type: 'quickReplyNode', label: 'Respuesta Rápida', icon: <Zap className="text-purple-400" /> },
             { type: 'listMessageNode', label: 'Mensaje de Lista', icon: <Rows className="text-indigo-400" /> },
-            { type: 'pollNode', label: 'Encuesta Nativa', icon: <CheckSquare className="text-teal-400" />, disabled: true },
-            { type: 'contactNode', label: 'Contacto (VCard)', icon: <Contact className="text-orange-400" />, disabled: true },
-            { type: 'locationNode', label: 'Ubicación', icon: <MapPin className="text-red-400" />, disabled: true },
+            { type: 'pollNode', label: 'Encuesta Nativa', icon: <CheckSquare className="text-teal-400" /> },
+            { type: 'contactNode', label: 'Contacto (VCard)', icon: <Contact className="text-orange-400" /> },
+            { type: 'locationNode', label: 'Ubicación', icon: <MapPin className="text-red-400" /> },
         ]
     },
     {
         title: 'Lógica y Procesamiento',
         nodes: [
             { type: 'captureInputNode', label: 'Capturar Entrada', icon: <Edit2 className="text-cyan-400" /> },
-            { type: 'conditionNode', label: 'Condición (If/Else)', icon: <BrainCircuit className="text-amber-400" />, disabled: true },
-            { type: 'setVariableNode', label: 'Asignar Variable', icon: <Variable className="text-lime-400" />, disabled: true },
-            { type: 'webhookNode', label: 'Webhook', icon: <Code className="text-pink-400" />, disabled: true },
+            { type: 'conditionNode', label: 'Condición (If/Else)', icon: <BrainCircuit className="text-amber-400" /> },
+            { type: 'setVariableNode', label: 'Asignar Variable', icon: <Variable className="text-lime-400" /> },
+            { type: 'webhookNode', label: 'Webhook', icon: <Code className="text-pink-400" /> },
             { type: 'firestoreReadWriteNode', label: 'Consulta Firestore', icon: <Database className="text-gray-400" />, disabled: true },
-            { type: 'delayNode', label: 'Espera / Delay', icon: <Clock className="text-gray-400" />, disabled: true },
+            { type: 'delayNode', label: 'Espera / Delay', icon: <Clock className="text-gray-400" /> },
             { type: 'endNode', label: 'Fin de Flujo', icon: <StopCircle className="text-red-500" /> },
         ]
     },
@@ -73,16 +75,16 @@ const sidebarNodeGroups = [
     {
         title: 'Inteligencia Artificial',
         nodes: [
-            { type: 'generativeAINode', label: 'IA Generativa (LLM)', icon: <Bot className="text-sky-400" />, disabled: true },
-            { type: 'transcriptionNode', label: 'Transcripción (Audio)', icon: <Mic className="text-sky-400" />, disabled: true },
-            { type: 'sentimentAnalysisNode', label: 'Análisis de Sentimiento', icon: <Smile className="text-sky-400" />, disabled: true },
+            { type: 'generativeAINode', label: 'IA Generativa (LLM)', icon: <Bot className="text-sky-400" /> },
+            { type: 'transcriptionNode', label: 'Transcripción (Audio)', icon: <Mic className="text-sky-400" /> },
+            { type: 'sentimentAnalysisNode', label: 'Análisis de Sentimiento', icon: <Smile className="text-sky-400" /> },
         ]
     },
     {
         title: 'Gestión y Soporte',
         nodes: [
-            { type: 'templateNode', label: 'Plantillas (Templates)', icon: <Send className="text-fuchsia-400" />, disabled: true },
-            { type: 'humanHandoffNode', label: 'Transferencia a Humano', icon: <Users className="text-fuchsia-400" />, disabled: true },
+            { type: 'templateNode', label: 'Plantillas (Templates)', icon: <Send className="text-fuchsia-400" /> },
+            { type: 'humanHandoffNode', label: 'Transferencia a Humano', icon: <Users className="text-fuchsia-400" /> },
         ]
     }
 ];
@@ -239,9 +241,45 @@ const ChatbotCanvas = forwardRef<ChatbotCanvasRef, ChatbotCanvasProps>(
             setNodes((nds) => nds.concat(newNode));
         }, [reactFlowInstance, setNodes]);
 
+        // --- Reconectar arrastrando un extremo; si se suelta en el vacío, se elimina la conexión ---
+        const edgeUpdateSuccessful = useRef(true);
+
+        const onEdgeUpdateStart = useCallback(() => {
+            edgeUpdateSuccessful.current = false;
+        }, []);
+
         const onEdgeUpdate = useCallback(
-            (oldEdge, newConnection) => setEdges((els) => updateEdge(oldEdge, newConnection, els)),
+            (oldEdge: Edge, newConnection: Connection) => {
+                edgeUpdateSuccessful.current = true;
+                setEdges((els) => updateEdge(oldEdge, newConnection, els));
+            },
             [setEdges]
+        );
+
+        const onEdgeUpdateEnd = useCallback(
+            (_: unknown, edge: Edge) => {
+                if (!edgeUpdateSuccessful.current) {
+                    setEdges((eds) => eds.filter((e) => e.id !== edge.id));
+                }
+                edgeUpdateSuccessful.current = true;
+            },
+            [setEdges]
+        );
+
+        // --- Validación: sin auto-conexiones ni duplicados exactos ---
+        const isValidConnection = useCallback(
+            (connection: Connection) => {
+                if (connection.source === connection.target) return false;
+                const duplicate = edges.some(
+                    (e) =>
+                        e.source === connection.source &&
+                        e.target === connection.target &&
+                        e.sourceHandle === connection.sourceHandle &&
+                        e.targetHandle === connection.targetHandle
+                );
+                return !duplicate;
+            },
+            [edges]
         );
 
         const onNodeClick = (_: React.MouseEvent, node: Node) => {
@@ -355,12 +393,27 @@ const ChatbotCanvas = forwardRef<ChatbotCanvasRef, ChatbotCanvasProps>(
                         onEdgesChange={onEdgesChange}
                         onConnect={onConnect}
                         onEdgeUpdate={onEdgeUpdate}
+                        onEdgeUpdateStart={onEdgeUpdateStart}
+                        onEdgeUpdateEnd={onEdgeUpdateEnd}
+                        isValidConnection={isValidConnection}
                         onNodeClick={onNodeClick}
                         onPaneClick={onPaneClick}
                         onNodesDelete={onNodesDelete}
                         nodeTypes={nodeTypes}
                         edgeTypes={edgeTypes}
                         onInit={setReactFlowInstance}
+                        defaultEdgeOptions={{
+                            type: 'custom',
+                            markerEnd: {
+                                type: MarkerType.ArrowClosed,
+                                width: 18,
+                                height: 18,
+                                color: '#52525b',
+                            },
+                        }}
+                        connectionLineStyle={{ stroke: '#8b5cf6', strokeWidth: 2.5 }}
+                        connectionRadius={40}
+                        deleteKeyCode={['Backspace', 'Delete']}
                         fitView
                         snapToGrid
                         snapGrid={[20, 20]}

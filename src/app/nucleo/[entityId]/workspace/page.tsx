@@ -21,7 +21,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import {
-    FileCheck, Scale, MessageSquare, TrendingUp, FileText, Megaphone, Cpu, Activity, Package, BookOpen, Contact, Brain, Users, Search, Award, Truck, Settings, Layout, Building, PieChart, Gavel, Coffee, Lightbulb, Briefcase, Share2, Server, Network, LifeBuoy, Calendar, Code2, Database, UserPlus, Globe, Shield, PenTool, Lock, Rocket, Landmark, Bot, Layers, ShieldAlert, CreditCard, Heart, Crown, GraduationCap, Target, BarChart, Send, Zap, DollarSign, ChevronDown, Handshake, Fingerprint, Key, Sun, Phone, Smartphone, ShoppingBag, Globe2, Terminal, Workflow, ZapOff, Anchor, Bell, Box, CheckCircle, Clipboard, Compass, Eye, Filter, Gift, HelpCircle, Image, Link, List, Mail, Map, MapPin, Mic, Moon, MousePointer, Music, Navigation, Paperclip, Play, Plus, Power, Printer, Radio, Save, Scissors, Share, Star, Table, Tag, Thermometer, ThumbsUp, Trash, Video, Volume2, Watch, Wifi, Wind, Smile, X, Edit3, Move, ExternalLink, Grid3X3, Square, ShieldCheck, BriefcaseIcon, Microscope, HardHat, ArrowLeft, Minus, ZoomIn, ZoomOut, Maximize2
+    FileCheck, Scale, MessageSquare, TrendingUp, FileText, Megaphone, Cpu, Activity, Package, BookOpen, Contact, Brain, Users, Search, Award, Truck, Settings, Layout, Building, PieChart, Gavel, Coffee, Lightbulb, Briefcase, Share2, Server, Network, LifeBuoy, Calendar, Code2, Database, UserPlus, Globe, Shield, PenTool, Lock, Rocket, Landmark, Bot, Layers, ShieldAlert, CreditCard, Heart, Crown, GraduationCap, Target, BarChart, Send, Zap, DollarSign, ChevronDown, Handshake, Fingerprint, Key, Sun, Phone, Smartphone, ShoppingBag, Globe2, Terminal, Workflow, ZapOff, Anchor, Bell, Box, CheckCircle, Clipboard, Compass, Eye, Filter, Gift, HelpCircle, Image, Link, List, Mail, Map, MapPin, Mic, Moon, MousePointer, Music, Navigation, Paperclip, Play, Plus, Power, Printer, Radio, Save, Scissors, Share, Star, Table, Tag, Thermometer, ThumbsUp, Trash, Video, Volume2, Watch, Wifi, Wind, Smile, X, Edit3, Move, ExternalLink, Grid3X3, Square, ShieldCheck, BriefcaseIcon, Microscope, HardHat, ArrowLeft, Minus, ZoomIn, ZoomOut, Maximize2, GripVertical, ChevronLeft
 } from "lucide-react";
 import { WindowNode } from '@/components/shared/WindowNode';
 import { cn } from '@/lib/utils';
@@ -30,6 +30,7 @@ import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { ensureEntityMoldUpToDate } from '@/lib/mold/entityMold';
 import { MOLD_WORKSPACE_ROUTES } from '@/lib/mold/routes';
+import { toast } from 'sonner';
 
 // --- CONSTANTS ---
 const PIXELS_PER_INCH = 96;
@@ -192,18 +193,169 @@ const AxesNode = () => (
     </div>
 );
 
-const TitleNode = ({ data }: NodeProps) => (
-    <div className="pointer-events-none select-none flex flex-col items-center" style={{ transform: 'translate(-50%, -50%)' }}>
-        <h1 className="text-6xl md:text-8xl font-thin text-white tracking-tighter whitespace-nowrap drop-shadow-[0_0_30px_rgba(255,255,255,0.1)]">
-            {data.title}
-        </h1>
-    </div>
-);
+const TitleNode = ({ data }: NodeProps) => {
+    const [menuOpen, setMenuOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!menuOpen) return;
+        const handler = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as globalThis.Node)) setMenuOpen(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [menuOpen]);
+
+    return (
+        <div className="pointer-events-none select-none flex flex-row items-center gap-10" style={{ transform: 'translate(-50%, -50%)' }}>
+            {data.onBack && (
+                <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); data.onBack(); }}
+                    title="Volver a la suite"
+                    className="nodrag pointer-events-auto shrink-0 text-white/40 hover:text-white transition-colors cursor-pointer"
+                >
+                    <ChevronLeft className="w-16 h-16 md:w-24 md:h-24" strokeWidth={1.25} />
+                </button>
+            )}
+            <h1 className="text-6xl md:text-8xl font-thin text-white tracking-tighter whitespace-nowrap drop-shadow-[0_0_30px_rgba(255,255,255,0.1)]">
+                {data.title}
+            </h1>
+            {data.roles && (
+                <div className="relative pointer-events-auto shrink-0" ref={menuRef}>
+                    <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setMenuOpen(o => !o); }}
+                        title="Cambiar de oficial"
+                        className={cn(
+                            "nodrag cursor-pointer transition-colors",
+                            menuOpen ? "text-white" : "text-white/40 hover:text-white"
+                        )}
+                    >
+                        <ChevronDown
+                            className={cn("w-16 h-16 md:w-24 md:h-24 transition-transform duration-300", menuOpen && "rotate-180")}
+                            strokeWidth={1.25}
+                        />
+                    </button>
+                    {menuOpen && (
+                        <div className="absolute left-1/2 -translate-x-1/2 top-[100%] mt-3 w-72 max-h-[55vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#0c0d12]/95 backdrop-blur-2xl py-2 shadow-[0_20px_50px_rgba(0,0,0,0.8)] z-[400] custom-scrollbar">
+                            {data.roles.map((r: any) => (
+                                <button
+                                    key={r.id}
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); data.onSelectRole?.(r.id); setMenuOpen(false); }}
+                                    className={cn(
+                                        "w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-3",
+                                        r.id === data.activeRole
+                                            ? "bg-white/10 text-white font-medium"
+                                            : "text-white/60 hover:text-white hover:bg-white/5"
+                                    )}
+                                >
+                                    <span
+                                        className={cn(
+                                            "shrink-0 w-12 text-xs font-bold tracking-wider tabular-nums",
+                                            r.id === data.activeRole ? "text-white" : "text-white/40"
+                                        )}
+                                    >
+                                        {r.acronym}
+                                    </span>
+                                    <span>{r.title}</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
 
 const LayerNode = ({ data }: NodeProps) => {
     const [isHovered, setIsHovered] = useState(false);
     const [lastTap, setLastTap] = useState(0);
-    
+
+    const handleTap = () => {
+        const now = Date.now();
+        const DOUBLE_TAP_DELAY = 500;
+        if (now - lastTap < DOUBLE_TAP_DELAY) {
+            data.onDoubleClick?.();
+        } else {
+            data.onClick?.();
+        }
+        setLastTap(now);
+    };
+
+    // Hexagon variant: flat-top hexagon (wide top/bottom edges so the name fits)
+    // rendered with the same isometric 3D tilt as the diamond layers below.
+    if (data.isHex) {
+        const hexClip = 'polygon(14% 0%, 86% 0%, 100% 50%, 86% 100%, 14% 100%, 0% 50%)';
+        return (
+            <div className="relative group">
+                <div
+                    className="pointer-events-none transition-all duration-300"
+                    style={{
+                        transform: `translate(-50%, -50%) rotateX(60deg) rotateZ(-45deg) scale(${isHovered ? 1.05 : 1})`,
+                        transformStyle: 'preserve-3d',
+                        filter: isHovered
+                            ? 'drop-shadow(0 0 45px rgba(255,255,255,0.35)) drop-shadow(0 40px 50px rgba(0,0,0,0.7))'
+                            : 'drop-shadow(0 35px 55px rgba(0,0,0,0.6))',
+                    }}
+                >
+                    {/* Glass fill (no border line). */}
+                    <div
+                        onMouseEnter={() => setIsHovered(true)}
+                        onMouseLeave={() => setIsHovered(false)}
+                        onClick={handleTap}
+                        className="pointer-events-auto cursor-pointer flex flex-row items-center justify-center gap-4 px-16 transition-colors duration-300"
+                        style={{
+                            width: 560,
+                            height: 360,
+                            clipPath: hexClip,
+                            backgroundColor: isHovered ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)',
+                            backdropFilter: 'blur(40px)',
+                            WebkitBackdropFilter: 'blur(40px)',
+                        }}
+                    >
+                        {/* Counter-rotate the content so it stays readable in the tilt.
+                            Fixed width + left alignment keeps the handle and icon in the
+                            exact same spot across every hexagon (consistent alignment). */}
+                        <div
+                            className="flex flex-row items-center justify-start gap-4 w-[360px]"
+                            style={{ transform: 'rotateZ(45deg) rotateX(-20deg)' }}
+                        >
+                            {/* Drag handle (6 dots): grab here to reorder the layer. */}
+                            <div
+                                className="hex-drag-handle pointer-events-auto cursor-grab active:cursor-grabbing shrink-0 p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                                onClick={(e) => e.stopPropagation()}
+                                title="Arrastra para mover / reordenar la lámina"
+                            >
+                                <GripVertical
+                                    className={cn(
+                                        'w-9 h-9 transition-colors',
+                                        isHovered ? 'text-white/80' : 'text-white/35'
+                                    )}
+                                />
+                            </div>
+                            {data.icon && (
+                                <data.icon
+                                    className={cn(
+                                        'w-20 h-20 shrink-0 transition-all duration-300',
+                                        isHovered
+                                            ? 'text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.8)]'
+                                            : 'text-white/30'
+                                    )}
+                                />
+                            )}
+                            <span className="flex-1 text-left text-3xl font-bold uppercase tracking-wide text-white leading-tight drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">
+                                {data.label}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="relative group">
             <AnimatePresence>
@@ -350,6 +502,7 @@ function WorkspaceContent() {
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
     const [gridType, setGridType] = useState<'none' | 'dots' | 'lines'>('none');
     const [savedLayout, setSavedLayout] = useState<Record<string, { x: number, y: number }>>({});
+    const [layerOrder, setLayerOrder] = useState<Record<string, string[]>>({});
     const [expandedDepts, setExpandedDepts] = useState<string[]>([]);
     const [openWindows, setOpenWindows] = useState<string[]>([]);
     const [persistedWindows, setPersistedWindows] = useState<string[]>([]);
@@ -376,25 +529,60 @@ function WorkspaceContent() {
 
     // --- REGLA 4: PERSISTENCIA EN LA BÓVEDA ---
     useEffect(() => {
-        if (!currentUser || !activeEntity) return;
+        const ent = activeEntity || entityId;
+        if (!currentUser?.uid || !ent) return;
         // Cambiamos a un documento 'global' para que todos los roles compartan las mismas ventanas
-        const layoutRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/workspace-layout`, 'global');
+        const layoutRef = doc(db, `users/${currentUser.uid}/entities/${ent}/workspace-layout`, 'global');
         
         const unsubscribe = onSnapshot(layoutRef, (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 setSavedLayout(data.positions || {});
                 setPersistedWindows(data.openWindows || []);
+                setLayerOrder(data.layerOrder || {});
             }
         });
         return () => unsubscribe();
-    }, [currentUser, activeEntity]); // Eliminamos activeRole como dependencia para evitar resets de snapshot
+    }, [currentUser, activeEntity, entityId]); // Eliminamos activeRole como dependencia para evitar resets de snapshot
 
     const savePosition = async (nodeId: string, xInches: number, yInches: number) => {
         if (!currentUser || !activeEntity) return;
         const layoutRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/workspace-layout`, 'global');
         const newPositions = { ...savedLayout, [nodeId]: { x: xInches, y: yInches } };
         await setDoc(layoutRef, { positions: newPositions }, { merge: true });
+    };
+
+    // Fixed slot (cartesian inches) for a layer at a given order index.
+    // This is the original aligned layout the layers snap back into.
+    const layerSlot = (index: number) => ({ x: 0, y: -7 - index * 2 });
+
+    // Resolve the display order of layer ids for a role, honoring the saved
+    // custom order and falling back to the default (alphabetical) order.
+    const getOrderedLayerIds = useCallback((role: string): string[] => {
+        const dept = DEPARTMENTS_DATA[role] || DEPARTMENTS_DATA.ceo;
+        const ids = dept.layers.map((l: any) => l.id);
+        const order = layerOrder[role];
+        if (!order || order.length === 0) return ids;
+        return [...ids].sort((a, b) => {
+            const ia = order.indexOf(a);
+            const ib = order.indexOf(b);
+            return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+        });
+    }, [layerOrder]);
+
+    const saveLayerOrder = async (role: string, ids: string[]) => {
+        const ent = activeEntity || entityId;
+        if (!currentUser?.uid || !ent) return;
+        const layoutRef = doc(db, `users/${currentUser.uid}/entities/${ent}/workspace-layout`, 'global');
+        const newOrder = { ...layerOrder, [role]: ids };
+        setLayerOrder(newOrder); // optimistic: keeps the new order even offline
+        try {
+            await setDoc(layoutRef, { layerOrder: newOrder }, { merge: true });
+            toast.success('Orden de las láminas guardado', { duration: 1500 });
+        } catch (e: any) {
+            console.error('[Workspace] saveLayerOrder error:', e);
+            toast.error('No se pudo guardar el orden');
+        }
     };
 
     const persistWindowState = async (windowIds: string[]) => {
@@ -461,20 +649,20 @@ function WorkspaceContent() {
         // Ejes
         newNodes.push({ id: 'global-axes', type: 'axesNode', position: { x: 0, y: 0 }, draggable: false, selectable: false, zIndex: -1, data: {} });
 
-        // Título
+        // Título (con flecha de regreso "<" a la izquierda y selector de oficial "v" a la derecha)
         const titleSaved = savedLayout['dept-title'] || { x: 0, y: -3 };
+        const roleOptions = Object.keys(DEPARTMENTS_DATA)
+            .map((id) => ({ id, title: DEPARTMENTS_DATA[id].title, acronym: id === 'board' ? 'BOD' : id.toUpperCase() }))
+            .sort((a, b) => a.title.localeCompare(b.title));
         newNodes.push({
             id: 'dept-title', type: 'titleNode', position: toCanvas(titleSaved.x, titleSaved.y),
-            draggable: true, style: { pointerEvents: 'none' }, data: { title: currentDeptData.title }
-        });
-
-        // Retorno
-        const titleSavedForReturn = savedLayout['dept-title'] || { x: 0, y: -3 };
-        newNodes.push({
-            id: 'action-return', type: 'actionNode', position: toCanvas(titleSavedForReturn.x, titleSavedForReturn.y - 1.2),
-            draggable: false, zIndex: 110, data: { 
-                label: 'Return to the suite',
-                onClick: () => router.push(`/nucleo/${entityId}`)
+            draggable: true, zIndex: 2000, style: { pointerEvents: 'none' },
+            data: {
+                title: currentDeptData.title,
+                onBack: () => router.push(`/nucleo/${entityId}`),
+                roles: roleOptions,
+                activeRole,
+                onSelectRole: (roleId: string) => router.push(`/nucleo/${entityId}/workspace?role=${roleId}`)
             }
         });
 
@@ -486,8 +674,12 @@ function WorkspaceContent() {
         
         const rainbowThemes = ['rose', 'orange', 'amber', 'emerald', 'cyan', 'blue', 'indigo', 'purple', 'slate'];
 
-        // 1. Capas del rol activo (CTO) - Siempre expandidas y BLANCAS
-        currentDeptData.layers.forEach(layer => {
+        // 1. Capas del rol activo - respetando el orden personalizado guardado.
+        const orderedIds = getOrderedLayerIds(activeRole);
+        const orderedLayers = orderedIds
+            .map(id => currentDeptData.layers.find((l: any) => l.id === id))
+            .filter(Boolean);
+        orderedLayers.forEach(layer => {
             allNodesData.push({ ...layer, role: activeRole, type: 'layer', isPrimary: true });
         });
 
@@ -504,13 +696,17 @@ function WorkspaceContent() {
                     data: { ...item }
                 });
             } else {
-                const canvasPos = toCanvas(saved.x, saved.y);
+                // Layers always sit in their fixed, aligned slot (by order index),
+                // so dragging only reorders them between those slots.
+                const slot = layerSlot(index);
+                const canvasPos = toCanvas(slot.x, slot.y);
                 newNodes.push({
                     id: nodeId, type: 'layerNode', position: canvasPos,
-                    draggable: false, zIndex: 1000 - index,
+                    draggable: true, dragHandle: '.hex-drag-handle', zIndex: 1000 - index,
                     style: { zIndex: 1000 - index, pointerEvents: 'none' },
                     data: { 
                         ...item, 
+                        isHex: true,
                         onClick: () => spawnWindow(item, canvasPos),
                         onDoubleClick: () => spawnWindow(item, canvasPos)
                     }
@@ -522,10 +718,42 @@ function WorkspaceContent() {
             const windowNodes = prev.filter(n => n.type === 'windowNode');
             return [...newNodes, ...windowNodes];
         });
-    }, [activeRole, entityId, savedLayout, currentDeptData, expandedDepts]);
+    }, [activeRole, entityId, savedLayout, currentDeptData, expandedDepts, getOrderedLayerIds]);
+
+    // Snap a dragged layer into the nearest fixed slot and reorder the list.
+    const handleLayerReorder = (node: Node) => {
+        const layerId = node.id.replace(`layer-${activeRole}-`, '');
+        const currentIds = getOrderedLayerIds(activeRole);
+        const count = currentIds.length;
+        if (count === 0) return;
+
+        // Nearest slot to where the layer was dropped.
+        let targetIndex = 0;
+        let best = Infinity;
+        for (let i = 0; i < count; i++) {
+            const slot = layerSlot(i);
+            const c = toCanvas(slot.x, slot.y);
+            const d = (c.x - node.position.x) ** 2 + (c.y - node.position.y) ** 2;
+            if (d < best) { best = d; targetIndex = i; }
+        }
+
+        const without = currentIds.filter(id => id !== layerId);
+        without.splice(targetIndex, 0, layerId);
+
+        // Immediately snap the dragged layer into its target slot for feedback.
+        const snap = toCanvas(layerSlot(targetIndex).x, layerSlot(targetIndex).y);
+        setNodes(prev => prev.map(n => n.id === node.id ? { ...n, position: snap } : n));
+
+        // Persist on every drag so the order is always saved.
+        saveLayerOrder(activeRole, without);
+    };
 
     const onNodeDragStop = (event: any, node: Node) => {
-        if (node.id === 'dept-title' || node.id === 'action-return' || node.id.startsWith('layer-') || node.type === 'windowNode') {
+        if (node.id.startsWith('layer-')) {
+            handleLayerReorder(node);
+            return;
+        }
+        if (node.id === 'dept-title' || node.id === 'action-return' || node.type === 'windowNode') {
             const pos = node.type === 'windowNode' ? node.position : fromCanvas(node.position.x, node.position.y);
             savePosition(node.id, pos.x, pos.y);
         }

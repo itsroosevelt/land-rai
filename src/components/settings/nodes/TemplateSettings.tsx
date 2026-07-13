@@ -1,6 +1,6 @@
 // src/components/settings/nodes/TemplateSettings.tsx
 'use client';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Node } from 'reactflow';
 import { produce } from 'immer';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,9 @@ import { Button } from '@/components/ui/button';
 import { RefreshCw, CheckCircle2, XCircle, ExternalLink, Image as ImageIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import { useParams } from 'next/navigation';
+import { toast } from 'sonner';
 
 interface TemplateVar {
     key: string; // {{1}}, {{2}}
@@ -33,13 +36,31 @@ interface NodeSettingsProps {
 export const TemplateSettings = ({ node, allNodes, updateNodeConfig }: NodeSettingsProps) => {
     const data = node.data || {};
     const [loading, setLoading] = useState(false);
+    const { currentUser } = useAuth();
+    const params = useParams();
+    const entityId = params?.entityId as string;
+    const [templates, setTemplates] = useState<any[]>([]);
 
-    // Mock de Templates
-    const [templates] = useState([
-        { name: 'hello_world', lang: 'en_US', status: 'APPROVED', params: [] },
-        { name: 'shipping_update', lang: 'es_MX', status: 'APPROVED', params: ['{{1}}', '{{2}}'] }, // Nombre, Pedido
-        { name: 'promo_black_friday', lang: 'es_ES', status: 'REJECTED', params: ['{{1}}'], header: 'IMAGE' },
-    ]);
+    const loadTemplates = useCallback(async () => {
+        if (!currentUser?.uid || !entityId) return;
+        setLoading(true);
+        try {
+            const res = await fetch(
+                `/api/whatsapp/templates?userId=${encodeURIComponent(currentUser.uid)}&entityId=${encodeURIComponent(entityId)}`
+            );
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.error || 'No se pudieron cargar plantillas');
+            setTemplates(json.templates || []);
+        } catch (err: any) {
+            toast.error(err.message || 'Error al sincronizar plantillas');
+        } finally {
+            setLoading(false);
+        }
+    }, [currentUser?.uid, entityId]);
+
+    useEffect(() => {
+        loadTemplates();
+    }, [loadTemplates]);
 
     const updateConfig = useCallback((fn: (draft: TemplateData) => void) => {
         const newData = produce(data, fn);
@@ -47,15 +68,24 @@ export const TemplateSettings = ({ node, allNodes, updateNodeConfig }: NodeSetti
     }, [data, node.id, updateNodeConfig]);
 
     const handleTemplateSelect = (val: string) => {
-        const t = templates.find(temp => temp.name === val);
+        const t = templates.find((temp) => temp.name === val);
         if (t) {
-            updateConfig(d => {
+            const bodyComponent = (t.components || []).find((c: any) => c.type === 'BODY');
+            const paramCount = (bodyComponent?.text?.match(/\{\{\d+\}\}/g) || []).length;
+            const headerComponent = (t.components || []).find((c: any) => c.type === 'HEADER');
+            updateConfig((d) => {
                 d.templateName = t.name;
-                d.language = t.lang;
-                // @ts-ignore
+                d.language = t.language || 'es';
                 d.status = t.status;
-                d.variables = t.params.map(p => ({ key: p, value: '' }));
-                if (!t.header) d.headerUrl = undefined;
+                d.variables = Array.from({ length: paramCount }, (_, i) => ({
+                    key: `{{${i + 1}}}`,
+                    value: '',
+                }));
+                if (headerComponent?.format === 'IMAGE') {
+                    d.headerUrl = d.headerUrl || '';
+                } else {
+                    d.headerUrl = undefined;
+                }
             });
         }
     };
@@ -65,11 +95,10 @@ export const TemplateSettings = ({ node, allNodes, updateNodeConfig }: NodeSetti
     };
 
     const syncTemplates = () => {
-        setLoading(true);
-        setTimeout(() => setLoading(false), 1000);
+        loadTemplates();
     };
 
-    const selectedTemplate = templates.find(t => t.name === data.templateName);
+    const selectedTemplate = templates.find((t) => t.name === data.templateName);
 
     return (
         <div className="space-y-4">
@@ -108,11 +137,11 @@ export const TemplateSettings = ({ node, allNodes, updateNodeConfig }: NodeSetti
                 )}
             </SettingsSection>
 
-            {(data.variables && data.variables.length > 0) || selectedTemplate?.header ? (
+            {(data.variables && data.variables.length > 0) ||
+            (selectedTemplate?.components || []).some((c: any) => c.type === 'HEADER' && c.format === 'IMAGE') ? (
                 <SettingsSection title="✏️ Personalización">
                     
-                    {/* Header Image */}
-                    {selectedTemplate?.header === 'IMAGE' && (
+                    {(selectedTemplate?.components || []).some((c: any) => c.type === 'HEADER' && c.format === 'IMAGE') && (
                         <div className="mb-4 space-y-2">
                              <label className="text-xs font-semibold text-neutral-400 flex items-center gap-1">
                                 <ImageIcon size={12}/> Imagen de Cabecera

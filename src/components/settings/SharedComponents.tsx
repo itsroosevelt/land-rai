@@ -11,6 +11,7 @@ import { useDropzone } from 'react-dropzone';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
 import { toast } from 'sonner';
+import { detectWhatsAppMediaType, validateMediaSize } from '@/lib/whatsapp/mediaUtils';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -37,7 +38,17 @@ export const Field = ({ label, htmlFor, children, description = null }: { label:
     </div>
 );
 
-export const FileUploader = ({ onUploadSuccess, initialUrl = null, initialFilename = null }: { onUploadSuccess: (url: string, filename: string, fileType: string) => void, initialUrl: string | null, initialFilename: string | null }) => {
+export const FileUploader = ({
+    onUploadSuccess,
+    initialUrl = null,
+    initialFilename = null,
+    accept,
+}: {
+    onUploadSuccess: (url: string, filename: string, fileType: string) => void;
+    initialUrl: string | null;
+    initialFilename: string | null;
+    accept?: Record<string, string[]>;
+}) => {
     const [uploading, setUploading] = useState(false);
     const [progress, setProgress] = useState(0);
     const [fileUrl, setFileUrl] = useState<string | null>(initialUrl);
@@ -49,9 +60,16 @@ export const FileUploader = ({ onUploadSuccess, initialUrl = null, initialFilena
         setFilename(initialFilename);
     }, [initialUrl, initialFilename]);
 
-    const onDrop = useCallback((acceptedFiles: any) => {
+    const onDrop = useCallback((acceptedFiles: File[]) => {
         const file = acceptedFiles[0];
         if (!file) return;
+
+        const kind = detectWhatsAppMediaType({ filename: file.name, mimeType: file.type });
+        const sizeErr = validateMediaSize(kind, file.size);
+        if (sizeErr) {
+            toast.error(sizeErr);
+            return;
+        }
 
         setUploading(true);
         setError(null);
@@ -89,7 +107,17 @@ export const FileUploader = ({ onUploadSuccess, initialUrl = null, initialFilena
         );
     }, [onUploadSuccess]);
 
-    const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, multiple: false });
+    const { getRootProps, getInputProps, isDragActive } = useDropzone({
+        onDrop,
+        multiple: false,
+        accept: accept || {
+            'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.gif'],
+            'video/*': ['.mp4', '.3gp', '.mov'],
+            'audio/*': ['.mp3', '.ogg', '.wav', '.m4a', '.aac', '.opus'],
+            'application/pdf': ['.pdf'],
+            'application/*': ['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.csv'],
+        },
+    });
 
     const handleRemoveFile = () => {
         setFileUrl(null);
@@ -122,6 +150,7 @@ export const FileUploader = ({ onUploadSuccess, initialUrl = null, initialFilena
                     <p className="text-sm">
                         {isDragActive ? "Suelta el archivo aquí" : "Arrastra un archivo o haz clic"}
                     </p>
+                    <p className="text-[9px] text-neutral-600">Imagen 5MB · Video/Audio 16MB · Documento 100MB</p>
                     {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
                 </div>
             )}
@@ -194,7 +223,7 @@ export const VariablePicker = ({ node, allNodes, allEdges, onInsert, className }
                     <Variable size={14} />
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="bg-neutral-900 border-neutral-800 text-white max-h-[300px] overflow-y-auto w-72">
+            <DropdownMenuContent className="bg-neutral-900 border-neutral-800 text-white max-h-[300px] overflow-y-auto custom-scrollbar w-72">
                 <div className="px-3 py-2 border-b border-neutral-800">
                     <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">Globales</span>
                 </div>

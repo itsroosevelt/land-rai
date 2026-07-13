@@ -88,6 +88,64 @@ export const createBroadcast = async (
     return { id: ref.id, recipientCount: recipients.length };
 };
 
+// Update an existing broadcast and re-resolve its recipients.
+// Only meant for campaigns that have not been launched yet (Draft / Scheduled),
+// because it wipes and rebuilds the recipients subcollection (resetting stats).
+export const updateBroadcast = async (
+    tenantPath: string,
+    broadcastId: string,
+    input: CreateBroadcastInput
+): Promise<{ recipientCount: number }> => {
+    const recipients = await resolveRecipients(tenantPath, input.segmentConfig);
+
+    const stats = emptyStats();
+    stats.total = recipients.length;
+    stats.pending = recipients.length;
+
+    await updateDoc(doc(db, broadcastsPath(tenantPath), broadcastId), {
+        name: input.name,
+        labels: input.labels || "-",
+        channel: input.channel || "-",
+        segment: input.segment || "-",
+        segmentConfig: input.segmentConfig,
+        message: input.message,
+        botId: input.botId || null,
+        botName: input.botName || null,
+        deliverySpeed: input.deliverySpeed || "No limit",
+        sendImmediately: input.sendImmediately ?? true,
+        scheduleAt: input.scheduleAt || null,
+        status: input.sendImmediately ? "Draft" : "Scheduled",
+        broadcastTime: input.sendImmediately ? "-" : input.scheduleAt || "-",
+        recipients: recipients.length,
+        totalMessages: recipients.length,
+        stats,
+        updatedAt: serverTimestamp(),
+    });
+
+    const recPath = `${broadcastsPath(tenantPath)}/${broadcastId}/recipients`;
+    const CHUNK = 450;
+
+    // Wipe existing recipients so the campaign reflects the new number list.
+    const existing = await getDocs(collection(db, recPath));
+    for (let i = 0; i < existing.docs.length; i += CHUNK) {
+        const batch = writeBatch(db);
+        existing.docs.slice(i, i + CHUNK).forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+    }
+
+    // Write the freshly resolved recipients.
+    for (let i = 0; i < recipients.length; i += CHUNK) {
+        const batch = writeBatch(db);
+        recipients.slice(i, i + CHUNK).forEach((r) => {
+            const rRef = doc(db, recPath, r.id);
+            batch.set(rRef, { ...r, sentAt: null, repliedAt: null });
+        });
+        await batch.commit();
+    }
+
+    return { recipientCount: recipients.length };
+};
+
 // Realtime subscription to the broadcasts list.
 export const subscribeBroadcasts = (
     tenantPath: string,

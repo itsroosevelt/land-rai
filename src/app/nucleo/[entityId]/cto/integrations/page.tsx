@@ -11,6 +11,7 @@ import { collection, onSnapshot, query } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 
+import { subscribeSlotConnections, type SlotConnections, type NumberSlot } from '@/lib/whatsapp/numbers';
 import { Category, Integration, INTEGRATIONS, CATEGORIES } from './config';
 import { WhatsAppCloudAPIModal } from './components/whatsapp_cloud_api/WhatsAppCloudAPIModal';
 import MessengerModal from './components/messenger/MessengerModal';
@@ -32,6 +33,11 @@ export default function IntegrationsPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [connectedIntegrations, setConnectedIntegrations] = useState<Record<string, any>>({});
     const [rawIntegrationDocs, setRawIntegrationDocs] = useState<Record<string, any>>({});
+    const [slotConnections, setSlotConnections] = useState<SlotConnections>({
+        general: { connected: false },
+        support: { connected: false },
+        broadcast: { connected: false },
+    });
     const [loading, setLoading] = useState(true);
 
     // Modal Control
@@ -73,6 +79,16 @@ export default function IntegrationsPage() {
         
         return () => unsubscribe();
     }, [currentUser, activeEntity]);
+
+    useEffect(() => {
+        if (!currentUser?.uid || !activeEntity) return;
+        const tenantPath = `users/${currentUser.uid}/entities/${activeEntity}`;
+        const unsub = subscribeSlotConnections(tenantPath, setSlotConnections);
+        return () => unsub();
+    }, [currentUser?.uid, activeEntity]);
+
+    const whatsappNumberCount = (['general', 'support', 'broadcast'] as NumberSlot[])
+        .filter((s) => slotConnections[s]?.connected).length;
 
     const handleConnect = async (integration: Integration) => {
         if (!['whatsapp', 'messenger', 'instagram', 'telegram', 'x_twitter', 'gmail'].includes(integration.id)) {
@@ -213,6 +229,7 @@ export default function IntegrationsPage() {
                                 isConnected={isIntegrationConnected(integration.id, connectedIntegrations[integration.id])}
                                 integrationData={connectedIntegrations[integration.id]}
                                 whatsappHealth={integration.id === 'whatsapp' ? whatsappHealth : undefined}
+                                whatsappNumberCount={integration.id === 'whatsapp' ? whatsappNumberCount : undefined}
                                 onConnect={() => handleConnect(integration)}
                             />
                         ))}
@@ -295,12 +312,14 @@ function IntegrationCard({
     isConnected, 
     integrationData,
     whatsappHealth,
+    whatsappNumberCount,
     onConnect 
 }: { 
     integration: Integration, 
     isConnected: boolean, 
     integrationData?: any,
     whatsappHealth?: ReturnType<typeof getWhatsAppIntegrationHealth>,
+    whatsappNumberCount?: number,
     onConnect: () => void 
 }) {
     const statusLabel = getIntegrationStatusLabel(integration.id, integrationData, whatsappHealth);
@@ -346,10 +365,17 @@ function IntegrationCard({
             <p className="text-neutral-500 text-[11px] leading-relaxed mb-4 flex-grow">
                 {integration.description}
             </p>
-            {integration.id === 'whatsapp' && whatsappHealth?.phoneNumberId && (
-                <p className="text-[10px] text-white/30 font-mono mb-4 truncate">
-                    ID {whatsappHealth.phoneNumberId}
-                </p>
+            {integration.id === 'whatsapp' && (whatsappHealth?.phoneNumberId || (whatsappNumberCount ?? 0) > 0) && (
+                <div className="flex items-center gap-2 mb-4 flex-wrap">
+                    {(whatsappNumberCount ?? 0) > 0 && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-[9px] font-black uppercase tracking-wider">
+                            {whatsappNumberCount} {whatsappNumberCount === 1 ? 'número' : 'números'}
+                        </span>
+                    )}
+                    {whatsappHealth?.phoneNumberId && (
+                        <span className="text-[10px] text-white/30 font-mono truncate">ID {whatsappHealth.phoneNumberId}</span>
+                    )}
+                </div>
             )}
 
             {/* Action */}

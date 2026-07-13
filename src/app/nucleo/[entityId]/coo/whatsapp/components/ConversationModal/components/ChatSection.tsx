@@ -1,5 +1,5 @@
 import React from 'react';
-import { Instagram, Facebook, Linkedin, Youtube, Twitter, Globe2, FileSpreadsheet, ChevronDown, CheckCheck, Paperclip, ImageIcon, FileText, Smile, Send, Loader2, X, ChevronRight, Clock } from 'lucide-react';
+import { Instagram, Facebook, Linkedin, Youtube, Twitter, Globe2, FileSpreadsheet, ChevronDown, CheckCheck, Paperclip, ImageIcon, FileText, Smile, Send, Loader2, X, ChevronRight, Clock, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
@@ -156,7 +156,7 @@ export const ChatSection: React.FC<ChatSectionProps> = ({
                                                 )}>
                                                     {msg.fileUrl ? (
                                                         <div className="mb-1">
-                                                            {msg.fileType?.startsWith('image/') ? (
+                                                            {msg.fileType?.startsWith('image/') || msg.fileType === 'image/*' ? (
                                                                 <button
                                                                     onClick={() => setPreviewFile({
                                                                         url: msg.fileUrl!,
@@ -172,6 +172,13 @@ export const ChatSection: React.FC<ChatSectionProps> = ({
                                                                         loading="lazy"
                                                                     />
                                                                 </button>
+                                                            ) : msg.fileType?.startsWith('audio/') ? (
+                                                                <div className="p-2 bg-black/20 rounded-lg border border-white/10">
+                                                                    <audio src={msg.fileUrl} controls className="w-full h-8" preload="metadata" />
+                                                                    {msg.fileName && <p className="text-[9px] text-white/50 mt-1 truncate">{msg.fileName}</p>}
+                                                                </div>
+                                                            ) : msg.fileType?.startsWith('video/') ? (
+                                                                <video src={msg.fileUrl} controls className="max-w-full rounded-lg max-h-48" preload="metadata" />
                                                             ) : (
                                                                 <button
                                                                     onClick={() => setPreviewFile({
@@ -209,6 +216,16 @@ export const ChatSection: React.FC<ChatSectionProps> = ({
                                                             )}
                                                             {msg.text && <p className="text-xs mt-1.5 whitespace-pre-wrap leading-relaxed">{highlightText(msg.text, chatSearchTerm)}</p>}
                                                         </div>
+                                                    ) : msg.type === 'location' && msg.metadata?.mapsUrl ? (
+                                                        <a
+                                                            href={msg.metadata.mapsUrl}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="flex items-center gap-2 p-2 bg-black/20 rounded-lg border border-white/10 hover:bg-black/30 transition-colors"
+                                                        >
+                                                            <MapPin size={16} className="text-red-400 shrink-0" />
+                                                            <span className="text-xs">{highlightText(msg.text || 'Ubicación', chatSearchTerm)}</span>
+                                                        </a>
                                                     ) : (
                                                         <p className="text-xs whitespace-pre-wrap px-0.5 leading-relaxed font-medium">{highlightText(msg.text || '', chatSearchTerm)}</p>
                                                     )}

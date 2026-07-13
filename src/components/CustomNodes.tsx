@@ -23,7 +23,7 @@ interface NodeWrapperProps {
 }
 
 const NodeWrapper = ({ children, header, icon, label, color }: NodeWrapperProps) => (
-    <div className={cn("rounded-[1.2rem] shadow-xl border bg-black/80 backdrop-blur-xl w-[20rem] hover:scale-[1.01] transition-all duration-300", color)}>
+    <div className={cn("rounded-[1.2rem] shadow-xl border bg-black/80 backdrop-blur-xl w-[32rem] hover:scale-[1.01] transition-all duration-300", color)}>
         {/* HEADER */}
         <div className={cn("px-4 py-3 rounded-t-[1.1rem] flex items-center gap-3 border-b border-white/5", color.replace('border-', 'bg-').replace('-500', '-500/10'))}>
             <div className={cn("p-2 rounded-lg bg-white/5 ring-1 ring-inset ring-white/10 shadow-inner scale-90")}>{icon}</div>
@@ -36,7 +36,7 @@ const NodeWrapper = ({ children, header, icon, label, color }: NodeWrapperProps)
         </div>
 
         {/* CONTENT */}
-        <div className="p-3 text-xs text-neutral-300 space-y-2 bg-gradient-to-b from-transparent to-white/[0.02]">
+        <div className="p-4 text-xs text-neutral-300 space-y-2.5 bg-gradient-to-b from-transparent to-white/[0.02]">
             {children}
         </div>
     </div>
@@ -82,7 +82,7 @@ export const EndNode = ({ data = {} }: NodeProps) => (
 export const TextMessageNode = ({ data = {} }: NodeProps) => (
     <NodeWrapper header="Mensaje de Texto" icon={<MessageSquare size={16} className="text-blue-400" />} label={data.label} color="border-blue-500">
         <p className="text-xs text-neutral-400">Contenido:</p>
-        <p className="whitespace-pre-wrap bg-neutral-900/70 p-2 rounded-md text-white max-h-28 overflow-y-auto text-xs">
+        <p className="whitespace-pre-wrap bg-neutral-900/70 p-3 rounded-md text-white max-h-64 min-h-[5rem] overflow-y-auto custom-scrollbar text-sm leading-relaxed">
             {data.content || 'Haz clic para editar el texto...'}
         </p>
         <HandleStyled type="target" position={Position.Left} />
@@ -128,7 +128,7 @@ export const QuickReplyNode = ({ data = {} }: NodeProps) => {
     return (
         <NodeWrapper header="Respuesta Rápida" icon={<Zap size={16} className="text-purple-400" />} label={data.label} color="border-purple-500">
             <p className="text-xs text-neutral-400">Texto:</p>
-            <p className="whitespace-pre-wrap bg-neutral-900/70 p-2 rounded-md text-white max-h-20 overflow-y-auto text-xs">
+            <p className="whitespace-pre-wrap bg-neutral-900/70 p-3 rounded-md text-white max-h-56 min-h-[4.5rem] overflow-y-auto custom-scrollbar text-sm leading-relaxed">
                 {data.bodyText || data.text || 'Haz clic para editar.'}
             </p>
             
@@ -159,7 +159,7 @@ export const QuickReplyNode = ({ data = {} }: NodeProps) => {
 export const ListMessageNode = ({ data = {} }: NodeProps) => (
     <NodeWrapper header="Mensaje de Lista" icon={<Rows size={16} className="text-indigo-400" />} label={data.label} color="border-indigo-500">
         <p className="text-xs text-neutral-400">Texto Principal:</p>
-        <p className="whitespace-pre-wrap bg-neutral-900/70 p-2 rounded-md text-white max-h-20 overflow-y-auto text-xs">
+        <p className="whitespace-pre-wrap bg-neutral-900/70 p-3 rounded-md text-white max-h-56 min-h-[4.5rem] overflow-y-auto custom-scrollbar text-sm leading-relaxed">
             {data.body || data.text || 'Haz clic para editar.'}
         </p>
         {(data.sections || []).map((section, sectionIndex) => (
@@ -312,19 +312,17 @@ export const SetVariableNode = ({ data = {} }: NodeProps) => {
 export const PollNode = ({ data = {} }: NodeProps) => (
     <NodeWrapper header="Encuesta Nativa" icon={<CheckSquare size={16} className="text-teal-400" />} label={data.label} color="border-teal-500">
         <p className="text-xs text-neutral-400">Pregunta:</p>
-        <p className="whitespace-pre-wrap bg-neutral-900/70 p-2 rounded-md text-white max-h-20 overflow-y-auto text-xs mb-2">
+        <p className="whitespace-pre-wrap bg-neutral-900/70 p-3 rounded-md text-white max-h-56 min-h-[4.5rem] overflow-y-auto custom-scrollbar text-sm leading-relaxed mb-2">
             {data.question || 'Escribe tu pregunta...'}
         </p>
         <div className="space-y-1">
-            {(data.options || []).map((opt: any, i: number) => (
-                <div key={i} className="flex items-center gap-2 p-1.5 rounded bg-neutral-700/50 text-[10px]">
-                    <CheckSquare size={10} className="text-teal-400" />
-                    <span className="truncate">{opt.text || `Opción ${i + 1}`}</span>
-                </div>
+            {(data.options || []).map((opt: any) => (
+                <OptionRow key={opt.id || opt.text} handleId={opt.id}>
+                    {opt.text || 'Opción'}
+                </OptionRow>
             ))}
         </div>
         <HandleStyled type="target" position={Position.Left} />
-        <HandleStyled type="source" position={Position.Right} />
     </NodeWrapper>
 );
 
@@ -426,8 +424,12 @@ export const TranscriptionNode = ({ data = {} }: NodeProps) => (
 export const SentimentAnalysisNode = ({ data = {} }: NodeProps) => (
     <NodeWrapper header="Análisis de Sentimiento" icon={<Smile size={16} className="text-sky-400" />} label={data.label} color="border-sky-500">
         <p className="text-xs text-neutral-400">Clasifica la emoción del usuario.</p>
+        <div className="space-y-1 pt-1">
+            <OptionRow handleId="positive">Positivo</OptionRow>
+            <OptionRow handleId="negative">Negativo</OptionRow>
+            <OptionRow handleId="neutral">Neutral</OptionRow>
+        </div>
         <HandleStyled type="target" position={Position.Left} />
-        <HandleStyled type="source" position={Position.Right} />
     </NodeWrapper>
 );
 
