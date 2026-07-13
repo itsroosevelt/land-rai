@@ -70,6 +70,39 @@ function dedupeQueueItems(queue: any[]): any[] {
 }
 
 /**
+ * MULTI-NUMBER: resolves the WhatsApp slot (general|support|broadcast) that owns a
+ * given business phone_number_id, so the engine can run the bot bound to that number.
+ * Returns null when the number isn't recognized (caller falls back to default selection).
+ */
+async function resolveSlotForPhoneId(
+    entityPath: string,
+    phoneId: string
+): Promise<string | null> {
+    const target = String(phoneId || '').trim();
+    if (!target) return null;
+    try {
+        const slotsSnap = await db.collection(`${entityPath}/whatsapp_numbers`).get();
+        for (const d of slotsSnap.docs) {
+            const data = d.data() || {};
+            const pid = String(data.phoneNumberId || data.phone_number_id || data.phoneId || '');
+            if (pid && pid === target) return d.id; // slot id === doc id
+        }
+        const [std, internal] = await Promise.all([
+            db.doc(`${entityPath}/integrations/whatsapp`).get(),
+            db.doc(`${entityPath}/integrations/whatsapp_internal`).get(),
+        ]);
+        for (const snap of [std, internal]) {
+            const data = snap.data() || {};
+            const pid = String(data.phoneNumberId || data.phone_number_id || data.phoneId || '');
+            if (pid && pid === target) return 'general'; // legacy number maps to general
+        }
+    } catch (e) {
+        console.warn('[ChatbotEngine] resolveSlotForPhoneId failed:', e);
+    }
+    return null;
+}
+
+/**
  * Sequential Chatbot Engine Runner
  * Implements a FIFO queue consumer pattern to prevent race conditions and duplicate responses.
  */
@@ -479,13 +512,34 @@ async function runEngineCycle(
         return;
     }
 
+    // --- MULTI-NUMBER ROUTING ---
+    // Run the bot bound to the SAME number/slot that received the message. Bots store
+    // `numberId` = slot id (general|support|broadcast); legacy bots default to 'general'.
+    // This keeps each number's flow isolated (e.g. reception number vs broadcast number)
+    // and prevents flows from mixing when several WhatsApp bots are active at once.
+    let selectedBots = platformBots;
+    if (platform === 'whatsapp' && channelAccountId && platformBots.length > 1) {
+        const incomingSlot = await resolveSlotForPhoneId(entityPath, channelAccountId);
+        if (incomingSlot) {
+            const matching = platformBots.filter(
+                (b) => String(b.numberId || 'general').trim() === incomingSlot
+            );
+            if (matching.length > 0) {
+                selectedBots = matching;
+                console.log(`[ChatbotEngine] 📍 Routing to slot "${incomingSlot}" (${matching.length} bot[s]) for number ${channelAccountId}`);
+            } else {
+                console.log(`[ChatbotEngine] ℹ️ No bot bound to slot "${incomingSlot}" for number ${channelAccountId}; using best available.`);
+            }
+        }
+    }
+
     // Sort by: 1. Score (Specificity) | 2. Recency
-    platformBots.sort((a, b) => {
+    selectedBots.sort((a, b) => {
         if (b._score !== a._score) return b._score - a._score;
         return (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0);
     });
 
-    const botData = platformBots[0];
+    const botData = selectedBots[0];
     console.log(`[ChatbotEngine] 🤖 Selected Bot: "${botData.name}" (Score: ${botData._score}) for ${platform}`);
     const flow = botData.flow || { nodes: [], edges: [] };
 
@@ -528,13 +582,19 @@ async function runEngineCycle(
     let currentNodeId: string | null = cardData.botState?.currentNodeId || null;
     let waitingForInput = cardData.botState?.waitingForInput || false;
 
-    // ALWAYS re-engage: the bot must answer every inbound message. Whenever a message
-    // arrives and the bot is not mid-question (i.e. not actively waiting for input on a
-    // valid node), it (re)starts the flow from the beginning — even if the previous flow
-    // already reached an End node. This keeps the conversation (and the payment funnel)
-    // always reachable for the customer, on every number.
+    // Re-engagement rule (balanced to avoid double replies / flow mixing):
+    //  - If the bot is actively waiting for an answer on a valid node → CONTINUE (capture input),
+    //    even if the customer replies days later. Never restart here.
+    //  - If the bot is genuinely idle (no current node, completed, or inactive) → RESTART the flow
+    //    from the beginning, so the customer can always re-enter the funnel.
+    //  - If the bot is mid-flow but not waiting (transient/resume state) → RESUME from the current
+    //    node instead of restarting, so we don't replay the start on top of the running flow.
+    const status = cardData.botState?.status;
     const isActivelyWaiting = waitingForInput && !!currentNodeId;
-    const shouldRestart = (isReset || isMenu) ? true : !isActivelyWaiting;
+    const botIsIdle = !currentNodeId || status === 'completed' || status === 'inactive' || !status;
+    const shouldRestart = (isReset || isMenu)
+        ? true
+        : (!isActivelyWaiting && botIsIdle);
 
     // Handle incoming input for current node
     if (waitingForInput && currentNodeId) {

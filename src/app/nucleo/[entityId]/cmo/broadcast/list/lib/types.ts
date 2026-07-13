@@ -75,6 +75,9 @@ export interface Broadcast {
     message?: BroadcastMessage;
     botId?: string | null;
     botName?: string | null;
+    /** WhatsApp number slot to send FROM (general | support | broadcast). Empty = default number. */
+    senderSlot?: string | null;
+    senderPhoneNumberId?: string | null;
     deliverySpeed?: string;
     sendImmediately?: boolean;
     scheduleAt?: string | null;

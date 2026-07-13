@@ -22,6 +22,7 @@ import {
 } from "../lib/segments";
 import { normalizePhoneNumber } from "@/lib/phoneUtils";
 import { getCountryFromPhone } from "@/lib/countryCodes";
+import { subscribeSlotConnections, SLOTS, type SlotConnections, type NumberSlot } from "@/lib/whatsapp/numbers";
 
 interface CreateBroadcastAsideProps {
     isOpen: boolean;
@@ -63,6 +64,10 @@ export default function CreateBroadcastAside({
     // Bots and templates
     const [chatbots, setChatbots] = useState<any[]>([]);
     const [selectedBotId, setSelectedBotId] = useState<string>("");
+
+    // WhatsApp numbers (slots) to send FROM
+    const [slotConnections, setSlotConnections] = useState<SlotConnections | null>(null);
+    const [selectedSlot, setSelectedSlot] = useState<string>("");
     const [metaTemplates, setMetaTemplates] = useState<any[]>([]);
     const [loadingTemplates, setLoadingTemplates] = useState<boolean>(false);
     const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
@@ -125,6 +130,7 @@ export default function CreateBroadcastAside({
             setFormChannel(initialData.channel !== "-" ? initialData.channel : "");
             setFormSegmentConfig(initialData.segmentConfig || null);
             setSelectedBotId(initialData.botId || "");
+            setSelectedSlot(initialData.senderSlot || "");
 
             // Hydrate manual recipients so the existing numbers are visible and
             // can be extended when editing the campaign.
@@ -177,6 +183,7 @@ export default function CreateBroadcastAside({
             setMediaUrl("");
             setMediaCaption("");
             setSelectedBotId("");
+            setSelectedSlot("");
             setSelectedTemplate(null);
             setTemplateVariables([]);
             setTemplateParamValues({});
@@ -232,12 +239,15 @@ export default function CreateBroadcastAside({
             (err) => console.error("[Broadcast] subscribe bots error:", err)
         );
 
+        const unsubSlots = subscribeSlotConnections(tenantPath, setSlotConnections);
+
         return () => {
             unsubKanban();
             unsubTags();
             unsubCountries();
             unsubContacts();
             unsubBots();
+            unsubSlots();
         };
     }, [tenantPath, isOpen]);
 
@@ -459,6 +469,7 @@ export default function CreateBroadcastAside({
         setCreating(true);
         try {
             const bot = chatbots.find((b) => b.id === selectedBotId);
+            const slotConn = selectedSlot ? slotConnections?.[selectedSlot as NumberSlot] : null;
             const { recipientCount } = await createBroadcast(tenantPath, {
                 name: formName,
                 labels: formLabel || "-",
@@ -468,6 +479,8 @@ export default function CreateBroadcastAside({
                 message: buildMessagePayload(),
                 botId: selectedBotId || null,
                 botName: bot?.name || null,
+                senderSlot: selectedSlot || null,
+                senderPhoneNumberId: slotConn?.phoneNumberId || null,
                 deliverySpeed,
                 sendImmediately,
                 scheduleAt: sendImmediately ? null : `${scheduleDate} ${scheduleTime}`.trim(),
@@ -496,6 +509,7 @@ export default function CreateBroadcastAside({
         setCreating(true);
         try {
             const bot = chatbots.find((b) => b.id === selectedBotId);
+            const slotConn = selectedSlot ? slotConnections?.[selectedSlot as NumberSlot] : null;
             const { recipientCount } = await updateBroadcast(tenantPath, initialData.id, {
                 name: formName,
                 labels: formLabel || "-",
@@ -505,6 +519,8 @@ export default function CreateBroadcastAside({
                 message: buildMessagePayload(),
                 botId: selectedBotId || null,
                 botName: bot?.name || null,
+                senderSlot: selectedSlot || null,
+                senderPhoneNumberId: slotConn?.phoneNumberId || null,
                 deliverySpeed,
                 sendImmediately,
                 scheduleAt: sendImmediately ? null : `${scheduleDate} ${scheduleTime}`.trim(),
@@ -1022,6 +1038,35 @@ export default function CreateBroadcastAside({
                                     )}
                                 </div>
                             )}
+
+                            {/* Sending Number (slot) */}
+                            <div className="space-y-2 bg-sky-500/5 border border-sky-500/10 p-3.5 rounded-xl">
+                                <h4 className="text-[11px] font-bold text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
+                                    <Send className="w-3.5 h-3.5" /> Número de envío
+                                </h4>
+                                <select
+                                    value={selectedSlot}
+                                    disabled={sidebarMode === "view"}
+                                    onChange={(e) => setSelectedSlot(e.target.value)}
+                                    className="w-full bg-[#13151a] border border-white/5 text-xs text-neutral-300 rounded-lg p-2 outline-none"
+                                >
+                                    <option value="">Número por defecto</option>
+                                    {SLOTS.map((s) => {
+                                        const conn = slotConnections?.[s.id];
+                                        const connected = !!conn?.connected;
+                                        const label = conn?.displayPhoneNumber || conn?.phoneNumberId;
+                                        return (
+                                            <option key={s.id} value={s.id} disabled={!connected}>
+                                                {s.label}
+                                                {connected ? ` • ${label}` : " • sin conectar"}
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                                <p className="text-[10px] text-neutral-500 leading-relaxed">
+                                    La campaña se enviará desde este número y el bot responderá desde el mismo. Conéctalos en CTO → Integraciones → WhatsApp.
+                                </p>
+                            </div>
 
                             {/* Bot Attachment */}
                             <div className="space-y-2 bg-emerald-500/5 border border-emerald-500/10 p-3.5 rounded-xl">

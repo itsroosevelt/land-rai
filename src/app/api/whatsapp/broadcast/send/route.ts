@@ -79,19 +79,29 @@ export async function POST(req: Request) {
 
         const { sendWhatsAppMessage } = await import("@/lib/sendProviders");
 
-        // MULTI-NUMBER: campaigns go out from the dedicated "broadcast" number when connected,
-        // so replies land on that number and the bot answers from it. Falls back to the
-        // default number if no broadcast slot is configured.
+        // MULTI-NUMBER: send from the number the user picked when configuring the campaign
+        // (broadcast.senderSlot / senderPhoneNumberId). Replies land on that number and the
+        // bot answers from it. Falls back to the legacy "broadcast" slot, then the default number.
         let broadcastFromPhoneId: string | undefined;
+        let broadcastSlot: string | undefined = broadcast.senderSlot || undefined;
         try {
-            const slotSnap = await db.doc(`${tenantPath}/whatsapp_numbers/broadcast`).get();
-            const slotData = slotSnap.data();
-            const slotPhoneId = slotData?.phoneNumberId || slotData?.phone_number_id;
-            if (slotPhoneId && slotData?.status !== "Disconnected") {
-                broadcastFromPhoneId = String(slotPhoneId);
+            if (broadcast.senderPhoneNumberId) {
+                broadcastFromPhoneId = String(broadcast.senderPhoneNumberId);
+            }
+            if (!broadcastFromPhoneId) {
+                const slotToRead = broadcastSlot || "broadcast";
+                const slotSnap = await db.doc(`${tenantPath}/whatsapp_numbers/${slotToRead}`).get();
+                const slotData = slotSnap.data();
+                const slotPhoneId = slotData?.phoneNumberId || slotData?.phone_number_id;
+                if (slotPhoneId && slotData?.status !== "Disconnected") {
+                    broadcastFromPhoneId = String(slotPhoneId);
+                    broadcastSlot = slotToRead;
+                }
+            }
+            if (broadcastFromPhoneId) {
                 // Register so the inbound webhook resolves this number to the tenant (index-free).
                 await registerWhatsAppTenantMapping(broadcastFromPhoneId, userId, entityId).catch(() => {});
-                console.log(`[Broadcast] 📤 Sending from dedicated broadcast number ${broadcastFromPhoneId}`);
+                console.log(`[Broadcast] 📤 Sending from number ${broadcastFromPhoneId} (slot: ${broadcastSlot || "n/a"})`);
             }
         } catch (e) {
             console.warn("[Broadcast] Broadcast number resolution skipped:", e);
@@ -192,11 +202,17 @@ export async function POST(req: Request) {
         }
 
         // Activate attached bot so replies get auto-answered by the engine.
+        // Bind it to the SAME slot/number the campaign sends from, so the engine routes
+        // replies on that number to THIS bot (isolated from bots on other numbers).
         if (broadcast.botId) {
             try {
                 await db
                     .doc(`${tenantPath}/chatbots/${broadcast.botId}`)
-                    .update({ isActive: true, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+                    .update({
+                        isActive: true,
+                        ...(broadcastSlot ? { numberId: broadcastSlot, targetPlatforms: ["whatsapp"] } : {}),
+                        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    });
             } catch (e) {
                 console.error("[Broadcast] Failed to activate bot:", e);
             }

@@ -32,6 +32,8 @@ export interface CreateBroadcastInput {
     message: BroadcastMessage;
     botId?: string | null;
     botName?: string | null;
+    senderSlot?: string | null;
+    senderPhoneNumberId?: string | null;
     deliverySpeed?: string;
     sendImmediately?: boolean;
     scheduleAt?: string | null;
@@ -59,6 +61,8 @@ export const createBroadcast = async (
         message: input.message,
         botId: input.botId || null,
         botName: input.botName || null,
+        senderSlot: input.senderSlot || null,
+        senderPhoneNumberId: input.senderPhoneNumberId || null,
         deliverySpeed: input.deliverySpeed || "No limit",
         sendImmediately: input.sendImmediately ?? true,
         scheduleAt: input.scheduleAt || null,
@@ -111,6 +115,8 @@ export const updateBroadcast = async (
         message: input.message,
         botId: input.botId || null,
         botName: input.botName || null,
+        senderSlot: input.senderSlot || null,
+        senderPhoneNumberId: input.senderPhoneNumberId || null,
         deliverySpeed: input.deliverySpeed || "No limit",
         sendImmediately: input.sendImmediately ?? true,
         scheduleAt: input.scheduleAt || null,
