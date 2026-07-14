@@ -54,3 +54,13 @@ export function createQueuedBotState(queueItem: BotQueueItem) {
         engine: 'queue',
     };
 }
+
+/**
+ * Remove queue entries by messageId (stable) instead of object equality.
+ * Firestore arrayRemove fails when the stored object differs by Timestamp/field order.
+ */
+export function filterOutQueueMessage(queue: any[] | null | undefined, messageId?: string | null): any[] {
+    const id = String(messageId || '').trim();
+    if (!id) return Array.isArray(queue) ? [...queue] : [];
+    return (queue || []).filter((item) => String(item?.messageId || '').trim() !== id);
+}

@@ -8,9 +8,13 @@ import {
     resolveQuickReplyEdge,
     sanitizeFlowButtons,
 } from './flowRouting';
+import { filterOutQueueMessage } from './botQueue';
 import { isIsolatedBotCollection, resolveBotsCollectionName } from './automation/botStorage';
 import axios from 'axios';
 import { buildBotNodeGroupMap, syncCardToBotNodeAdmin } from '@/lib/kanban/kanbanBotSyncAdmin';
+
+/** Avoid spamming the same validation prompt when the user taps quickly or the queue retries. */
+const VALIDATION_DEBOUNCE_MS = 25_000;
 
 function evaluateCondition(varValue: any, operator: string, targetValue: any, fuzzy: boolean = true): boolean {
     let v = varValue === undefined || varValue === null ? '' : String(varValue);
@@ -221,8 +225,10 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
             if (msgId && (processedInRunner.has(msgId) || isStaleProcessedItem)) {
                 console.log(`[ChatbotEngine] ⏭️ Skipping duplicate queue item [${msgId}]`);
                 await db.runTransaction(async (transaction) => {
+                    const fresh = await transaction.get(cardRef);
+                    const q = fresh.data()?.botState?.messageQueue || [];
                     transaction.update(cardRef, {
-                        'botState.messageQueue': admin.firestore.FieldValue.arrayRemove(currentMsg),
+                        'botState.messageQueue': filterOutQueueMessage(q, msgId),
                     });
                 });
                 continue;
@@ -243,13 +249,16 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
                     'botState.lastErrorAt': admin.firestore.FieldValue.serverTimestamp()
                 });
             } finally {
-                // --- 4. ATOMIC QUEUE DRAIN (MUST happen even on failure to avoid blocking) ---
+                // --- 4. ATOMIC QUEUE DRAIN by messageId (not object equality) ---
                 await db.runTransaction(async (transaction) => {
-                    transaction.update(cardRef, {
-                        'botState.messageQueue': admin.firestore.FieldValue.arrayRemove(currentMsg),
-                        'botState.lastProcessedMessageId': msgId || null,
-                        botLock: admin.firestore.FieldValue.serverTimestamp() // Refresh lock
-                    });
+                    const fresh = await transaction.get(cardRef);
+                    const q = fresh.data()?.botState?.messageQueue || [];
+                    const update: Record<string, any> = {
+                        'botState.messageQueue': filterOutQueueMessage(q, msgId),
+                        botLock: admin.firestore.FieldValue.serverTimestamp(),
+                    };
+                    if (msgId) update['botState.lastProcessedMessageId'] = msgId;
+                    transaction.update(cardRef, update);
                 });
             }
         }
@@ -576,6 +585,119 @@ async function runEngineCycle(
         });
     };
 
+    const isValidationDebounced = () => {
+        const raw = cardData.botState?.lastValidationAt;
+        if (!raw) return false;
+        const lastAt = raw.toDate?.() || (typeof raw === 'number' ? new Date(raw) : new Date(raw));
+        if (Number.isNaN(lastAt.getTime())) return false;
+        return Date.now() - lastAt.getTime() < VALIDATION_DEBOUNCE_MS;
+    };
+
+    /** Re-send the interactive prompt for the node we are actually waiting on (keeps WhatsApp UI in sync). */
+    const resendWaitNodePrompt = async (waitNode: any) => {
+        if (!waitNode) return;
+
+        if (waitNode.type === 'listMessageNode') {
+            const body = replaceVars(waitNode.data?.body || waitNode.data?.text || 'Selecciona una opción:');
+            const sections = buildWhatsAppListSections(waitNode.data?.sections || []);
+            await dispatchMessage(body, {
+                type: 'list',
+                button: waitNode.data?.buttonText || 'Ver opciones',
+                sections,
+            });
+            await appendAgentMessage({
+                text: body,
+                type: 'list',
+                messageId: `bot_list_retry_${Date.now()}`,
+                metadata: {
+                    buttonText: waitNode.data?.buttonText || 'Ver opciones',
+                    sections,
+                    resentAfterInvalid: true,
+                },
+            });
+            return;
+        }
+
+        if (waitNode.type === 'pollNode') {
+            const question = replaceVars(waitNode.data?.question || 'Selecciona una opción:');
+            const sections = [{
+                title: 'Opciones',
+                rows: (waitNode.data?.options || []).map((o: any) => ({
+                    id: o.id,
+                    title: String(o.text || o.title || '').substring(0, 24),
+                    description: '',
+                })),
+            }];
+            const waSections = buildWhatsAppListSections(sections);
+            await dispatchMessage(question, { type: 'list', button: 'Ver opciones', sections: waSections });
+            await appendAgentMessage({
+                text: question,
+                type: 'list',
+                messageId: `bot_poll_retry_${Date.now()}`,
+                metadata: { resentAfterInvalid: true },
+            });
+            return;
+        }
+
+        if (waitNode.type === 'quickReplyNode') {
+            const content = replaceVars(waitNode.data?.content || waitNode.data?.text || waitNode.data?.bodyText || '');
+            const buttons = buildWhatsAppQuickReplyButtons(waitNode.data?.buttons || []);
+            const prompt = content.trim() || 'Selecciona una opción:';
+            if (buttons.length > 0) {
+                await dispatchMessage(prompt, { type: 'quick_reply', buttons });
+            } else {
+                await dispatchMessage(prompt, {});
+            }
+            await appendAgentMessage({
+                text: prompt,
+                type: buttons.length > 0 ? 'buttons' : 'text',
+                messageId: `bot_wait_retry_${Date.now()}`,
+                ...(buttons.length > 0
+                    ? {
+                        metadata: {
+                            buttons: buttons.map((button: any) => ({
+                                text: button.reply?.title || '',
+                                id: button.reply?.id || '',
+                            })),
+                            resentAfterInvalid: true,
+                        },
+                    }
+                    : { metadata: { resentAfterInvalid: true } }),
+            });
+        }
+    };
+
+    /**
+     * Invalid menu reply: keep waiting on the SAME node, debounce spam, and re-send the real menu
+     * instead of only a hardcoded text the user never put in the flow.
+     */
+    const handleInvalidMenuSelection = async (waitNode: any, rawInput: string) => {
+        console.log(
+            `[ChatbotEngine] ⚠️ Invalid selection for ${waitNode?.type} ${waitNode?.id}: "${String(rawInput).slice(0, 80)}"`
+        );
+
+        const debounced = isValidationDebounced();
+        await cardRef.update({
+            'botState.waitingForInput': true,
+            'botState.currentNodeId': waitNode?.id || null,
+            'botState.lastValidationAt': admin.firestore.FieldValue.serverTimestamp(),
+            'botState.lastValidationInput': String(rawInput || '').slice(0, 120),
+        });
+
+        if (debounced) {
+            console.log(`[ChatbotEngine] ⏳ Validation debounce active — not re-sending prompt`);
+            return;
+        }
+
+        await resendWaitNodePrompt(waitNode);
+        await cardRef.update({
+            'botState.waitingForInput': true,
+            'botState.currentNodeId': waitNode?.id || null,
+            'botState.lastStep': waitNode?.type || null,
+            'botState.lastWaitStartedAt': admin.firestore.FieldValue.serverTimestamp(),
+        });
+    };
+
     // --- INNER EXECUTION LOOP ---
     // CRITICAL: Read bState AFTER Master Bypass updates cardData.botState in memory
     // so that waitingForInput reflects the current state of this execution cycle.
@@ -704,14 +826,7 @@ async function runEngineCycle(
                 const resolution = resolveQuickReplyEdge(flow.edges, node.id, buttons, text);
 
                 if (resolution.invalid) {
-                    console.log(`[ChatbotEngine] ⚠️ Invalid quick-reply selection for node ${node.id}: "${text}"`);
-                    const errorContent = 'Por favor, selecciona una de las opciones válidas del menú para continuar.';
-                    await dispatchMessage(errorContent);
-                    await appendAgentMessage({
-                        text: errorContent,
-                        type: 'text',
-                        messageId: `bot_validation_${Date.now()}`
-                    });
+                    await handleInvalidMenuSelection(node, text);
                     return;
                 }
 
@@ -719,20 +834,18 @@ async function runEngineCycle(
                     console.error(`[ChatbotEngine] ⚠️ No edge matched for quick-reply on node ${node.id} (input: "${text}"). Trying default exit.`);
                     const fallback = resolveDefaultNextEdge(flow.edges, node.id);
                     if (!fallback) {
-                        const errorContent = 'Por favor, selecciona una de las opciones del mensaje anterior para continuar.';
-                        await dispatchMessage(errorContent);
-                        await appendAgentMessage({
-                            text: errorContent,
-                            type: 'text',
-                            messageId: `bot_config_${Date.now()}`
-                        });
+                        await handleInvalidMenuSelection(node, text);
                         return;
                     }
                     currentNodeId = fallback.target;
                 } else {
                     currentNodeId = resolution.edge?.target || null;
                 }
-                await cardRef.update({ 'botState.waitingForInput': false });
+                // Persist next node immediately so a crash mid-send cannot leave us parked on the old QR.
+                await cardRef.update({
+                    'botState.waitingForInput': false,
+                    'botState.currentNodeId': currentNodeId,
+                });
             } else if (node?.type === 'listMessageNode' || node?.type === 'pollNode') {
                 const sections =
                     node.type === 'pollNode'
@@ -748,14 +861,7 @@ async function runEngineCycle(
                 const resolution = resolveListMessageEdge(flow.edges, node.id, sections, text);
 
                 if (resolution.invalid) {
-                    console.log(`[ChatbotEngine] ⚠️ Invalid list selection for node ${node.id}: "${text}"`);
-                    const errorContent = 'Por favor, selecciona una de las opciones válidas del menú para continuar.';
-                    await dispatchMessage(errorContent);
-                    await appendAgentMessage({
-                        text: errorContent,
-                        type: 'text',
-                        messageId: `bot_validation_${Date.now()}`
-                    });
+                    await handleInvalidMenuSelection(node, text);
                     return;
                 }
 
@@ -763,24 +869,24 @@ async function runEngineCycle(
                     console.error(`[ChatbotEngine] ⚠️ No edge matched for list on node ${node.id} (input: "${text}"). Trying default exit.`);
                     const fallback = resolveDefaultNextEdge(flow.edges, node.id);
                     if (!fallback) {
-                        const errorContent = 'Por favor, selecciona una de las opciones del menú para continuar.';
-                        await dispatchMessage(errorContent);
-                        await appendAgentMessage({
-                            text: errorContent,
-                            type: 'text',
-                            messageId: `bot_config_${Date.now()}`
-                        });
+                        await handleInvalidMenuSelection(node, text);
                         return;
                     }
                     currentNodeId = fallback.target;
                 } else {
                     currentNodeId = resolution.edge?.target || null;
                 }
-                await cardRef.update({ 'botState.waitingForInput': false });
+                await cardRef.update({
+                    'botState.waitingForInput': false,
+                    'botState.currentNodeId': currentNodeId,
+                });
             } else {
                 const edge = resolveDefaultNextEdge(flow.edges, node?.id || '');
                 currentNodeId = edge ? edge.target : null;
-                await cardRef.update({ 'botState.waitingForInput': false });
+                await cardRef.update({
+                    'botState.waitingForInput': false,
+                    'botState.currentNodeId': currentNodeId,
+                });
             }
         }
     } else {
@@ -827,7 +933,15 @@ async function runEngineCycle(
             continue;
         }
 
-        await cardRef.update({ 'botState.currentNodeId': node.id, 'botState.lastStep': `${node.type}` });
+        const isWaitPromptNode = ['captureInputNode', 'quickReplyNode', 'listMessageNode', 'pollNode']
+            .includes(node.type);
+        // For wait nodes, do NOT stamp lastStep until AFTER Meta confirms the prompt —
+        // otherwise self-heal wrongly treats a half-sent node as "already waiting".
+        await cardRef.update(
+            isWaitPromptNode
+                ? { 'botState.currentNodeId': node.id }
+                : { 'botState.currentNodeId': node.id, 'botState.lastStep': `${node.type}` }
+        );
         await syncKanbanToNode(node.id);
 
         // 1. TEXT MESSAGE
@@ -912,17 +1026,23 @@ async function runEngineCycle(
             continue;
         }
 
-        // 3. LIST MESSAGE
+        // 3. LIST MESSAGE — park on this node in Firestore BEFORE Meta send so a crash
+        // after delivery still self-heals onto the list (not the previous QR).
         if (node.type === 'listMessageNode') {
             const body = replaceVars(node.data?.body || node.data?.text || 'Selecciona una opción:');
             const sections = buildWhatsAppListSections(node.data?.sections || []);
 
+            await cardRef.update({
+                'botState.status': 'active',
+                'botState.currentNodeId': node.id,
+                'botState.waitingForInput': false,
+            });
+
             await dispatchMessage(body, { type: 'list', button: node.data?.buttonText || 'Ver opciones', sections });
             
             await cardRef.update({
-                'botState.status': 'active',
                 'botState.waitingForInput': true,
-                'botState.currentNodeId': node.id,
+                'botState.lastStep': 'listMessageNode',
                 'botState.lastWaitStartedAt': admin.firestore.FieldValue.serverTimestamp(),
                 messages: admin.firestore.FieldValue.arrayUnion({
                     sender: 'agent',
@@ -947,6 +1067,14 @@ async function runEngineCycle(
             const buttons = buildWhatsAppQuickReplyButtons(node.data?.buttons || []);
             const isQuickReply = node.type === 'quickReplyNode';
 
+            // Park on this node before sending so mid-send failures self-heal onto THIS wait node.
+            await cardRef.update({
+                'botState.status': 'active',
+                'botState.currentNodeId': node.id,
+                'botState.waitingForInput': false,
+                'botState.variableName': node.data?.variableName || 'input',
+            });
+
             if (isQuickReply && buttons.length > 0) {
                 const prompt = content.trim() || 'Selecciona una opción:';
                 await dispatchMessage(prompt, { type: 'quick_reply', buttons });
@@ -962,10 +1090,8 @@ async function runEngineCycle(
                 : (content.trim() || (node.type === 'captureInputNode' ? 'Por favor, escribe tu respuesta:' : ''));
 
             const updatePayload: any = {
-                'botState.status': 'active',
                 'botState.waitingForInput': true,
-                'botState.currentNodeId': node.id,
-                'botState.variableName': node.data?.variableName || 'input',
+                'botState.lastStep': node.type,
                 'botState.lastWaitStartedAt': admin.firestore.FieldValue.serverTimestamp()
             };
             
@@ -1319,6 +1445,7 @@ async function runEngineCycle(
                 'botState.status': 'active',
                 'botState.waitingForInput': true,
                 'botState.currentNodeId': node.id,
+                'botState.lastStep': 'pollNode',
                 'botState.lastWaitStartedAt': admin.firestore.FieldValue.serverTimestamp(),
                 messages: admin.firestore.FieldValue.arrayUnion({
                     sender: 'agent',
