@@ -7,9 +7,10 @@ import {
     STARTER_CHATBOT_FIELDS,
     STARTER_CHATBOT_ID,
 } from './starterChatbot';
+import { ensureWhatsAppSlotNormalization } from './whatsappSlotNormalization';
 
 /** Incrementar cuando el molde multitenant gane nuevas estructuras obligatorias. */
-export const ENTITY_MOLD_VERSION = 9;
+export const ENTITY_MOLD_VERSION = 10;
 
 export const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
@@ -26,6 +27,13 @@ export const ENTITY_MOLD_FEATURES = {
     flowHumanize: true,
     /** Integración Gemini por entidad en /cto/integrations. */
     geminiIntegration: true,
+    /**
+     * Multi-número: slots general|support|broadcast; el bot Activo de la pestaña
+     * atiende ese número; apagar/no crear bot = ese número no responde (sin préstamo).
+     */
+    multiNumberBotIsolation: true,
+    /** Legacy whatsapp_numbers/primary migrado a general. */
+    primarySlotNormalized: true,
 } as const;
 
 function tenantPath(userId: string, entityId: string) {
@@ -85,6 +93,7 @@ export async function provisionEntityMold(
     await ensureManualKanbanInitialized(db, path);
     await ensureReceptionColumn(db, path);
     await ensureStarterChatbot(db, path);
+    await ensureWhatsAppSlotNormalization(db, path);
 
     await setDoc(
         doc(db, path),

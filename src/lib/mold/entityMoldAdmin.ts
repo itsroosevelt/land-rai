@@ -8,6 +8,7 @@ import {
     STARTER_CHATBOT_FIELDS,
     STARTER_CHATBOT_ID,
 } from './starterChatbot';
+import { ensureWhatsAppSlotNormalizationAdmin } from './whatsappSlotNormalizationAdmin';
 
 type AdminDb = admin.firestore.Firestore;
 
@@ -92,6 +93,7 @@ export async function provisionEntityMoldAdmin(
     await ensureManualKanbanInitializedAdmin(db, path);
     await ensureReceptionColumnAdmin(db, path);
     await ensureStarterChatbotAdmin(db, path);
+    await ensureWhatsAppSlotNormalizationAdmin(db, path);
 
     await db.doc(path).set(
         {
