@@ -9,7 +9,7 @@ import {
 } from './starterChatbot';
 
 /** Incrementar cuando el molde multitenant gane nuevas estructuras obligatorias. */
-export const ENTITY_MOLD_VERSION = 8;
+export const ENTITY_MOLD_VERSION = 9;
 
 export const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
@@ -20,6 +20,12 @@ export const ENTITY_MOLD_FEATURES = {
     whatsappMultiNumber: true,
     whatsappInboundMedia: true,
     botAdvancedNodes: true,
+    /** Conversaciones estables (messages/botState fuera del kanban). */
+    conversationsStore: true,
+    /** Switch Humanizar en chatbots (tono vía LLM, flujo manda). */
+    flowHumanize: true,
+    /** Integración Gemini por entidad en /cto/integrations. */
+    geminiIntegration: true,
 } as const;
 
 function tenantPath(userId: string, entityId: string) {

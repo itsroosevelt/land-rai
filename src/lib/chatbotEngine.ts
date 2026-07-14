@@ -17,6 +17,7 @@ import {
     ensureConversationFromCard,
     syncThinCardPreview,
 } from '@/lib/conversations/store';
+import { humanizeOutboundText, shouldHumanizeOutbound } from '@/lib/chatbot/humanizeOutbound';
 
 /** Avoid spamming the same validation prompt when the user taps quickly or the queue retries. */
 const VALIDATION_DEBOUNCE_MS = 25_000;
@@ -364,21 +365,77 @@ async function runEngineCycle(
     const from = msg.from;
     const messageId = msg.messageId;
 
+    // Populated after active bot is selected — style layer only (does not choose nodes).
+    let humanizeConfig = {
+        enabled: false,
+        style: 'warm' as string,
+        botId: '',
+        openaiApiKey: null as string | null,
+        geminiApiKey: null as string | null,
+    };
+    let lastOutboundText: string | null = null;
+
     const appendAgentMessage = async (message: any) => {
         await refreshCardRef();
+        const resolved = { ...message };
+        if (
+            !message.preserveText &&
+            typeof message.text === 'string' &&
+            message.text.length > 0 &&
+            typeof lastOutboundText === 'string' &&
+            lastOutboundText.length > 0
+        ) {
+            resolved.text = lastOutboundText;
+        }
+        lastOutboundText = null;
         await box.ref.update({
             messages: admin.firestore.FieldValue.arrayUnion({
                 sender: 'agent',
                 platform,
                 timestamp: new Date(),
-                ...message
+                ...resolved
             })
         });
     };
 
     // --- A. HELPERS (Essentials) ---
     const dispatchMessage = async (content: string, options: any = {}) => {
-        const opts = { userId, entityId, ...(channelAccountId ? { fromPhoneNumberId: channelAccountId } : {}), ...options };
+        const { skipHumanize, nodeId: optionNodeId, preserveText: _pt, ...sendOptions } = options || {};
+        let finalContent = content;
+
+        if (
+            shouldHumanizeOutbound({
+                humanizeToneEnabled: humanizeConfig.enabled,
+                content,
+                skipHumanize: !!skipHumanize,
+                type: sendOptions.type,
+            })
+        ) {
+            finalContent = await humanizeOutboundText({
+                approvedText: content,
+                tone: humanizeConfig.style,
+                botId: humanizeConfig.botId,
+                nodeId: optionNodeId || cardData.botState?.currentNodeId || null,
+                contactName:
+                    (sessionVars as any)?.nombre ||
+                    (sessionVars as any)?.name ||
+                    cardData.contactName ||
+                    null,
+                lastUserText: text,
+                recentTurns: (cardData.messages || []).slice(-4),
+                openaiApiKey: humanizeConfig.openaiApiKey,
+                geminiApiKey: humanizeConfig.geminiApiKey,
+            });
+        }
+
+        lastOutboundText = typeof finalContent === 'string' ? finalContent : content;
+
+        const opts = {
+            userId,
+            entityId,
+            ...(channelAccountId ? { fromPhoneNumberId: channelAccountId } : {}),
+            ...sendOptions,
+        };
         if (platform === 'whatsapp') {
             const isSessionMessage =
                 !opts.type ||
@@ -387,37 +444,49 @@ async function runEngineCycle(
             if (isSessionMessage && !opts.forceTemplate) {
                 const entitySnap = await db.doc(entityPath).get();
                 const { resolveWhatsAppSendGuard } = await import('@/lib/whatsapp/sessionGuard');
-                const guard = resolveWhatsAppSendGuard(cardData.messages || [], content, entitySnap.data());
+                const guard = resolveWhatsAppSendGuard(cardData.messages || [], finalContent, entitySnap.data());
                 if (guard.blockSend) {
                     console.warn(`[ChatbotEngine] WhatsApp blocked (24h): ${guard.blockReason}`);
-                    return { skipped: true, reason: guard.blockReason };
+                    return { skipped: true, reason: guard.blockReason, sentText: finalContent };
                 }
                 if (guard.useTemplate && guard.templatePayload) {
-                    return await sendWhatsAppMessage(from, content, { ...opts, ...guard.templatePayload });
+                    const result = await sendWhatsAppMessage(from, finalContent, { ...opts, ...guard.templatePayload });
+                    return { ...result, sentText: finalContent };
                 }
             }
-            return await sendWhatsAppMessage(from, content, opts);
+            const result = await sendWhatsAppMessage(from, finalContent, opts);
+            return { ...result, sentText: finalContent };
         }
         if (platform === 'messenger' || platform === 'facebook_comments') {
-            return await sendMetaMessage(from, content, { ...opts, provider: 'messenger' });
+            const result = await sendMetaMessage(from, finalContent, { ...opts, provider: 'messenger' });
+            return { ...result, sentText: finalContent };
         }
         if (platform === 'instagram_comments') {
             const commentId = msg.metadata?.commentId || cardData?.botState?.lastCommentId;
             if (!commentId) {
                 console.warn('[ChatbotEngine] instagram_comments reply skipped — missing commentId in queue metadata.');
-                return { skipped: true, reason: 'missing_comment_id' };
+                return { skipped: true, reason: 'missing_comment_id', sentText: finalContent };
             }
-            return await sendInstagramCommentReply(commentId, content, { userId, entityId });
+            const result = await sendInstagramCommentReply(commentId, finalContent, { userId, entityId });
+            return { ...result, sentText: finalContent };
         }
         if (platform === 'instagram') {
-            return await sendMetaMessage(from, content, { ...opts, provider: 'instagram' });
+            const result = await sendMetaMessage(from, finalContent, { ...opts, provider: 'instagram' });
+            return { ...result, sentText: finalContent };
         }
-        if (platform === 'telegram') return await sendTelegramMessage(from, content, opts);
-        if (platform === 'gmail') return await sendGmailMessage(from, content, opts);
+        if (platform === 'telegram') {
+            const result = await sendTelegramMessage(from, finalContent, opts);
+            return { ...result, sentText: finalContent };
+        }
+        if (platform === 'gmail') {
+            const result = await sendGmailMessage(from, finalContent, opts);
+            return { ...result, sentText: finalContent };
+        }
         if (platform === 'x_twitter' || platform === 'x' || platform === 'x_twitter_comments') {
             console.log(`[ChatbotEngine] X outbound (${platform}) queued in card — API send pending OAuth tokens.`);
-            return { logged: true, platform, to: from };
+            return { logged: true, platform, to: from, sentText: finalContent };
         }
+        return { sentText: finalContent };
     };
 
     const normalizedInput = text.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -637,6 +706,30 @@ async function runEngineCycle(
 
     const botData = selectedBots[0];
     console.log(`[ChatbotEngine] 🤖 Selected Bot: "${botData.name}" (Score: ${botData._score}) for ${platform}`);
+    humanizeConfig = {
+        enabled: !!botData.humanizeTone,
+        style: String(botData.humanizeStyle || 'warm'),
+        botId: String(botData.id || ''),
+        openaiApiKey: null,
+        geminiApiKey: null,
+    };
+    if (humanizeConfig.enabled) {
+        console.log(`[ChatbotEngine] 🗣️ Humanize tone ON (style=${humanizeConfig.style}) for bot ${humanizeConfig.botId}`);
+        try {
+            const [openaiSnap, geminiSnap] = await Promise.all([
+                db.doc(`${entityPath}/integrations/openai`).get().catch(() => null),
+                db.doc(`${entityPath}/integrations/gemini`).get().catch(() => null),
+            ]);
+            if (openaiSnap?.exists) {
+                humanizeConfig.openaiApiKey = String(openaiSnap.data()?.apiKey || '').trim() || null;
+            }
+            if (geminiSnap?.exists) {
+                humanizeConfig.geminiApiKey = String(geminiSnap.data()?.apiKey || '').trim() || null;
+            }
+        } catch (err: any) {
+            console.warn(`[ChatbotEngine] Humanize key lookup skipped: ${err?.message || err}`);
+        }
+    }
     const flow = botData.flow || { nodes: [], edges: [] };
 
     let nodeGroupMap: Map<string, string> | undefined;
@@ -713,6 +806,7 @@ async function runEngineCycle(
                 type: 'list',
                 button: waitNode.data?.buttonText || 'Ver opciones',
                 sections,
+                nodeId: waitNode.id,
             });
             await appendAgentMessage({
                 text: body,
@@ -927,11 +1021,12 @@ async function runEngineCycle(
                 if (!isValid) {
                     console.log(`[ChatbotEngine] ⚠️ Validation failed for ${varName}: "${extracted}"`);
                     const errorContent = replaceVars(errorMessage);
-                    await dispatchMessage(errorContent);
+                    await dispatchMessage(errorContent, { skipHumanize: true });
                     await appendAgentMessage({
                         text: errorContent,
                         type: 'text',
-                        messageId: `bot_validation_${Date.now()}`
+                        messageId: `bot_validation_${Date.now()}`,
+                        preserveText: true,
                     });
                     return;
                 }
@@ -1084,12 +1179,14 @@ async function runEngineCycle(
         // 1. TEXT MESSAGE
         if (node.type === 'textMessageNode') {
             const content = replaceVars(node.data?.content || node.data?.text || 'Hola');
-            await dispatchMessage(content);
-            if (content.trim()) {
+            const sent = await dispatchMessage(content, { nodeId: node.id });
+            const outbound = (sent as any)?.sentText || content;
+            if (outbound.trim()) {
                 await appendAgentMessage({
-                    text: content,
+                    text: outbound,
                     type: 'text',
-                    messageId: `bot_${Date.now()}`
+                    messageId: `bot_${Date.now()}`,
+                    preserveText: true,
                 });
             }
             const edge = resolveDefaultNextEdge(flow.edges, node.id);
@@ -1175,15 +1272,22 @@ async function runEngineCycle(
                 'botState.waitingForInput': false,
             });
 
-            await dispatchMessage(body, { type: 'list', button: node.data?.buttonText || 'Ver opciones', sections });
-            
+            await dispatchMessage(body, {
+                type: 'list',
+                button: node.data?.buttonText || 'Ver opciones',
+                sections,
+                nodeId: node.id,
+            });
+            const listOutbound = lastOutboundText || body;
+            lastOutboundText = null;
+
             await box.ref.update({
                 'botState.waitingForInput': true,
                 'botState.lastStep': 'listMessageNode',
                 'botState.lastWaitStartedAt': admin.firestore.FieldValue.serverTimestamp(),
                 messages: admin.firestore.FieldValue.arrayUnion({
                     sender: 'agent',
-                    text: body,
+                    text: listOutbound,
                     platform,
                     timestamp: new Date(),
                     messageId: `bot_list_${Date.now()}`,
@@ -1214,17 +1318,19 @@ async function runEngineCycle(
 
             if (isQuickReply && buttons.length > 0) {
                 const prompt = content.trim() || 'Selecciona una opción:';
-                await dispatchMessage(prompt, { type: 'quick_reply', buttons });
+                await dispatchMessage(prompt, { type: 'quick_reply', buttons, nodeId: node.id });
             } else if (content.trim()) {
-                await dispatchMessage(content, {});
+                await dispatchMessage(content, { nodeId: node.id });
             } else if (node.type === 'captureInputNode') {
                 const prompt = 'Por favor, escribe tu respuesta:';
-                await dispatchMessage(prompt, {});
+                await dispatchMessage(prompt, { nodeId: node.id });
             }
 
-            const agentText = isQuickReply && buttons.length > 0
+            const agentTextRaw = isQuickReply && buttons.length > 0
                 ? (content.trim() || 'Selecciona una opción:')
                 : (content.trim() || (node.type === 'captureInputNode' ? 'Por favor, escribe tu respuesta:' : ''));
+            const agentText = (agentTextRaw && lastOutboundText) ? lastOutboundText : agentTextRaw;
+            lastOutboundText = null;
 
             const updatePayload: any = {
                 'botState.waitingForInput': true,
@@ -1442,31 +1548,34 @@ async function runEngineCycle(
                         });
                         sessionVars[outputVar] = aiText;
                     } else {
-                        await dispatchMessage(aiText);
+                        await dispatchMessage(aiText, { skipHumanize: true });
                         await appendAgentMessage({
                             text: aiText,
                             type: 'text',
-                            messageId: `bot_ai_${Date.now()}`
+                            messageId: `bot_ai_${Date.now()}`,
+                            preserveText: true,
                         });
                     }
                 } catch (error: any) {
                     console.error(`[ChatbotEngine] AI Error:`, error.response?.data || error.message);
                     const errorMsg = "Lo siento, tuve un problema procesando tu solicitud con IA.";
-                    await dispatchMessage(errorMsg);
+                    await dispatchMessage(errorMsg, { skipHumanize: true });
                     await appendAgentMessage({
                         text: errorMsg,
                         type: 'text',
-                        messageId: `bot_ai_err_${Date.now()}`
+                        messageId: `bot_ai_err_${Date.now()}`,
+                        preserveText: true,
                     });
                 }
             } else {
                 console.warn("[ChatbotEngine] Missing OpenAI API Key");
                 const errorMsg = "El nodo de IA no está configurado (falta API Key).";
-                await dispatchMessage(errorMsg);
+                await dispatchMessage(errorMsg, { skipHumanize: true });
                 await appendAgentMessage({
                     text: errorMsg,
                     type: 'text',
-                    messageId: `bot_ai_err_${Date.now()}`
+                    messageId: `bot_ai_err_${Date.now()}`,
+                    preserveText: true,
                 });
             }
             const edge = resolveDefaultNextEdge(flow.edges, node.id);

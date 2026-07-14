@@ -24,9 +24,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from 'sonner';
-import { Loader2, ArrowLeft, Cloud, Check, Save, Facebook, Instagram, Send, Mail, Twitter } from 'lucide-react';
+import { Loader2, ArrowLeft, Cloud, Check, Save, Facebook, Instagram, Send, Mail, Twitter, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { getPrimaryPlatform, normalizeTargetPlatforms, updateExclusiveBotPlatform } from '../utils';
 
 const WhatsAppIcon = ({ className }: { className?: string }) => (
@@ -50,6 +51,7 @@ function FlowPage() {
   const [chatbotName, setChatbotName] = useState('Cargando...');
   const [targetPlatforms, setTargetPlatforms] = useState<string[]>([]);
   const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
+  const [humanizeTone, setHumanizeTone] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [isLoading, setIsLoading] = useState(true);
     const params = useParams();
@@ -109,6 +111,7 @@ function FlowPage() {
         const data = docSnap.data();
         setChatbotName(data.name || 'Mi Chatbot');
         setTargetPlatforms(normalizeTargetPlatforms(data.targetPlatforms));
+        setHumanizeTone(!!data.humanizeTone);
 
         const flowData = data.flow || {};
         const savedNodes = flowData.nodes || [];
@@ -142,6 +145,9 @@ function FlowPage() {
       if (!docSnap.exists()) return;
       const data = docSnap.data();
       setTargetPlatforms(normalizeTargetPlatforms(data.targetPlatforms));
+      if (typeof data.humanizeTone === 'boolean') {
+        setHumanizeTone(data.humanizeTone);
+      }
       if (typeof data.name === 'string') {
         setChatbotName((prev) => prev === data.name ? prev : data.name);
       }
@@ -190,6 +196,24 @@ function FlowPage() {
     } catch (error) {
       console.error('Error updating platform:', error);
       toast.error('No se pudo actualizar la plataforma.');
+    }
+  };
+
+  const handleToggleHumanizeTone = async (checked: boolean) => {
+    if (!currentUser || !activeEntity || !chatbotId) return;
+    setHumanizeTone(checked);
+    try {
+      const chatbotRef = doc(db, 'users', currentUser.uid, 'entities', activeEntity, 'chatbots', chatbotId);
+      await setDoc(
+        chatbotRef,
+        { humanizeTone: checked, humanizeStyle: 'warm', updatedAt: new Date() },
+        { merge: true }
+      );
+      toast.success(checked ? 'Humanizar conversación activado' : 'Humanizar conversación desactivado');
+    } catch (error) {
+      console.error('Error updating humanizeTone:', error);
+      setHumanizeTone(!checked);
+      toast.error('No se pudo guardar Humanizar.');
     }
   };
 
@@ -278,6 +302,27 @@ function FlowPage() {
 
         {/* Derecha: Plataformas y Estado de Guardado */}
         <div className="flex items-center gap-6">
+          <div
+            className={`flex items-center gap-2.5 px-3 py-1.5 rounded-full border transition-all ${
+              humanizeTone
+                ? 'bg-emerald-500/10 border-emerald-500/20'
+                : 'bg-white/5 border-white/5'
+            }`}
+            title="La IA solo reformula el tono de los mensajes del flujo. No cambia el camino ni inventa respuestas."
+          >
+            <Sparkles className={`w-3.5 h-3.5 ${humanizeTone ? 'text-emerald-400' : 'text-neutral-500'}`} />
+            <div className="flex flex-col leading-none">
+              <span className={`text-[10px] font-normal uppercase tracking-tight ${humanizeTone ? 'text-emerald-300' : 'text-neutral-500'}`}>
+                Humanizar
+              </span>
+            </div>
+            <Switch
+              checked={humanizeTone}
+              onCheckedChange={handleToggleHumanizeTone}
+              className="scale-75 data-[state=checked]:bg-emerald-600"
+            />
+          </div>
+
           {/* Platform Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

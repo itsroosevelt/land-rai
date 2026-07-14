@@ -19,6 +19,7 @@ import InstagramModal from './components/instagram/InstagramModal';
 import TelegramModal from './components/telegram/TelegramModal';
 import TwitterModal from './components/twitter/TwitterModal';
 import GmailModal from './components/gmail/GmailModal';
+import GeminiModal from './components/gemini/GeminiModal';
 
 export default function IntegrationsPage() {
     const { currentUser } = useAuth();
@@ -91,7 +92,7 @@ export default function IntegrationsPage() {
         .filter((s) => slotConnections[s]?.connected).length;
 
     const handleConnect = async (integration: Integration) => {
-        if (!['whatsapp', 'messenger', 'instagram', 'telegram', 'x_twitter', 'gmail'].includes(integration.id)) {
+        if (!['whatsapp', 'messenger', 'instagram', 'telegram', 'x_twitter', 'gmail', 'gemini'].includes(integration.id)) {
             toast.info(`${integration.name}: Esta integración estará disponible próximamente en Roosevelt.`);
             return;
         }
@@ -279,6 +280,14 @@ export default function IntegrationsPage() {
             )}
             {activeIntegration?.id === 'gmail' && (
                 <GmailModal 
+                    isOpen={isModalOpen}
+                    onClose={() => { setIsModalOpen(false); setActiveIntegration(null); }}
+                    activeEntity={activeEntity}
+                    currentUser={currentUser}
+                />
+            )}
+            {activeIntegration?.id === 'gemini' && (
+                <GeminiModal
                     isOpen={isModalOpen}
                     onClose={() => { setIsModalOpen(false); setActiveIntegration(null); }}
                     activeEntity={activeEntity}

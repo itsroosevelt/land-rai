@@ -14,11 +14,12 @@ import {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
-import { ArrowLeft, Check, Cloud, Instagram, Loader2, Save } from 'lucide-react';
+import { ArrowLeft, Check, Cloud, Instagram, Loader2, Save, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatbotCanvas from '@/components/ChatbotCanvas';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { db } from '@/lib/firebase';
 import { BotChannelConfig } from '@/lib/automation/channels';
 import { useAutomationEntity } from '@/lib/automation/useAutomationEntity';
@@ -36,6 +37,7 @@ export function ChannelBotEditorPage({ channel, botId }: ChannelBotEditorPagePro
   const [edges, setEdges] = useState<Edge[]>([]);
   const [chatbotName, setChatbotName] = useState('Cargando...');
   const [targetPlatforms, setTargetPlatforms] = useState<string[]>([channel.enginePlatform]);
+  const [humanizeTone, setHumanizeTone] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [isLoading, setIsLoading] = useState(true);
   const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -90,6 +92,7 @@ export function ChannelBotEditorPage({ channel, botId }: ChannelBotEditorPagePro
           const data = snap.data();
           setChatbotName(data.name || `Bot ${channel.shortTitle}`);
           setTargetPlatforms(normalizeTargetPlatforms(data.targetPlatforms) || [channel.enginePlatform]);
+          setHumanizeTone(!!data.humanizeTone);
           const flowData = data.flow || {};
           setNodes(Array.isArray(flowData.nodes) ? flowData.nodes : []);
           setEdges(
@@ -124,6 +127,9 @@ export function ChannelBotEditorPage({ channel, botId }: ChannelBotEditorPagePro
       if (!snap.exists()) return;
       const data = snap.data();
       setTargetPlatforms(normalizeTargetPlatforms(data.targetPlatforms) || [channel.enginePlatform]);
+      if (typeof data.humanizeTone === 'boolean') {
+        setHumanizeTone(data.humanizeTone);
+      }
       if (typeof data.name === 'string') {
         setChatbotName((prev) => (prev === data.name ? prev : data.name));
       }
@@ -148,6 +154,23 @@ export function ChannelBotEditorPage({ channel, botId }: ChannelBotEditorPagePro
     (connection) => setEdges((eds) => addEdge({ ...connection, type: 'custom' }, eds)),
     []
   );
+
+  const handleToggleHumanizeTone = async (checked: boolean) => {
+    if (!botId || !currentUser || !entityId) return;
+    setHumanizeTone(checked);
+    try {
+      await setDoc(
+        botDocPath(),
+        { humanizeTone: checked, humanizeStyle: 'warm', updatedAt: new Date() },
+        { merge: true }
+      );
+      toast.success(checked ? 'Humanizar conversación activado' : 'Humanizar conversación desactivado');
+    } catch (error) {
+      console.error('Error updating humanizeTone:', error);
+      setHumanizeTone(!checked);
+      toast.error('No se pudo guardar Humanizar.');
+    }
+  };
 
   if (authLoading || isLoading) {
     return (
@@ -204,6 +227,22 @@ export function ChannelBotEditorPage({ channel, botId }: ChannelBotEditorPagePro
           )}
         </div>
         <div className="flex items-center gap-3 text-sm">
+          <div
+            className={`flex items-center gap-2.5 px-3 py-1.5 rounded-full border ${
+              humanizeTone ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-white/5 border-white/5'
+            }`}
+            title="La IA solo reformula el tono. El flujo decide el camino."
+          >
+            <Sparkles className={`w-3.5 h-3.5 ${humanizeTone ? 'text-emerald-400' : 'text-neutral-500'}`} />
+            <span className={`text-[10px] uppercase tracking-tight ${humanizeTone ? 'text-emerald-300' : 'text-neutral-500'}`}>
+              Humanizar
+            </span>
+            <Switch
+              checked={humanizeTone}
+              onCheckedChange={handleToggleHumanizeTone}
+              className="scale-75 data-[state=checked]:bg-emerald-600"
+            />
+          </div>
           {saveStatus === 'saving' && (
             <span className="text-neutral-400 flex items-center gap-2"><Cloud className="w-4 h-4" /> Guardando...</span>
           )}

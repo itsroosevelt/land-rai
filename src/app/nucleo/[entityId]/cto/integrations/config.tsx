@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type Category = 'All' | 'Business Messaging' | 'Social Media' | 'Live Chat' | 'Payments' | 'SMS' | 'Email';
+export type Category = 'All' | 'Business Messaging' | 'Social Media' | 'Live Chat' | 'Payments' | 'SMS' | 'Email' | 'AI';
 
 export interface Integration {
     id: string;
@@ -46,6 +46,22 @@ export const XIcon = ({ className = "w-10 h-10" }: { className?: string }) => (
 export const GmailIcon = ({ className = "w-10 h-10" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" className={`${className}`} xmlns="http://www.w3.org/2000/svg">
         <path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L12 9.573l8.073-6.08c1.618-1.214 3.927-.059 3.927 1.964z" fill="#EA4335" />
+    </svg>
+);
+
+export const GeminiIcon = ({ className = "w-10 h-10" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" className={className} xmlns="http://www.w3.org/2000/svg">
+        <defs>
+            <linearGradient id="geminiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#4285F4" />
+                <stop offset="50%" stopColor="#9B72CB" />
+                <stop offset="100%" stopColor="#D96570" />
+            </linearGradient>
+        </defs>
+        <path
+            fill="url(#geminiGrad)"
+            d="M12 2l1.5 6.5L20 10l-6.5 1.5L12 18l-1.5-6.5L4 10l6.5-1.5L12 2zm7 11l.8 3.2L23 17l-3.2.8L19 21l-.8-3.2L15 17l3.2-.8L19 13zM5 14l.6 2.4L8 17l-2.4.6L5 20l-.6-2.4L2 17l2.4-.6L5 14z"
+        />
     </svg>
 );
 
@@ -103,7 +119,16 @@ export const INTEGRATIONS: Integration[] = [
         category: 'Email',
         popular: false,
         color: '#EA4335'
+    },
+    {
+        id: 'gemini',
+        name: 'Google Gemini',
+        description: 'API key de Google AI Studio por entidad. Potencia Humanizar en flujos de chatbots y otras capacidades de IA del tenant.',
+        icon: <GeminiIcon />,
+        category: 'AI',
+        popular: true,
+        color: '#4285F4'
     }
 ];
 
-export const CATEGORIES: Category[] = ['All', 'Business Messaging', 'Social Media', 'Email'];
+export const CATEGORIES: Category[] = ['All', 'Business Messaging', 'Social Media', 'Email', 'AI'];
