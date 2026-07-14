@@ -377,13 +377,35 @@ async function runEngineCycle(
     const isReset = isExplicitReset || isTimeoutReset;
     const isMenu = /^(menu|opciones|ayuda|help)/i.test(normalizedInput);
     const isStop = /^(detener|stop|salir|chau|adios)/i.test(normalizedInput);
-    const isStartTrigger = /^(hola|hi|buenas|inicio|start|buen(as)?\s*(dias|tardes|noches)|que\s*tal|saludos)/i.test(normalizedInput);
+
+    // Classic greetings (kept for mid-flow re-entry without waiting).
+    // Includes "buenos dias" (not only "buenas") and common typos/variants.
+    const isGreeting =
+        /^(hola+|holi+|oli+|hi+|hello+|hey+|ey+|wenas?|wematos?|saludos?|inicio|start|que\s*tal|como\s*estas?|buen[oa]s?\s*(dias?|tardes?|noches?)|buenas)\b/i.test(
+            normalizedInput
+        );
 
     // If the bot is waiting for an answer, greetings are part of the reply — not a new session.
     const wasWaitingForInput = !!cardData.botState?.waitingForInput;
-    const shouldApplyStartTrigger = isStartTrigger && !wasWaitingForInput;
+    const statusForWake = cardData.botState?.status;
+    const nodeForWake = cardData.botState?.currentNodeId;
+    const botLooksIdle =
+        !wasWaitingForInput &&
+        (!nodeForWake || statusForWake === 'completed' || statusForWake === 'inactive' || !statusForWake);
+    const hasAnyUserContent = String(text || '').trim().length > 0;
+
+    // Wake rules:
+    //  - Idle bot → ANY message (".", emoji text, "hola", "buenos dias"…) starts the flow.
+    //  - Mid-flow but not waiting → a greeting restarts (unstick / re-engage).
+    //  - Actively waiting → never restart here (answer the current question).
+    const isStartTrigger = !wasWaitingForInput && ((botLooksIdle && hasAnyUserContent) || isGreeting);
+    const shouldApplyStartTrigger = isStartTrigger;
     
     const isCommand = isReset || isMenu || isStop;
+
+    if (botLooksIdle && hasAnyUserContent) {
+        console.log(`[ChatbotEngine] 👋 Idle wake-up with input "${String(text).slice(0, 40)}" — starting flow`);
+    }
 
     const sessionVars = {
         nombre: (isReset || shouldApplyStartTrigger) ? 'Usuario' : (cardData.contactName || 'Usuario'),
@@ -734,7 +756,7 @@ async function runEngineCycle(
     const status = cardData.botState?.status;
     const isActivelyWaiting = waitingForInput && !!currentNodeId;
     const botIsIdle = !currentNodeId || status === 'completed' || status === 'inactive' || !status;
-    const shouldRestart = (isReset || isMenu)
+    const shouldRestart = (isReset || isMenu || shouldApplyStartTrigger)
         ? true
         : (!isActivelyWaiting && botIsIdle);
 
