@@ -18,6 +18,18 @@ export const SLOTS: SlotDefinition[] = [
     { id: "broadcast", label: "Broadcast", short: "CAM", description: "Campañas y envíos masivos." },
 ];
 
+/**
+ * Normalize legacy slot ids (`primary`) and empty values to the canonical NumberSlot.
+ * Bots / whatsapp_numbers historically used `primary` for the first number.
+ */
+export function normalizeNumberSlot(value: unknown): NumberSlot {
+    const v = String(value || "").trim().toLowerCase();
+    if (v === "support") return "support";
+    if (v === "broadcast") return "broadcast";
+    // primary / general / empty / unknown → general
+    return "general";
+}
+
 export interface WhatsAppNumberConnection {
     connected: boolean;
     phoneNumberId?: string;
@@ -81,7 +93,8 @@ export const subscribeSlotConnections = (
                 explicit[s] = false;
             });
             snap.docs.forEach((d) => {
-                const id = d.id as NumberSlot;
+                // Map legacy `primary` docs onto the General tab.
+                const id = d.id === "primary" ? "general" : (d.id as NumberSlot);
                 if (id === "general" || id === "support" || id === "broadcast") {
                     slots[id] = buildConnection(d.data());
                     explicit[id] = true;

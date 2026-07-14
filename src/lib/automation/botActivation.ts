@@ -80,10 +80,12 @@ interface UpdateExclusiveBotForNumberOptions {
     activate: boolean;
 }
 
-// Treat a missing numberId as the primary number so legacy bots stay grouped.
+// Treat a missing numberId as the general tab so legacy bots stay grouped.
 const effectiveNumberId = (value: unknown): string => {
-    const v = String(value || '').trim();
-    return v || 'primary';
+    const v = String(value || '').trim().toLowerCase();
+    if (v === 'support' || v === 'broadcast') return v;
+    // primary / empty / unknown → general (canonical slot)
+    return 'general';
 };
 
 /**

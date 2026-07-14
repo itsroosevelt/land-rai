@@ -184,7 +184,8 @@ export default function BroadcastsTable({
     };
 
     return (
-        <div className="border border-white/5 rounded-xl bg-[#0b0c10]/40 overflow-hidden shadow-2xl backdrop-blur-sm">
+        <div className="border border-white/5 rounded-xl bg-[#0b0c10]/40 overflow-visible shadow-2xl backdrop-blur-sm">
+            <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
                 <thead>
                     <tr className="border-b border-white/5 bg-[#13151a]/30 text-[11px] font-normal uppercase tracking-wider text-neutral-400 select-none">
@@ -353,11 +354,11 @@ export default function BroadcastsTable({
                                             </button>
                                         </div>
 
-                                        {/* Custom Row Actions Dropdown */}
+                                        {/* Custom Row Actions Dropdown — Eliminar near top so it never gets clipped */}
                                         {activeRowMenuId === broadcast.id && (
                                             <div
                                                 ref={rowMenuRef}
-                                                className="absolute right-4 top-10 z-50 bg-[#13151a] border border-white/10 rounded-lg py-1.5 w-44 shadow-[0_10px_30px_rgba(0,0,0,0.5)] text-left"
+                                                className="absolute right-4 top-10 z-[80] bg-[#13151a] border border-white/10 rounded-lg py-1.5 w-48 shadow-[0_10px_30px_rgba(0,0,0,0.5)] text-left"
                                             >
                                                 {canLaunch && (
                                                     <button
@@ -375,6 +376,13 @@ export default function BroadcastsTable({
                                                         <BarChart3 className="w-3 h-3" /> Ver resultados
                                                     </button>
                                                 )}
+                                                <button
+                                                    onClick={() => handleDeleteClick(broadcast)}
+                                                    className="w-full px-3 py-1.5 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                                                >
+                                                    Eliminar
+                                                </button>
+                                                <div className="h-px bg-white/5 my-1" />
                                                 {canEdit && (
                                                     <button
                                                         onClick={() => handleEditBroadcast(broadcast)}
@@ -405,13 +413,6 @@ export default function BroadcastsTable({
                                                 >
                                                     Clonar
                                                 </button>
-                                                <div className="h-px bg-white/5 my-1" />
-                                                <button
-                                                    onClick={() => handleDeleteClick(broadcast)}
-                                                    className="w-full px-3 py-1.5 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
-                                                >
-                                                    Eliminar
-                                                </button>
                                             </div>
                                         )}
                                     </td>
@@ -427,6 +428,7 @@ export default function BroadcastsTable({
                     )}
                 </tbody>
             </table>
+            </div>
         </div>
     );
 }

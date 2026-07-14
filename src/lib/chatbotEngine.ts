@@ -97,7 +97,10 @@ async function resolveSlotForPhoneId(
         for (const d of slotsSnap.docs) {
             const data = d.data() || {};
             const pid = String(data.phoneNumberId || data.phone_number_id || data.phoneId || '');
-            if (pid && pid === target) return d.id; // slot id === doc id
+            if (pid && pid === target) {
+                // Legacy docs used id `primary` — normalize to canonical `general`.
+                return d.id === 'primary' ? 'general' : d.id;
+            }
         }
         const [std, internal] = await Promise.all([
             db.doc(`${entityPath}/integrations/whatsapp`).get(),
@@ -112,6 +115,12 @@ async function resolveSlotForPhoneId(
         console.warn('[ChatbotEngine] resolveSlotForPhoneId failed:', e);
     }
     return null;
+}
+
+function normalizeBotNumberSlot(numberId: unknown): string {
+    const v = String(numberId || '').trim().toLowerCase();
+    if (v === 'support' || v === 'broadcast') return v;
+    return 'general'; // null | primary | general | empty
 }
 
 /**
@@ -678,22 +687,22 @@ async function runEngineCycle(
     }
 
     // --- MULTI-NUMBER ROUTING ---
-    // Run the bot bound to the SAME number/slot that received the message. Bots store
-    // `numberId` = slot id (general|support|broadcast); legacy bots default to 'general'.
-    // This keeps each number's flow isolated (e.g. reception number vs broadcast number)
-    // and prevents flows from mixing when several WhatsApp bots are active at once.
+    // Always prefer the bot bound to the SAME slot that received the message.
+    // Never fall back across slots when a phone maps to a known slot — that is how
+    // one number steals another number's bot (esp. after broadcast activation).
     let selectedBots = platformBots;
-    if (platform === 'whatsapp' && channelAccountId && platformBots.length > 1) {
+    if (platform === 'whatsapp' && channelAccountId) {
         const incomingSlot = await resolveSlotForPhoneId(entityPath, channelAccountId);
         if (incomingSlot) {
             const matching = platformBots.filter(
-                (b) => String(b.numberId || 'general').trim() === incomingSlot
+                (b) => normalizeBotNumberSlot(b.numberId) === String(incomingSlot)
             );
             if (matching.length > 0) {
                 selectedBots = matching;
                 console.log(`[ChatbotEngine] 📍 Routing to slot "${incomingSlot}" (${matching.length} bot[s]) for number ${channelAccountId}`);
             } else {
-                console.log(`[ChatbotEngine] ℹ️ No bot bound to slot "${incomingSlot}" for number ${channelAccountId}; using best available.`);
+                console.log(`[ChatbotEngine] ⛔ No bot bound to slot "${incomingSlot}" for number ${channelAccountId} — skipping (no cross-number fallback).`);
+                return;
             }
         }
     }

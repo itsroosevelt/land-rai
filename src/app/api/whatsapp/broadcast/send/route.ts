@@ -201,18 +201,48 @@ export async function POST(req: Request) {
             if (i < recipients.length - 1) await sleep(delay);
         }
 
-        // Activate attached bot so replies get auto-answered by the engine.
-        // Bind it to the SAME slot/number the campaign sends from, so the engine routes
-        // replies on that number to THIS bot (isolated from bots on other numbers).
+        // Activate attached bot ONLY on the campaign slot (exclusive), without stealing
+        // bots from other numbers. Never overwrite numberId to another slot blindly when
+        // the bot already belongs elsewhere — bind explicitly to broadcastSlot.
         if (broadcast.botId) {
             try {
-                await db
-                    .doc(`${tenantPath}/chatbots/${broadcast.botId}`)
-                    .update({
-                        isActive: true,
-                        ...(broadcastSlot ? { numberId: broadcastSlot, targetPlatforms: ["whatsapp"] } : {}),
-                        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                    });
+                const botsSnap = await db.collection(`${tenantPath}/chatbots`).get();
+                const targetSlot = String(broadcastSlot || 'broadcast').trim() || 'broadcast';
+                const batch = db.batch();
+                for (const botDoc of botsSnap.docs) {
+                    const data = botDoc.data() || {};
+                    const botSlot = (() => {
+                        const v = String(data.numberId || '').trim().toLowerCase();
+                        if (v === 'support' || v === 'broadcast') return v;
+                        return 'general';
+                    })();
+                    if (botDoc.id === broadcast.botId) {
+                        batch.set(
+                            botDoc.ref,
+                            {
+                                isActive: true,
+                                numberId: targetSlot,
+                                targetPlatforms: ['whatsapp'],
+                                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                            },
+                            { merge: true }
+                        );
+                    } else if (
+                        (data.isActive === true || data.isActive === 'true') &&
+                        botSlot === targetSlot
+                    ) {
+                        // Only deactivate peers on the SAME slot
+                        batch.set(
+                            botDoc.ref,
+                            {
+                                isActive: false,
+                                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                            },
+                            { merge: true }
+                        );
+                    }
+                }
+                await batch.commit();
             } catch (e) {
                 console.error("[Broadcast] Failed to activate bot:", e);
             }
