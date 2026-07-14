@@ -11,7 +11,7 @@ import {
 import { filterOutQueueMessage } from './botQueue';
 import { isIsolatedBotCollection, resolveBotsCollectionName } from './automation/botStorage';
 import axios from 'axios';
-import { buildBotNodeGroupMap, syncCardToBotNodeAdmin } from '@/lib/kanban/kanbanBotSyncAdmin';
+import { buildBotNodeGroupMap, syncCardToBotNodeAdmin, locateKanbanCard } from '@/lib/kanban/kanbanBotSyncAdmin';
 
 /** Avoid spamming the same validation prompt when the user taps quickly or the queue retries. */
 const VALIDATION_DEBOUNCE_MS = 25_000;
@@ -114,21 +114,39 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
     const { userId, entityId, groupId, cardId, platform, from, text, messageId, botsCollection, channelAccountId } = ctx;
     const triggerMessageId = messageId ? String(messageId).trim() : '';
     const entityPath = `users/${userId}/entities/${entityId}`;
-    const cardRef = db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`);
+
+    // Live card pointer: kanban sync MOVES the card doc between groups. Writes to the old path
+    // silently fail after delete, leaving messageQueue forever stuck on the new doc.
+    const box: { ref: admin.firestore.DocumentReference } = {
+        ref: db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`),
+    };
+    const refreshCardRef = async (): Promise<boolean> => {
+        const located = await locateKanbanCard(db, entityPath, cardId);
+        if (!located) {
+            console.error(`[ChatbotEngine] ❌ Card ${cardId} not found under ${entityPath}`);
+            return false;
+        }
+        if (located.ref.path !== box.ref.path) {
+            console.log(`[ChatbotEngine] 📦 Card rebound → ${located.groupId}`);
+        }
+        box.ref = located.ref;
+        return true;
+    };
+
+    if (!(await refreshCardRef())) return;
 
     console.log(`[ChatbotEngine] 🚀 RUNNER START | Platform: ${platform} | From: ${from}`);
 
     try {
         // Human agent has control — save client messages but do not run the bot.
-        const earlySnap = await cardRef.get();
+        const earlySnap = await box.ref.get();
         if (earlySnap.exists && earlySnap.data()?.humanTakeover?.active === true) {
             console.log(`[ChatbotEngine] 🧑‍💼 Human takeover active — skipping bot for ${cardId}`);
             const data = earlySnap.data() || {};
             const queue = dedupeQueueItems(data.botState?.messageQueue || []);
             if (triggerMessageId && queue.some((q) => String(q.messageId) === triggerMessageId)) {
-                const remaining = queue.filter((q) => String(q.messageId) !== triggerMessageId);
-                await cardRef.update({
-                    'botState.messageQueue': remaining,
+                await box.ref.update({
+                    'botState.messageQueue': filterOutQueueMessage(queue, triggerMessageId),
                     'botState.lastProcessedMessageId': triggerMessageId,
                     botLock: admin.firestore.FieldValue.delete(),
                 });
@@ -138,7 +156,7 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
 
         // --- 1. ATOMIC LOCK ACQUISITION ---
         const canExecute = await db.runTransaction(async (transaction) => {
-            const snap = await transaction.get(cardRef);
+            const snap = await transaction.get(box.ref);
             if (!snap.exists) return false;
             const data = snap.data() || {};
             const bState = data.botState || {};
@@ -150,10 +168,8 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
                 console.log(`[ChatbotEngine] 🔓 Priority command breaking existing lock for ${cardId}`);
             }
 
-            // DEDUP: Skip only when this webhook message was fully processed in a prior run.
             if (triggerMessageId && bState.lastProcessedMessageId === triggerMessageId) return false;
 
-            // LOCK CHECK: If still locked (not a priority command), check timeout
             if (data.botLock && !isPriorityCommand) {
                 const lockTime = data.botLock.toDate?.() || new Date(data.botLock);
                 const diff = (Date.now() - lockTime.getTime()) / 1000;
@@ -163,8 +179,7 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
                 }
             }
 
-            // Acquire lock only — lastProcessedMessageId is set after the queue item is consumed.
-            transaction.update(cardRef, {
+            transaction.update(box.ref, {
                 botLock: admin.firestore.FieldValue.serverTimestamp(),
             });
             return true;
@@ -172,7 +187,8 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
 
         if (!canExecute) {
             if (retryCount < 2 && triggerMessageId) {
-                const blockedSnap = await cardRef.get();
+                await refreshCardRef();
+                const blockedSnap = await box.ref.get();
                 const blockedData = blockedSnap.data() || {};
                 const blockedState = blockedData.botState || {};
                 const stillPending = dedupeQueueItems(blockedState.messageQueue || [])
@@ -188,20 +204,22 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
             return;
         }
 
-        // Trim stale/duplicate queue entries before consuming (prevents old messages re-firing prompts).
-        const preRunSnap = await cardRef.get();
+        await refreshCardRef();
+
+        const preRunSnap = await box.ref.get();
         const preRunQueue = dedupeQueueItems(preRunSnap.data()?.botState?.messageQueue || []);
         if (preRunQueue.length > 5) {
             const trimmed = preRunQueue.slice(-5);
-            await cardRef.update({ 'botState.messageQueue': trimmed });
+            await box.ref.update({ 'botState.messageQueue': trimmed });
             console.log(`[ChatbotEngine] 🧹 Trimmed message queue from ${preRunQueue.length} to ${trimmed.length}`);
         }
 
-        // --- 2. THE CONSUMER LOOP ---
         const processedInRunner = new Set<string>();
         let queueHasItems = true;
         while (queueHasItems) {
-            const snap = await cardRef.get();
+            if (!(await refreshCardRef())) break;
+
+            const snap = await box.ref.get();
             const cardData = snap.data() || {};
             const bState = cardData.botState || {};
             const queue = dedupeQueueItems(bState.messageQueue || []);
@@ -211,23 +229,19 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
                 break;
             }
 
-            // Consume first item (FIFO)
             const currentMsg = queue[0];
             const msgId = String(currentMsg.messageId || '').trim();
             const msgText = String(currentMsg.text || '').trim();
-            const msgPlatform = currentMsg.platform || platform;
-            const msgFrom = currentMsg.from || from;
 
-            // Skip duplicate deliveries within this runner, or stale items already handled earlier.
             const isStaleProcessedItem = !!msgId
                 && bState.lastProcessedMessageId === msgId
                 && msgId !== triggerMessageId;
             if (msgId && (processedInRunner.has(msgId) || isStaleProcessedItem)) {
                 console.log(`[ChatbotEngine] ⏭️ Skipping duplicate queue item [${msgId}]`);
                 await db.runTransaction(async (transaction) => {
-                    const fresh = await transaction.get(cardRef);
+                    const fresh = await transaction.get(box.ref);
                     const q = fresh.data()?.botState?.messageQueue || [];
-                    transaction.update(cardRef, {
+                    transaction.update(box.ref, {
                         'botState.messageQueue': filterOutQueueMessage(q, msgId),
                     });
                 });
@@ -239,45 +253,47 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
             console.log(`[ChatbotEngine] 🧵 Processing Queue Item [${msgId}]: "${msgText.substring(0, 30)}"`);
 
             try {
-                // --- 3. INNER ENGINE CORE ---
-                await runEngineCycle(cardRef, cardData, currentMsg, entityPath, entityId, userId, cardId, botsCollection, channelAccountId);
+                await runEngineCycle(box, refreshCardRef, cardData, currentMsg, entityPath, entityId, userId, cardId, botsCollection, channelAccountId);
             } catch (cycleErr: any) {
                 console.error(`[ChatbotEngine] ❌ Cycle Error [${msgId}]:`, cycleErr.message);
-                // Log error to card but DON'T stop the whole runner
-                await cardRef.update({
+                await refreshCardRef();
+                await box.ref.update({
                     'botState.lastError': cycleErr.message || 'Unknown Cycle Error',
                     'botState.lastErrorAt': admin.firestore.FieldValue.serverTimestamp()
-                });
+                }).catch(() => {});
             } finally {
-                // --- 4. ATOMIC QUEUE DRAIN by messageId (not object equality) ---
+                await refreshCardRef();
                 await db.runTransaction(async (transaction) => {
-                    const fresh = await transaction.get(cardRef);
+                    const fresh = await transaction.get(box.ref);
+                    if (!fresh.exists) return;
                     const q = fresh.data()?.botState?.messageQueue || [];
                     const update: Record<string, any> = {
                         'botState.messageQueue': filterOutQueueMessage(q, msgId),
                         botLock: admin.firestore.FieldValue.serverTimestamp(),
                     };
                     if (msgId) update['botState.lastProcessedMessageId'] = msgId;
-                    transaction.update(cardRef, update);
+                    transaction.update(box.ref, update);
                 });
             }
         }
     } catch (err: any) {
         console.error(`[ChatbotEngine] 💥 Runner Crash:`, err.message);
     } finally {
-        // --- 5. FINAL RELEASE + KANBAN PLACEMENT ---
         try {
+            await refreshCardRef();
             const activeBots = await db.collection(`${entityPath}/chatbots`).where('isActive', 'in', [true, 'true']).limit(1).get();
             const botId = activeBots.docs[0]?.id || '00000003';
             const { ensureCardKanbanPlacement } = await import('@/lib/kanban/kanbanBotSyncAdmin');
+            const located = await locateKanbanCard(db, entityPath, cardId);
             await ensureCardKanbanPlacement({
                 db,
                 tenantPath: entityPath,
                 cardId,
                 botId,
-                preferredGroupId: groupId,
+                preferredGroupId: located?.groupId || groupId,
             });
-            await cardRef.update({ botLock: admin.firestore.FieldValue.delete() });
+            await refreshCardRef();
+            await box.ref.update({ botLock: admin.firestore.FieldValue.delete() });
             console.log(`[ChatbotEngine] 🏁 RUNNER FINISHED for ${cardId}`);
         } catch (e) {}
     }
@@ -287,7 +303,8 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
  * Single Engine Cycle: Processes ONE message through the flow.
  */
 async function runEngineCycle(
-    cardRef: any,
+    box: { ref: admin.firestore.DocumentReference },
+    refreshCardRef: () => Promise<boolean>,
     cardData: any,
     msg: any,
     entityPath: string,
@@ -303,7 +320,8 @@ async function runEngineCycle(
     const messageId = msg.messageId;
 
     const appendAgentMessage = async (message: any) => {
-        await cardRef.update({
+        await refreshCardRef();
+        await box.ref.update({
             messages: admin.firestore.FieldValue.arrayUnion({
                 sender: 'agent',
                 platform,
@@ -369,7 +387,7 @@ async function runEngineCycle(
         const lastWait = cardData.botState.lastWaitStartedAt.toDate?.() || new Date(cardData.botState.lastWaitStartedAt);
         const daysPassed = (Date.now() - lastWait.getTime()) / (1000 * 60 * 60 * 24);
         if (daysPassed >= 15) {
-            console.log(`[ChatbotEngine] ⏳ 15-day timeout reached for card ${cardRef.id}. Forcing reset.`);
+            console.log(`[ChatbotEngine] ⏳ 15-day timeout reached for card ${box.ref.id}. Forcing reset.`);
             isTimeoutReset = true;
         }
     }
@@ -388,22 +406,24 @@ async function runEngineCycle(
     // If the bot is waiting for an answer, greetings are part of the reply — not a new session.
     const wasWaitingForInput = !!cardData.botState?.waitingForInput;
     const statusForWake = cardData.botState?.status;
-    const nodeForWake = cardData.botState?.currentNodeId;
-    const botLooksIdle =
-        !wasWaitingForInput &&
-        (!nodeForWake || statusForWake === 'completed' || statusForWake === 'inactive' || !statusForWake);
+    // Truly idle = finished / inactive session. Do NOT treat "active + missing node"
+    // (lost state after a kanban move) as idle-any-message — that made names like
+    // "Roosevelt" restart the greeting instead of answering the capture step.
+    const isTrulyIdle =
+        statusForWake === 'completed' || statusForWake === 'inactive' || !statusForWake;
     const hasAnyUserContent = String(text || '').trim().length > 0;
 
     // Wake rules:
-    //  - Idle bot → ANY message (".", emoji text, "hola", "buenos dias"…) starts the flow.
-    //  - Mid-flow but not waiting → a greeting restarts (unstick / re-engage).
-    //  - Actively waiting → never restart here (answer the current question).
-    const isStartTrigger = !wasWaitingForInput && ((botLooksIdle && hasAnyUserContent) || isGreeting);
+    //  - Truly idle → ANY message starts the flow (hola, buenos dias, ".", etc.).
+    //  - Mid-flow but not waiting → only an explicit greeting restarts.
+    //  - Actively waiting → never restart (answer the current question).
+    const isStartTrigger =
+        !wasWaitingForInput && ((isTrulyIdle && hasAnyUserContent) || isGreeting);
     const shouldApplyStartTrigger = isStartTrigger;
     
     const isCommand = isReset || isMenu || isStop;
 
-    if (botLooksIdle && hasAnyUserContent) {
+    if (isTrulyIdle && hasAnyUserContent) {
         console.log(`[ChatbotEngine] 👋 Idle wake-up with input "${String(text).slice(0, 40)}" — starting flow`);
     }
 
@@ -438,7 +458,7 @@ async function runEngineCycle(
     // --- B. MASTER BYPASS (Reset/Trigger Override) ---
     // Never treat greetings as a restart while waiting for user input (prevents question loops).
     if (isReset || isMenu || shouldApplyStartTrigger) {
-        console.log(`[ChatbotEngine] 🧹 Master Bypass [${isReset ? 'RESET' : isMenu ? 'MENU' : 'START'}] for card ${cardRef.id}`);
+        console.log(`[ChatbotEngine] 🧹 Master Bypass [${isReset ? 'RESET' : isMenu ? 'MENU' : 'START'}] for card ${box.ref.id}`);
         
         // Atomic wipe + Status reset (Rule 4: Root Isolation)
         const resetPayload: any = {
@@ -453,7 +473,7 @@ async function runEngineCycle(
             resetPayload['botState.lastProcessedMessageId'] = null;
         }
 
-        await cardRef.update(resetPayload);
+        await box.ref.update(resetPayload);
         
         // Sync local cardData for current cycle execution
         cardData.botState = { ...(cardData.botState || {}), status: 'active', waitingForInput: false, currentNodeId: null };
@@ -593,7 +613,11 @@ async function runEngineCycle(
                 nodeId: String(nodeId),
                 nodeGroupMap,
             });
-            if (newGroupId) currentKanbanGroupId = newGroupId;
+            if (newGroupId) {
+                currentKanbanGroupId = newGroupId;
+                // Critical: card doc was moved — rebind before any further Firestore writes.
+                await refreshCardRef();
+            }
         } catch (err: any) {
             console.warn(`[ChatbotEngine] Kanban auto-move failed: ${err?.message || err}`);
         }
@@ -699,7 +723,7 @@ async function runEngineCycle(
         );
 
         const debounced = isValidationDebounced();
-        await cardRef.update({
+        await box.ref.update({
             'botState.waitingForInput': true,
             'botState.currentNodeId': waitNode?.id || null,
             'botState.lastValidationAt': admin.firestore.FieldValue.serverTimestamp(),
@@ -712,7 +736,7 @@ async function runEngineCycle(
         }
 
         await resendWaitNodePrompt(waitNode);
-        await cardRef.update({
+        await box.ref.update({
             'botState.waitingForInput': true,
             'botState.currentNodeId': waitNode?.id || null,
             'botState.lastStep': waitNode?.type || null,
@@ -746,6 +770,32 @@ async function runEngineCycle(
         }
     }
 
+    // Recover lost park after kanban card move / failed writes: status still "active" and we
+    // were asking for text (greeting→name), but currentNodeId was wiped. Capture this reply
+    // instead of no-op or restarting the whole greeting.
+    if (
+        !waitingForInput &&
+        !currentNodeId &&
+        !isReset &&
+        !shouldApplyStartTrigger &&
+        cardData.botState?.status === 'active'
+    ) {
+        const lastStep = cardData.botState?.lastStep;
+        if (lastStep === 'textMessageNode' || lastStep === 'captureInputNode') {
+            const capture = flow.nodes.find((n: any) => n.type === 'captureInputNode');
+            if (capture) {
+                console.log(`[ChatbotEngine] 🩹 Recovering capture park on ${capture.id} after lost state`);
+                currentNodeId = capture.id;
+                waitingForInput = true;
+                await box.ref.update({
+                    'botState.currentNodeId': capture.id,
+                    'botState.waitingForInput': true,
+                    'botState.lastStep': 'captureInputNode',
+                }).catch(() => {});
+            }
+        }
+    }
+
     // Re-engagement rule (balanced to avoid double replies / flow mixing):
     //  - If the bot is actively waiting for an answer on a valid node → CONTINUE (capture input),
     //    even if the customer replies days later. Never restart here.
@@ -755,7 +805,9 @@ async function runEngineCycle(
     //    node instead of restarting, so we don't replay the start on top of the running flow.
     const status = cardData.botState?.status;
     const isActivelyWaiting = waitingForInput && !!currentNodeId;
-    const botIsIdle = !currentNodeId || status === 'completed' || status === 'inactive' || !status;
+    // Do not treat a missing currentNodeId alone as idle — that causes full restarts mid-funnel
+    // after state is lost (e.g. card move), replaying the greeting when the user types their name.
+    const botIsIdle = status === 'completed' || status === 'inactive' || !status;
     const shouldRestart = (isReset || isMenu || shouldApplyStartTrigger)
         ? true
         : (!isActivelyWaiting && botIsIdle);
@@ -839,7 +891,7 @@ async function runEngineCycle(
                     'botState.waitingForInput': false,
                     'botState.currentNodeId': nextId,
                 };
-                await cardRef.update(updatePayload);
+                await box.ref.update(updatePayload);
 
                 currentNodeId = nextId;
                 await syncKanbanToNode(nextId);
@@ -864,7 +916,7 @@ async function runEngineCycle(
                     currentNodeId = resolution.edge?.target || null;
                 }
                 // Persist next node immediately so a crash mid-send cannot leave us parked on the old QR.
-                await cardRef.update({
+                await box.ref.update({
                     'botState.waitingForInput': false,
                     'botState.currentNodeId': currentNodeId,
                 });
@@ -898,14 +950,14 @@ async function runEngineCycle(
                 } else {
                     currentNodeId = resolution.edge?.target || null;
                 }
-                await cardRef.update({
+                await box.ref.update({
                     'botState.waitingForInput': false,
                     'botState.currentNodeId': currentNodeId,
                 });
             } else {
                 const edge = resolveDefaultNextEdge(flow.edges, node?.id || '');
                 currentNodeId = edge ? edge.target : null;
-                await cardRef.update({
+                await box.ref.update({
                     'botState.waitingForInput': false,
                     'botState.currentNodeId': currentNodeId,
                 });
@@ -922,7 +974,7 @@ async function runEngineCycle(
     }
 
     // If we're already waiting on a prompt node, do NOT re-send it in the forward loop.
-    const preLoopSnap = await cardRef.get();
+    const preLoopSnap = await box.ref.get();
     const preLoopState = preLoopSnap.data()?.botState || {};
     if (preLoopState.waitingForInput && preLoopState.currentNodeId) {
         const waitingNode = flow.nodes.find((n: any) => n.id === preLoopState.currentNodeId);
@@ -959,7 +1011,7 @@ async function runEngineCycle(
             .includes(node.type);
         // For wait nodes, do NOT stamp lastStep until AFTER Meta confirms the prompt —
         // otherwise self-heal wrongly treats a half-sent node as "already waiting".
-        await cardRef.update(
+        await box.ref.update(
             isWaitPromptNode
                 ? { 'botState.currentNodeId': node.id }
                 : { 'botState.currentNodeId': node.id, 'botState.lastStep': `${node.type}` }
@@ -1054,7 +1106,7 @@ async function runEngineCycle(
             const body = replaceVars(node.data?.body || node.data?.text || 'Selecciona una opción:');
             const sections = buildWhatsAppListSections(node.data?.sections || []);
 
-            await cardRef.update({
+            await box.ref.update({
                 'botState.status': 'active',
                 'botState.currentNodeId': node.id,
                 'botState.waitingForInput': false,
@@ -1062,7 +1114,7 @@ async function runEngineCycle(
 
             await dispatchMessage(body, { type: 'list', button: node.data?.buttonText || 'Ver opciones', sections });
             
-            await cardRef.update({
+            await box.ref.update({
                 'botState.waitingForInput': true,
                 'botState.lastStep': 'listMessageNode',
                 'botState.lastWaitStartedAt': admin.firestore.FieldValue.serverTimestamp(),
@@ -1090,7 +1142,7 @@ async function runEngineCycle(
             const isQuickReply = node.type === 'quickReplyNode';
 
             // Park on this node before sending so mid-send failures self-heal onto THIS wait node.
-            await cardRef.update({
+            await box.ref.update({
                 'botState.status': 'active',
                 'botState.currentNodeId': node.id,
                 'botState.waitingForInput': false,
@@ -1136,14 +1188,14 @@ async function runEngineCycle(
                 });
             }
             
-            await cardRef.update(updatePayload);
+            await box.ref.update(updatePayload);
             await syncKanbanToNode(node.id);
             return; // EXIT loop, wait for user
         }
 
         // 4. LOGIC NODES (Set Variable, Webhook, etc.)
         if (node.type === 'conditionNode') {
-            const snap = await cardRef.get();
+            const snap = await box.ref.get();
             const fresh = snap.data() || {};
             const conditionData = node.data || {};
             const routes = conditionData.routes || [];
@@ -1189,7 +1241,7 @@ async function runEngineCycle(
         }
 
         if (node.type === 'setVariableNode') {
-            const snap = await cardRef.get();
+            const snap = await box.ref.get();
             const fresh = snap.data() || {};
             const setVarData = node.data || {};
             const varToSet = (setVarData.variableName || '').replace(/[\{\}]/g, '').trim();
@@ -1215,7 +1267,7 @@ async function runEngineCycle(
                     }
                 }
 
-                await cardRef.update({
+                await box.ref.update({
                     [`customFields.${varToSet}`]: newVal
                 });
                 
@@ -1249,7 +1301,7 @@ async function runEngineCycle(
         }
 
         if (node.type === 'webhookNode') {
-            const snap = await cardRef.get();
+            const snap = await box.ref.get();
             const fresh = snap.data() || {};
             const webhookData = node.data || {};
             const url = replaceVars(webhookData.url || '');
@@ -1266,7 +1318,7 @@ async function runEngineCycle(
                     });
 
                     if (saveTo) {
-                        await cardRef.update({
+                        await box.ref.update({
                             [`customFields.${saveTo}`]: response.data
                         });
                         sessionVars[saveTo] = response.data;
@@ -1287,7 +1339,7 @@ async function runEngineCycle(
         }
 
         if (node.type === 'generativeAINode') {
-            const snap = await cardRef.get();
+            const snap = await box.ref.get();
             const fresh = snap.data() || {};
             const aiData = node.data || {};
             const systemPrompt = replaceVars(aiData.systemPrompt || 'Eres un asistente útil.');
@@ -1322,7 +1374,7 @@ async function runEngineCycle(
                     const aiText = aiResponse.data.choices[0].message.content;
 
                     if (outputVar) {
-                        await cardRef.update({
+                        await box.ref.update({
                             [`customFields.${outputVar}`]: aiText
                         });
                         sessionVars[outputVar] = aiText;
@@ -1463,7 +1515,7 @@ async function runEngineCycle(
                 })),
             }]);
             await dispatchMessage(question, { type: 'list', button: 'Ver opciones', sections });
-            await cardRef.update({
+            await box.ref.update({
                 'botState.status': 'active',
                 'botState.waitingForInput': true,
                 'botState.currentNodeId': node.id,
@@ -1484,7 +1536,7 @@ async function runEngineCycle(
         }
 
         if (node.type === 'transcriptionNode') {
-            const snap = await cardRef.get();
+            const snap = await box.ref.get();
             const fresh = snap.data() || {};
             const messages = fresh.messages || [];
             const lastAudio = [...messages].reverse().find(
@@ -1521,7 +1573,7 @@ async function runEngineCycle(
             }
 
             if (outputVar) {
-                await cardRef.update({ [`customFields.${outputVar}`]: transcript });
+                await box.ref.update({ [`customFields.${outputVar}`]: transcript });
                 sessionVars[outputVar] = transcript;
             } else if (transcript) {
                 await dispatchMessage(transcript);
@@ -1533,7 +1585,7 @@ async function runEngineCycle(
         }
 
         if (node.type === 'sentimentAnalysisNode') {
-            const snap = await cardRef.get();
+            const snap = await box.ref.get();
             const fresh = snap.data() || {};
             const inputVar = (node.data?.inputVariable || '{{last_message}}').replace(/[\{\}]/g, '').trim();
             let textToAnalyze = fresh.lastMessage || text || '';
@@ -1572,7 +1624,7 @@ async function runEngineCycle(
                 }
             }
 
-            await cardRef.update({ 'customFields.last_sentiment': sentiment });
+            await box.ref.update({ 'customFields.last_sentiment': sentiment });
             const routeEdge = flow.edges.find(
                 (e: any) => String(e.source) === String(node.id) && e.sourceHandle === sentiment
             );
@@ -1582,7 +1634,7 @@ async function runEngineCycle(
 
         if (node.type === 'humanHandoffNode') {
             console.log(`[ChatbotEngine] Human Handoff initiated`);
-            await cardRef.update({
+            await box.ref.update({
                 isHandledByHuman: true,
                 botActive: false,
                 'botState.status': 'completed',
@@ -1609,7 +1661,7 @@ async function runEngineCycle(
                     varsToClear.forEach((v: string) => {
                         updateObj[`customFields.${v}`] = admin.firestore.FieldValue.delete();
                     });
-                    await cardRef.update(updateObj);
+                    await box.ref.update(updateObj);
                 }
             }
 
@@ -1618,7 +1670,7 @@ async function runEngineCycle(
                 label: endData.outcomeLabel || (endData.outcome === 'success' ? 'Éxito' : 'Cierre'),
                 finishedAt: new Date()
             };
-            await cardRef.update({ 
+            await box.ref.update({ 
                 botOutcome,
                 'botState.status': 'completed', 
                 'botState.waitingForInput': false 
