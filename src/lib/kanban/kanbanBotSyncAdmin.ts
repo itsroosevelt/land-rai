@@ -32,36 +32,15 @@ async function moveKanbanCardAdmin(
     sourceGroupId: string,
     destGroupId: string
 ): Promise<void> {
-    if (!sourceGroupId || !destGroupId || sourceGroupId === destGroupId) return;
-
-    const sourceRef = db.doc(`${tenantPath}/kanban-groups/${sourceGroupId}/cards/${cardId}`);
-    const destRef = db.doc(`${tenantPath}/kanban-groups/${destGroupId}/cards/${cardId}`);
-
-    let contactId: string | undefined;
-
-    await db.runTransaction(async (tx) => {
-        const snap = await tx.get(sourceRef);
-        if (!snap.exists) return;
-        const data = snap.data() || {};
-        contactId = (data.contactId || data.crmId) as string | undefined;
-        tx.set(destRef, {
-            ...data,
-            groupId: destGroupId,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        tx.delete(sourceRef);
+    // Placement-only: conversation messages/botState live under /conversations/{id}.
+    const { moveThinKanbanCard } = await import('@/lib/conversations/store');
+    await moveThinKanbanCard({
+        db,
+        tenantPath,
+        cardId,
+        sourceGroupId,
+        destGroupId,
     });
-
-    if (contactId) {
-        await db.doc(`${tenantPath}/contacts/${contactId}`).set(
-            {
-                kanbanGroupId: destGroupId,
-                kanbanCardId: cardId,
-                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            },
-            { merge: true }
-        ).catch(() => undefined);
-    }
 }
 
 export async function locateKanbanCard(

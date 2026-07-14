@@ -50,6 +50,7 @@ export const useCardSubscription = ({ card, groups = [], groupName }: Conversati
 
         let isMounted = true;
         let unsubscribe: any = null;
+        let unsubscribeConv: (() => void) | null = null;
         let unsubscribeCRM: any = null;
 
         const performDynamicSearch = async (cardIdToFind: string) => {
@@ -112,22 +113,57 @@ export const useCardSubscription = ({ card, groups = [], groupName }: Conversati
                     console.log(`[useCardSubscription] 📡 Subscribing to direct path: ${fullPath}`);
                     const cardRef = doc(db, fullPath);
 
-                    const unsub = onSnapshot(cardRef, (docSnap) => {
+                    unsubscribe = onSnapshot(cardRef, (docSnap) => {
                         if (!isMounted) return;
-                        if (docSnap.exists()) {
-                            const data = docSnap.data() as CardData;
-                            console.log(`[useCardSubscription] ✅ Snapshot received for ${targetCardId}. Messages: ${data.messages?.length || 0}`);
-                            setLiveCardData({ ...data, id: docSnap.id, groupId: targetGroupId });
-                        } else {
+                        if (!docSnap.exists()) {
                             console.warn(`[useCardSubscription] ⚠️ Document not found at path: ${cardRef.path}. Card may have moved or been deleted.`);
-                            // Trigger dynamic search as a fallback
                             performDynamicSearch(targetCardId);
+                            return;
                         }
+
+                        const cardOnly = docSnap.data() as CardData;
+                        const convId =
+                            (cardOnly as any).conversationId || targetCardId;
+                        const convRef = doc(
+                            db,
+                            `${tenantPath}/conversations/${convId}`
+                        );
+
+                        // Resubscribe when conversationId changes; truth lives on /conversations.
+                        if (unsubscribeConv) {
+                            unsubscribeConv();
+                            unsubscribeConv = null;
+                        }
+
+                        unsubscribeConv = onSnapshot(convRef, (convSnap) => {
+                            if (!isMounted) return;
+                            if (convSnap.exists()) {
+                                const conv = convSnap.data() as CardData;
+                                console.log(
+                                    `[useCardSubscription] ✅ Conversation ${convId}. Messages: ${(conv as any).messages?.length || 0}`
+                                );
+                                setLiveCardData({
+                                    ...cardOnly,
+                                    ...conv,
+                                    id: targetCardId,
+                                    groupId: targetGroupId,
+                                    conversationId: convId,
+                                } as any);
+                            } else {
+                                // Legacy: messages still on the card until promoted
+                                console.log(
+                                    `[useCardSubscription] ✅ Card snapshot (legacy) for ${targetCardId}. Messages: ${cardOnly.messages?.length || 0}`
+                                );
+                                setLiveCardData({
+                                    ...cardOnly,
+                                    id: docSnap.id,
+                                    groupId: targetGroupId,
+                                });
+                            }
+                        });
                     }, (error) => {
                         console.error(`[useCardSubscription] ❌ Snapshot error for ${targetCardId}:`, error);
                     });
-
-                    unsubscribe = unsub;
                 } else {
                     // If no groupId provided in props/state, we MUST search
                     performDynamicSearch(targetCardId);
@@ -201,6 +237,7 @@ export const useCardSubscription = ({ card, groups = [], groupName }: Conversati
         return () => {
             isMounted = false;
             if (unsubscribe) unsubscribe();
+            if (unsubscribeConv) unsubscribeConv();
             if (unsubscribeCRM) unsubscribeCRM();
         };
     }, [card?.id, card?.groupId, groups, card?.contactNumber, currentUser?.uid, activeEntity]);

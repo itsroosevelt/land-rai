@@ -12,6 +12,11 @@ import { filterOutQueueMessage } from './botQueue';
 import { isIsolatedBotCollection, resolveBotsCollectionName } from './automation/botStorage';
 import axios from 'axios';
 import { buildBotNodeGroupMap, syncCardToBotNodeAdmin, locateKanbanCard } from '@/lib/kanban/kanbanBotSyncAdmin';
+import {
+    conversationDoc,
+    ensureConversationFromCard,
+    syncThinCardPreview,
+} from '@/lib/conversations/store';
 
 /** Avoid spamming the same validation prompt when the user taps quickly or the queue retries. */
 const VALIDATION_DEBOUNCE_MS = 25_000;
@@ -51,6 +56,8 @@ export interface ChatbotContext {
     entityId: string;
     groupId: string;
     cardId: string;
+    /** Stable conversation id (messages + botState). Kanban card is placement only. */
+    conversationId?: string;
     platform: 'whatsapp' | 'messenger' | 'instagram' | 'instagram_comments' | 'facebook_comments' | 'telegram' | 'gmail' | 'x_twitter' | 'x_twitter_comments' | 'x';
     from: string;
     text: string;
@@ -115,33 +122,58 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
     const triggerMessageId = messageId ? String(messageId).trim() : '';
     const entityPath = `users/${userId}/entities/${entityId}`;
 
-    // Live card pointer: kanban sync MOVES the card doc between groups. Writes to the old path
-    // silently fail after delete, leaving messageQueue forever stuck on the new doc.
+    // Resolve / promote stable conversation (source of truth). Kanban card is placement only.
+    let conversationId = String(ctx.conversationId || '').trim();
+    let placementGroupId = groupId;
+
+    if (!conversationId) {
+        const located = await locateKanbanCard(db, entityPath, cardId);
+        if (located) {
+            placementGroupId = located.groupId;
+            const cardSnap = await located.ref.get();
+            const ensured = await ensureConversationFromCard({
+                db,
+                tenantPath: entityPath,
+                cardId,
+                groupId: located.groupId,
+                cardData: cardSnap.data() || {},
+                cardRef: located.ref,
+            });
+            conversationId = ensured.conversationId;
+        } else {
+            const maybe = await conversationDoc(db, entityPath, cardId).get();
+            if (maybe.exists) conversationId = cardId;
+        }
+    }
+
+    if (!conversationId) {
+        console.error(`[ChatbotEngine] ❌ No conversation for card ${cardId}`);
+        return;
+    }
+
+    // Truth document — NEVER moves with kanban columns.
     const box: { ref: admin.firestore.DocumentReference } = {
-        ref: db.doc(`${entityPath}/kanban-groups/${groupId}/cards/${cardId}`),
+        ref: conversationDoc(db, entityPath, conversationId),
     };
     const refreshCardRef = async (): Promise<boolean> => {
-        const located = await locateKanbanCard(db, entityPath, cardId);
-        if (!located) {
-            console.error(`[ChatbotEngine] ❌ Card ${cardId} not found under ${entityPath}`);
+        const snap = await box.ref.get();
+        if (!snap.exists) {
+            console.error(`[ChatbotEngine] ❌ Conversation ${conversationId} missing`);
             return false;
         }
-        if (located.ref.path !== box.ref.path) {
-            console.log(`[ChatbotEngine] 📦 Card rebound → ${located.groupId}`);
-        }
-        box.ref = located.ref;
+        const data = snap.data() || {};
+        if (data.kanbanGroupId) placementGroupId = String(data.kanbanGroupId);
         return true;
     };
 
     if (!(await refreshCardRef())) return;
 
-    console.log(`[ChatbotEngine] 🚀 RUNNER START | Platform: ${platform} | From: ${from}`);
+    console.log(`[ChatbotEngine] 🚀 RUNNER START | conv=${conversationId} | card=${cardId} | From: ${from}`);
 
     try {
-        // Human agent has control — save client messages but do not run the bot.
         const earlySnap = await box.ref.get();
         if (earlySnap.exists && earlySnap.data()?.humanTakeover?.active === true) {
-            console.log(`[ChatbotEngine] 🧑‍💼 Human takeover active — skipping bot for ${cardId}`);
+            console.log(`[ChatbotEngine] 🧑‍💼 Human takeover active — skipping bot for ${conversationId}`);
             const data = earlySnap.data() || {};
             const queue = dedupeQueueItems(data.botState?.messageQueue || []);
             if (triggerMessageId && queue.some((q) => String(q.messageId) === triggerMessageId)) {
@@ -154,7 +186,6 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
             return;
         }
 
-        // --- 1. ATOMIC LOCK ACQUISITION ---
         const canExecute = await db.runTransaction(async (transaction) => {
             const snap = await transaction.get(box.ref);
             if (!snap.exists) return false;
@@ -165,7 +196,7 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
             const isPriorityCommand = /^(reinici[ao]r?|reinici|reinci(ar)?|restart|reset|clear|limpiar|borrar|menu|opciones|ayuda|help|inicio|start)/i.test(normInput);
 
             if (isPriorityCommand && data.botLock) {
-                console.log(`[ChatbotEngine] 🔓 Priority command breaking existing lock for ${cardId}`);
+                console.log(`[ChatbotEngine] 🔓 Priority command breaking existing lock for ${conversationId}`);
             }
 
             if (triggerMessageId && bState.lastProcessedMessageId === triggerMessageId) return false;
@@ -174,7 +205,7 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
                 const lockTime = data.botLock.toDate?.() || new Date(data.botLock);
                 const diff = (Date.now() - lockTime.getTime()) / 1000;
                 if (diff < 30) {
-                    console.log(`[ChatbotEngine] 🔒 Card ${cardId} is actively locked (${diff}s). Skipping parallel execution.`);
+                    console.log(`[ChatbotEngine] 🔒 Conversation ${conversationId} is actively locked (${diff}s). Skipping parallel execution.`);
                     return false;
                 }
             }
@@ -196,7 +227,7 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
                 const notYetProcessed = blockedState.lastProcessedMessageId !== triggerMessageId;
 
                 if (stillPending && notYetProcessed && blockedData.botLock) {
-                    console.log(`[ChatbotEngine] ⏳ Lock contention for ${cardId}; retrying queue consumer (${retryCount + 1}/2)`);
+                    console.log(`[ChatbotEngine] ⏳ Lock contention for ${conversationId}; retrying queue consumer (${retryCount + 1}/2)`);
                     await sleep(2000);
                     return processChatbotFlow(ctx, retryCount + 1);
                 }
@@ -253,7 +284,21 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
             console.log(`[ChatbotEngine] 🧵 Processing Queue Item [${msgId}]: "${msgText.substring(0, 30)}"`);
 
             try {
-                await runEngineCycle(box, refreshCardRef, cardData, currentMsg, entityPath, entityId, userId, cardId, botsCollection, channelAccountId);
+                await runEngineCycle(
+                    box,
+                    refreshCardRef,
+                    () => placementGroupId,
+                    (gid: string) => { placementGroupId = gid; },
+                    cardData,
+                    currentMsg,
+                    entityPath,
+                    entityId,
+                    userId,
+                    cardId,
+                    conversationId,
+                    botsCollection,
+                    channelAccountId
+                );
             } catch (cycleErr: any) {
                 console.error(`[ChatbotEngine] ❌ Cycle Error [${msgId}]:`, cycleErr.message);
                 await refreshCardRef();
@@ -281,20 +326,17 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
     } finally {
         try {
             await refreshCardRef();
-            const activeBots = await db.collection(`${entityPath}/chatbots`).where('isActive', 'in', [true, 'true']).limit(1).get();
-            const botId = activeBots.docs[0]?.id || '00000003';
-            const { ensureCardKanbanPlacement } = await import('@/lib/kanban/kanbanBotSyncAdmin');
-            const located = await locateKanbanCard(db, entityPath, cardId);
-            await ensureCardKanbanPlacement({
+            const convData = (await box.ref.get()).data() || {};
+            await syncThinCardPreview({
                 db,
                 tenantPath: entityPath,
+                conversationId,
+                groupId: placementGroupId,
                 cardId,
-                botId,
-                preferredGroupId: located?.groupId || groupId,
-            });
-            await refreshCardRef();
+                data: convData,
+            }).catch(() => {});
             await box.ref.update({ botLock: admin.firestore.FieldValue.delete() });
-            console.log(`[ChatbotEngine] 🏁 RUNNER FINISHED for ${cardId}`);
+            console.log(`[ChatbotEngine] 🏁 RUNNER FINISHED for conversation ${conversationId}`);
         } catch (e) {}
     }
 }
@@ -305,12 +347,15 @@ export async function processChatbotFlow(ctx: ChatbotContext, retryCount = 0) {
 async function runEngineCycle(
     box: { ref: admin.firestore.DocumentReference },
     refreshCardRef: () => Promise<boolean>,
+    getPlacementGroupId: () => string,
+    setPlacementGroupId: (gid: string) => void,
     cardData: any,
     msg: any,
     entityPath: string,
     entityId: string,
     userId: string,
     cardId: string,
+    conversationId: string,
     botsCollection?: string,
     channelAccountId?: string
 ) {
@@ -600,7 +645,8 @@ async function runEngineCycle(
     } catch (err: any) {
         console.warn(`[ChatbotEngine] Kanban group map unavailable: ${err?.message || err}`);
     }
-    let currentKanbanGroupId: string = cardData.groupId;
+    let currentKanbanGroupId: string =
+        getPlacementGroupId() || cardData.kanbanGroupId || cardData.groupId || '';
     const syncKanbanToNode = async (nodeId: string | null | undefined) => {
         if (!nodeId || !cardId || !currentKanbanGroupId) return;
         try {
@@ -613,10 +659,27 @@ async function runEngineCycle(
                 nodeId: String(nodeId),
                 nodeGroupMap,
             });
-            if (newGroupId) {
+            if (newGroupId && newGroupId !== currentKanbanGroupId) {
                 currentKanbanGroupId = newGroupId;
-                // Critical: card doc was moved — rebind before any further Firestore writes.
-                await refreshCardRef();
+                setPlacementGroupId(newGroupId);
+                // Conversation truth stays put — only update placement pointers + thin card.
+                await box.ref.set(
+                    {
+                        kanbanGroupId: newGroupId,
+                        kanbanCardId: cardId,
+                        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    },
+                    { merge: true }
+                );
+                const convData = (await box.ref.get()).data() || {};
+                await syncThinCardPreview({
+                    db,
+                    tenantPath: entityPath,
+                    conversationId,
+                    groupId: newGroupId,
+                    cardId,
+                    data: convData,
+                });
             }
         } catch (err: any) {
             console.warn(`[ChatbotEngine] Kanban auto-move failed: ${err?.message || err}`);

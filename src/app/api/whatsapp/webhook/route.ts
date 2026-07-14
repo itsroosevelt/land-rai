@@ -3,7 +3,7 @@ import { db, admin } from '@/lib/firebase-admin';
 import fs from 'fs';
 import path from 'path';
 import { processChatbotFlow } from '@/lib/chatbotEngine';
-import { buildBotQueueItem, createQueuedBotState, isDuplicateQueueMessage } from '@/lib/botQueue';
+import { buildBotQueueItem, isDuplicateQueueMessage } from '@/lib/botQueue';
 import { extractWhatsAppInboundPayload } from '@/lib/whatsappInbound';
 import { buildInboundWhatsAppUserMessage } from '@/lib/whatsapp/inboundMessageBuilder';
 import {
@@ -12,6 +12,13 @@ import {
     resolveWhatsAppTenant,
 } from '@/lib/whatsappTenant';
 import { isInboxGroup, SYSTEM_INBOX_GROUP_ID, SYSTEM_INBOX_GROUP_FIELDS } from '@/lib/kanban/botNodeGroups';
+import {
+    appendInboundToConversation,
+    createConversationWithThinCard,
+    ensureConversationFromCard,
+    findConversationByPhone,
+    syncThinCardPreview,
+} from '@/lib/conversations/store';
 
 const DEBUG_FILE = '/tmp/webhook.log';
 
@@ -356,9 +363,6 @@ export async function POST(req: Request) {
                     messageId,
                 });
 
-                let cardId = targetCardDoc?.id;
-                let groupId = targetGroupId;
-
                 const queueItem = buildBotQueueItem({
                     text: text || '',
                     messageId: messageId || `wa_${Date.now()}`,
@@ -366,40 +370,82 @@ export async function POST(req: Request) {
                     from: from,
                 });
 
-                if (targetCardDoc && targetGroupId) {
+                // Stable conversation store = source of truth for messages + botState.
+                let conversationId: string | null =
+                    (contactDoc?.data?.()?.conversationId as string) || null;
+                let cardId = targetCardDoc?.id as string | undefined;
+                let groupId = targetGroupId as string | null;
+
+                if (!conversationId) {
+                    const byPhone = await findConversationByPhone(db, entityPath, cleanFrom);
+                    if (byPhone) conversationId = byPhone.id;
+                }
+
+                if (!conversationId && targetCardDoc && targetGroupId) {
+                    const promoted = await ensureConversationFromCard({
+                        db,
+                        tenantPath: entityPath,
+                        cardId: targetCardDoc.id,
+                        groupId: targetGroupId,
+                        cardData: targetCardDoc.data() || {},
+                        cardRef: targetCardDoc.ref,
+                    });
+                    conversationId = promoted.conversationId;
                     cardId = targetCardDoc.id;
                     groupId = targetGroupId;
+                }
 
-                    const existingCardData = targetCardDoc.data() || {};
-                    const alreadyQueued = isDuplicateQueueMessage(existingCardData, messageId);
+                if (conversationId) {
+                    const convRef = db.doc(`${entityPath}/conversations/${conversationId}`);
+                    const convSnap = await convRef.get();
+                    const convData = convSnap.exists ? convSnap.data() || {} : {};
+                    const alreadyQueued = isDuplicateQueueMessage(convData, messageId);
 
-                    const cardUpdate: Record<string, any> = {
-                        lastMessage: displayPrefText.length > 50 ? displayPrefText.substring(0, 47) + '...' : displayPrefText,
-                        updatedAt: new Date(),
-                        unreadCount: admin.firestore.FieldValue.increment(1),
-                        messages: admin.firestore.FieldValue.arrayUnion(newMessage),
-                        'botState.engine': 'queue',
-                        status: 'open'
-                    };
-
-                    // Remember which business number this conversation belongs to (multi-number).
-                    if (recipientPhoneNumberId) {
-                        cardUpdate.whatsappPhoneNumberId = String(recipientPhoneNumberId);
+                    if (convSnap.exists) {
+                        await appendInboundToConversation({
+                            db,
+                            tenantPath: entityPath,
+                            conversationRef: convRef,
+                            newMessage,
+                            queueItem,
+                            alreadyQueued,
+                            displayPrefText,
+                            recipientPhoneNumberId,
+                        });
                     }
 
-                    if (!alreadyQueued) {
-                        cardUpdate['botState.messageQueue'] = admin.firestore.FieldValue.arrayUnion(queueItem);
-                    } else {
-                        debugLog(`[POST] Duplicate WhatsApp message ${messageId} ignored for queue on card ${cardId}`);
+                    cardId = String(convData.kanbanCardId || cardId || conversationId);
+                    groupId = String(convData.kanbanGroupId || groupId || '');
+
+                    if (!groupId) {
+                        const groupsSnapshot2 = await db.collection(`${entityPath}/kanban-groups`).get();
+                        const inboxDoc =
+                            groupsSnapshot2.docs.find((g) => g.id === SYSTEM_INBOX_GROUP_ID) ||
+                            groupsSnapshot2.docs.find((g) => isInboxGroup({ id: g.id, ...g.data() })) ||
+                            groupsSnapshot2.docs[0];
+                        groupId = inboxDoc?.id || SYSTEM_INBOX_GROUP_ID;
                     }
 
-                    await targetCardDoc.ref.update(cardUpdate);
+                    const freshConv = (await convRef.get()).data() || {};
+                    await syncThinCardPreview({
+                        db,
+                        tenantPath: entityPath,
+                        conversationId,
+                        groupId,
+                        cardId,
+                        data: freshConv,
+                    });
+
+                    if (existingContactId) {
+                        await db.collection(`${entityPath}/contacts`).doc(existingContactId).set({
+                            conversationId,
+                            kanbanGroupId: groupId,
+                            kanbanCardId: cardId,
+                            updatedAt: new Date().toISOString(),
+                        }, { merge: true }).catch(() => {});
+                    }
                 } else {
-                    // Create NEW card
                     let destinationGroupId = targetGroupId;
-                    
-                    // SAFEGUARD: Always drop new conversations into the permanent reception
-                    // column so messages arrive even when no bot is active.
                     if (!destinationGroupId) {
                         const inboxDoc =
                             groupsSnapshot.docs.find(g => g.id === SYSTEM_INBOX_GROUP_ID) ||
@@ -408,7 +454,6 @@ export async function POST(req: Request) {
                         if (inboxDoc) {
                             destinationGroupId = inboxDoc.id;
                         } else {
-                            // Failsafe: create the reception column if the entity is empty.
                             const newGroupRef = db.collection(`${entityPath}/kanban-groups`).doc(SYSTEM_INBOX_GROUP_ID);
                             await newGroupRef.set({
                                 ...SYSTEM_INBOX_GROUP_FIELDS,
@@ -418,81 +463,70 @@ export async function POST(req: Request) {
                         }
                     }
 
-                    const targetGroupRef = db.collection(`${entityPath}/kanban-groups`).doc(destinationGroupId);
-
-                    if (targetGroupRef) {
-                        const newCardRef = targetGroupRef.collection('cards').doc();
-
-                        // 1. Resolve CRM ID: Use existing or generate new one
-                        let numericId = existingContactId;
-                        
-                        if (!numericId) {
-                            numericId = String(Date.now()).slice(-10);
-                            try {
-                                const counterRef = db.collection(`${entityPath}/system_metadata`).doc('counters');
-                                await db.runTransaction(async (tx) => {
-                                    const snap = await tx.get(counterRef);
-                                    const next = (snap.exists ? (snap.data()?.crmIdCount || 0) : 0) + 1;
-                                    tx.set(counterRef, { crmIdCount: next }, { merge: true });
-                                    numericId = String(next).padStart(10, '0');
-                                });
-                            } catch (err) {
-                                debugLog(`[POST] Error generating CRM ID: ${err}`);
-                            }
+                    let numericId = existingContactId;
+                    if (!numericId) {
+                        numericId = String(Date.now()).slice(-10);
+                        try {
+                            const counterRef = db.collection(`${entityPath}/system_metadata`).doc('counters');
+                            await db.runTransaction(async (tx) => {
+                                const snap = await tx.get(counterRef);
+                                const next = (snap.exists ? (snap.data()?.crmIdCount || 0) : 0) + 1;
+                                tx.set(counterRef, { crmIdCount: next }, { merge: true });
+                                numericId = String(next).padStart(10, '0');
+                            });
+                        } catch (err) {
+                            debugLog(`[POST] Error generating CRM ID: ${err}`);
                         }
+                    }
 
-                        const finalContactName = value.contacts?.[0]?.profile?.name || existingContactName || from;
-
-                        await newCardRef.set({
-                            crmId: numericId,
+                    const finalContactName = value.contacts?.[0]?.profile?.name || existingContactName || from;
+                    const created = await createConversationWithThinCard({
+                        db,
+                        tenantPath: entityPath,
+                        groupId: destinationGroupId!,
+                        newMessage,
+                        queueItem,
+                        profile: {
                             contactName: finalContactName,
                             contactNumber: from,
                             contactNumberClean: cleanFrom,
-                            lastMessage: displayPrefText.length > 50 ? displayPrefText.substring(0, 47) + '...' : displayPrefText,
-                            updatedAt: new Date(),
-                            createdAt: new Date(),
-                            messages: [newMessage],
-                            botState: createQueuedBotState(queueItem),
-                            unreadCount: 1,
-                            status: 'open',
-                            source: 'WHATSAPP',
-                            primary_channel: 'whatsapp',
-                            platform_ids: { whatsapp: from },
-                            ...(recipientPhoneNumberId ? { whatsappPhoneNumberId: String(recipientPhoneNumberId) } : {})
+                            crmId: String(numericId),
+                            recipientPhoneNumberId,
+                        },
+                    });
+                    conversationId = created.conversationId;
+                    cardId = created.cardId;
+                    groupId = created.groupId;
+
+                    if (existingContactId) {
+                        await db.collection(`${entityPath}/contacts`).doc(existingContactId).update({
+                            conversationId,
+                            kanbanGroupId: groupId,
+                            kanbanCardId: cardId,
+                            updatedAt: new Date().toISOString()
                         });
-
-                        // 3. Update or Create Contact Reference
-                        if (existingContactId) {
-                            await db.collection(`${entityPath}/contacts`).doc(existingContactId).update({
-                                kanbanGroupId: destinationGroupId,
-                                kanbanCardId: newCardRef.id,
-                                updatedAt: new Date().toISOString()
-                            });
-                        } else {
-                            const numericId = Date.now().toString() + Math.floor(Math.random() * 1000).toString();
-                            await db.collection(`${entityPath}/contacts`).doc(numericId).set({
-                                crmId: numericId,
-                                name: finalContactName || cleanFrom,
-                                contactName: finalContactName || cleanFrom,
-                                phone: `+${cleanFrom}`,
-                                contactNumber: from,
-                                kanbanGroupId: destinationGroupId,
-                                kanbanCardId: newCardRef.id,
-                                updatedAt: new Date().toISOString(),
-                                createdAt: new Date().toISOString()
-                            });
-                        }
-
-                        cardId = newCardRef.id;
-                        groupId = destinationGroupId;
+                    } else {
+                        const newContactId = Date.now().toString() + Math.floor(Math.random() * 1000).toString();
+                        await db.collection(`${entityPath}/contacts`).doc(newContactId).set({
+                            crmId: newContactId,
+                            name: finalContactName || cleanFrom,
+                            contactName: finalContactName || cleanFrom,
+                            phone: `+${cleanFrom}`,
+                            contactNumber: from,
+                            conversationId,
+                            kanbanGroupId: groupId,
+                            kanbanCardId: cardId,
+                            updatedAt: new Date().toISOString(),
+                            createdAt: new Date().toISOString()
+                        });
                     }
                 }
 
-                // 4. TRIGGER UNIVERSAL CHATBOT
-                if (groupId && cardId) {
-                    debugLog(`[POST] Triggering universal chatbot for whatsapp in tenant ${entityId}...`);
+                if (groupId && cardId && conversationId) {
+                    debugLog(`[POST] Triggering chatbot for conversation ${conversationId} (card ${cardId})...`);
                     await processChatbotFlow({
-                        userId, entityId, groupId, cardId, platform: 'whatsapp', from: from, text: text,
+                        userId, entityId, groupId, cardId, conversationId,
+                        platform: 'whatsapp', from: from, text: text,
                         messageId: messageId,
                         channelAccountId: recipientPhoneNumberId
                     }).catch(botError => {

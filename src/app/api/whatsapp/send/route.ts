@@ -95,21 +95,33 @@ export async function POST(req: Request) {
                 if ((!type || type === 'text') && !template && cleanSearch) {
                     try {
                         let cardMessages: any[] = [];
-                        const groupsSnap = await db
-                            .collection(`users/${userId}/entities/${entityId}/kanban-groups`)
-                            .get();
-                        for (const groupDoc of groupsSnap.docs) {
-                            const cardSnap = await groupDoc.ref
-                                .collection('cards')
-                                .where('contactNumberClean', '==', cleanSearch)
-                                .limit(1)
+                        const tenantPath = `users/${userId}/entities/${entityId}`;
+                        const { findConversationByPhone } = await import('@/lib/conversations/store');
+                        const byPhone = await findConversationByPhone(db, tenantPath, cleanSearch);
+                        if (byPhone?.data?.messages) {
+                            cardMessages = byPhone.data.messages;
+                        } else {
+                            const groupsSnap = await db
+                                .collection(`${tenantPath}/kanban-groups`)
                                 .get();
-                            if (!cardSnap.empty) {
-                                cardMessages = cardSnap.docs[0].data()?.messages || [];
-                                break;
+                            for (const groupDoc of groupsSnap.docs) {
+                                const cardSnap = await groupDoc.ref
+                                    .collection('cards')
+                                    .where('contactNumberClean', '==', cleanSearch)
+                                    .limit(1)
+                                    .get();
+                                if (!cardSnap.empty) {
+                                    const cdata = cardSnap.docs[0].data() || {};
+                                    const convId = String(cdata.conversationId || cardSnap.docs[0].id);
+                                    const convSnap = await db.doc(`${tenantPath}/conversations/${convId}`).get();
+                                    cardMessages = convSnap.exists
+                                        ? convSnap.data()?.messages || []
+                                        : cdata.messages || [];
+                                    break;
+                                }
                             }
                         }
-                        const entitySnap = await db.doc(`users/${userId}/entities/${entityId}`).get();
+                        const entitySnap = await db.doc(`${tenantPath}`).get();
                         const { resolveWhatsAppSendGuard } = await import('@/lib/whatsapp/sessionGuard');
                         const guard = resolveWhatsAppSendGuard(cardMessages, message || '', entitySnap.data());
                         if (guard.blockSend) {
@@ -197,11 +209,38 @@ export async function POST(req: Request) {
 
         if (resolvedCardId && resolvedGroupId) {
             try {
+                const tenantPath = `users/${userId}/entities/${entityId}`;
                 const cardRef = db
                     .collection('users').doc(userId)
                     .collection('entities').doc(entityId)
                     .collection('kanban-groups').doc(resolvedGroupId)
                     .collection('cards').doc(resolvedCardId);
+
+                const cardSnap = await cardRef.get();
+                const cardData = cardSnap.exists ? cardSnap.data() || {} : {};
+                const conversationId = String(
+                    cardData.conversationId || resolvedCardId
+                );
+
+                const {
+                    ensureConversationFromCard,
+                    syncThinCardPreview,
+                } = await import('@/lib/conversations/store');
+
+                const ensured = await ensureConversationFromCard({
+                    db,
+                    tenantPath,
+                    cardId: resolvedCardId,
+                    groupId: resolvedGroupId,
+                    cardData: { ...cardData, conversationId },
+                    cardRef,
+                });
+
+                const previewText = message || filename || 'Adjunto';
+                const lastMessage =
+                    previewText.length > 40
+                        ? previewText.substring(0, 37) + '...'
+                        : previewText;
 
                 const newMessage = {
                     sender: 'agent',
@@ -227,16 +266,35 @@ export async function POST(req: Request) {
                     error: apiError ? (typeof apiError === 'object' ? JSON.stringify(apiError) : apiError) : null
                 };
 
-                await cardRef.update({
-                    lastMessage: (message || filename || 'Adjunto').length > 40
-                        ? (message || filename || 'Adjunto').substring(0, 37) + '...'
-                        : (message || filename || 'Adjunto'),
+                const convUpdate: Record<string, any> = {
+                    lastMessage,
                     updatedAt: new Date(),
-                    ...(targetPlatform === 'whatsapp' ? { contactNumberClean: cleanTo.replace(/\D/g, '') } : {}),
                     messages: admin.firestore.FieldValue.arrayUnion(newMessage),
                     unreadCount: 0,
+                };
+                if (targetPlatform === 'whatsapp') {
+                    convUpdate.contactNumberClean = cleanTo.replace(/\D/g, '');
+                }
+
+                await ensured.ref.update(convUpdate);
+                await syncThinCardPreview({
+                    db,
+                    tenantPath,
+                    conversationId: ensured.conversationId,
+                    groupId: resolvedGroupId,
+                    cardId: resolvedCardId,
+                    data: {
+                        lastMessage,
+                        updatedAt: new Date(),
+                        unreadCount: 0,
+                        ...(targetPlatform === 'whatsapp'
+                            ? { contactNumberClean: cleanTo.replace(/\D/g, '') }
+                            : {}),
+                    },
                 });
-                console.log(`[Omnichannel API] Firestore log success for ${resolvedCardId} (Status: ${newMessage.status})`);
+                console.log(
+                    `[Omnichannel API] Firestore log success for conversation ${ensured.conversationId} / card ${resolvedCardId} (Status: ${newMessage.status})`
+                );
             } catch (logError: any) {
                 console.error('[Omnichannel API] Firestore log failed:', logError.message);
             }
