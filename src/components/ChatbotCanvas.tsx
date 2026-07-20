@@ -101,6 +101,7 @@ interface ChatbotCanvasProps {
     setNodes: React.Dispatch<React.SetStateAction<Node[]>>;
     setEdges: React.Dispatch<React.SetStateAction<Edge[]>>;
     targetPlatforms?: string[];
+    onSelectedNodeChange?: (node: Node | null) => void;
 }
 
 interface SidebarNodeProps {
@@ -188,7 +189,7 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => 
 };
 
 const ChatbotCanvas = forwardRef<ChatbotCanvasRef, ChatbotCanvasProps>(
-    ({ nodes, edges, onNodesChange, onEdgesChange, onConnect, setNodes, setEdges, targetPlatforms }, ref) => {
+    ({ nodes, edges, onNodesChange, onEdgesChange, onConnect, setNodes, setEdges, targetPlatforms, onSelectedNodeChange }, ref) => {
 
         const [selectedNode, setSelectedNode] = useState<Node | null>(null);
         const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
@@ -284,11 +285,13 @@ const ChatbotCanvas = forwardRef<ChatbotCanvasRef, ChatbotCanvasProps>(
 
         const onNodeClick = (_: React.MouseEvent, node: Node) => {
             setSelectedNode(node);
+            onSelectedNodeChange?.(node);
             setRightSidebarOpen(true);
         };
 
         const onPaneClick = () => {
             setSelectedNode(null);
+            onSelectedNodeChange?.(null);
             setRightSidebarOpen(false);
         };
 
@@ -297,27 +300,33 @@ const ChatbotCanvas = forwardRef<ChatbotCanvasRef, ChatbotCanvasProps>(
                 nds.map((node) => (node.id === nodeId ? { ...node, data: { ...node.data, ...data } } : node))
             );
             if (selectedNode?.id === nodeId) {
-                setSelectedNode(prev => prev ? { ...prev, data: { ...prev.data, ...data } } : null);
+                setSelectedNode(prev => {
+                    const next = prev ? { ...prev, data: { ...prev.data, ...data } } : null;
+                    onSelectedNodeChange?.(next);
+                    return next;
+                });
             }
-        }, [selectedNode, setNodes]);
+        }, [selectedNode, setNodes, onSelectedNodeChange]);
 
         const onNodesDelete = useCallback(
             (deletedNodes: Node[]) => {
                 const deletedNodeIds = new Set(deletedNodes.map((n) => n.id));
                 if (selectedNode && deletedNodeIds.has(selectedNode.id)) {
                     setSelectedNode(null);
+                    onSelectedNodeChange?.(null);
                     setRightSidebarOpen(false);
                 }
             },
-            [selectedNode]
+            [selectedNode, onSelectedNodeChange]
         );
 
         const deleteNode = useCallback((nodeId: string) => {
             setNodes((nds) => nds.filter((node) => node.id !== nodeId));
             setEdges((eds) => eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
             setSelectedNode(null);
+            onSelectedNodeChange?.(null);
             setRightSidebarOpen(false);
-        }, [setNodes, setEdges]);
+        }, [setNodes, setEdges, onSelectedNodeChange]);
 
         useImperativeHandle(ref, () => ({}));
 

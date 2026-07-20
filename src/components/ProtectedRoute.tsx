@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2 } from 'lucide-react';
@@ -8,12 +8,19 @@ import { Loader2 } from 'lucide-react';
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
     const { currentUser, loading } = useAuth();
     const router = useRouter();
+    const [routerReady, setRouterReady] = useState(false);
 
     useEffect(() => {
-        if (!loading && !currentUser) {
+        setRouterReady(true);
+    }, []);
+
+    useEffect(() => {
+        if (!routerReady || loading || currentUser) return;
+        const timer = window.setTimeout(() => {
             router.push('/login');
-        }
-    }, [currentUser, loading, router]);
+        }, 0);
+        return () => window.clearTimeout(timer);
+    }, [currentUser, loading, router, routerReady]);
 
     if (loading) {
         return (

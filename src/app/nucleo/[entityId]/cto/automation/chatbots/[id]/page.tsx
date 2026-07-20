@@ -29,6 +29,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { getPrimaryPlatform, normalizeTargetPlatforms, updateExclusiveBotPlatform } from '../utils';
+import FlowGeneratorBar from '@/components/chatbot/FlowGeneratorBar';
+import { layoutFlow } from '@/lib/chatbot/layoutFlow';
+import type { FlowEditMode } from '@/lib/chatbot/flowGraphOps';
 
 const WhatsAppIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" className={className} fill="currentColor">
@@ -54,6 +57,7 @@ function FlowPage() {
   const [humanizeTone, setHumanizeTone] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
     const params = useParams();
     const router = useRouter();
     const { currentUser, activeEntity } = useAuth();
@@ -248,6 +252,17 @@ function FlowPage() {
     [setEdges]
   );
 
+  const handleFlowGenerated = useCallback((_generatedNodes: Node[], _generatedEdges: Edge[], _mode: FlowEditMode) => {
+    // API already returns layouted merged flow; apply directly.
+    const { nodes: layoutedNodes, edges: layoutedEdges } = layoutFlow(_generatedNodes, _generatedEdges, 'LR');
+    setNodes(layoutedNodes);
+    setEdges(layoutedEdges);
+  }, []);
+
+  const handleSelectedNodeChange = useCallback((node: Node | null) => {
+    setSelectedNode(node);
+  }, []);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-neutral-900 text-white">
@@ -424,7 +439,19 @@ function FlowPage() {
           setNodes={setNodes}
           setEdges={setEdges}
           targetPlatforms={targetPlatforms}
+          onSelectedNodeChange={handleSelectedNodeChange}
         />
+        {currentUser && activeEntity && (
+          <FlowGeneratorBar
+            userId={currentUser.uid}
+            entityId={activeEntity}
+            nodes={nodes}
+            edges={edges}
+            selectedNode={selectedNode}
+            onFlowGenerated={handleFlowGenerated}
+            disabled={isLoading}
+          />
+        )}
       </div>
     </div>
   );
