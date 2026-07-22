@@ -4,10 +4,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  EntityRouteProvider,
+  type EntityRouteContextValue,
+} from '@/contexts/EntityRouteContext';
 import { db } from '@/lib/firebase';
 import {
   getEntityRouteSegment,
-  resolveEntityFromSegment,
+  resolveEntityFromSegmentWithIndex,
   type EntitySlugRecord,
 } from '@/lib/entitySlug';
 
@@ -22,6 +26,7 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
   const pathname = usePathname();
   const pathnameRef = useRef(pathname);
   const [ready, setReady] = useState(false);
+  const [routeContext, setRouteContext] = useState<EntityRouteContextValue | null>(null);
 
   useEffect(() => {
     pathnameRef.current = pathname;
@@ -29,6 +34,7 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
 
   useEffect(() => {
     setReady(false);
+    setRouteContext(null);
   }, [segment]);
 
   useEffect(() => {
@@ -47,29 +53,46 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
       collection(db, `users/${currentUser.uid}/entities`),
       (snapshot) => {
         if (cancelled) return;
+
         const entities: EntitySlugRecord[] = snapshot.docs.map((d) => ({
           id: d.id,
           name: d.data().name,
           slug: d.data().slug,
         }));
 
-        const resolved = resolveEntityFromSegment(entities, segment);
-        if (!resolved) {
-          router.replace('/nucleo');
-          return;
-        }
+        void (async () => {
+          const resolved = await resolveEntityFromSegmentWithIndex(
+            currentUser.uid,
+            entities,
+            segment
+          );
 
-        const routeSegment = getEntityRouteSegment(resolved);
-        setActiveEntity(resolved.id, routeSegment);
+          if (cancelled) return;
 
-        const currentPath = pathnameRef.current;
-        if (segment !== routeSegment && currentPath?.startsWith(`/nucleo/${segment}`)) {
-          const rest = currentPath.slice(`/nucleo/${segment}`.length);
-          router.replace(`/nucleo/${routeSegment}${rest}`);
-          return;
-        }
+          if (!resolved) {
+            router.replace('/nucleo');
+            return;
+          }
 
-        setReady(true);
+          const routeSegment = getEntityRouteSegment(resolved);
+          const contextValue: EntityRouteContextValue = {
+            firestoreId: resolved.id,
+            routeSegment,
+            entityName: resolved.name,
+          };
+
+          setActiveEntity(resolved.id, routeSegment);
+          setRouteContext(contextValue);
+
+          const currentPath = pathnameRef.current;
+          if (segment !== routeSegment && currentPath?.startsWith(`/nucleo/${segment}`)) {
+            const rest = currentPath.slice(`/nucleo/${segment}`.length);
+            router.replace(`/nucleo/${routeSegment}${rest}`);
+            return;
+          }
+
+          setReady(true);
+        })();
       },
       (error) => {
         console.error('[EntityRouteResolver]', error);
@@ -83,7 +106,7 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
     };
   }, [currentUser, loading, segment, router, setActiveEntity]);
 
-  if (!ready) {
+  if (!ready || !routeContext) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center text-white/40 text-sm tracking-widest uppercase">
         Cargando entidad...
@@ -91,5 +114,9 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
     );
   }
 
-  return <>{children}</>;
+  return (
+    <EntityRouteProvider value={routeContext}>
+      {children}
+    </EntityRouteProvider>
+  );
 }

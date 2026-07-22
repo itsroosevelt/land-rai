@@ -93,7 +93,7 @@ export default function ChatArea({ card, groups, groupName, allConversations, on
         }
     };
 
-    const { currentUser, activeEntity } = useAuth();
+    const { currentUser, activeEntity, activeEntityRoute } = useAuth();
 
     // Close menus when clicking outside
     useEffect(() => {
@@ -491,7 +491,7 @@ export default function ChatArea({ card, groups, groupName, allConversations, on
                         </span>
                     </div>
                     <button 
-                        onClick={() => window.open(`/nucleo/${activeEntity}/cto/integrations`, '_blank')}
+                        onClick={() => window.open(`/nucleo/${activeEntityRoute || activeEntity}/cto/integrations`, '_blank')}
                         className="text-[9px] font-black underline uppercase text-amber-500 hover:text-amber-400 transition-colors"
                     >
                         Ver Integraciones <ExternalLink size={10} className="inline ml-1" />

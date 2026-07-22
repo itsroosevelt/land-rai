@@ -5,6 +5,12 @@ export {
     ensureEntityMoldUpToDate,
 } from './entityMold';
 
+export {
+    ENTITY_ROUTE_CONTRACT_VERSION,
+    ENTITY_ROUTE_MOLD_FIELDS,
+    isSlugOwnedByOtherEntity,
+} from './entityRouteContract';
+
 export { MOLD_WORKSPACE_ROUTES, MOLD_NAV_HREFS } from './routes';
 
 export {

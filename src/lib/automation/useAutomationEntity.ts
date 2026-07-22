@@ -1,22 +1,20 @@
 'use client';
 
-import { useParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEntityRoute } from '@/hooks/useEntityRoute';
 
-/** Entity doc id (Firestore). Prefer AuthContext over raw URL segment (may be slug). */
+/** Entity doc id (Firestore). Never use the URL slug segment for DB paths. */
 export function useAutomationEntity() {
-  const params = useParams();
-  const { currentUser, activeEntity, loading: authLoading } = useAuth();
+  const { currentUser, loading: authLoading } = useAuth();
+  const { firestoreId, routeSegment, tenantPath, isResolved } = useEntityRoute();
 
-  const entityId = activeEntity ||
-    (typeof params?.entityId === 'string' ? params.entityId : '') ||
-    '';
-
-  const isReady = !authLoading && !!currentUser && !!entityId;
+  const isReady = !authLoading && !!currentUser && isResolved;
 
   return {
     currentUser,
-    entityId,
+    entityId: firestoreId,
+    routeSegment,
+    tenantPath,
     authLoading,
     isReady,
   };

@@ -39,6 +39,8 @@ interface SettingsPanelProps {
   deleteNode: (nodeId: string) => void;
   isOpen: boolean;
   onToggle: () => void;
+  linkedPhoneDigits?: string;
+  linkedSlotLabel?: string;
 }
 
 interface NodeSettingsProps {
@@ -46,9 +48,11 @@ interface NodeSettingsProps {
   allNodes: Node[];
   allEdges: Edge[];
   updateNodeConfig: (nodeId: string, data: object) => void;
+  linkedPhoneDigits?: string;
+  linkedSlotLabel?: string;
 }
 
-const SettingsPanel = ({ selectedNode, allNodes, allEdges, updateNodeConfig, deleteNode, isOpen, onToggle }: SettingsPanelProps) => {
+const SettingsPanel = ({ selectedNode, allNodes, allEdges, updateNodeConfig, deleteNode, isOpen, onToggle, linkedPhoneDigits, linkedSlotLabel }: SettingsPanelProps) => {
   if (!isOpen) {
     return (
       <div className="pointer-events-none absolute inset-y-0 right-0 z-20 flex items-center">
@@ -116,7 +120,16 @@ const SettingsPanel = ({ selectedNode, allNodes, allEdges, updateNodeConfig, del
             )}
             
             {NodeSpecificSettings ? (
-              <NodeSpecificSettings node={selectedNode} allNodes={allNodes} allEdges={allEdges} updateNodeConfig={updateNodeConfig} />
+              selectedNode.type === 'startNode' ? (
+                <StartSettings
+                  node={selectedNode}
+                  updateNodeConfig={updateNodeConfig}
+                  linkedPhoneDigits={linkedPhoneDigits}
+                  linkedSlotLabel={linkedSlotLabel}
+                />
+              ) : (
+                <NodeSpecificSettings node={selectedNode} allNodes={allNodes} allEdges={allEdges} updateNodeConfig={updateNodeConfig} />
+              )
             ) : (
               <p className="text-neutral-600 text-center py-6 text-[10px] font-bold uppercase tracking-wider">No additional settings.</p>
             )}

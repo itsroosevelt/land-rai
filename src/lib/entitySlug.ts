@@ -57,10 +57,38 @@ export function resolveEntityFromSegment(
 ): EntitySlugRecord | null {
   const normalized = segment.trim();
   if (!normalized) return null;
-  const byId = entities.find((e) => e.id === normalized);
-  if (byId) return byId;
-  const bySlug = entities.find((e) => e.slug?.trim().toLowerCase() === normalized.toLowerCase());
-  return bySlug || null;
+
+  const realEntities = filterRealEntities(entities);
+  const lower = normalized.toLowerCase();
+
+  // URLs use slugs — match slug before doc id so ghost docs (id === slug) never win.
+  const bySlug = realEntities.find((e) => e.slug?.trim().toLowerCase() === lower);
+  if (bySlug) return bySlug;
+
+  const byId = realEntities.find((e) => e.id === normalized);
+  return byId || null;
+}
+
+/** Resolve segment via entity list + entity_slugs index (for tenants without slug on doc yet). */
+export async function resolveEntityFromSegmentWithIndex(
+  userId: string,
+  entities: EntitySlugRecord[],
+  segment: string
+): Promise<EntitySlugRecord | null> {
+  const fromList = resolveEntityFromSegment(entities, segment);
+  if (fromList) return fromList;
+
+  const normalized = segment.trim().toLowerCase();
+  if (!normalized) return null;
+
+  const slugSnap = await getDoc(doc(db, `users/${userId}/entity_slugs/${normalized}`));
+  if (!slugSnap.exists()) return null;
+
+  const entityId = slugSnap.data()?.entityId as string | undefined;
+  if (!entityId) return null;
+
+  const realEntities = filterRealEntities(entities);
+  return realEntities.find((e) => e.id === entityId) || null;
 }
 
 export function buildEntityPath(routeSegment: string, suffix = ''): string {

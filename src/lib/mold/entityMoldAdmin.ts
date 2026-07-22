@@ -10,6 +10,7 @@ import {
 } from './starterChatbot';
 import { ensureWhatsAppSlotNormalizationAdmin } from './whatsappSlotNormalizationAdmin';
 import { ensureEntitySlugNormalizationAdmin } from './entitySlugNormalizationAdmin';
+import { isSlugOwnedByOtherEntity } from './entityRouteContract';
 import { MOLD_INTEGRATIONS_INIT } from './integrationsCatalog';
 
 type AdminDb = admin.firestore.Firestore;
@@ -126,8 +127,22 @@ export async function ensureEntityMoldUpToDateAdmin(
     userId: string,
     entityId: string
 ): Promise<void> {
-    const snap = await db.doc(tenantPath(userId, entityId)).get();
-    const currentVersion = snap.data()?.moldVersion ?? 0;
+    const entityRef = db.doc(tenantPath(userId, entityId));
+    const snap = await entityRef.get();
+    if (!snap.exists) return;
+
+    const data = snap.data() || {};
+    if (!data.initialized && !data.name) return;
+
+    const slugIndexSnap = await db.doc(`users/${userId}/entity_slugs/${entityId.toLowerCase()}`).get();
+    if (
+        slugIndexSnap.exists &&
+        isSlugOwnedByOtherEntity(entityId, slugIndexSnap.data()?.entityId as string)
+    ) {
+        return;
+    }
+
+    const currentVersion = data.moldVersion ?? 0;
     if (currentVersion >= ENTITY_MOLD_VERSION) return;
     await provisionEntityMoldAdmin(db, userId, entityId);
 }

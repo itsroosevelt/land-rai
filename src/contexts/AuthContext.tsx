@@ -5,7 +5,7 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 import { provisionEntityMold, ensureEntityMoldUpToDate } from '@/lib/mold/entityMold';
-import { claimEntitySlug, generateUniqueEntitySlug } from '@/lib/entitySlug';
+import { claimEntitySlug, filterRealEntities, generateUniqueEntitySlug } from '@/lib/entitySlug';
 
 import { usePathname } from 'next/navigation';
 
@@ -129,10 +129,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                             // specific page. Cheap: skips entities already up to date.
                             try {
                                 const entitiesSnap = await getDocs(collection(db, `users/${user.uid}/entities`));
+                                const realEntities = filterRealEntities(
+                                    entitiesSnap.docs.map((entityDoc) => ({
+                                        id: entityDoc.id,
+                                        name: entityDoc.data().name,
+                                        slug: entityDoc.data().slug,
+                                    }))
+                                );
                                 await Promise.all(
-                                    entitiesSnap.docs.map((entityDoc) =>
-                                        ensureEntityMoldUpToDate(db, user.uid, entityDoc.id).catch((err) =>
-                                            console.error(`Mold migration failed for entity ${entityDoc.id}:`, err)
+                                    realEntities.map((entity) =>
+                                        ensureEntityMoldUpToDate(db, user.uid, entity.id).catch((err) =>
+                                            console.error(`Mold migration failed for entity ${entity.id}:`, err)
                                         )
                                     )
                                 );

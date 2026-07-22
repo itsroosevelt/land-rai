@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { DollarSign, TrendingUp, TrendingDown, Wallet, ArrowUpRight, ArrowDownRight, CreditCard, PieChart, BarChart3, Clock, Shield, Sparkles, RefreshCw } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
-import { useParams } from "next/navigation";
+import { useEntityRoute } from "@/hooks/useEntityRoute";
 import { db } from "@/lib/firebase";
 import { collection, onSnapshot, query, orderBy, limit } from "firebase/firestore";
 
@@ -86,8 +86,7 @@ function MiniBarChart({ data }: { data: number[] }) {
 
 export default function RevenuePage() {
     const { currentUser } = useAuth();
-    const params = useParams();
-    const entityId = params?.entityId as string;
+    const { firestoreId: entityId } = useEntityRoute();
 
     const [transactions, setTransactions] = useState<Transaction[]>(DEMO_TRANSACTIONS);
     const [metrics, setMetrics] = useState(DEMO_METRICS);

@@ -11,26 +11,33 @@ import { toast } from 'sonner';
 interface StartSettingsProps {
   node: Node;
   updateNodeConfig: (nodeId: string, data: object) => void;
+  /** Phone digits from the bot's linked WhatsApp slot (auto-sync). */
+  linkedPhoneDigits?: string;
+  linkedSlotLabel?: string;
 }
 
-export const StartSettings: React.FC<StartSettingsProps> = ({ node, updateNodeConfig }) => {
-  // Establecemos el número por defecto si no existe en la data del nodo
-  const defaultNumber = '13858882799';
+export const StartSettings: React.FC<StartSettingsProps> = ({
+  node,
+  updateNodeConfig,
+  linkedPhoneDigits,
+  linkedSlotLabel,
+}) => {
   const [triggerPhrase, setTriggerPhrase] = useState(node.data.triggerPhrase || 'Hola, quiero más información');
-  const [phoneNumber, setPhoneNumber] = useState(node.data.phoneNumber || defaultNumber);
+  const [phoneNumber, setPhoneNumber] = useState(node.data.phoneNumber || linkedPhoneDigits || '');
   const [copied, setCopied] = useState(false);
 
-  // Aseguramos que la configuración del nodo tenga el número guardado si estaba vacío
+  // Sync phone when bot is linked to a different WhatsApp number slot.
   useEffect(() => {
-    if (!node.data.phoneNumber) {
-        updateNodeConfig(node.id, { ...node.data, phoneNumber: defaultNumber });
-    }
-  }, []);
+    if (!linkedPhoneDigits) return;
+    const current = String(node.data.phoneNumber || '').replace(/\D/g, '');
+    if (current === linkedPhoneDigits) return;
+    setPhoneNumber(linkedPhoneDigits);
+    updateNodeConfig(node.id, { ...node.data, phoneNumber: linkedPhoneDigits });
+  }, [linkedPhoneDigits, node.id, node.data, updateNodeConfig]);
 
-  // Generar el link de kamban
   const generateWaLink = () => {
     if (!phoneNumber) return '';
-    const cleanPhone = phoneNumber.replace(/\D/g, ''); // Eliminar todo lo que no sea número
+    const cleanPhone = phoneNumber.replace(/\D/g, '');
     const encodedText = encodeURIComponent(triggerPhrase);
     return `https://wa.me/${cleanPhone}?text=${encodedText}`;
   };
@@ -44,7 +51,7 @@ export const StartSettings: React.FC<StartSettingsProps> = ({ node, updateNodeCo
   };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newPhone = e.target.value;
+    const newPhone = e.target.value.replace(/\D/g, '');
     setPhoneNumber(newPhone);
     updateNodeConfig(node.id, { ...node.data, phoneNumber: newPhone });
   };
@@ -53,7 +60,6 @@ export const StartSettings: React.FC<StartSettingsProps> = ({ node, updateNodeCo
     if (!waLink) return;
 
     try {
-      // Intento 1: API moderna
       await navigator.clipboard.writeText(waLink);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -61,12 +67,9 @@ export const StartSettings: React.FC<StartSettingsProps> = ({ node, updateNodeCo
     } catch (err) {
       console.warn('Falló clipboard.writeText, usando fallback:', err);
       
-      // Intento 2: Fallback robusto
       try {
         const textArea = document.createElement("textarea");
         textArea.value = waLink;
-        
-        // Estilos para hacerlo "invisible" pero interactuable
         textArea.style.position = "fixed";
         textArea.style.left = "0";
         textArea.style.top = "0";
@@ -76,7 +79,6 @@ export const StartSettings: React.FC<StartSettingsProps> = ({ node, updateNodeCo
         textArea.style.padding = "0";
         
         document.body.appendChild(textArea);
-        
         textArea.focus();
         textArea.select();
         
@@ -113,16 +115,18 @@ export const StartSettings: React.FC<StartSettingsProps> = ({ node, updateNodeCo
       </div>
 
       <div className="space-y-2">
-        <Label>Número de kamban del Bot</Label>
-         <p className="text-xs text-neutral-400">
-          Este es el número oficial de tu bot.
+        <Label>Número de WhatsApp del bot</Label>
+        <p className="text-xs text-neutral-400">
+          {linkedSlotLabel
+            ? `Vinculado al slot ${linkedSlotLabel}. Se actualiza al cambiar el número en la lista de bots.`
+            : 'Número E.164 sin símbolos (solo dígitos).'}
         </p>
         <Input 
           value={phoneNumber} 
           onChange={handlePhoneChange} 
           placeholder="Ej: 13858882799" 
           type="tel"
-          className="bg-neutral-900 border-neutral-700"
+          className="bg-neutral-900 border-neutral-700 font-mono"
         />
       </div>
 
@@ -163,5 +167,3 @@ export const StartSettings: React.FC<StartSettingsProps> = ({ node, updateNodeCo
     </div>
   );
 };
-
-

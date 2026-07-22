@@ -5,7 +5,7 @@ import { Search, Zap, ArrowRight, Settings2, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { getWhatsAppIntegrationHealth } from '@/lib/omnichannel/whatsappIntegrationStatus';
 import { useAuth } from '@/contexts/AuthContext';
-import { useParams } from 'next/navigation';
+import { useEntityRoute } from '@/hooks/useEntityRoute';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -25,8 +25,7 @@ import StripeModal from './components/stripe/StripeModal';
 
 export default function IntegrationsPage() {
     const { currentUser } = useAuth();
-    const params = useParams();
-    const activeEntity = params?.entityId as string;
+    const { firestoreId, routeSegment, entityName } = useEntityRoute();
 
     const [selectedCategory, setSelectedCategory] = useState<Category>('All');
     const [searchQuery, setSearchQuery] = useState('');
@@ -43,9 +42,9 @@ export default function IntegrationsPage() {
     const [activeIntegration, setActiveIntegration] = useState<Integration | null>(null);
 
     useEffect(() => {
-        if (!currentUser || !activeEntity) return;
+        if (!currentUser || !firestoreId) return;
 
-        const integrationsRef = collection(db, `users/${currentUser.uid}/entities/${activeEntity}/integrations`);
+        const integrationsRef = collection(db, `users/${currentUser.uid}/entities/${firestoreId}/integrations`);
         const q = query(integrationsRef);
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -75,14 +74,14 @@ export default function IntegrationsPage() {
         });
 
         return () => unsubscribe();
-    }, [currentUser, activeEntity]);
+    }, [currentUser, firestoreId]);
 
     useEffect(() => {
-        if (!currentUser?.uid || !activeEntity) return;
-        const tenantPath = `users/${currentUser.uid}/entities/${activeEntity}`;
+        if (!currentUser?.uid || !firestoreId) return;
+        const tenantPath = `users/${currentUser.uid}/entities/${firestoreId}`;
         const unsub = subscribeSlotConnections(tenantPath, setSlotConnections);
         return () => unsub();
-    }, [currentUser?.uid, activeEntity]);
+    }, [currentUser?.uid, firestoreId]);
 
     useEffect(() => {
         const bootstrap = readGmailBootstrap();
@@ -145,8 +144,18 @@ export default function IntegrationsPage() {
                                 Integraciones
                             </h1>
                             <p className="mt-2 text-sm leading-relaxed text-white/40">
-                                Conecta canales y servicios para que Roosevelt opere por ti en{' '}
-                                <span className="font-mono text-white/55">{activeEntity}</span>.
+                                {entityName ? (
+                                    <>
+                                        Empresa: <span className="text-white/70">{entityName}</span>
+                                        {' · '}
+                                        Ruta: <span className="font-mono text-white/55">/nucleo/{routeSegment}</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        Conecta canales para{' '}
+                                        <span className="font-mono text-white/55">/nucleo/{routeSegment}</span>
+                                    </>
+                                )}
                             </p>
                         </div>
 
@@ -205,7 +214,8 @@ export default function IntegrationsPage() {
                                 <IntegrationCard
                                     key={integration.id}
                                     integration={integration}
-                                    activeEntity={activeEntity}
+                                    activeEntity={firestoreId}
+                                    routeSegment={routeSegment}
                                     isConnected={isIntegrationConnected(
                                         integration.id,
                                         connectedIntegrations[integration.id],
@@ -244,7 +254,7 @@ export default function IntegrationsPage() {
                 <MessengerModal
                     isOpen={isModalOpen}
                     onClose={() => setIsModalOpen(false)}
-                    activeEntity={activeEntity}
+                    activeEntity={firestoreId}
                     currentUser={currentUser}
                 />
             )}
@@ -252,7 +262,7 @@ export default function IntegrationsPage() {
                 <InstagramModal
                     isOpen={isModalOpen}
                     onClose={() => setIsModalOpen(false)}
-                    activeEntity={activeEntity}
+                    activeEntity={firestoreId}
                     currentUser={currentUser}
                 />
             )}
@@ -263,7 +273,7 @@ export default function IntegrationsPage() {
                         setIsModalOpen(false);
                         setActiveIntegration(null);
                     }}
-                    activeEntity={activeEntity}
+                    activeEntity={firestoreId}
                     currentUser={currentUser}
                 />
             )}
@@ -274,7 +284,7 @@ export default function IntegrationsPage() {
                         setIsModalOpen(false);
                         setActiveIntegration(null);
                     }}
-                    activeEntity={activeEntity}
+                    activeEntity={firestoreId}
                     currentUser={currentUser}
                 />
             )}
@@ -285,7 +295,7 @@ export default function IntegrationsPage() {
                         setIsModalOpen(false);
                         setActiveIntegration(null);
                     }}
-                    activeEntity={activeEntity}
+                    activeEntity={firestoreId}
                     currentUser={currentUser}
                 />
             )}
@@ -296,7 +306,7 @@ export default function IntegrationsPage() {
                         setIsModalOpen(false);
                         setActiveIntegration(null);
                     }}
-                    activeEntity={activeEntity}
+                    activeEntity={firestoreId}
                     currentUser={currentUser}
                 />
             )}
@@ -307,7 +317,7 @@ export default function IntegrationsPage() {
                         setIsModalOpen(false);
                         setActiveIntegration(null);
                     }}
-                    activeEntity={activeEntity}
+                    activeEntity={firestoreId}
                     currentUser={currentUser}
                 />
             )}
@@ -349,6 +359,7 @@ function getIntegrationStatusLabel(
 function IntegrationCard({
     integration,
     activeEntity,
+    routeSegment,
     isConnected,
     integrationData,
     whatsappHealth,
@@ -361,6 +372,7 @@ function IntegrationCard({
 }: {
     integration: Integration;
     activeEntity: string;
+    routeSegment: string;
     isConnected: boolean;
     integrationData?: any;
     whatsappHealth?: ReturnType<typeof getWhatsAppIntegrationHealth>;
@@ -486,14 +498,14 @@ function IntegrationCard({
             {integration.id === 'whatsapp' && statusReady && (
                 <div className="mb-3 flex gap-2">
                     <Link
-                        href={`/nucleo/${activeEntity}/coo/omnichannel`}
+                        href={`/nucleo/${routeSegment}/coo/omnichannel`}
                         className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-emerald-500/20 bg-emerald-500/8 py-2 text-[9px] font-bold uppercase tracking-wider text-emerald-400 transition-colors hover:bg-emerald-500/15"
                     >
                         Omnicanal
                         <ExternalLink className="h-3 w-3 opacity-60" />
                     </Link>
                     <Link
-                        href={`/nucleo/${activeEntity}/cmo/broadcast/list`}
+                        href={`/nucleo/${routeSegment}/cmo/broadcast/list`}
                         className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-blue-500/20 bg-blue-500/8 py-2 text-[9px] font-bold uppercase tracking-wider text-blue-400 transition-colors hover:bg-blue-500/15"
                     >
                         Difusiones
