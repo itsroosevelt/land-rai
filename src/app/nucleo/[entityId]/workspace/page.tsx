@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
-import { useRouter, useParams, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactFlow, {
     Background,
@@ -26,6 +26,7 @@ import {
 import { WindowNode } from '@/components/shared/WindowNode';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEntityRoute } from '@/hooks/useEntityRoute';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { ensureEntityMoldUpToDate } from '@/lib/mold/entityMold';
@@ -481,10 +482,9 @@ export default function UnifiedWorkspace() {
 
 function WorkspaceContent() {
     const router = useRouter();
-    const params = useParams();
     const searchParams = useSearchParams();
-    const entityId = params.entityId as string;
-    const { currentUser, activeEntity } = useAuth();
+    const { currentUser } = useAuth();
+    const { entityId: firestoreId, routeSegment } = useEntityRoute();
     const { zoomIn, zoomOut, fitView, setCenter } = useReactFlow();
     
     const roleParam = searchParams.get('role') || 'ceo';
@@ -509,11 +509,11 @@ function WorkspaceContent() {
     const [isMobile, setIsMobile] = useState(false);
 
     useEffect(() => {
-        if (!currentUser?.uid || !entityId) return;
-        ensureEntityMoldUpToDate(db, currentUser.uid, entityId).catch((err) => {
+        if (!currentUser?.uid || !firestoreId) return;
+        ensureEntityMoldUpToDate(db, currentUser.uid, firestoreId).catch((err) => {
             console.error('[Workspace] mold upgrade failed:', err);
         });
-    }, [currentUser?.uid, entityId]);
+    }, [currentUser?.uid, firestoreId]);
 
     useEffect(() => {
         const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -529,10 +529,8 @@ function WorkspaceContent() {
 
     // --- REGLA 4: PERSISTENCIA EN LA BÓVEDA ---
     useEffect(() => {
-        const ent = activeEntity || entityId;
-        if (!currentUser?.uid || !ent) return;
-        // Cambiamos a un documento 'global' para que todos los roles compartan las mismas ventanas
-        const layoutRef = doc(db, `users/${currentUser.uid}/entities/${ent}/workspace-layout`, 'global');
+        if (!currentUser?.uid || !firestoreId) return;
+        const layoutRef = doc(db, `users/${currentUser.uid}/entities/${firestoreId}/workspace-layout`, 'global');
         
         const unsubscribe = onSnapshot(layoutRef, (docSnap) => {
             if (docSnap.exists()) {
@@ -543,11 +541,11 @@ function WorkspaceContent() {
             }
         });
         return () => unsubscribe();
-    }, [currentUser, activeEntity, entityId]); // Eliminamos activeRole como dependencia para evitar resets de snapshot
+    }, [currentUser, firestoreId]);
 
     const savePosition = async (nodeId: string, xInches: number, yInches: number) => {
-        if (!currentUser || !activeEntity) return;
-        const layoutRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/workspace-layout`, 'global');
+        if (!currentUser || !firestoreId) return;
+        const layoutRef = doc(db, `users/${currentUser.uid}/entities/${firestoreId}/workspace-layout`, 'global');
         const newPositions = { ...savedLayout, [nodeId]: { x: xInches, y: yInches } };
         await setDoc(layoutRef, { positions: newPositions }, { merge: true });
     };
@@ -571,9 +569,8 @@ function WorkspaceContent() {
     }, [layerOrder]);
 
     const saveLayerOrder = async (role: string, ids: string[]) => {
-        const ent = activeEntity || entityId;
-        if (!currentUser?.uid || !ent) return;
-        const layoutRef = doc(db, `users/${currentUser.uid}/entities/${ent}/workspace-layout`, 'global');
+        if (!currentUser?.uid || !firestoreId) return;
+        const layoutRef = doc(db, `users/${currentUser.uid}/entities/${firestoreId}/workspace-layout`, 'global');
         const newOrder = { ...layerOrder, [role]: ids };
         setLayerOrder(newOrder); // optimistic: keeps the new order even offline
         try {
@@ -586,8 +583,8 @@ function WorkspaceContent() {
     };
 
     const persistWindowState = async (windowIds: string[]) => {
-        if (!currentUser || !activeEntity) return;
-        const layoutRef = doc(db, `users/${currentUser.uid}/entities/${activeEntity}/workspace-layout`, 'global');
+        if (!currentUser || !firestoreId) return;
+        const layoutRef = doc(db, `users/${currentUser.uid}/entities/${firestoreId}/workspace-layout`, 'global');
         await setDoc(layoutRef, { openWindows: windowIds }, { merge: true });
     };
 
@@ -618,8 +615,8 @@ function WorkspaceContent() {
                     id: layer.id, label: layer.label, icon: layer.icon,
                     origin: parentPos, // Pass parentPos as origin for the entry animation
                     url: layer.fullPath
-                        ? `/nucleo/${entityId}/${layer.fullPath}`
-                        : `/nucleo/${entityId}/${layer.role || activeRole}/${layer.path}`,
+                        ? `/nucleo/${routeSegment}/${layer.fullPath}`
+                        : `/nucleo/${routeSegment}/${layer.role || activeRole}/${layer.path}`,
                     onClose: () => {
                         setOpenWindows(prev => prev.filter(id => id !== uniqueId));
                         setNodes(currNodes => currNodes.filter(n => n.id !== uniqueId));
@@ -659,10 +656,10 @@ function WorkspaceContent() {
             draggable: true, zIndex: 2000, style: { pointerEvents: 'none' },
             data: {
                 title: currentDeptData.title,
-                onBack: () => router.push(`/nucleo/${entityId}`),
+                onBack: () => router.push(`/nucleo/${routeSegment}`),
                 roles: roleOptions,
                 activeRole,
-                onSelectRole: (roleId: string) => router.push(`/nucleo/${entityId}/workspace?role=${roleId}`)
+                onSelectRole: (roleId: string) => router.push(`/nucleo/${routeSegment}/workspace?role=${roleId}`)
             }
         });
 
@@ -718,7 +715,7 @@ function WorkspaceContent() {
             const windowNodes = prev.filter(n => n.type === 'windowNode');
             return [...newNodes, ...windowNodes];
         });
-    }, [activeRole, entityId, savedLayout, currentDeptData, expandedDepts, getOrderedLayerIds]);
+    }, [activeRole, routeSegment, savedLayout, currentDeptData, expandedDepts, getOrderedLayerIds, router]);
 
     // Snap a dragged layer into the nearest fixed slot and reorder the list.
     const handleLayerReorder = (node: Node) => {

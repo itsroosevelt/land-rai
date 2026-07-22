@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext';
@@ -20,7 +20,16 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
   const { currentUser, loading, setActiveEntity } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
   const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    pathnameRef.current = pathname;
+  }, [pathname]);
+
+  useEffect(() => {
+    setReady(false);
+  }, [segment]);
 
   useEffect(() => {
     if (loading) return;
@@ -33,10 +42,11 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
       return;
     }
 
-    setReady(false);
+    let cancelled = false;
     const unsub = onSnapshot(
       collection(db, `users/${currentUser.uid}/entities`),
       (snapshot) => {
+        if (cancelled) return;
         const entities: EntitySlugRecord[] = snapshot.docs.map((d) => ({
           id: d.id,
           name: d.data().name,
@@ -52,8 +62,9 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
         const routeSegment = getEntityRouteSegment(resolved);
         setActiveEntity(resolved.id, routeSegment);
 
-        if (segment !== routeSegment && pathname?.startsWith(`/nucleo/${segment}`)) {
-          const rest = pathname.slice(`/nucleo/${segment}`.length);
+        const currentPath = pathnameRef.current;
+        if (segment !== routeSegment && currentPath?.startsWith(`/nucleo/${segment}`)) {
+          const rest = currentPath.slice(`/nucleo/${segment}`.length);
           router.replace(`/nucleo/${routeSegment}${rest}`);
           return;
         }
@@ -66,8 +77,11 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
       }
     );
 
-    return () => unsub();
-  }, [currentUser, loading, segment, pathname, router, setActiveEntity]);
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, [currentUser, loading, segment, router, setActiveEntity]);
 
   if (!ready) {
     return (
