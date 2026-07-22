@@ -1,7 +1,8 @@
 import * as admin from 'firebase-admin';
 import { MANUAL_KANBAN_COLUMNS } from './mold/manualKanbanColumns';
 
-export const ENTITY_MOLD_VERSION = 4;
+/** Mantener alineado con src/lib/mold/entityMold.ts */
+export const ENTITY_MOLD_VERSION = 11;
 
 const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
@@ -9,6 +10,21 @@ const ENTITY_MOLD_FEATURES = {
     manualKanban: true,
     whatsappOutbound: true,
     whatsappBroadcast: true,
+    whatsappMultiNumber: true,
+    geminiIntegration: true,
+    stripeIntegration: true,
+    gmailMultiAccount: true,
+    gmailGoogleLoginBootstrap: true,
+    integrationsHubV2: true,
+    chatbotRulesExport: true,
+    chatbotJsonImportExport: true,
+} as const;
+
+const MOLD_INTEGRATIONS_INIT = {
+    encrypted: false,
+    catalogVersion: 2,
+    available: ['whatsapp', 'telegram', 'messenger', 'instagram', 'gmail', 'stripe', 'gemini', 'x_twitter'],
+    connectable: ['whatsapp', 'messenger', 'instagram', 'telegram', 'x_twitter', 'gmail', 'stripe', 'gemini'],
 } as const;
 
 const MOLD_WHATSAPP_MESSAGING = {
@@ -68,6 +84,14 @@ export async function provisionEntityMoldAdmin(
 ): Promise<void> {
     const path = tenantPath(userId, entityId);
     await ensureManualKanbanInitializedAdmin(db, path);
+
+    await db.doc(`${path}/integrations/_init`).set(
+        {
+            ...MOLD_INTEGRATIONS_INIT,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+    );
 
     await db.doc(path).set(
         {

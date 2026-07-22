@@ -12,3 +12,9 @@ export {
     resolveWhatsAppMessagingSettings,
     type WhatsAppMessagingSettings,
 } from './whatsappMessaging';
+
+export {
+    MOLD_INTEGRATIONS_CATALOG_VERSION,
+    MOLD_INTEGRATION_IDS,
+    MOLD_INTEGRATIONS_INIT,
+} from './integrationsCatalog';

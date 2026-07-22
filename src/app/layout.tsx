@@ -8,6 +8,7 @@ import { SidebarProvider } from "@/components/SidebarContext";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
+import { GmailAutoConnect } from "@/components/integrations/GmailAutoConnect";
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -61,6 +62,7 @@ export default function RootLayout({
           <LanguageProvider>
             <AuthProvider>
               <SidebarProvider>
+                <GmailAutoConnect />
                 {children}
                 <Toaster position="top-right" richColors theme="dark" />
               </SidebarProvider>

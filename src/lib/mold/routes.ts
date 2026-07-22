@@ -6,6 +6,9 @@ export const MOLD_WORKSPACE_ROUTES = {
     botKanban: (entityId: string) => `/nucleo/${entityId}/workspace/bot`,
     manualKanban: (entityId: string) => `/nucleo/${entityId}/workspace/manual`,
     broadcastList: (entityId: string) => `/nucleo/${entityId}/cmo/broadcast/list`,
+    integrations: (entityId: string) => `/nucleo/${entityId}/cto/integrations`,
+    chatbotEditor: (entityId: string, botId: string) =>
+        `/nucleo/${entityId}/cto/automation/chatbots/${botId}`,
     /** Lámina COO en el diagrama (fullPath relativo a /nucleo/{entityId}/) */
     kambanLayerFullPath: 'workspace/hub',
 } as const;

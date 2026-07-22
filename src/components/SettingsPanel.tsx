@@ -51,11 +51,19 @@ interface NodeSettingsProps {
 const SettingsPanel = ({ selectedNode, allNodes, allEdges, updateNodeConfig, deleteNode, isOpen, onToggle }: SettingsPanelProps) => {
   if (!isOpen) {
     return (
-      <div className="absolute top-1/2 right-0 -translate-y-1/2 z-10">
-        <Button size="icon" onClick={onToggle} className="rounded-r-none shadow-lg"><ChevronLeft className="h-4 w-4" /></Button>
+      <div className="pointer-events-none absolute inset-y-0 right-0 z-20 flex items-center">
+        <Button
+          size="icon"
+          onClick={onToggle}
+          className="pointer-events-auto rounded-r-none shadow-lg"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
       </div>
     );
   }
+
+  const nodeSettingsKey = selectedNode?.id ?? 'none';
 
   const nodeSettingsMap: { [key: string]: React.FC<NodeSettingsProps> } = {
     startNode: StartSettings, // Registrado
@@ -88,8 +96,8 @@ const SettingsPanel = ({ selectedNode, allNodes, allEdges, updateNodeConfig, del
 
   return (
     <aside className={cn(
-      "w-[520px] max-w-[94vw] h-[calc(100%-48px)] my-6 mr-4 bg-neutral-950/90 backdrop-blur-md p-6 border border-neutral-800 text-white flex flex-col transition-transform duration-300 ease-in-out shadow-2xl rounded-2xl",
-      isOpen ? "translate-x-0" : "translate-x-[calc(100%+16px)]"
+      "pointer-events-auto absolute inset-y-0 right-0 z-20 flex w-[min(520px,94vw)] flex-col border-l border-neutral-800/80 bg-neutral-950/95 p-6 text-white shadow-[-12px_0_40px_rgba(0,0,0,0.45)] backdrop-blur-md transition-transform duration-300 ease-in-out my-6 mr-4 rounded-l-2xl",
+      isOpen ? "translate-x-0" : "translate-x-full"
     )}>
       <div className="flex items-center justify-between pb-2 flex-shrink-0 border-b border-neutral-800/50">
         <h3 className="text-[10px] font-black text-neutral-500 uppercase tracking-[0.2em]">CONFIGURACIÓN</h3>
@@ -99,7 +107,7 @@ const SettingsPanel = ({ selectedNode, allNodes, allEdges, updateNodeConfig, del
       </div>
 
       {selectedNode ? (
-        <div className="flex-grow flex flex-col mt-3 overflow-hidden min-h-0 relative">
+        <div key={nodeSettingsKey} className="flex-grow flex flex-col mt-3 overflow-hidden min-h-0 relative">
           <div className="flex-grow overflow-y-auto space-y-4 pr-3 custom-scrollbar min-h-0 pb-4">
             <GeneralSettings node={selectedNode} allNodes={allNodes} updateNodeConfig={updateNodeConfig} />
             

@@ -1,6 +1,6 @@
 // src/components/ChatbotCanvas.tsx
 'use client';
-import React, { useState, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useCallback, useRef, forwardRef, useImperativeHandle, useEffect } from 'react';
 import {
     ReactFlow,
     MiniMap,
@@ -196,6 +196,12 @@ const ChatbotCanvas = forwardRef<ChatbotCanvasRef, ChatbotCanvasProps>(
         const [isLeftSidebarOpen, setLeftSidebarOpen] = useState(true);
         const [isRightSidebarOpen, setRightSidebarOpen] = useState(false);
 
+        useEffect(() => {
+            onSelectedNodeChange?.(selectedNode);
+            // Solo notificar al padre cuando cambia el nodo seleccionado (por id).
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [selectedNode?.id]);
+
         const onLayout = useCallback(
             (direction: string) => {
                 const { layoutedNodes, layoutedEdges } = getLayoutedElements(
@@ -283,50 +289,58 @@ const ChatbotCanvas = forwardRef<ChatbotCanvasRef, ChatbotCanvasProps>(
             [edges]
         );
 
-        const onNodeClick = (_: React.MouseEvent, node: Node) => {
-            setSelectedNode(node);
-            onSelectedNodeChange?.(node);
-            setRightSidebarOpen(true);
-        };
+        const selectNode = useCallback(
+            (node: Node | null) => {
+                if (!node) {
+                    setSelectedNode(null);
+                    return;
+                }
+                const fresh = nodes.find((n) => n.id === node.id) ?? node;
+                setSelectedNode((prev) => (prev?.id === fresh.id ? prev : fresh));
+                setRightSidebarOpen(true);
+            },
+            [nodes]
+        );
 
-        const onPaneClick = () => {
+        const onNodeClick = useCallback(
+            (_: React.MouseEvent, node: Node) => {
+                selectNode(node);
+            },
+            [selectNode]
+        );
+
+        const onPaneClick = useCallback(() => {
             setSelectedNode(null);
-            onSelectedNodeChange?.(null);
             setRightSidebarOpen(false);
-        };
+        }, []);
 
         const updateNodeConfig = useCallback((nodeId: string, data: object) => {
             setNodes((nds) =>
                 nds.map((node) => (node.id === nodeId ? { ...node, data: { ...node.data, ...data } } : node))
             );
-            if (selectedNode?.id === nodeId) {
-                setSelectedNode(prev => {
-                    const next = prev ? { ...prev, data: { ...prev.data, ...data } } : null;
-                    onSelectedNodeChange?.(next);
-                    return next;
-                });
-            }
-        }, [selectedNode, setNodes, onSelectedNodeChange]);
+            setSelectedNode((prev) => {
+                if (prev?.id !== nodeId) return prev;
+                return { ...prev, data: { ...prev.data, ...data } };
+            });
+        }, [setNodes]);
 
         const onNodesDelete = useCallback(
             (deletedNodes: Node[]) => {
                 const deletedNodeIds = new Set(deletedNodes.map((n) => n.id));
                 if (selectedNode && deletedNodeIds.has(selectedNode.id)) {
                     setSelectedNode(null);
-                    onSelectedNodeChange?.(null);
                     setRightSidebarOpen(false);
                 }
             },
-            [selectedNode, onSelectedNodeChange]
+            [selectedNode]
         );
 
         const deleteNode = useCallback((nodeId: string) => {
             setNodes((nds) => nds.filter((node) => node.id !== nodeId));
             setEdges((eds) => eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
             setSelectedNode(null);
-            onSelectedNodeChange?.(null);
             setRightSidebarOpen(false);
-        }, [setNodes, setEdges, onSelectedNodeChange]);
+        }, [setNodes, setEdges]);
 
         useImperativeHandle(ref, () => ({}));
 
@@ -394,7 +408,7 @@ const ChatbotCanvas = forwardRef<ChatbotCanvasRef, ChatbotCanvasProps>(
                     </div>
                 </aside>
 
-                <div className="flex-1 relative" onDrop={onDrop} onDragOver={onDragOver}>
+                <div className="flex-1 relative min-w-0" onDrop={onDrop} onDragOver={onDragOver}>
                     <ReactFlow
                         nodes={nodes}
                         edges={edges}
@@ -411,6 +425,11 @@ const ChatbotCanvas = forwardRef<ChatbotCanvasRef, ChatbotCanvasProps>(
                         nodeTypes={nodeTypes}
                         edgeTypes={edgeTypes}
                         onInit={setReactFlowInstance}
+                        nodesDraggable
+                        nodesConnectable
+                        elementsSelectable
+                        selectNodesOnDrag={false}
+                        panOnDrag
                         defaultEdgeOptions={{
                             type: 'custom',
                             markerEnd: {
@@ -432,17 +451,17 @@ const ChatbotCanvas = forwardRef<ChatbotCanvasRef, ChatbotCanvasProps>(
                         <MiniMap nodeStrokeWidth={3} className="!bg-neutral-900/80 !border-neutral-700" />
                         <Background variant={BackgroundVariant.Dots} gap={24} size={1.5} color="#2d2d2d" />
                     </ReactFlow>
-                </div>
 
-                <SettingsPanel
-                    selectedNode={selectedNode}
-                    allNodes={nodes}
-                    allEdges={edges}
-                    updateNodeConfig={updateNodeConfig}
-                    deleteNode={deleteNode}
-                    isOpen={isRightSidebarOpen}
-                    onToggle={() => setRightSidebarOpen(o => !o)}
-                />
+                    <SettingsPanel
+                        selectedNode={selectedNode}
+                        allNodes={nodes}
+                        allEdges={edges}
+                        updateNodeConfig={updateNodeConfig}
+                        deleteNode={deleteNode}
+                        isOpen={isRightSidebarOpen}
+                        onToggle={() => setRightSidebarOpen((o) => !o)}
+                    />
+                </div>
             </div>
         );
     });

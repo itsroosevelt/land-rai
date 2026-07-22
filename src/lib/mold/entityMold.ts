@@ -8,9 +8,10 @@ import {
     STARTER_CHATBOT_ID,
 } from './starterChatbot';
 import { ensureWhatsAppSlotNormalization } from './whatsappSlotNormalization';
+import { MOLD_INTEGRATIONS_INIT } from './integrationsCatalog';
 
 /** Incrementar cuando el molde multitenant gane nuevas estructuras obligatorias. */
-export const ENTITY_MOLD_VERSION = 10;
+export const ENTITY_MOLD_VERSION = 11;
 
 export const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
@@ -27,6 +28,18 @@ export const ENTITY_MOLD_FEATURES = {
     flowHumanize: true,
     /** Integración Gemini por entidad en /cto/integrations. */
     geminiIntegration: true,
+    /** Stripe por entidad (claves en integrations/stripe + stripe_internal). */
+    stripeIntegration: true,
+    /** Gmail multi-cuenta (personal + Google Workspace) por entidad. */
+    gmailMultiAccount: true,
+    /** Auto-conectar Gmail tras login con Google (OAuth bootstrap). */
+    gmailGoogleLoginBootstrap: true,
+    /** Hub de integraciones rediseñado (ancho completo, tarjetas). */
+    integrationsHubV2: true,
+    /** Exportar reglas/nodos JSON desde el editor de chatbots. */
+    chatbotRulesExport: true,
+    /** Importar/exportar JSON del bot completo en el editor. */
+    chatbotJsonImportExport: true,
     /**
      * Multi-número: slots general|support|broadcast; el bot Activo de la pestaña
      * atiende ese número; apagar/no crear bot = ese número no responde (sin préstamo).
@@ -79,6 +92,18 @@ async function ensureStarterChatbot(db: Firestore, path: string): Promise<void> 
     );
 }
 
+/** Documento semilla del catálogo de integraciones (no credenciales). */
+async function ensureIntegrationsInit(db: Firestore, path: string): Promise<void> {
+    await setDoc(
+        doc(db, `${path}/integrations/_init`),
+        {
+            ...MOLD_INTEGRATIONS_INIT,
+            updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+    );
+}
+
 /**
  * Aprovisiona estructuras CRM/Kanban del molde maestro para una empresa (tenant).
  * Idempotente — seguro llamar varias veces.
@@ -94,6 +119,7 @@ export async function provisionEntityMold(
     await ensureReceptionColumn(db, path);
     await ensureStarterChatbot(db, path);
     await ensureWhatsAppSlotNormalization(db, path);
+    await ensureIntegrationsInit(db, path);
 
     await setDoc(
         doc(db, path),

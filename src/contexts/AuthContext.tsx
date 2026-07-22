@@ -70,6 +70,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                                 { id: 'life', name: 'Personal', desc: 'Personal OS', type: 'persona' },
                                 { id: randomCompanyId, name: 'Mi Primera Empresa', desc: 'Business OS', type: 'empresa' }
                             ];
+                            const signedInWithGoogle = user.providerData.some((provider) => provider.providerId === 'google.com');
 
                             // Seed entities and settings in parallel
                             await Promise.all(initialEntities.map(async (entity) => {
@@ -91,6 +92,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                                 ]);
                                 await provisionEntityMold(db, user.uid, entity.id);
                             }));
+
+                            if (signedInWithGoogle && typeof window !== 'undefined') {
+                                const { queueGmailBootstrap } = await import('@/lib/integrations/gmailAutoConnect');
+                                queueGmailBootstrap({
+                                    userId: user.uid,
+                                    email: user.email,
+                                    entityIds: initialEntities.map((entity) => entity.id),
+                                });
+                            }
                         } else {
                             // If user already exists, update last login...
                             await updateDoc(userDocRef, {

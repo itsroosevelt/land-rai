@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Search, Zap, ArrowRight, Settings2, MessageSquare, Megaphone } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Search, Zap, ArrowRight, Settings2, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { getWhatsAppIntegrationHealth } from '@/lib/omnichannel/whatsappIntegrationStatus';
 import { useAuth } from '@/contexts/AuthContext';
@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 
 import { subscribeSlotConnections, type SlotConnections, type NumberSlot } from '@/lib/whatsapp/numbers';
+import { getGmailConnectionState, getGoogleLoginEmail, readGmailBootstrap } from '@/lib/integrations/gmailAutoConnect';
 import { Category, Integration, INTEGRATIONS, CATEGORIES } from './config';
 import { WhatsAppCloudAPIModal } from './components/whatsapp_cloud_api/WhatsAppCloudAPIModal';
 import MessengerModal from './components/messenger/MessengerModal';
@@ -20,15 +21,12 @@ import TelegramModal from './components/telegram/TelegramModal';
 import TwitterModal from './components/twitter/TwitterModal';
 import GmailModal from './components/gmail/GmailModal';
 import GeminiModal from './components/gemini/GeminiModal';
+import StripeModal from './components/stripe/StripeModal';
 
 export default function IntegrationsPage() {
     const { currentUser } = useAuth();
     const params = useParams();
     const activeEntity = params?.entityId as string;
-    const getTenantPath = () => {
-        if (!currentUser?.uid || !activeEntity) return '';
-        return `users/${currentUser.uid}/entities/${activeEntity}`;
-    };
 
     const [selectedCategory, setSelectedCategory] = useState<Category>('All');
     const [searchQuery, setSearchQuery] = useState('');
@@ -40,34 +38,32 @@ export default function IntegrationsPage() {
         broadcast: { connected: false },
     });
     const [loading, setLoading] = useState(true);
-
-    // Modal Control
+    const [gmailBootstrapPending, setGmailBootstrapPending] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [activeIntegration, setActiveIntegration] = useState<Integration | null>(null);
 
     useEffect(() => {
         if (!currentUser || !activeEntity) return;
-        
+
         const integrationsRef = collection(db, `users/${currentUser.uid}/entities/${activeEntity}/integrations`);
         const q = query(integrationsRef);
-        
+
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const data: Record<string, any> = {};
             const raw: Record<string, any> = {};
-            snapshot.docs.forEach(d => {
+            snapshot.docs.forEach((d) => {
                 const docData = d.data();
                 if (d.id === '_init') return;
                 raw[d.id] = docData;
 
-                // Mapeo lógico: Si es la versión interna de whatsapp, cuenta como la integración principal 'whatsapp'
                 if (d.id === 'whatsapp_internal' && (docData.status === 'Internal' || docData.status === 'Connected' || docData.status === 'Error')) {
-                    data['whatsapp'] = { ...(data['whatsapp'] || {}), ...docData };
+                    data.whatsapp = { ...(data.whatsapp || {}), ...docData };
                 } else if (docData.status === 'Connected' || docData.status === 'Error' || docData.status === 'Disconnected') {
                     if (d.id === 'whatsapp') {
                         const phone = docData.phoneNumberId || docData.phone_number_id;
                         const token = docData.accessToken || docData.token || docData.access_token;
                         if (!phone && !token) return;
-                        data['whatsapp'] = { ...(data['whatsapp'] || {}), ...docData };
+                        data.whatsapp = { ...(data.whatsapp || {}), ...docData };
                     } else {
                         data[d.id] = docData;
                     }
@@ -77,7 +73,7 @@ export default function IntegrationsPage() {
             setRawIntegrationDocs(raw);
             setLoading(false);
         });
-        
+
         return () => unsubscribe();
     }, [currentUser, activeEntity]);
 
@@ -88,11 +84,40 @@ export default function IntegrationsPage() {
         return () => unsub();
     }, [currentUser?.uid, activeEntity]);
 
+    useEffect(() => {
+        const bootstrap = readGmailBootstrap();
+        setGmailBootstrapPending(!!bootstrap && bootstrap.userId === currentUser?.uid);
+    }, [currentUser?.uid, connectedIntegrations.gmail]);
+
     const whatsappNumberCount = (['general', 'support', 'broadcast'] as NumberSlot[])
         .filter((s) => slotConnections[s]?.connected).length;
 
+    const whatsappHealth = getWhatsAppIntegrationHealth(
+        rawIntegrationDocs.whatsapp,
+        rawIntegrationDocs.whatsapp_internal
+    );
+
+    const gmailConnectionState = getGmailConnectionState(currentUser, connectedIntegrations.gmail);
+    const googleLoginEmail = getGoogleLoginEmail(currentUser);
+
+    const connectedCount = useMemo(
+        () =>
+            INTEGRATIONS.filter((item) =>
+                isIntegrationConnected(item.id, connectedIntegrations[item.id], item.id === 'whatsapp' ? whatsappHealth : undefined)
+            ).length,
+        [connectedIntegrations, whatsappHealth]
+    );
+
+    const filteredIntegrations = INTEGRATIONS.filter((item) => {
+        const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
+        const matchesSearch =
+            item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            item.category.toLowerCase().includes(searchQuery.toLowerCase());
+        return matchesCategory && matchesSearch;
+    });
+
     const handleConnect = async (integration: Integration) => {
-        if (!['whatsapp', 'messenger', 'instagram', 'telegram', 'x_twitter', 'gmail', 'gemini'].includes(integration.id)) {
+        if (!['whatsapp', 'messenger', 'instagram', 'telegram', 'x_twitter', 'gmail', 'gemini', 'stripe'].includes(integration.id)) {
             toast.info(`${integration.name}: Esta integración estará disponible próximamente en Roosevelt.`);
             return;
         }
@@ -100,49 +125,65 @@ export default function IntegrationsPage() {
         setIsModalOpen(true);
     };
 
-    const filteredIntegrations = INTEGRATIONS.filter(item => {
-        const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
-        const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
-        return matchesCategory && matchesSearch;
-    });
-
-    const whatsappHealth = getWhatsAppIntegrationHealth(
-        rawIntegrationDocs.whatsapp,
-        rawIntegrationDocs.whatsapp_internal
-    );
-
     return (
-        <div className="min-h-screen bg-black text-white relative flex flex-col overflow-y-auto">
-            {/* Background elements */}
-            <div className="fixed inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-600/10 blur-[120px] rounded-full" />
-                <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-purple-600/10 blur-[120px] rounded-full" />
+        <div className="min-h-screen bg-[#050505] text-white relative overflow-y-auto">
+            <div className="fixed inset-0 pointer-events-none overflow-hidden">
+                <div className="absolute -top-32 right-0 h-80 w-80 rounded-full bg-blue-600/8 blur-[120px]" />
+                <div className="absolute bottom-0 left-0 h-72 w-72 rounded-full bg-violet-600/8 blur-[100px]" />
             </div>
 
-            <main className="relative z-10 flex-1 p-6 md:p-12">
-                {/* Header Section */}
-                <div className="max-w-7xl mx-auto mb-12">
-                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
-                        <div>
-                            <div className="flex items-center gap-2 text-blue-400 text-xs font-bold tracking-[0.2em] uppercase mb-4">
-                                <Zap className="w-3 h-3 fill-current" />
-                                <span>Master Connect</span>
+            <main className="relative z-10 w-full px-5 py-8 md:px-10 md:py-12 lg:px-14">
+                {/* Header */}
+                <header className="mb-10">
+                    <div className="mb-6 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+                        <div className="max-w-xl">
+                            <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.25em] text-blue-400/80">
+                                <Zap className="h-3 w-3 fill-current" />
+                                Master Connect
                             </div>
-                            <h1 className="text-3xl md:text-5xl font-extralight tracking-tighter mb-4">
-                                Integraciones del <span className="font-medium text-white">CTO</span>
+                            <h1 className="text-3xl font-extralight tracking-tight text-white md:text-4xl">
+                                Integraciones
                             </h1>
-                            <p className="text-neutral-500 text-sm md:text-base max-w-2xl leading-relaxed">
-                                Orquestación centralizada de canales externos. Conecta tus activos digitales para que la inteligencia autónoma de <span className="text-white font-medium">Roosevelt</span> pueda operar por ti.
+                            <p className="mt-2 text-sm leading-relaxed text-white/40">
+                                Conecta canales y servicios para que Roosevelt opere por ti en{' '}
+                                <span className="font-mono text-white/55">{activeEntity}</span>.
                             </p>
                         </div>
-                        
-                        <div className="flex bg-neutral-900/40 backdrop-blur-md border border-white/5 p-1 rounded-full overflow-x-auto no-scrollbar max-w-full">
-                            {CATEGORIES.map(cat => (
+
+                        <div className="flex items-center gap-3 self-start md:self-auto">
+                            <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-center">
+                                <p className="text-[9px] font-bold uppercase tracking-widest text-white/35">Activas</p>
+                                <p className="mt-0.5 text-2xl font-light text-white">
+                                    {loading ? '—' : connectedCount}
+                                    <span className="ml-1 text-sm text-white/30">/ {INTEGRATIONS.length}</span>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Toolbar */}
+                    <div className="flex flex-col gap-4 rounded-[28px] border border-white/6 bg-white/[0.02] p-4 backdrop-blur-sm md:flex-row md:items-center md:justify-between">
+                        <div className="relative min-w-0 flex-1 md:max-w-sm">
+                            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" />
+                            <input
+                                type="text"
+                                placeholder="Buscar por nombre o categoría…"
+                                className="h-11 w-full rounded-xl border border-white/8 bg-black/40 pl-10 pr-4 text-sm text-white placeholder:text-white/25 focus:border-white/20 focus:outline-none"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+                            {CATEGORIES.map((cat) => (
                                 <button
                                     key={cat}
+                                    type="button"
                                     onClick={() => setSelectedCategory(cat)}
-                                    className={`px-6 py-2 rounded-full text-xs font-medium transition-all duration-300 whitespace-nowrap ${
-                                        selectedCategory === cat ? 'bg-white text-black shadow-lg' : 'text-neutral-500 hover:text-white'
+                                    className={`shrink-0 rounded-full px-4 py-2 text-[11px] font-medium transition-all ${
+                                        selectedCategory === cat
+                                            ? 'bg-white text-black'
+                                            : 'text-white/45 hover:bg-white/5 hover:text-white'
                                     }`}
                                 >
                                     {cat}
@@ -150,138 +191,100 @@ export default function IntegrationsPage() {
                             ))}
                         </div>
                     </div>
+                </header>
 
-                    {/* Search Bar */}
-                    <div className="relative max-w-md">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-600 w-4 h-4" />
-                        <input 
-                            type="text"
-                            placeholder="Buscar integración..."
-                            className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-sm focus:outline-none focus:border-blue-500/50 backdrop-blur-xl transition-all"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
+                {/* Grid */}
+                {filteredIntegrations.length === 0 ? (
+                    <div className="rounded-[28px] border border-dashed border-white/10 py-20 text-center">
+                        <p className="text-sm text-white/40">No hay integraciones que coincidan con tu búsqueda.</p>
                     </div>
-                </div>
-
-                {/* WhatsApp readiness banner */}
-                {!loading && (rawIntegrationDocs.whatsapp || rawIntegrationDocs.whatsapp_internal) && (
-                    <div className="max-w-7xl mx-auto mb-8">
-                        <div className={`rounded-[24px] border p-5 md:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 ${whatsappHealth.canSend ? 'bg-emerald-500/[0.06] border-emerald-500/25' : 'bg-amber-500/[0.06] border-amber-500/25'}`}>
-                            <div className="min-w-0">
-                                <p className={`text-[10px] font-black uppercase tracking-[0.25em] mb-2 ${whatsappHealth.canSend ? 'text-emerald-400' : 'text-amber-400'}`}>
-                                    WhatsApp · {activeEntity}
-                                </p>
-                                <h2 className="text-lg font-medium text-white mb-1">{whatsappHealth.label}</h2>
-                                <p className="text-[12px] text-white/45 max-w-xl">
-                                    {whatsappHealth.canSend
-                                        ? 'Bot y omnicanal operativos. Abre una conversación, toma el chat y escribe al cliente.'
-                                        : 'Revisa Phone Number ID y Access Token en Ajustes de WhatsApp para poder enviar desde omnicanal.'}
-                                </p>
-                                {whatsappHealth.phoneNumberId && (
-                                    <p className="text-[11px] text-white/35 font-mono mt-2">
-                                        Phone ID: {whatsappHealth.phoneNumberId}
-                                        {whatsappHealth.wabaId ? ` · WABA: ${whatsappHealth.wabaId}` : ''}
-                                    </p>
-                                )}
-                            </div>
-                            <div className="flex flex-wrap gap-2 shrink-0">
-                                {whatsappHealth.canSend && (
-                                    <>
-                                        <Link
-                                            href={`/nucleo/${activeEntity}/coo/omnichannel`}
-                                            className="inline-flex items-center gap-2 h-11 px-5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wider transition-colors"
-                                        >
-                                            <MessageSquare className="w-4 h-4" />
-                                            Abrir Omnicanal
-                                        </Link>
-                                        <Link
-                                            href={`/nucleo/${activeEntity}/cmo/broadcast/list`}
-                                            className="inline-flex items-center gap-2 h-11 px-5 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold uppercase tracking-wider transition-colors"
-                                        >
-                                            <Megaphone className="w-4 h-4" />
-                                            Abrir Difusiones
-                                        </Link>
-                                    </>
-                                )}
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        const wa = INTEGRATIONS.find(i => i.id === 'whatsapp');
-                                        if (wa) handleConnect(wa);
-                                    }}
-                                    className="inline-flex items-center gap-2 h-11 px-5 rounded-full border border-white/15 text-white/70 hover:bg-white/5 text-[10px] font-bold uppercase tracking-wider transition-colors"
-                                >
-                                    <Settings2 className="w-4 h-4" />
-                                    Ajustes WhatsApp
-                                </button>
-                            </div>
-                        </div>
+                ) : (
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+                        <AnimatePresence mode="popLayout">
+                            {filteredIntegrations.map((integration) => (
+                                <IntegrationCard
+                                    key={integration.id}
+                                    integration={integration}
+                                    activeEntity={activeEntity}
+                                    isConnected={isIntegrationConnected(
+                                        integration.id,
+                                        connectedIntegrations[integration.id],
+                                        integration.id === 'whatsapp' ? whatsappHealth : undefined
+                                    )}
+                                    integrationData={connectedIntegrations[integration.id]}
+                                    whatsappHealth={integration.id === 'whatsapp' ? whatsappHealth : undefined}
+                                    whatsappNumberCount={integration.id === 'whatsapp' ? whatsappNumberCount : undefined}
+                                    gmailConnectionState={integration.id === 'gmail' ? gmailConnectionState : undefined}
+                                    googleLoginEmail={integration.id === 'gmail' ? googleLoginEmail : undefined}
+                                    gmailBootstrapPending={integration.id === 'gmail' ? gmailBootstrapPending : false}
+                                    gmailAccountCount={
+                                        integration.id === 'gmail'
+                                            ? connectedIntegrations.gmail?.accountCount ??
+                                              connectedIntegrations.gmail?.accounts?.length ??
+                                              0
+                                            : 0
+                                    }
+                                    onConnect={() => handleConnect(integration)}
+                                />
+                            ))}
+                        </AnimatePresence>
                     </div>
                 )}
-
-                {/* Grid Section - Reduced Width (4 Columns) */}
-                <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <AnimatePresence mode="popLayout">
-                        {filteredIntegrations.map((integration, idx) => (
-                            <IntegrationCard 
-                                key={integration.id}
-                                integration={integration}
-                                isConnected={isIntegrationConnected(integration.id, connectedIntegrations[integration.id])}
-                                integrationData={connectedIntegrations[integration.id]}
-                                whatsappHealth={integration.id === 'whatsapp' ? whatsappHealth : undefined}
-                                whatsappNumberCount={integration.id === 'whatsapp' ? whatsappNumberCount : undefined}
-                                onConnect={() => handleConnect(integration)}
-                            />
-                        ))}
-                    </AnimatePresence>
-                </div>
             </main>
 
-            {/* Modals Dispatcher */}
+            {/* Modals */}
             {activeIntegration?.id === 'whatsapp' && (
-                <WhatsAppCloudAPIModal 
-                    isOpen={isModalOpen} 
-                    onClose={() => setIsModalOpen(false)} 
-                    activeIntegration={activeIntegration} 
+                <WhatsAppCloudAPIModal
+                    isOpen={isModalOpen}
+                    onClose={() => setIsModalOpen(false)}
+                    activeIntegration={activeIntegration}
                 />
             )}
             {activeIntegration?.id === 'messenger' && (
-                <MessengerModal 
-                    isOpen={isModalOpen} 
-                    onClose={() => setIsModalOpen(false)} 
+                <MessengerModal
+                    isOpen={isModalOpen}
+                    onClose={() => setIsModalOpen(false)}
                     activeEntity={activeEntity}
                     currentUser={currentUser}
                 />
             )}
             {activeIntegration?.id === 'instagram' && (
-                <InstagramModal 
-                    isOpen={isModalOpen} 
-                    onClose={() => setIsModalOpen(false)} 
+                <InstagramModal
+                    isOpen={isModalOpen}
+                    onClose={() => setIsModalOpen(false)}
                     activeEntity={activeEntity}
                     currentUser={currentUser}
                 />
             )}
             {activeIntegration?.id === 'telegram' && (
-                <TelegramModal 
+                <TelegramModal
                     isOpen={isModalOpen}
-                    onClose={() => { setIsModalOpen(false); setActiveIntegration(null); }}
+                    onClose={() => {
+                        setIsModalOpen(false);
+                        setActiveIntegration(null);
+                    }}
                     activeEntity={activeEntity}
                     currentUser={currentUser}
                 />
             )}
             {activeIntegration?.id === 'x_twitter' && (
-                <TwitterModal 
+                <TwitterModal
                     isOpen={isModalOpen}
-                    onClose={() => { setIsModalOpen(false); setActiveIntegration(null); }}
+                    onClose={() => {
+                        setIsModalOpen(false);
+                        setActiveIntegration(null);
+                    }}
                     activeEntity={activeEntity}
                     currentUser={currentUser}
                 />
             )}
             {activeIntegration?.id === 'gmail' && (
-                <GmailModal 
+                <GmailModal
                     isOpen={isModalOpen}
-                    onClose={() => { setIsModalOpen(false); setActiveIntegration(null); }}
+                    onClose={() => {
+                        setIsModalOpen(false);
+                        setActiveIntegration(null);
+                    }}
                     activeEntity={activeEntity}
                     currentUser={currentUser}
                 />
@@ -289,7 +292,21 @@ export default function IntegrationsPage() {
             {activeIntegration?.id === 'gemini' && (
                 <GeminiModal
                     isOpen={isModalOpen}
-                    onClose={() => { setIsModalOpen(false); setActiveIntegration(null); }}
+                    onClose={() => {
+                        setIsModalOpen(false);
+                        setActiveIntegration(null);
+                    }}
+                    activeEntity={activeEntity}
+                    currentUser={currentUser}
+                />
+            )}
+            {activeIntegration?.id === 'stripe' && (
+                <StripeModal
+                    isOpen={isModalOpen}
+                    onClose={() => {
+                        setIsModalOpen(false);
+                        setActiveIntegration(null);
+                    }}
                     activeEntity={activeEntity}
                     currentUser={currentUser}
                 />
@@ -298,116 +315,221 @@ export default function IntegrationsPage() {
     );
 }
 
-function isIntegrationConnected(integrationId: string, integrationData?: any) {
-    if (!integrationData) return false;
+function isIntegrationConnected(
+    integrationId: string,
+    integrationData?: any,
+    whatsappHealth?: ReturnType<typeof getWhatsAppIntegrationHealth>
+) {
+    if (!integrationData && integrationId !== 'whatsapp') return false;
     if (integrationId === 'whatsapp') {
-        const health = getWhatsAppIntegrationHealth(integrationData);
+        const health = whatsappHealth || getWhatsAppIntegrationHealth(integrationData);
         return health.level === 'ready' || health.level === 'partial';
     }
-    return integrationData.status === 'Connected';
+    return integrationData?.status === 'Connected';
 }
 
-function getIntegrationStatusLabel(integrationId: string, integrationData?: any, whatsappHealth?: ReturnType<typeof getWhatsAppIntegrationHealth>) {
+function getIntegrationStatusLabel(
+    integrationId: string,
+    integrationData?: any,
+    whatsappHealth?: ReturnType<typeof getWhatsAppIntegrationHealth>,
+    gmailConnectionState?: ReturnType<typeof getGmailConnectionState>,
+    gmailBootstrapPending?: boolean
+) {
     if (integrationId === 'whatsapp' && whatsappHealth) {
         if (whatsappHealth.level === 'ready') return 'Listo';
         if (whatsappHealth.level === 'partial') return 'Incompleto';
         return 'Offline';
     }
+    if (integrationId === 'gmail' && gmailConnectionState === 'pending_authorization') {
+        return gmailBootstrapPending ? 'Autorizando…' : 'Falta autorizar';
+    }
     return isIntegrationConnected(integrationId, integrationData) ? 'Activo' : 'Offline';
 }
 
-function IntegrationCard({ 
-    integration, 
-    isConnected, 
+function IntegrationCard({
+    integration,
+    activeEntity,
+    isConnected,
     integrationData,
     whatsappHealth,
     whatsappNumberCount,
-    onConnect 
-}: { 
-    integration: Integration, 
-    isConnected: boolean, 
-    integrationData?: any,
-    whatsappHealth?: ReturnType<typeof getWhatsAppIntegrationHealth>,
-    whatsappNumberCount?: number,
-    onConnect: () => void 
+    gmailConnectionState,
+    googleLoginEmail,
+    gmailBootstrapPending,
+    gmailAccountCount,
+    onConnect,
+}: {
+    integration: Integration;
+    activeEntity: string;
+    isConnected: boolean;
+    integrationData?: any;
+    whatsappHealth?: ReturnType<typeof getWhatsAppIntegrationHealth>;
+    whatsappNumberCount?: number;
+    gmailConnectionState?: ReturnType<typeof getGmailConnectionState>;
+    googleLoginEmail?: string | null;
+    gmailBootstrapPending?: boolean;
+    gmailAccountCount?: number;
+    onConnect: () => void;
 }) {
-    const statusLabel = getIntegrationStatusLabel(integration.id, integrationData, whatsappHealth);
+    const gmailPending = integration.id === 'gmail' && gmailConnectionState === 'pending_authorization';
+    const statusLabel = getIntegrationStatusLabel(
+        integration.id,
+        integrationData,
+        whatsappHealth,
+        gmailConnectionState,
+        gmailBootstrapPending
+    );
     const statusReady = integration.id === 'whatsapp' && whatsappHealth?.canSend;
     const statusPartial = integration.id === 'whatsapp' && whatsappHealth?.level === 'partial';
+
+    const accentColor = integration.color;
+
     return (
-        <motion.div
+        <motion.article
             layout
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className={`relative group px-6 py-4 rounded-[32px] border transition-all duration-500 flex flex-col h-full bg-[#0a0a0a] ${
-                statusReady ? 'border-emerald-500/30 ring-1 ring-emerald-500/20' : statusPartial ? 'border-amber-500/30 ring-1 ring-amber-500/15' : isConnected ? 'border-blue-500/30 ring-1 ring-blue-500/20' : 'border-white/5 hover:border-white/20'
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.25 }}
+            className={`group relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-[28px] border bg-[#0a0a0a]/80 p-6 transition-all duration-300 hover:bg-[#0d0d0d] ${
+                statusReady
+                    ? 'border-emerald-500/25'
+                    : statusPartial || gmailPending
+                      ? 'border-amber-500/25'
+                      : isConnected
+                        ? 'border-white/12'
+                        : 'border-white/6 hover:border-white/12'
             }`}
+            style={{
+                boxShadow: isConnected || statusReady ? `0 0 0 1px ${accentColor}10` : undefined,
+            }}
         >
-            {/* Status Badge */}
-            <div className="flex justify-between items-start mb-4">
-                <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-[9px] uppercase font-black border transition-all ${
-                    statusReady ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : statusPartial ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' : isConnected ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/10 text-neutral-600'
-                }`}>
-                    <div className={`w-1 h-1 rounded-full ${
-                        statusReady ? 'bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,1)]' : statusPartial ? 'bg-amber-400' : isConnected ? 'bg-blue-400 shadow-[0_0_5px_rgba(59,130,246,1)]' : 'bg-neutral-600'
-                    }`} />
-                    {statusLabel}
+            {/* Accent line */}
+            <div
+                className="absolute inset-x-0 top-0 h-px opacity-60"
+                style={{ background: `linear-gradient(90deg, transparent, ${accentColor}55, transparent)` }}
+            />
+
+            <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="shrink-0 transition-transform duration-300 group-hover:scale-105">
+                    {integration.icon}
                 </div>
-                {integration.popular && !isConnected && (
-                    <div className="px-3 py-1 bg-white text-black rounded-full text-[9px] font-black uppercase tracking-tighter shadow-xl">
+
+                <div className="flex flex-col items-end gap-1.5">
+                    <span
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[8px] font-black uppercase tracking-wider ${
+                            statusReady
+                                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                                : statusPartial || gmailPending
+                                  ? 'border-amber-500/30 bg-amber-500/10 text-amber-400'
+                                  : isConnected
+                                    ? 'border-blue-500/30 bg-blue-500/10 text-blue-400'
+                                    : 'border-white/8 bg-white/[0.03] text-white/35'
+                        }`}
+                    >
+                        <span
+                            className={`h-1.5 w-1.5 rounded-full ${
+                                statusReady
+                                    ? 'bg-emerald-400'
+                                    : statusPartial || gmailPending
+                                      ? `bg-amber-400${gmailBootstrapPending ? ' animate-pulse' : ''}`
+                                      : isConnected
+                                        ? 'bg-blue-400'
+                                        : 'bg-white/25'
+                            }`}
+                        />
+                        {statusLabel}
+                    </span>
+                    <span className="text-[9px] uppercase tracking-widest text-white/25">{integration.category}</span>
+                </div>
+            </div>
+
+            <h3 className="mb-1.5 text-lg font-medium text-white md:text-xl">{integration.name}</h3>
+            <p className="mb-4 flex-grow text-[13px] leading-relaxed text-white/40">
+                {gmailPending
+                    ? `Cuenta Google detectada${googleLoginEmail ? ` (${googleLoginEmail})` : ''}. Falta autorizar Gmail para enviar correos.`
+                    : integration.id === 'whatsapp' && whatsappHealth && isConnected
+                      ? whatsappHealth.label
+                      : integration.description}
+            </p>
+
+            {/* Meta chips */}
+            <div className="mb-4 flex min-h-[24px] flex-wrap gap-1.5">
+                {integration.id === 'gmail' && (gmailAccountCount ?? 0) > 0 && (
+                    <span className="rounded-full border border-blue-500/20 bg-blue-500/8 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-blue-400/90">
+                        {gmailAccountCount} {gmailAccountCount === 1 ? 'cuenta' : 'cuentas'}
+                    </span>
+                )}
+                {gmailPending && googleLoginEmail && (
+                    <span className="rounded-full border border-amber-500/20 bg-amber-500/8 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-400/90">
+                        Google detectado
+                    </span>
+                )}
+                {integration.id === 'whatsapp' && (whatsappNumberCount ?? 0) > 0 && (
+                    <span className="rounded-full border border-emerald-500/20 bg-emerald-500/8 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-400/90">
+                        {whatsappNumberCount} {whatsappNumberCount === 1 ? 'número' : 'números'}
+                    </span>
+                )}
+                {integration.id === 'whatsapp' && whatsappHealth?.phoneNumberId && (
+                    <span className="rounded-full border border-white/8 bg-white/[0.03] px-2 py-0.5 font-mono text-[9px] text-white/35">
+                        {whatsappHealth.phoneNumberId}
+                    </span>
+                )}
+                {integration.popular && !isConnected && !gmailPending && (
+                    <span className="rounded-full border border-white/10 bg-white px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-black">
                         Popular
-                    </div>
+                    </span>
                 )}
             </div>
 
-            {/* Icon */}
-            <div className="mb-4 relative">
-                 <div className="w-16 h-16 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-center group-hover:scale-110 transition-transform duration-500 group-hover:border-white/10 overflow-hidden relative">
-                    {integration.icon}
-                    {/* Glossy reflection overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-none" />
-                 </div>
-            </div>
-
-            {/* Content */}
-            <h3 className="text-xl font-medium text-white mb-2">{integration.name}</h3>
-            <p className="text-neutral-500 text-[11px] leading-relaxed mb-4 flex-grow">
-                {integration.description}
-            </p>
-            {integration.id === 'whatsapp' && (whatsappHealth?.phoneNumberId || (whatsappNumberCount ?? 0) > 0) && (
-                <div className="flex items-center gap-2 mb-4 flex-wrap">
-                    {(whatsappNumberCount ?? 0) > 0 && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-[9px] font-black uppercase tracking-wider">
-                            {whatsappNumberCount} {whatsappNumberCount === 1 ? 'número' : 'números'}
-                        </span>
-                    )}
-                    {whatsappHealth?.phoneNumberId && (
-                        <span className="text-[10px] text-white/30 font-mono truncate">ID {whatsappHealth.phoneNumberId}</span>
-                    )}
+            {/* WhatsApp quick links — inside card, not full-width banner */}
+            {integration.id === 'whatsapp' && statusReady && (
+                <div className="mb-3 flex gap-2">
+                    <Link
+                        href={`/nucleo/${activeEntity}/coo/omnichannel`}
+                        className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-emerald-500/20 bg-emerald-500/8 py-2 text-[9px] font-bold uppercase tracking-wider text-emerald-400 transition-colors hover:bg-emerald-500/15"
+                    >
+                        Omnicanal
+                        <ExternalLink className="h-3 w-3 opacity-60" />
+                    </Link>
+                    <Link
+                        href={`/nucleo/${activeEntity}/cmo/broadcast/list`}
+                        className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-blue-500/20 bg-blue-500/8 py-2 text-[9px] font-bold uppercase tracking-wider text-blue-400 transition-colors hover:bg-blue-500/15"
+                    >
+                        Difusiones
+                        <ExternalLink className="h-3 w-3 opacity-60" />
+                    </Link>
                 </div>
             )}
 
-            {/* Action */}
             <button
+                type="button"
                 onClick={onConnect}
-                className={`w-full h-12 rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] transition-all duration-500 ${
-                    isConnected 
-                        ? 'border border-blue-500/30 text-blue-400 hover:bg-blue-500/10' 
-                        : 'bg-white text-black hover:scale-[1.02] hover:shadow-xl active:scale-95'
+                className={`mt-auto flex h-12 w-full items-center justify-center gap-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.15em] transition-all ${
+                    isConnected
+                        ? 'border border-white/10 text-white/70 hover:border-white/20 hover:bg-white/5'
+                        : gmailPending
+                          ? 'border border-amber-500/25 bg-amber-500/12 text-amber-300 hover:bg-amber-500/20'
+                          : 'bg-white text-black hover:bg-white/90'
                 }`}
             >
                 {isConnected ? (
                     <>
-                        <Settings2 className="w-3 h-3" />
+                        <Settings2 className="h-3.5 w-3.5" />
                         Ajustes
+                    </>
+                ) : gmailPending ? (
+                    <>
+                        {gmailBootstrapPending ? 'Esperando…' : 'Autorizar Gmail'}
+                        <ArrowRight className="h-3 w-3" />
                     </>
                 ) : (
                     <>
                         Conectar
-                        <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
+                        <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
                     </>
                 )}
             </button>
-        </motion.div>
+        </motion.article>
     );
 }

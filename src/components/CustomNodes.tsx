@@ -23,7 +23,7 @@ interface NodeWrapperProps {
 }
 
 const NodeWrapper = ({ children, header, icon, label, color }: NodeWrapperProps) => (
-    <div className={cn("rounded-[1.2rem] shadow-xl border bg-black/80 backdrop-blur-xl w-[32rem] hover:scale-[1.01] transition-all duration-300", color)}>
+    <div className={cn("cursor-pointer rounded-[1.2rem] shadow-xl border bg-black/80 backdrop-blur-xl w-[32rem] transition-all duration-300 hover:scale-[1.01]", color)}>
         {/* HEADER */}
         <div className={cn("px-4 py-3 rounded-t-[1.1rem] flex items-center gap-3 border-b border-white/5", color.replace('border-', 'bg-').replace('-500', '-500/10'))}>
             <div className={cn("p-2 rounded-lg bg-white/5 ring-1 ring-inset ring-white/10 shadow-inner scale-90")}>{icon}</div>

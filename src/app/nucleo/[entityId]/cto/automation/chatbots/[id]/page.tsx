@@ -23,8 +23,30 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { toast } from 'sonner';
-import { Loader2, ArrowLeft, Cloud, Check, Save, Facebook, Instagram, Send, Mail, Twitter, Sparkles } from 'lucide-react';
+import {
+  Loader2,
+  ChevronLeft,
+  Cloud,
+  Check,
+  AlertCircle,
+  Facebook,
+  Instagram,
+  Send,
+  Mail,
+  Twitter,
+  Wand2,
+  FileJson,
+  Braces,
+  FileUp,
+  Radio,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -32,12 +54,89 @@ import { getPrimaryPlatform, normalizeTargetPlatforms, updateExclusiveBotPlatfor
 import FlowGeneratorBar from '@/components/chatbot/FlowGeneratorBar';
 import { layoutFlow } from '@/lib/chatbot/layoutFlow';
 import type { FlowEditMode } from '@/lib/chatbot/flowGraphOps';
+import { buildBotRulesExport, downloadJsonFile } from '@/lib/chatbot/botNodeCatalog';
+import { cn } from '@/lib/utils';
+
+const TOOLBAR_BTN =
+  'h-8 gap-1.5 rounded-lg bg-transparent px-2.5 text-neutral-400 shadow-none border-0 hover:bg-white/[0.06] hover:text-white';
+const TOOLBAR_ICON_BTN = cn(TOOLBAR_BTN, 'px-2');
+
+function ToolbarDivider() {
+  return <div className="mx-1 h-4 w-px shrink-0 bg-white/10" aria-hidden />;
+}
 
 const WhatsAppIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" className={className} fill="currentColor">
     <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.414 0 0 5.414 0 12.05c0 2.123.551 4.197 1.597 6.03l-1.602 5.8 5.883-1.543a11.86 11.86 0 005.815 1.526h.005c6.634 0 12.048-5.414 12.048-12.05 0-3.213-1.252-6.234-3.525-8.508z" />
   </svg>
 );
+
+/** Serializa Timestamps de Firestore y objetos anidados para JSON legible. */
+function serializeForJson(value: unknown): unknown {
+  if (value === null || value === undefined) return value;
+  if (typeof value === 'object' && value !== null && 'toDate' in value && typeof (value as { toDate: () => Date }).toDate === 'function') {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  if (Array.isArray(value)) return value.map(serializeForJson);
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nested]) => [key, serializeForJson(nested)])
+    );
+  }
+  return value;
+}
+
+type ParsedBotImport = {
+  name?: string;
+  humanizeTone?: boolean;
+  humanizeStyle?: string;
+  targetPlatforms?: string[];
+  nodes: Node[];
+  edges: Edge[];
+};
+
+/** Acepta JSON exportado por Roosevelt, documento de bot o solo flow { nodes, edges }. */
+function parseBotImportJson(raw: unknown): ParsedBotImport {
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('El archivo no contiene un JSON válido.');
+  }
+
+  const root = raw as Record<string, unknown>;
+  const bot =
+    root.bot && typeof root.bot === 'object'
+      ? (root.bot as Record<string, unknown>)
+      : root;
+
+  const flow =
+    bot.flow && typeof bot.flow === 'object'
+      ? (bot.flow as Record<string, unknown>)
+      : null;
+
+  const nodes = flow?.nodes ?? bot.nodes;
+  const edges = flow?.edges ?? bot.edges;
+
+  if (!Array.isArray(nodes) || nodes.length === 0) {
+    throw new Error('El JSON debe incluir al menos un nodo en flow.nodes.');
+  }
+
+  const normalizedEdges = (Array.isArray(edges) ? edges : []).map(
+    ({ animated, style, selected, ...edge }: Edge & { animated?: boolean; style?: unknown; selected?: boolean }) => ({
+      ...edge,
+      type: edge.type || 'custom',
+    })
+  );
+
+  return {
+    name: typeof bot.name === 'string' ? bot.name : undefined,
+    humanizeTone: typeof bot.humanizeTone === 'boolean' ? bot.humanizeTone : undefined,
+    humanizeStyle: typeof bot.humanizeStyle === 'string' ? bot.humanizeStyle : undefined,
+    targetPlatforms: Array.isArray(bot.targetPlatforms)
+      ? normalizeTargetPlatforms(bot.targetPlatforms as string[])
+      : undefined,
+    nodes: nodes as Node[],
+    edges: normalizedEdges as Edge[],
+  };
+}
 
 const PLATFORMS_MAP: Record<string, any> = {
   whatsapp: { icon: WhatsAppIcon, color: 'text-[#25D366]' },
@@ -63,8 +162,9 @@ function FlowPage() {
     const { currentUser, activeEntity } = useAuth();
     const chatbotId = params.id as string;
     const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
+    const importFileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const saveData = useCallback(async (currentNodes: Node[], currentEdges: Edge[], name: string) => {
+  const saveData = useCallback(async (currentNodes: Node[], currentEdges: Edge[], name: string, extraFields?: Record<string, unknown>) => {
     if (!chatbotId || !currentUser || !activeEntity) return;
 
     setSaveStatus('saving');
@@ -74,10 +174,12 @@ function FlowPage() {
 
       await setDoc(chatbotRef, {
         name: name,
+        ...extraFields,
         flow: {
           nodes: currentNodes,
           edges: edgesToSave,
-        }
+        },
+        updatedAt: new Date(),
       }, { merge: true });
 
       await fetch('/api/kanban/sync-bot-groups', {
@@ -97,7 +199,7 @@ function FlowPage() {
       console.error("Error al guardar:", error);
       setSaveStatus('error');
     }
-  }, [chatbotId]);
+  }, [chatbotId, currentUser, activeEntity]);
 
   useEffect(() => {
     const fetchChatbotData = async () => {
@@ -203,6 +305,99 @@ function FlowPage() {
     }
   };
 
+  const handleDownloadJson = async () => {
+    if (!currentUser || !activeEntity || !chatbotId) return;
+
+    try {
+      const docRef = doc(db, 'users', currentUser.uid, 'entities', activeEntity, 'chatbots', chatbotId);
+      const docSnap = await getDoc(docRef);
+      const firestoreData = docSnap.exists() ? docSnap.data() : {};
+      const edgesToExport = edges.map(({ selected, animated, style, ...edge }) => edge);
+
+      const exportPayload = serializeForJson({
+        exportedAt: new Date().toISOString(),
+        schemaVersion: 1,
+        entityId: activeEntity,
+        bot: {
+          id: chatbotId,
+          ...firestoreData,
+          name: chatbotName,
+          humanizeTone,
+          humanizeStyle: firestoreData.humanizeStyle ?? 'warm',
+          targetPlatforms,
+          flow: {
+            nodes,
+            edges: edgesToExport,
+          },
+        },
+      });
+
+      const safeName = chatbotName.replace(/[^a-z0-9-_áéíóúñ]/gi, '_').slice(0, 50) || 'bot';
+      downloadJsonFile(exportPayload, `chatbot-${chatbotId}-${safeName}.json`);
+      toast.success('JSON del bot descargado');
+    } catch (error) {
+      console.error('Error downloading bot JSON:', error);
+      toast.error('No se pudo descargar el JSON del bot');
+    }
+  };
+
+  const handleDownloadRulesJson = () => {
+    try {
+      downloadJsonFile(buildBotRulesExport(), 'chatbot-nodos-y-reglas.json');
+      toast.success('Catálogo de nodos y reglas descargado');
+    } catch (error) {
+      console.error('Error downloading bot rules JSON:', error);
+      toast.error('No se pudo descargar el catálogo de nodos');
+    }
+  };
+
+  const handleImportJsonClick = () => {
+    importFileInputRef.current?.click();
+  };
+
+  const handleImportJsonFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !currentUser || !activeEntity || !chatbotId) return;
+
+    if (!window.confirm('Esto reemplazará el flujo actual del bot con el JSON importado. ¿Continuar?')) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const parsedJson = JSON.parse(text) as unknown;
+      const imported = parseBotImportJson(parsedJson);
+
+      const importedName = imported.name ?? chatbotName;
+      const importedHumanize = imported.humanizeTone ?? humanizeTone;
+      const importedPlatforms = imported.targetPlatforms ?? targetPlatforms;
+
+      setChatbotName(importedName);
+      setHumanizeTone(importedHumanize);
+      if (imported.targetPlatforms) {
+        setTargetPlatforms(importedPlatforms);
+      }
+      setNodes(imported.nodes);
+      setEdges(imported.edges);
+
+      const extraFields: Record<string, unknown> = {
+        humanizeTone: importedHumanize,
+        humanizeStyle: imported.humanizeStyle ?? 'warm',
+      };
+      if (imported.targetPlatforms) {
+        extraFields.targetPlatforms = importedPlatforms;
+      }
+
+      await saveData(imported.nodes, imported.edges, importedName, extraFields);
+      toast.success(`JSON importado (${imported.nodes.length} nodos, ${imported.edges.length} conexiones)`);
+    } catch (error) {
+      console.error('Error importing bot JSON:', error);
+      const message = error instanceof Error ? error.message : 'No se pudo importar el JSON del bot';
+      toast.error(message);
+    }
+  };
+
   const handleToggleHumanizeTone = async (checked: boolean) => {
     if (!currentUser || !activeEntity || !chatbotId) return;
     setHumanizeTone(checked);
@@ -284,149 +479,189 @@ function FlowPage() {
       `}</style>
       
       {/* HEADER BAR */}
-      <div className="h-14 bg-neutral-950 border-b border-neutral-800 flex items-center justify-between px-4 z-20 shrink-0">
+      <header className="z-20 flex h-12 shrink-0 items-center justify-between border-b border-white/[0.06] bg-neutral-950/80 px-3 backdrop-blur-md sm:px-4">
+        <TooltipProvider delayDuration={300}>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    if (activeEntity) {
+                      router.push(`/nucleo/${activeEntity}/cto/automation/chatbots`);
+                    }
+                  }}
+                  className={TOOLBAR_ICON_BTN}
+                >
+                  <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Volver a mis bots</TooltipContent>
+            </Tooltip>
 
-        {/* Izquierda: Volver y Nombre */}
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              if (activeEntity) {
-                router.push(`/nucleo/${activeEntity}/cto/automation/chatbots`);
-              }
-            }}
-            className="text-neutral-400 hover:text-white hover:bg-neutral-800"
-            title="Volver a mis bots"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
+          <ToolbarDivider />
 
-          <div className="flex items-center group">
-            <Input
-              value={chatbotName}
-              onChange={(e) => setChatbotName(e.target.value)}
-              className="bg-transparent border-transparent hover:border-neutral-700 focus:border-neutral-600 focus:bg-neutral-900 text-lg font-normal tracking-tight text-white w-[300px] h-9 px-2 transition-all"
-              placeholder="Nombre del Chatbot"
-            />
-            <span className="opacity-0 group-hover:opacity-100 text-neutral-600 text-[10px] ml-2 transition-opacity uppercase tracking-wider font-normal">
-              Editar
-            </span>
-          </div>
+          <Input
+            value={chatbotName}
+            onChange={(e) => setChatbotName(e.target.value)}
+            className="h-8 min-w-0 flex-1 border-0 bg-transparent px-1 text-base font-medium tracking-tight text-white shadow-none placeholder:text-neutral-600 focus-visible:bg-white/[0.03] focus-visible:ring-0 sm:max-w-xs sm:text-lg"
+            placeholder="Nombre del chatbot"
+          />
         </div>
 
-        {/* Derecha: Plataformas y Estado de Guardado */}
-        <div className="flex items-center gap-6">
-          <div
-            className={`flex items-center gap-2.5 px-3 py-1.5 rounded-full border transition-all ${
-              humanizeTone
-                ? 'bg-emerald-500/10 border-emerald-500/20'
-                : 'bg-white/5 border-white/5'
-            }`}
-            title="La IA solo reformula el tono de los mensajes del flujo. No cambia el camino ni inventa respuestas."
-          >
-            <Sparkles className={`w-3.5 h-3.5 ${humanizeTone ? 'text-emerald-400' : 'text-neutral-500'}`} />
-            <div className="flex flex-col leading-none">
-              <span className={`text-[10px] font-normal uppercase tracking-tight ${humanizeTone ? 'text-emerald-300' : 'text-neutral-500'}`}>
-                Humanizar
-              </span>
-            </div>
-            <Switch
-              checked={humanizeTone}
-              onCheckedChange={handleToggleHumanizeTone}
-              className="scale-75 data-[state=checked]:bg-emerald-600"
-            />
-          </div>
+        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <label
+                  className={cn(
+                    'flex h-8 cursor-pointer items-center gap-2 rounded-lg px-2 transition-colors hover:bg-white/[0.06]',
+                    humanizeTone ? 'text-emerald-400' : 'text-neutral-400 hover:text-white'
+                  )}
+                >
+                  <Wand2 className="h-4 w-4" strokeWidth={1.75} />
+                  <Switch
+                    checked={humanizeTone}
+                    onCheckedChange={handleToggleHumanizeTone}
+                    className="h-4 w-7 data-[state=checked]:bg-emerald-500/80"
+                  />
+                </label>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-[220px]">
+                Humanizar: la IA reformula el tono sin cambiar el flujo
+              </TooltipContent>
+            </Tooltip>
 
-          {/* Platform Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border cursor-pointer transition-all hover:bg-white/10 ${
-                    targetPlatforms.length > 0 
-                    ? 'bg-white/5 border-white/5' 
-                    : 'bg-red-500/5 border-red-500/10'
-                }`}>
-                    <span className={`text-[10px] font-normal uppercase tracking-tight ${
-                        targetPlatforms.length > 0 ? 'text-neutral-500' : 'text-red-400/80'
-                    }`}>
-                        {targetPlatforms.length > 0 ? 'Canales' : 'Desconectado'}
-                    </span>
-                    <div className="flex items-center gap-1">
-                        {targetPlatforms.length > 0 ? (
-                            (() => {
-                                const currentPlatform = getPrimaryPlatform(targetPlatforms);
-                                const p = currentPlatform ? PLATFORMS_MAP[currentPlatform] : null;
-                                if (!p || !currentPlatform) return null;
-                                return <p.icon key={currentPlatform} className={`w-3.5 h-3.5 ${p.color}`} />;
-                            })()
-                        ) : (
-                            <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                        )}
-                    </div>
-                </div>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="bg-neutral-900 border-neutral-800 rounded-xl p-1.5 shadow-2xl z-[100] min-w-[180px]">
-                <div className="px-3 py-2 border-b border-white/5 mb-1.5">
-                    <p className="text-[9px] font-normal text-neutral-500 uppercase tracking-widest">Gestionar Conexión</p>
-                </div>
-                {Object.keys(PLATFORMS_MAP).filter(pId => connectedPlatforms.includes(pId)).map((pId) => {
-                    const p = PLATFORMS_MAP[pId];
-                    const isCurrent = getPrimaryPlatform(targetPlatforms) === pId;
-                    return (
-                        <DropdownMenuItem
-                            key={pId}
-                            onClick={() => handleTogglePlatform(pId)}
-                            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all cursor-pointer ${
-                                isCurrent ? 'bg-white/5 text-white' : 'text-neutral-400 hover:bg-white/5 hover:text-white'
-                            }`}
-                        >
-                            <p.icon className={`w-4 h-4 ${p.color}`} />
-                            <span className="text-xs font-normal tracking-tight">{pId.toUpperCase()}</span>
-                            {isCurrent && (
-                                <div className="ml-auto flex items-center gap-1">
-                                    <div className="w-1 h-1 rounded-full bg-green-500" />
-                                    <span className="text-[8px] text-green-500 font-normal">VINCULADO</span>
-                                </div>
-                            )}
-                        </DropdownMenuItem>
-                    );
+            <ToolbarDivider />
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={handleDownloadJson} className={TOOLBAR_ICON_BTN}>
+                  <FileJson className="h-4 w-4" strokeWidth={1.75} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Descargar flujo JSON</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={handleDownloadRulesJson} className={TOOLBAR_ICON_BTN}>
+                  <Braces className="h-4 w-4" strokeWidth={1.75} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Descargar nodos y reglas</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={handleImportJsonClick} className={TOOLBAR_ICON_BTN}>
+                  <FileUp className="h-4 w-4" strokeWidth={1.75} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Importar JSON</TooltipContent>
+            </Tooltip>
+
+            <input
+              ref={importFileInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={handleImportJsonFile}
+            />
+
+            <ToolbarDivider />
+
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={cn(
+                        TOOLBAR_ICON_BTN,
+                        targetPlatforms.length === 0 && 'text-red-400/90 hover:text-red-300'
+                      )}
+                    >
+                      {targetPlatforms.length > 0 ? (
+                        (() => {
+                          const currentPlatform = getPrimaryPlatform(targetPlatforms);
+                          const p = currentPlatform ? PLATFORMS_MAP[currentPlatform] : null;
+                          if (!p || !currentPlatform) return <Radio className="h-4 w-4" strokeWidth={1.75} />;
+                          return <p.icon className={cn('h-4 w-4', p.color)} />;
+                        })()
+                      ) : (
+                        <Radio className="h-4 w-4" strokeWidth={1.75} />
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  {targetPlatforms.length > 0 ? 'Gestionar canal' : 'Sin canal vinculado'}
+                </TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent className="z-[100] min-w-[180px] rounded-xl border-neutral-800 bg-neutral-900 p-1.5 shadow-2xl">
+                <p className="px-3 py-2 text-[9px] font-normal uppercase tracking-widest text-neutral-500">
+                  Gestionar conexión
+                </p>
+                {Object.keys(PLATFORMS_MAP).filter((pId) => connectedPlatforms.includes(pId)).map((pId) => {
+                  const p = PLATFORMS_MAP[pId];
+                  const isCurrent = getPrimaryPlatform(targetPlatforms) === pId;
+                  return (
+                    <DropdownMenuItem
+                      key={pId}
+                      onClick={() => handleTogglePlatform(pId)}
+                      className={cn(
+                        'flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 transition-all',
+                        isCurrent ? 'bg-white/5 text-white' : 'text-neutral-400 hover:bg-white/5 hover:text-white'
+                      )}
+                    >
+                      <p.icon className={cn('h-4 w-4', p.color)} />
+                      <span className="text-xs font-normal tracking-tight">{pId.toUpperCase()}</span>
+                      {isCurrent && (
+                        <span className="ml-auto text-[8px] font-normal text-emerald-500">VINCULADO</span>
+                      )}
+                    </DropdownMenuItem>
+                  );
                 })}
                 {connectedPlatforms.length === 0 && (
-                    <div className="px-4 py-6 text-center">
-                        <p className="text-[10px] text-neutral-500 leading-relaxed">No tienes integraciones conectadas en este tenant.</p>
-                    </div>
+                  <p className="px-4 py-5 text-center text-[10px] leading-relaxed text-neutral-500">
+                    No hay integraciones conectadas en este tenant.
+                  </p>
                 )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-          <div className="flex items-center gap-3">
-            {saveStatus === 'saving' && (
-              <div className="flex items-center gap-2 text-neutral-400 text-sm animate-pulse">
-                <Cloud className="w-4 h-4" />
-                <span>Guardando...</span>
-              </div>
-            )}
-            {saveStatus === 'saved' && (
-              <div className="flex items-center gap-2 text-green-500 text-sm animate-in fade-in slide-in-from-top-2 duration-300">
-                <Check className="w-4 h-4" />
-                <span>Guardado</span>
-              </div>
-            )}
-            {saveStatus === 'error' && (
-              <div className="flex items-center gap-2 text-red-500 text-sm">
-                <Save className="w-4 h-4" />
-                <span>Error al guardar</span>
-              </div>
-            )}
-            {saveStatus === 'idle' && (
-              <div className="flex items-center gap-2 text-neutral-600 text-sm">
-                <Cloud className="w-4 h-4" />
-                <span>Al día</span>
-              </div>
-            )}
-          </div>
+            <ToolbarDivider />
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  className={cn(
+                    'flex h-8 items-center gap-1.5 rounded-lg px-2',
+                    saveStatus === 'saving' && 'text-neutral-400',
+                    saveStatus === 'saved' && 'text-emerald-400',
+                    saveStatus === 'error' && 'text-red-400',
+                    saveStatus === 'idle' && 'text-neutral-600'
+                  )}
+                >
+                  {saveStatus === 'saving' && <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />}
+                  {saveStatus === 'saved' && <Check className="h-3.5 w-3.5" strokeWidth={2} />}
+                  {saveStatus === 'error' && <AlertCircle className="h-3.5 w-3.5" strokeWidth={1.75} />}
+                  {saveStatus === 'idle' && <Cloud className="h-3.5 w-3.5" strokeWidth={1.75} />}
+                  <span className="hidden text-[11px] font-normal sm:inline">
+                    {saveStatus === 'saving' && 'Guardando'}
+                    {saveStatus === 'saved' && 'Guardado'}
+                    {saveStatus === 'error' && 'Error'}
+                    {saveStatus === 'idle' && 'Al día'}
+                  </span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Estado de guardado automático</TooltipContent>
+            </Tooltip>
         </div>
-      </div>
+        </TooltipProvider>
+      </header>
 
       {/* CANVAS AREA */}
       <div className="flex-1 min-h-0 relative w-full">

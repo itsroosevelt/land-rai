@@ -18,6 +18,8 @@ build/
 dist/
 .next/
 out/
+node_modules/.cache/
+.turbo/
 
 # TypeScript
 tsconfig.tsbuildinfo

@@ -9,6 +9,7 @@ import {
     STARTER_CHATBOT_ID,
 } from './starterChatbot';
 import { ensureWhatsAppSlotNormalizationAdmin } from './whatsappSlotNormalizationAdmin';
+import { MOLD_INTEGRATIONS_INIT } from './integrationsCatalog';
 
 type AdminDb = admin.firestore.Firestore;
 
@@ -83,6 +84,16 @@ async function ensureStarterChatbotAdmin(db: AdminDb, path: string): Promise<voi
     );
 }
 
+async function ensureIntegrationsInitAdmin(db: AdminDb, path: string): Promise<void> {
+    await db.doc(`${path}/integrations/_init`).set(
+        {
+            ...MOLD_INTEGRATIONS_INIT,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+    );
+}
+
 /** Versión servidor del aprovisionamiento del molde (webhooks, API, scripts). */
 export async function provisionEntityMoldAdmin(
     db: AdminDb,
@@ -94,6 +105,7 @@ export async function provisionEntityMoldAdmin(
     await ensureReceptionColumnAdmin(db, path);
     await ensureStarterChatbotAdmin(db, path);
     await ensureWhatsAppSlotNormalizationAdmin(db, path);
+    await ensureIntegrationsInitAdmin(db, path);
 
     await db.doc(path).set(
         {

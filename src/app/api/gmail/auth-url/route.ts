@@ -7,6 +7,12 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('u');
     const entityId = searchParams.get('e');
+    const loginHint = searchParams.get('hint')?.trim() || '';
+    const entityIdsParam = searchParams.get('entities')?.trim() || '';
+    const mode = searchParams.get('mode')?.trim() || 'default';
+    const entityIds = entityIdsParam
+        ? entityIdsParam.split(',').map((id) => id.trim()).filter(Boolean)
+        : [];
 
     if (!userId || !entityId) {
         return NextResponse.json({ error: 'Missing context' }, { status: 400 });
@@ -33,14 +39,26 @@ export async function GET(req: Request) {
         'https://www.googleapis.com/auth/userinfo.profile'
     ];
     
-    const state = Buffer.from(JSON.stringify({ userId, entityId })).toString('base64');
+    const prompt = mode === 'add' ? 'select_account consent' : 'consent';
+
+    const state = Buffer.from(
+        JSON.stringify({
+            userId,
+            entityId,
+            entityIds: entityIds.length > 0 ? entityIds : [entityId],
+            loginHint: loginHint || null,
+            source: mode === 'add' ? 'add_account' : 'google_login',
+            mode,
+        })
+    ).toString('base64');
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
         `client_id=${CLIENT_ID}&` +
         `redirect_uri=${encodeURIComponent(dynamicRedirect!)}&` +
         `response_type=code&` +
         `scope=${encodeURIComponent(scopes.join(' '))}&` +
         `access_type=offline&` +
-        `prompt=consent&` +
+        `prompt=${encodeURIComponent(prompt)}&` +
+        (loginHint && mode !== 'add' ? `login_hint=${encodeURIComponent(loginHint)}&` : '') +
         `state=${state}`;
 
     console.log(`[Gmail Auth] Agnostic URL Generated for ${entityId}. Host: ${host} | Using: ${dynamicRedirect}`);

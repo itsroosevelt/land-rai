@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { OAuth2Client } from 'google-auth-library';
 import { db } from '@/lib/firebase-admin';
+import { saveGmailAccount } from '@/lib/gmail/accounts.server';
 import * as admin from 'firebase-admin';
 
 export const dynamic = 'force-dynamic';
@@ -14,9 +15,15 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: 'Missing code or state' }, { status: 400 });
     }
 
-    const { entityId, userId } = JSON.parse(Buffer.from(state, 'base64').toString());
+    const statePayload = JSON.parse(Buffer.from(state, 'base64').toString());
+    const { entityId, userId } = statePayload;
+    const entityIds: string[] =
+        Array.isArray(statePayload.entityIds) && statePayload.entityIds.length > 0
+            ? statePayload.entityIds
+            : [entityId];
+    const linkedFromGoogleLogin = statePayload.source === 'google_login';
+    const addAccount = statePayload.mode === 'add';
 
-    // Rebuild the same redirect_uri used in auth-url/route.ts so Google accepts the exchange
     const host = req.headers.get('host');
     const protocol = req.headers.get('x-forwarded-proto') || (host?.includes('localhost') ? 'http' : 'https');
     const redirectUri = host
@@ -33,14 +40,13 @@ export async function GET(req: Request) {
         const { tokens } = await oauth2Client.getToken(code);
         oauth2Client.setCredentials(tokens);
 
-        // Get Gmail profile and fall back to userinfo if Gmail profile is incomplete.
         const profileRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
-            headers: { Authorization: `Bearer ${tokens.access_token}` }
+            headers: { Authorization: `Bearer ${tokens.access_token}` },
         });
         const profileData = await profileRes.json().catch(() => null);
 
         const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-            headers: { Authorization: `Bearer ${tokens.access_token}` }
+            headers: { Authorization: `Bearer ${tokens.access_token}` },
         });
         const userInfo = await userInfoRes.json().catch(() => null);
 
@@ -53,59 +59,35 @@ export async function GET(req: Request) {
             throw new Error('No se pudo obtener el correo de la cuenta de Gmail autorizada.');
         }
 
-        // Validate uniqueness across all Roosevelt tenants
-        const integrationsSnap = await db.collectionGroup('integrations').where('email', '==', email).get();
+        const accountsSnap = await db.collectionGroup('accounts').where('email', '==', email).get();
         let isAlreadyConnected = false;
-        integrationsSnap.forEach(docSnap => {
-            if (!docSnap.ref.path.includes(`users/${userId}/entities/${entityId}`)) {
+        accountsSnap.forEach((docSnap) => {
+            const path = docSnap.ref.path;
+            const isSameUserEntity = entityIds.some((id) =>
+                path.includes(`users/${userId}/entities/${id}/integrations/gmail/accounts`)
+            );
+            if (!isSameUserEntity) {
                 isAlreadyConnected = true;
             }
         });
 
         if (isAlreadyConnected) {
-            throw new Error(`Esta cuenta de Gmail (${email}) ya está vinculada a otro usuario en la plataforma.`);
+            throw new Error(`Esta cuenta (${email}) ya está vinculada a otro usuario en la plataforma.`);
         }
 
-        // Save tokens and info in Firestore
-        const integrationData = {
-            email,
-            gmailAddress: email,
-            accessToken: tokens.access_token,
-            refreshToken: tokens.refresh_token,
-            expiryDate: tokens.expiry_date,
-            expiresAt: typeof tokens.expiry_date === 'number' ? tokens.expiry_date : null,
-            status: 'Connected',
-            watchStatus: 'pending',
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        };
+        let watchMeta: Record<string, unknown> = { watchStatus: 'pending' };
 
-        // 1. Save in entity (for UI)
-        await db.doc(`users/${userId}/entities/${entityId}/integrations/gmail`).set(integrationData);
-
-        // 1b. Save internal auth document used by token refresh/send providers
-        await db.doc(`users/${userId}/entities/${entityId}/integrations/gmail_internal`).set({
-            email,
-            gmailAddress: email,
-            accessToken: tokens.access_token,
-            refreshToken: tokens.refresh_token || null,
-            expiryDate: tokens.expiry_date || null,
-            expiresAt: typeof tokens.expiry_date === 'number' ? tokens.expiry_date : null,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
-
-        // (No longer saving to public integrations per Master Mold rules)
-        // Register Watch for real-time notifications via fetch
         try {
             const watchResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/watch', {
                 method: 'POST',
-                headers: { 
+                headers: {
                     Authorization: `Bearer ${tokens.access_token}`,
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
                     labelIds: ['INBOX'],
-                    topicName: process.env.GMAIL_PUBSUB_TOPIC
-                })
+                    topicName: process.env.GMAIL_PUBSUB_TOPIC,
+                }),
             });
 
             const watchData = await watchResponse.json().catch(() => null);
@@ -115,39 +97,41 @@ export async function GET(req: Request) {
                 throw new Error(`Gmail Watch API: ${watchError}`);
             }
 
-            const watchMeta = {
+            watchMeta = {
                 status: 'Connected',
                 watchStatus: 'active',
                 watchHistoryId: watchData?.historyId || null,
                 watchExpiration: watchData?.expiration ? Number(watchData.expiration) : null,
                 watchActivatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                lastError: admin.firestore.FieldValue.delete()
+                lastHistoryId: watchData?.historyId || null,
+                lastError: admin.firestore.FieldValue.delete(),
             };
-
-            await db.doc(`users/${userId}/entities/${entityId}/integrations/gmail`).set(watchMeta, { merge: true });
-            await db.doc(`users/${userId}/entities/${entityId}/integrations/gmail_internal`).set({
-                ...watchMeta,
-                lastHistoryId: watchData?.historyId || null
-            }, { merge: true });
-            // (No longer saving to public integrations per Master Mold rules)
-        } catch (watchError: any) {
+        } catch (watchError: unknown) {
             console.error('Gmail Watch Error:', watchError);
-            const detailedError = watchError?.message || String(watchError);
-            await db.doc(`users/${userId}/entities/${entityId}/integrations/gmail`).update({
-                status: 'Connected',
-                watchStatus: 'error',
-                lastError: `Google API Error: ${detailedError}`
-            });
-            await db.doc(`users/${userId}/entities/${entityId}/integrations/gmail_internal`).set({
+            const detailedError = watchError instanceof Error ? watchError.message : String(watchError);
+            watchMeta = {
                 status: 'Connected',
                 watchStatus: 'error',
                 lastError: `Google API Error: ${detailedError}`,
-                updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
+            };
         }
 
-        // Return a success page — handles both popup and main-window redirect flows
-        return new NextResponse(`
+        await Promise.all(
+            entityIds.map((targetEntityId) =>
+                saveGmailAccount({
+                    userId,
+                    entityId: targetEntityId,
+                    email,
+                    tokens,
+                    watchMeta,
+                    linkedFromGoogleLogin,
+                    makeDefault: addAccount ? undefined : true,
+                })
+            )
+        );
+
+        return new NextResponse(
+            `
             <html>
                 <head><meta charset="utf-8"></head>
                 <body style="font-family:sans-serif;text-align:center;padding:50px;background:#111;color:#fff;">
@@ -160,16 +144,17 @@ export async function GET(req: Request) {
                         }
                     </script>
                     <h2 style="color:#4CAF50;">Conexion Exitosa</h2>
-                    <p>Redirigiendo...</p>
+                    <p>Cuenta ${email} vinculada.</p>
                 </body>
             </html>
-        `, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
-
-    } catch (error: any) {
-        const errMsg = error?.message || error?.toString() || 'Unknown error';
-        const errDetail = error?.response?.data ? JSON.stringify(error.response.data) : '';
-        console.error('Gmail Callback Error:', errMsg, errDetail);
-        return new NextResponse(`
+        `,
+            { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+        );
+    } catch (error: unknown) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        console.error('Gmail Callback Error:', errMsg);
+        return new NextResponse(
+            `
             <html>
                 <head><meta charset="utf-8"></head>
                 <body style="font-family:sans-serif;text-align:center;padding:50px;background:#111;color:#fff;">
@@ -178,10 +163,12 @@ export async function GET(req: Request) {
                     </script>
                     <h2 style="color:#EA4335;">Error de Conexion con Gmail</h2>
                     <p>No se pudo completar la autenticacion.</p>
-                    <pre style="background:#222;padding:16px;border-radius:8px;text-align:left;font-size:12px;color:#f87171;white-space:pre-wrap;word-break:break-all;">${errMsg}${errDetail ? '\n' + errDetail : ''}</pre>
+                    <pre style="background:#222;padding:16px;border-radius:8px;text-align:left;font-size:12px;color:#f87171;white-space:pre-wrap;word-break:break-all;">${errMsg}</pre>
                     <p style="color:#888;font-size:12px;">Puedes cerrar esta ventana.</p>
                 </body>
             </html>
-        `, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+        `,
+            { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+        );
     }
 }

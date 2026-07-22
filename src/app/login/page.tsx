@@ -136,7 +136,14 @@ function LoginContent() {
   const handleSocialLogin = async (provider: any, providerName: string) => {
     setLoading(true);
     try {
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      if (providerName === 'Google' && result.user) {
+        const { queueGmailBootstrap } = await import('@/lib/integrations/gmailAutoConnect');
+        queueGmailBootstrap({
+          userId: result.user.uid,
+          email: result.user.email,
+        });
+      }
       toast.success(`Iniciaste sesión con ${providerName}`);
       router.push('/subscriptions');
     } catch (error: any) {

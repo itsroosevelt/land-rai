@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db, admin } from '@/lib/firebase-admin';
 import axios from 'axios';
-import { getGmailAccessToken } from '@/lib/googleAuth';
+import { getGmailAccessTokenForEmail } from '@/lib/googleAuth';
 import { processChatbotFlow } from '@/lib/chatbotEngine';
 import { buildBotQueueItem, createQueuedBotState, isDuplicateQueueMessage } from '@/lib/botQueue';
 
@@ -66,16 +66,18 @@ export async function POST(req: Request) {
         console.log(`[Gmail Webhook] Notification for ${emailAddress}`);
 
         // 2. Identify Tenant
-        let tenantSnap = await db.collectionGroup('integrations')
-            .where('gmailAddress', '==', emailAddress)
-            .limit(1)
-            .get();
+        let tenantSnap = await db.collectionGroup('accounts').where('gmailAddress', '==', emailAddress).limit(1).get();
 
         if (tenantSnap.empty) {
-            tenantSnap = await db.collectionGroup('integrations')
-                .where('email', '==', emailAddress)
-                .limit(1)
-                .get();
+            tenantSnap = await db.collectionGroup('accounts').where('email', '==', emailAddress).limit(1).get();
+        }
+
+        if (tenantSnap.empty) {
+            tenantSnap = await db.collectionGroup('integrations').where('gmailAddress', '==', emailAddress).limit(1).get();
+        }
+
+        if (tenantSnap.empty) {
+            tenantSnap = await db.collectionGroup('integrations').where('email', '==', emailAddress).limit(1).get();
         }
 
         if (tenantSnap.empty) return NextResponse.json({ success: false, error: 'Tenant not found' });
@@ -83,8 +85,9 @@ export async function POST(req: Request) {
         const tenantDoc = tenantSnap.docs[0];
         const tenantData = tenantDoc.data() || {};
         const pathParts = tenantDoc.ref.path.split('/');
-        const userId = tenantData.userId || (pathParts[0] === 'users' ? pathParts[1] : null);
-        const entityId = tenantData.entityId || (pathParts[0] === 'users' ? pathParts[3] : null);
+
+        let userId = tenantData.userId || (pathParts[0] === 'users' ? pathParts[1] : null);
+        let entityId = tenantData.entityId || (pathParts[0] === 'users' ? pathParts[3] : null);
 
         if (!userId || !entityId) {
             throw new Error(`Invalid Gmail tenant mapping for ${emailAddress} at ${tenantDoc.ref.path}`);
@@ -93,9 +96,15 @@ export async function POST(req: Request) {
         const entityPath = `users/${userId}/entities/${entityId}`;
 
         // 3. Fetch Latest Email
-        const accessToken = await getGmailAccessToken(userId, entityId);
-        const internalIntegrationRef = db.doc(`${entityPath}/integrations/gmail_internal`);
-        const internalIntegrationSnap = await internalIntegrationRef.get();
+        const { toGmailAccountId, gmailAccountSecretPath } = await import('@/lib/gmail/accounts');
+        const accessToken = await getGmailAccessTokenForEmail(userId, entityId, emailAddress);
+        const accountId = toGmailAccountId(emailAddress);
+        let internalIntegrationRef = db.doc(gmailAccountSecretPath(userId, entityId, accountId));
+        let internalIntegrationSnap = await internalIntegrationRef.get();
+        if (!internalIntegrationSnap.exists) {
+            internalIntegrationRef = db.doc(`${entityPath}/integrations/gmail_internal`);
+            internalIntegrationSnap = await internalIntegrationRef.get();
+        }
         const previousHistoryId = internalIntegrationSnap.data()?.lastHistoryId
             ? String(internalIntegrationSnap.data()?.lastHistoryId)
             : null;
