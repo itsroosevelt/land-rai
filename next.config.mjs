@@ -65,6 +65,17 @@ const nextConfig = {
       { source: '/cso/meet-agents', destination: '/suite/cto/meet-agents', permanent: true },
       { source: '/cso/orchestrator', destination: '/suite/cto/orchestrator', permanent: true },
       { source: '/cso/conexion', destination: '/suite/cto/integrations', permanent: true },
+      // WhatsApp bots route rename
+      {
+        source: '/nucleo/:entityId/cto/automation/chatbots',
+        destination: '/nucleo/:entityId/cto/automation/whatsappbots',
+        permanent: true,
+      },
+      {
+        source: '/nucleo/:entityId/cto/automation/chatbots/:id',
+        destination: '/nucleo/:entityId/cto/automation/whatsappbots/:id',
+        permanent: true,
+      },
     ];
   },
   async rewrites() {

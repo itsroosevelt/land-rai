@@ -1,4 +1,4 @@
-// src/app/cso/automation/chatbots/[id]/page.tsx
+// src/app/nucleo/[entityId]/cto/automation/whatsappbots/[id]/page.tsx
 'use client';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -489,7 +489,7 @@ function FlowPage() {
                   size="icon"
                   onClick={() => {
                     if (activeEntity) {
-                      router.push(`/nucleo/${activeEntity}/cto/automation/chatbots`);
+                      router.push(`/nucleo/${activeEntity}/cto/automation/whatsappbots`);
                     }
                   }}
                   className={TOOLBAR_ICON_BTN}

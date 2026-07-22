@@ -13,7 +13,7 @@ export default function ChannelBotsRoutePage() {
 
   useEffect(() => {
     if (channelSlug === 'whatsapp') {
-      router.replace(`/nucleo/${params.entityId}/cto/automation/chatbots`);
+      router.replace(`/nucleo/${params.entityId}/cto/automation/whatsappbots`);
     }
   }, [channelSlug, params.entityId, router]);
 

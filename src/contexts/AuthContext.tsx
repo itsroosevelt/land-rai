@@ -5,6 +5,7 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 import { provisionEntityMold, ensureEntityMoldUpToDate } from '@/lib/mold/entityMold';
+import { claimEntitySlug, generateUniqueEntitySlug } from '@/lib/entitySlug';
 
 import { usePathname } from 'next/navigation';
 
@@ -12,13 +13,15 @@ interface AuthContextType {
     currentUser: User | null;
     loading: boolean;
     activeEntity: string | null;
-    setActiveEntity: (entity: string | null) => void;
+    activeEntityRoute: string | null;
+    setActiveEntity: (entityId: string, routeSegment?: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
     currentUser: null,
     loading: true,
     activeEntity: null,
+    activeEntityRoute: null,
     setActiveEntity: () => {},
 });
 
@@ -27,23 +30,33 @@ export const useAuth = () => useContext(AuthContext);
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
-    const [activeEntity, setActiveEntity] = useState<string | null>(null);
+    const [activeEntity, setActiveEntityState] = useState<string | null>(null);
+    const [activeEntityRoute, setActiveEntityRoute] = useState<string | null>(null);
     const pathname = usePathname();
+
+    const setActiveEntity = (entityId: string, routeSegment?: string) => {
+        setActiveEntityState(entityId);
+        const route = routeSegment || entityId;
+        setActiveEntityRoute(route);
+        localStorage.setItem('roosevelt_active_entity', entityId);
+        localStorage.setItem('roosevelt_active_entity_route', route);
+    };
 
     useEffect(() => {
         const parts = pathname?.split('/') || [];
-        // Example: /nucleo/life -> parts = ["", "nucleo", "life"]
-        if (parts.length >= 3 && parts[1] === 'nucleo') {
-            const entityUrl = parts[2];
-            setActiveEntity(entityUrl);
-            localStorage.setItem('roosevelt_active_entity', entityUrl);
+        // Entity routes are resolved in EntityRouteResolver (slug → doc id).
+        if (parts.length >= 3 && parts[1] === 'nucleo' && parts[2]) {
+            return;
+        }
+
+        const saved = localStorage.getItem('roosevelt_active_entity');
+        const savedRoute = localStorage.getItem('roosevelt_active_entity_route');
+        if (saved) {
+            setActiveEntityState(saved);
+            setActiveEntityRoute(savedRoute || saved);
         } else {
-            const saved = localStorage.getItem('roosevelt_active_entity');
-            if (saved) {
-                setActiveEntity(saved);
-            } else {
-                setActiveEntity('life');
-            }
+            setActiveEntityState('life');
+            setActiveEntityRoute('life');
         }
     }, [pathname]);
 
@@ -74,10 +87,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
                             // Seed entities and settings in parallel
                             await Promise.all(initialEntities.map(async (entity) => {
+                                const slug = await generateUniqueEntitySlug(user.uid, entity.name, entity.id);
                                 await Promise.all([
                                     setDoc(doc(db, `users/${user.uid}/entities/${entity.id}`), {
                                         initialized: true,
                                         name: entity.name,
+                                        slug,
                                         type: entity.type,
                                         description: entity.desc,
                                         createdAt: new Date()
@@ -90,6 +105,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                                         updatedAt: new Date()
                                     })
                                 ]);
+                                await claimEntitySlug(user.uid, entity.id, slug);
                                 await provisionEntityMold(db, user.uid, entity.id);
                             }));
 
@@ -139,7 +155,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }, []);
 
     return (
-        <AuthContext.Provider value={{ currentUser, loading, activeEntity, setActiveEntity }}>
+        <AuthContext.Provider value={{ currentUser, loading, activeEntity, activeEntityRoute, setActiveEntity }}>
             {children}
         </AuthContext.Provider>
     );

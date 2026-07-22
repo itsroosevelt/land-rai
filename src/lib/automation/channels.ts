@@ -56,7 +56,7 @@ export const BOT_CHANNELS: BotChannelConfig[] = [
         iconColor: 'text-[#25D366]',
         activeBg: 'bg-[#25D366]/10',
         activeBorder: 'border-[#25D366]/30',
-        listHref: (entityId) => `/nucleo/${entityId}/cto/automation/chatbots`,
+        listHref: (entityId) => `/nucleo/${entityId}/cto/automation/whatsappbots`,
         Icon: ChannelIcons.WhatsApp,
     },
     {

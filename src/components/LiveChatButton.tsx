@@ -8,7 +8,7 @@ export const LiveChatButton = () => {
   const pathname = usePathname();
 
   // Detectar si estamos en el editor de chatbot
-  const isInChatbotEditor = pathname?.includes('/automation/chatbots/') && pathname !== '/cso/automation/chatbots';
+  const isInChatbotEditor = pathname?.includes('/automation/whatsappbots/');
 
   // Número de teléfono actualizado
   const phoneNumber = "16507840581";

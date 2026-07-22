@@ -88,7 +88,7 @@ function FeatureCard({
 
 export function CsoAutomationContent() {
   const router = useRouter();
-  const { activeEntity } = useAuth();
+  const { activeEntity, activeEntityRoute } = useAuth();
 
   const handleNavigate = (href: string) => {
     if (href && href !== '#') router.push(href);
@@ -109,7 +109,7 @@ export function CsoAutomationContent() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-10">
         {BOT_CHANNELS.map((channel) => {
           const Icon = channel.Icon;
-          const href = activeEntity ? channel.listHref(activeEntity) : '#';
+          const href = activeEntity ? channel.listHref(activeEntityRoute || activeEntity) : '#';
           return (
             <FeatureCard
               key={channel.slug}

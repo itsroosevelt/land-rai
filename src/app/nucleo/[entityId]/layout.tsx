@@ -1,23 +1,24 @@
 'use client';
 
 import React from 'react';
-import { usePathname, useRouter } from 'next/navigation';
-import { ChevronLeft } from 'lucide-react';
+import { useParams } from 'next/navigation';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import { EntityRouteResolver } from '@/components/EntityRouteResolver';
+
 export default function SuiteLayout({
     children,
 }: {
     children: React.ReactNode;
 }) {
-    const pathname = usePathname();
-    const router = useRouter();
-    const isDashboard = pathname === `/nucleo/${pathname.split('/')[2]}`;
+    const params = useParams();
+    const segment = typeof params?.entityId === 'string' ? params.entityId : '';
 
     return (
         <div className="min-h-screen bg-[#0a0a0a] text-white font-sans selection:bg-white/20">
-
             <ProtectedRoute>
-                {children}
+                <EntityRouteResolver segment={segment}>
+                    {children}
+                </EntityRouteResolver>
             </ProtectedRoute>
         </div>
     );

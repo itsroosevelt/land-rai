@@ -19,10 +19,19 @@ import { auth, db } from '@/lib/firebase';
 import { signOut } from 'firebase/auth';
 import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
 import { provisionEntityMold } from '@/lib/mold/entityMold';
+import {
+    claimEntitySlug,
+    generateUniqueEntitySlug,
+    getEntityRouteSegment,
+    releaseEntitySlug,
+    slugifyEntityName,
+    validateEntitySlug,
+} from '@/lib/entitySlug';
 
 interface Entity {
     id: string;
     name?: string;
+    slug?: string;
     description?: string;
     type?: string;
     status?: 'active' | 'archived';
@@ -45,6 +54,8 @@ export default function NucleoPage() {
     const [archiveEntity, setArchiveEntity] = useState<Entity | null>(null);
 
     const [inputValue, setInputValue] = useState('');
+    const [slugValue, setSlugValue] = useState('');
+    const [slugError, setSlugError] = useState('');
     const [creationType, setCreationType] = useState<'persona' | 'empresa'>('empresa');
     const [creatingProgress, setCreatingProgress] = useState(false);
 
@@ -93,17 +104,17 @@ export default function NucleoPage() {
         router.push('/login');
     };
 
-    const handleSelectEntity = async (entityId: string) => {
-        if (managementMode) return; // Prevent navigation in management mode
-        setTransitioning(entityId);
+    const handleSelectEntity = async (entity: Entity) => {
+        if (managementMode) return;
+        setTransitioning(entity.id);
 
-        // Regla 3: Inyección de estado en AuthContext
-        setActiveEntity(entityId);
-        localStorage.setItem('roosevelt_active_entity', entityId);
+        const route = getEntityRouteSegment(entity);
+        setActiveEntity(entity.id, route);
+        localStorage.setItem('roosevelt_active_entity', entity.id);
+        localStorage.setItem('roosevelt_active_entity_route', route);
 
-        // Regla 2: Enrutamiento Dinámico
         setTimeout(() => {
-            router.push(`/nucleo/${entityId}`);
+            router.push(`/nucleo/${route}`);
         }, 400);
     };
 
@@ -116,14 +127,18 @@ export default function NucleoPage() {
         // Regla 1: ID agnóstico
         const randomId = `bs_${Math.random().toString(36).substring(2, 9)}`;
         const entityRef = doc(db, `users/${currentUser.uid}/entities/${randomId}`);
+        const slug = await generateUniqueEntitySlug(currentUser.uid, inputValue, randomId);
 
         await setDoc(entityRef, {
             initialized: true,
             name: inputValue,
+            slug,
             status: 'active',
             type: creationType,
             createdAt: new Date()
         });
+
+        await claimEntitySlug(currentUser.uid, randomId, slug);
 
         // Regla 5: Estructura de Sub-Bóvedas
         await setDoc(doc(db, `users/${currentUser.uid}/entities/${randomId}/settings/general`), {
@@ -138,12 +153,26 @@ export default function NucleoPage() {
         setCreatingProgress(false);
     };
 
-    const handleUpdateName = async () => {
+    const handleUpdateEntity = async () => {
         if (!editEntity || !inputValue.trim() || !currentUser) return;
-        const ref = doc(db, `users/${currentUser.uid}/entities/${editEntity.id}`);
-        await updateDoc(ref, { name: inputValue });
-        setEditEntity(null);
-        setInputValue('');
+
+        const validation = validateEntitySlug(slugValue);
+        if (!validation.valid) {
+            setSlugError(validation.error || 'Usuario de ruta inválido.');
+            return;
+        }
+
+        try {
+            const ref = doc(db, `users/${currentUser.uid}/entities/${editEntity.id}`);
+            await claimEntitySlug(currentUser.uid, editEntity.id, slugValue, editEntity.slug);
+            await updateDoc(ref, { name: inputValue, slug: slugValue.trim().toLowerCase() });
+            setEditEntity(null);
+            setInputValue('');
+            setSlugValue('');
+            setSlugError('');
+        } catch (error) {
+            setSlugError(error instanceof Error ? error.message : 'No se pudo guardar.');
+        }
     };
 
     const handleToggleArchive = async (entity: Entity) => {
@@ -156,6 +185,7 @@ export default function NucleoPage() {
     const handleDeleteEntity = async () => {
         if (!deleteEntity || !currentUser || inputValue !== deleteEntity.name) return;
         const ref = doc(db, `users/${currentUser.uid}/entities/${deleteEntity.id}`);
+        await releaseEntitySlug(currentUser.uid, deleteEntity.slug);
         await deleteDoc(ref);
         setDeleteEntity(null);
         setInputValue('');
@@ -329,7 +359,12 @@ export default function NucleoPage() {
                                         animate={{ opacity: 1, y: 0 }}
                                         className="absolute -top-6 -right-6 flex flex-col gap-2 z-50 p-2"
                                     >
-                                        <button onClick={() => { setEditEntity(entity); setInputValue(entity.name || ''); }} className="bg-white/10 hover:bg-white text-white hover:text-black p-2.5 rounded-full backdrop-blur-xl transition-all border border-white/20 shadow-[0_0_20px_rgba(255,255,255,0.1)]">
+                                        <button onClick={() => {
+                                            setEditEntity(entity);
+                                            setInputValue(entity.name || '');
+                                            setSlugValue(entity.slug || slugifyEntityName(entity.name || entity.id));
+                                            setSlugError('');
+                                        }} className="bg-white/10 hover:bg-white text-white hover:text-black p-2.5 rounded-full backdrop-blur-xl transition-all border border-white/20 shadow-[0_0_20px_rgba(255,255,255,0.1)]">
                                             <Edit2 className="w-4 h-4" />
                                         </button>
                                         <button onClick={() => setArchiveEntity(entity)} className="bg-white/10 hover:bg-amber-500 text-white p-2.5 rounded-full backdrop-blur-xl transition-all border border-white/20">
@@ -342,7 +377,7 @@ export default function NucleoPage() {
                                 )}
 
                                 <div
-                                    onClick={() => handleSelectEntity(entity.id)}
+                                    onClick={() => handleSelectEntity(entity)}
                                     className={`w-36 h-36 md:w-40 md:h-40 rounded-full border-4 border-transparent transition-all p-1 cursor-pointer ${!managementMode ? 'hover:border-white/20 hover:scale-105 active:scale-95 shadow-2xl hover:shadow-blue-500/10' : 'cursor-default'}`}
                                 >
                                     <Avatar className="w-full h-full shadow-2xl border border-white/5">
@@ -356,6 +391,9 @@ export default function NucleoPage() {
                                 <div className="text-center group-hover:translate-y-1 transition-transform">
                                     <span className="text-xl font-light block transition-colors uppercase tracking-[0.2em] text-white/80 group-hover:text-white">
                                         {entity.name || 'Sin Nombre'}
+                                    </span>
+                                    <span className="text-[10px] text-blue-400/70 tracking-[0.15em] font-mono mt-1.5 block">
+                                        /nucleo/{getEntityRouteSegment(entity)}
                                     </span>
                                     <span className="text-[10px] text-white/20 uppercase tracking-[0.3em] font-bold mt-1 block">
                                         {entity.status === 'archived' ? 'ARCHIVADO' : (entity.type || 'WORK UNIT')}
@@ -392,18 +430,38 @@ export default function NucleoPage() {
             <AnimatePresence>
                 {/* Modal: Editar */}
                 {editEntity && (
-                    <Modal title="Renombrar Entorno" onClose={() => setEditEntity(null)}>
+                    <Modal title="Editar Entorno" onClose={() => { setEditEntity(null); setSlugError(''); }}>
                         <div className="space-y-6">
                             <div className="relative group">
-                                <label className="block text-[8px] font-bold text-white/20 mb-4 uppercase tracking-[0.5em] text-center">Nuevo Identificador</label>
+                                <label className="block text-[8px] font-bold text-white/20 mb-4 uppercase tracking-[0.5em] text-center">Nombre de la entidad</label>
                                 <input
                                     type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)}
                                     className="w-full bg-transparent border-b border-white/10 text-white text-center py-4 focus:outline-none focus:border-white transition-all font-light text-2xl tracking-wide placeholder:text-white/5"
                                     placeholder="..." autoFocus
                                 />
                             </div>
-                            <Button onClick={handleUpdateName} className="w-full bg-white text-black hover:bg-neutral-200 rounded-none py-8 tracking-[0.4em] uppercase text-[10px] font-bold transition-all shadow-xl">
-                                Actualizar Identidad
+                            <div className="relative group">
+                                <label className="block text-[8px] font-bold text-white/20 mb-3 uppercase tracking-[0.5em] text-center">Usuario en la ruta</label>
+                                <p className="text-center text-neutral-500 text-xs mb-2">byroosevelt.com/nucleo/</p>
+                                <input
+                                    type="text"
+                                    value={slugValue}
+                                    onChange={(e) => {
+                                        setSlugValue(slugifyEntityName(e.target.value));
+                                        setSlugError('');
+                                    }}
+                                    className="w-full bg-transparent border-b border-white/10 text-blue-400 text-center py-3 focus:outline-none focus:border-blue-400 transition-all font-mono text-lg tracking-wide placeholder:text-white/5"
+                                    placeholder="mi-empresa"
+                                />
+                                {slugError && (
+                                    <p className="text-red-400 text-[10px] text-center mt-3">{slugError}</p>
+                                )}
+                                <p className="text-[9px] text-white/30 text-center mt-3 leading-relaxed">
+                                    Al cambiar el usuario, la URL de esta entidad se actualizará en toda la plataforma.
+                                </p>
+                            </div>
+                            <Button onClick={handleUpdateEntity} className="w-full bg-white text-black hover:bg-neutral-200 rounded-none py-8 tracking-[0.4em] uppercase text-[10px] font-bold transition-all shadow-xl">
+                                Guardar cambios
                             </Button>
                         </div>
                     </Modal>

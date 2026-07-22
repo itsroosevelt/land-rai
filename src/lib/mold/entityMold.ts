@@ -8,10 +8,11 @@ import {
     STARTER_CHATBOT_ID,
 } from './starterChatbot';
 import { ensureWhatsAppSlotNormalization } from './whatsappSlotNormalization';
+import { ensureEntitySlugNormalization } from './entitySlugNormalization';
 import { MOLD_INTEGRATIONS_INIT } from './integrationsCatalog';
 
 /** Incrementar cuando el molde multitenant gane nuevas estructuras obligatorias. */
-export const ENTITY_MOLD_VERSION = 11;
+export const ENTITY_MOLD_VERSION = 12;
 
 export const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
@@ -47,6 +48,10 @@ export const ENTITY_MOLD_FEATURES = {
     multiNumberBotIsolation: true,
     /** Legacy whatsapp_numbers/primary migrado a general. */
     primarySlotNormalized: true,
+    /** URLs de entidad con slug personalizable (/nucleo/{slug}/...). */
+    entityRouteSlugs: true,
+    /** Ruta de bots WhatsApp en /cto/automation/whatsappbots. */
+    whatsappBotsRoute: true,
 } as const;
 
 function tenantPath(userId: string, entityId: string) {
@@ -119,6 +124,7 @@ export async function provisionEntityMold(
     await ensureReceptionColumn(db, path);
     await ensureStarterChatbot(db, path);
     await ensureWhatsAppSlotNormalization(db, path);
+    await ensureEntitySlugNormalization(db, userId, entityId);
     await ensureIntegrationsInit(db, path);
 
     await setDoc(

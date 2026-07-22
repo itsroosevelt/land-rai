@@ -48,9 +48,9 @@ type SortColumn = "status" | "broadcastTime" | "name";
 type SortOrder = "asc" | "desc" | null;
 
 export default function BroadcastsListPage() {
-    const { currentUser } = useAuth();
+    const { currentUser, activeEntity } = useAuth();
     const params = useParams();
-    const entityId = params.entityId as string;
+    const entityId = activeEntity || (params.entityId as string);
 
     // Layout states
     const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
