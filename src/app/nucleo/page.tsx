@@ -26,6 +26,8 @@ import {
     releaseEntitySlug,
     slugifyEntityName,
     validateEntitySlug,
+    findGhostEntities,
+    filterRealEntities,
 } from '@/lib/entitySlug';
 
 interface Entity {
@@ -98,6 +100,19 @@ export default function NucleoPage() {
 
     if (!mounted || loading) return <div className="min-h-screen bg-black flex items-center justify-center text-white/50 tracking-widest text-sm">Cargando...</div>;
     if (!currentUser) return null;
+
+    const ghostEntities = findGhostEntities(entities);
+    const ghostIds = new Set(ghostEntities.map((e) => e.id));
+    const listedEntities = managementMode
+        ? entities
+        : filterRealEntities(entities).filter((e) => e.status !== 'archived');
+
+    const entityTypeLabel = (entity: Entity) => {
+        if (entity.status === 'archived') return 'ARCHIVADO';
+        if (entity.type === 'persona') return 'PERSONAL';
+        if (entity.type === 'empresa') return 'EMPRESA';
+        return 'UNIDAD DE TRABAJO';
+    };
 
     const handleLogout = async () => {
         await signOut(auth);
@@ -338,11 +353,18 @@ export default function NucleoPage() {
                     {managementMode ? t('nucleo.titleManagement') : t('nucleo.titleQuestion')}
                 </h1>
 
+                {managementMode && ghostEntities.length > 0 && (
+                    <p className="mb-8 max-w-lg text-center text-amber-400/90 text-xs tracking-wide px-4">
+                        Hay {ghostEntities.length} entorno(s) duplicado(s) por error de migración de ruta.
+                        Elimínalos con el ícono de basura — tu empresa real no se borra.
+                    </p>
+                )}
+
                 <div className="flex flex-wrap justify-center gap-12 md:gap-16">
 
                     <AnimatePresence mode='popLayout'>
                         {/* Dynamic Rendering of Entities */}
-                        {entities.filter(e => managementMode || e.status !== 'archived').map((entity) => (
+                        {listedEntities.map((entity) => (
                             <motion.div
                                 key={entity.id}
                                 layout
@@ -350,7 +372,7 @@ export default function NucleoPage() {
                                 animate={{ opacity: 1, scale: 1 }}
                                 exit={{ opacity: 0, scale: 0.8 }}
                                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                                className={`flex flex-col items-center gap-6 relative group ${transitioning && transitioning !== entity.id ? 'opacity-20 blur-sm scale-95' : ''} ${entity.status === 'archived' ? 'opacity-40 grayscale' : ''}`}
+                                className={`flex flex-col items-center gap-6 relative group ${transitioning && transitioning !== entity.id ? 'opacity-20 blur-sm scale-95' : ''} ${entity.status === 'archived' ? 'opacity-40 grayscale' : ''} ${ghostIds.has(entity.id) ? 'ring-2 ring-amber-500/40 rounded-3xl p-4' : ''}`}
                             >
                                 {/* Floating Actions for Management Mode */}
                                 {managementMode && (
@@ -396,7 +418,7 @@ export default function NucleoPage() {
                                         /nucleo/{getEntityRouteSegment(entity)}
                                     </span>
                                     <span className="text-[10px] text-white/20 uppercase tracking-[0.3em] font-bold mt-1 block">
-                                        {entity.status === 'archived' ? 'ARCHIVADO' : (entity.type || 'WORK UNIT')}
+                                        {ghostIds.has(entity.id) ? 'DUPLICADO — ELIMINAR' : entityTypeLabel(entity)}
                                     </span>
                                 </div>
                             </motion.div>

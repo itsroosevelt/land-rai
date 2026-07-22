@@ -3,8 +3,8 @@ import { Mail, Users, CheckCircle, Hash, Settings, ChevronDown, ChevronRight, Me
 import WhatsappIcon from '@/components/icons/WhatsappIcon';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
-import { useParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEntityRoute } from '@/hooks/useEntityRoute';
 import { cn } from '@/lib/utils';
 
 interface SidebarProps {
@@ -35,8 +35,7 @@ function CollapsedTooltip({ label, children }: { label: string; children: React.
 
 export default function InboxSidebar({ selectedFolder, setSelectedFolder, cards = [] }: SidebarProps) {
     const { currentUser } = useAuth();
-    const params = useParams();
-    const activeEntity = params?.entityId as string;
+    const { firestoreId: activeEntity, routeSegment } = useEntityRoute();
     const [integrationStatuses, setIntegrationStatuses] = useState<Record<string, string>>({});
     const [isCollapsed, setIsCollapsed] = useState(true);
 
@@ -259,7 +258,7 @@ export default function InboxSidebar({ selectedFolder, setSelectedFolder, cards 
                                                         title="Click para reconectar en Configuración"
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            window.open(`/nucleo/${activeEntity}/cto/integrations`, '_blank');
+                                                            window.open(`/nucleo/${routeSegment}/cto/integrations`, '_blank');
                                                         }}
                                                     >
                                                         <AlertTriangle size={10} className="text-amber-500" />

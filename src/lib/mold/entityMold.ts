@@ -9,10 +9,11 @@ import {
 } from './starterChatbot';
 import { ensureWhatsAppSlotNormalization } from './whatsappSlotNormalization';
 import { ensureEntitySlugNormalization } from './entitySlugNormalization';
+import { isSlugOwnedByOtherEntity } from './entityRouteContract';
 import { MOLD_INTEGRATIONS_INIT } from './integrationsCatalog';
 
 /** Incrementar cuando el molde multitenant gane nuevas estructuras obligatorias. */
-export const ENTITY_MOLD_VERSION = 12;
+export const ENTITY_MOLD_VERSION = 13;
 
 export const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
@@ -50,6 +51,14 @@ export const ENTITY_MOLD_FEATURES = {
     primarySlotNormalized: true,
     /** URLs de entidad con slug personalizable (/nucleo/{slug}/...). */
     entityRouteSlugs: true,
+    /** Resolución slug→doc id con índice entity_slugs (Firestore id nunca cambia). */
+    entitySlugsIndex: true,
+    /** Prioridad slug sobre doc id al resolver rutas (evita docs fantasma). */
+    slugFirstRouteResolution: true,
+    /** No aprovisionar molde en documentos fantasma (id === slug de otra entidad). */
+    ghostEntityGuard: true,
+    /** Contexto de ruta sincronizado antes de renderizar páginas del tenant. */
+    entityRouteContext: true,
     /** Ruta de bots WhatsApp en /cto/automation/whatsappbots. */
     whatsappBotsRoute: true,
 } as const;
@@ -150,7 +159,23 @@ export async function ensureEntityMoldUpToDate(
 ): Promise<void> {
     const entityRef = doc(db, tenantPath(userId, entityId));
     const snap = await getDoc(entityRef);
-    const currentVersion = snap.data()?.moldVersion ?? 0;
+    if (!snap.exists()) return;
+
+    const data = snap.data() || {};
+    // Never provision mold on a phantom doc (e.g. slug used as path segment by mistake).
+    if (!data.initialized && !data.name) return;
+
+    const slugIndexSnap = await getDoc(
+        doc(db, `users/${userId}/entity_slugs/${entityId.toLowerCase()}`)
+    );
+    if (
+        slugIndexSnap.exists() &&
+        isSlugOwnedByOtherEntity(entityId, slugIndexSnap.data()?.entityId as string)
+    ) {
+        return;
+    }
+
+    const currentVersion = data.moldVersion ?? 0;
 
     if (currentVersion >= ENTITY_MOLD_VERSION) return;
 

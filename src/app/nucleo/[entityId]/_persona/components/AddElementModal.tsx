@@ -13,17 +13,17 @@ interface AddElementModalProps {
 }
 
 export const AddElementModal = ({ isOpen, onClose, onAdd }: AddElementModalProps) => {
-    const { activeEntity } = useAuth();
+    const { activeEntityRoute } = useAuth();
     const [title, setTitle] = useState('');
     const [subtitle, setSubtitle] = useState('');
     const [selectedIcon, setSelectedIcon] = useState('Activity');
     const [selectedColor, setSelectedColor] = useState('rose');
 
     const handleAdd = () => {
-        if (!title.trim() || !activeEntity) return;
+        if (!title.trim() || !activeEntityRoute) return;
         onAdd({
             id: title.toLowerCase().replace(/\s+/g, '-'),
-            href: `/nucleo/${activeEntity}/${title.toLowerCase().replace(/\s+/g, '-')}`,
+            href: `/nucleo/${activeEntityRoute}/${title.toLowerCase().replace(/\s+/g, '-')}`,
             iconName: selectedIcon,
             title,
             subtitle,

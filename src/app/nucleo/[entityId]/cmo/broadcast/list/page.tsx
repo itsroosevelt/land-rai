@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { useParams } from "next/navigation";
+import { useEntityRoute } from "@/hooks/useEntityRoute";
 import { toast } from "sonner";
 
 // Modularized Component Imports
@@ -48,9 +48,8 @@ type SortColumn = "status" | "broadcastTime" | "name";
 type SortOrder = "asc" | "desc" | null;
 
 export default function BroadcastsListPage() {
-    const { currentUser, activeEntity } = useAuth();
-    const params = useParams();
-    const entityId = activeEntity || (params.entityId as string);
+    const { currentUser } = useAuth();
+    const { firestoreId: entityId, routeSegment } = useEntityRoute();
 
     // Layout states
     const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);

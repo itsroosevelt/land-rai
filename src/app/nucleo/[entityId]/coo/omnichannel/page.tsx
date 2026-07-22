@@ -40,7 +40,7 @@ export default function OmnichannelInboxPage() {
 
     // Global Integration Status Watchdog
     const [integrationStatuses, setIntegrationStatuses] = useState<Record<string, string>>({});
-    const { currentUser, activeEntity } = useAuth();
+    const { currentUser, activeEntity, activeEntityRoute } = useAuth();
     
     React.useEffect(() => {
         if (!currentUser || !activeEntity) return;
@@ -76,7 +76,7 @@ export default function OmnichannelInboxPage() {
                         </span>
                     </div>
                     <button 
-                        onClick={() => window.open(`/nucleo/${activeEntity}/cto/integrations`, '_blank')}
+                        onClick={() => window.open(`/nucleo/${activeEntityRoute || activeEntity}/cto/integrations`, '_blank')}
                         className="bg-white/20 hover:bg-white/30 text-white text-[9px] font-black px-3 py-1 rounded transition-colors uppercase"
                     >
                         Reconectar Ahora

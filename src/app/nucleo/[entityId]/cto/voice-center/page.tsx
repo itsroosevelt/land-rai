@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Mic, MicOff, Phone, Settings, Bot, Volume2, VolumeX, Trash2, Copy, CheckCircle, AlertCircle, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
-import { useParams } from "next/navigation";
+import { useEntityRoute } from "@/hooks/useEntityRoute";
 import { toast } from "sonner";
 
 interface TranscriptEntry {
@@ -41,8 +41,7 @@ function WaveformVisualizer({ isActive }: { isActive: boolean }) {
 
 export default function VoiceCenterPage() {
     const { currentUser } = useAuth();
-    const params = useParams();
-    const entityId = params?.entityId as string;
+    const { firestoreId: entityId } = useEntityRoute();
 
     const [isListening, setIsListening] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);

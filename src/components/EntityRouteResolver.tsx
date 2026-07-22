@@ -1,13 +1,17 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  EntityRouteProvider,
+  type EntityRouteContextValue,
+} from '@/contexts/EntityRouteContext';
 import { db } from '@/lib/firebase';
 import {
   getEntityRouteSegment,
-  resolveEntityFromSegment,
+  resolveEntityFromSegmentWithIndex,
   type EntitySlugRecord,
 } from '@/lib/entitySlug';
 
@@ -20,7 +24,18 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
   const { currentUser, loading, setActiveEntity } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
   const [ready, setReady] = useState(false);
+  const [routeContext, setRouteContext] = useState<EntityRouteContextValue | null>(null);
+
+  useEffect(() => {
+    pathnameRef.current = pathname;
+  }, [pathname]);
+
+  useEffect(() => {
+    setReady(false);
+    setRouteContext(null);
+  }, [segment]);
 
   useEffect(() => {
     if (loading) return;
@@ -33,32 +48,51 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
       return;
     }
 
-    setReady(false);
+    let cancelled = false;
     const unsub = onSnapshot(
       collection(db, `users/${currentUser.uid}/entities`),
       (snapshot) => {
+        if (cancelled) return;
+
         const entities: EntitySlugRecord[] = snapshot.docs.map((d) => ({
           id: d.id,
           name: d.data().name,
           slug: d.data().slug,
         }));
 
-        const resolved = resolveEntityFromSegment(entities, segment);
-        if (!resolved) {
-          router.replace('/nucleo');
-          return;
-        }
+        void (async () => {
+          const resolved = await resolveEntityFromSegmentWithIndex(
+            currentUser.uid,
+            entities,
+            segment
+          );
 
-        const routeSegment = getEntityRouteSegment(resolved);
-        setActiveEntity(resolved.id, routeSegment);
+          if (cancelled) return;
 
-        if (segment !== routeSegment && pathname?.startsWith(`/nucleo/${segment}`)) {
-          const rest = pathname.slice(`/nucleo/${segment}`.length);
-          router.replace(`/nucleo/${routeSegment}${rest}`);
-          return;
-        }
+          if (!resolved) {
+            router.replace('/nucleo');
+            return;
+          }
 
-        setReady(true);
+          const routeSegment = getEntityRouteSegment(resolved);
+          const contextValue: EntityRouteContextValue = {
+            firestoreId: resolved.id,
+            routeSegment,
+            entityName: resolved.name,
+          };
+
+          setActiveEntity(resolved.id, routeSegment);
+          setRouteContext(contextValue);
+
+          const currentPath = pathnameRef.current;
+          if (segment !== routeSegment && currentPath?.startsWith(`/nucleo/${segment}`)) {
+            const rest = currentPath.slice(`/nucleo/${segment}`.length);
+            router.replace(`/nucleo/${routeSegment}${rest}`);
+            return;
+          }
+
+          setReady(true);
+        })();
       },
       (error) => {
         console.error('[EntityRouteResolver]', error);
@@ -66,10 +100,13 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
       }
     );
 
-    return () => unsub();
-  }, [currentUser, loading, segment, pathname, router, setActiveEntity]);
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, [currentUser, loading, segment, router, setActiveEntity]);
 
-  if (!ready) {
+  if (!ready || !routeContext) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center text-white/40 text-sm tracking-widest uppercase">
         Cargando entidad...
@@ -77,5 +114,9 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
     );
   }
 
-  return <>{children}</>;
+  return (
+    <EntityRouteProvider value={routeContext}>
+      {children}
+    </EntityRouteProvider>
+  );
 }

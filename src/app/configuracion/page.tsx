@@ -233,7 +233,7 @@ const CONFIG_TAB_IDS = new Set(
 function ConfigurationPageContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const { currentUser, loading: authLoading, activeEntity, setActiveEntity } = useAuth();
+    const { currentUser, loading: authLoading, activeEntity, activeEntityRoute, setActiveEntity } = useAuth();
     const [activeTab, setActiveTab] = useState('billing');
     const [searchQuery, setSearchQuery] = useState('');
     const [entities, setEntities] = useState<any[]>([]);
@@ -420,7 +420,7 @@ function ConfigurationPageContent() {
 
                 <div className="px-4 pb-4">
                     <button
-                        onClick={() => router.push(`/nucleo/${activeEntity || 'gateway'}`)}
+                        onClick={() => router.push(`/nucleo/${activeEntityRoute || activeEntity || 'gateway'}`)}
                         className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-xl transition-all font-medium"
                     >
                         <ArrowLeft className="w-4 h-4" />

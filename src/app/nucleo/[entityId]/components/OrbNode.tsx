@@ -27,8 +27,8 @@ const shadowColors: Record<string, string> = {
 };
 
 export const OrbNode = ({ href, onClick, icon: Icon, title, subtitle, color }: OrbNodeProps) => {
-    const { activeEntity } = useAuth();
-    const finalHref = href?.replace('{entity}', activeEntity || '');
+    const { activeEntityRoute } = useAuth();
+    const finalHref = href?.replace('{entity}', activeEntityRoute || '');
 
     const InnerContent = (
         <>

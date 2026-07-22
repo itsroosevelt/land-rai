@@ -30,7 +30,7 @@ import { resolveCardChannel } from '@/lib/omnichannel/resolveCardChannel';
 import { getContactHeaderNames } from '@/lib/omnichannel/contactHeaderInfo';
 import { isInboxGroup } from '@/lib/kanban/botNodeGroups';
 export default function KambanBoard({ boardMode = 'all' }: { boardMode?: 'bot' | 'all' }) {
-    const { currentUser, activeEntity } = useAuth();
+    const { currentUser, activeEntity, activeEntityRoute } = useAuth();
     const getTenantPath = () => {
         if (!currentUser?.uid || !activeEntity) return '';
         return `users/${currentUser.uid}/entities/${activeEntity}`;
@@ -299,7 +299,7 @@ export default function KambanBoard({ boardMode = 'all' }: { boardMode?: 'bot' |
         isSidebarCollapsed={isCollapsed}
         toggleSidebar={toggleSidebar}
         onNewChat={() => setIsGlobalSelectContactOpen(true)}
-        onSettings={() => router.push(`/nucleo/${activeEntity}/cto/integrations`)}
+        onSettings={() => router.push(`/nucleo/${activeEntityRoute || activeEntity}/cto/integrations`)}
         onSyncBotGroups={handleSyncBotGroups}
         isSyncingBotGroups={isSyncingBotGroups}
         onExportAll={handleExportAllVCF}

@@ -39,6 +39,10 @@ import { db } from '@/lib/firebase';
 import { toast } from 'sonner';
 import { isBotActiveValue, toggleBotForNumber } from './utils';
 import {
+  phoneDigitsFromConnection,
+  syncBotStartPhoneInFirestore,
+} from '@/lib/chatbot/syncStartNodePhone';
+import {
   subscribeSlotConnections,
   saveSlotConnection,
   disconnectSlot,
@@ -82,8 +86,8 @@ const formatPhone = (conn: WhatsAppNumberConnection) =>
 
 const ChatbotsPage = () => {
   const router = useRouter();
-  const { currentUser, activeEntity } = useAuth();
-  const { routeSegment } = useEntityRoute();
+  const { currentUser } = useAuth();
+  const { firestoreId, routeSegment, entityName, tenantPath } = useEntityRoute();
   const [bots, setBots] = useState<Bot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [updatingBots, setUpdatingBots] = useState<string[]>([]);
@@ -96,13 +100,9 @@ const ChatbotsPage = () => {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createSlot, setCreateSlot] = useState<NumberSlot>('general');
 
-  const tenantPath = currentUser?.uid && activeEntity
-    ? `users/${currentUser.uid}/entities/${activeEntity}`
-    : '';
-
   useEffect(() => {
-    if (!currentUser || !activeEntity) return;
-    const botsCollection = collection(db, 'users', currentUser.uid, 'entities', activeEntity, 'chatbots');
+    if (!currentUser || !firestoreId) return;
+    const botsCollection = collection(db, 'users', currentUser.uid, 'entities', firestoreId, 'chatbots');
     const unsubscribe = onSnapshot(
       botsCollection,
       (querySnapshot) => {
@@ -121,7 +121,7 @@ const ChatbotsPage = () => {
       }
     );
     return () => unsubscribe();
-  }, [currentUser, activeEntity]);
+  }, [currentUser, firestoreId]);
 
   useEffect(() => {
     if (!tenantPath) return;
@@ -153,7 +153,7 @@ const ChatbotsPage = () => {
   };
 
   const handleCreateNewBot = async () => {
-    if (!currentUser || !activeEntity) return;
+    if (!currentUser || !firestoreId) return;
     if (!connections[createSlot]?.connected) {
       toast.error('Conecta ese número de WhatsApp antes de crear un bot.');
       setConnectSlot(createSlot);
@@ -162,14 +162,14 @@ const ChatbotsPage = () => {
     setShowCreateDialog(false);
     setIsLoading(true);
     try {
-      const counterRef = doc(db, 'users', currentUser.uid, 'entities', activeEntity, 'system_metadata', 'chatbot_counter');
+      const counterRef = doc(db, 'users', currentUser.uid, 'entities', firestoreId, 'system_metadata', 'chatbot_counter');
       const newBotId = await runTransaction(db, async (transaction) => {
         const counterDoc = await transaction.get(counterRef);
         const currentCount = counterDoc.exists() ? (counterDoc.data().count || 0) : 0;
         const nextCount = currentCount + 1;
         transaction.set(counterRef, { count: nextCount }, { merge: true });
         const formattedId = String(nextCount).padStart(8, '0');
-        const botRef = doc(db, 'users', currentUser.uid, 'entities', activeEntity, 'chatbots', formattedId);
+        const botRef = doc(db, 'users', currentUser.uid, 'entities', firestoreId, 'chatbots', formattedId);
         transaction.set(botRef, {
           id: formattedId,
           name: 'New WhatsApp Bot',
@@ -195,7 +195,7 @@ const ChatbotsPage = () => {
   };
 
   const handleToggleBotStatus = async (bot: Bot) => {
-    if (!currentUser || !activeEntity) return;
+    if (!currentUser || !firestoreId) return;
     const slot = botSlot(bot);
     if (!connections[slot].connected) {
       toast.error('Conecta un número de WhatsApp a este bot antes de activarlo.');
@@ -208,7 +208,7 @@ const ChatbotsPage = () => {
       await toggleBotForNumber({
         db,
         userId: currentUser.uid,
-        entityId: activeEntity,
+        entityId: firestoreId,
         botId: bot.id,
         numberId: slot,
         activate: newStatus,
@@ -223,7 +223,7 @@ const ChatbotsPage = () => {
   };
 
   const handleChangeBotNumber = async (bot: Bot, newSlot: NumberSlot) => {
-    if (!currentUser || !activeEntity) return;
+    if (!currentUser || !firestoreId) return;
     if (botSlot(bot) === newSlot) return;
     if (!connections[newSlot].connected) {
       toast.error('Ese número no está conectado. Configúralo primero.');
@@ -232,12 +232,12 @@ const ChatbotsPage = () => {
     }
     setUpdatingBots((prev) => [...prev, bot.id]);
     try {
-      const botRef = doc(db, 'users', currentUser.uid, 'entities', activeEntity, 'chatbots', bot.id);
+      const botRef = doc(db, 'users', currentUser.uid, 'entities', firestoreId, 'chatbots', bot.id);
       if (bot.isActive) {
         await toggleBotForNumber({
           db,
           userId: currentUser.uid,
-          entityId: activeEntity,
+          entityId: firestoreId,
           botId: bot.id,
           numberId: newSlot,
           activate: true,
@@ -245,6 +245,8 @@ const ChatbotsPage = () => {
       } else {
         await updateDoc(botRef, { numberId: newSlot, updatedAt: new Date() });
       }
+      const digits = phoneDigitsFromConnection(connections[newSlot]);
+      await syncBotStartPhoneInFirestore(botRef, digits);
       toast.success(`Bot vinculado a ${slotLabel(newSlot)}.`);
     } catch (error) {
       console.error('Error changing bot number:', error);
@@ -257,7 +259,7 @@ const ChatbotsPage = () => {
   const confirmDelete = async () => {
     if (!botToDelete || deleteConfirmation !== 'delete') return;
     try {
-      await deleteDoc(doc(db, 'users', currentUser!.uid, 'entities', activeEntity!, 'chatbots', botToDelete.id));
+      await deleteDoc(doc(db, 'users', currentUser!.uid, 'entities', firestoreId!, 'chatbots', botToDelete.id));
       toast.success(`Bot "${botToDelete.name}" eliminado.`);
       setBotToDelete(null);
     } catch (error) {
@@ -284,7 +286,15 @@ const ChatbotsPage = () => {
                 WhatsApp Bots
               </h1>
               <p className="text-xs text-neutral-500 mt-0.5">
-                Gestiona tus flujos y vincúlalos al número de WhatsApp que prefieras.
+                {entityName ? (
+                  <>
+                    <span className="text-white/60">{entityName}</span>
+                    <span className="mx-1.5 text-white/20">·</span>
+                    <span className="font-mono text-white/40">/nucleo/{routeSegment}</span>
+                  </>
+                ) : (
+                  <>Gestiona tus flujos en <span className="font-mono">/nucleo/{routeSegment}</span></>
+                )}
               </p>
             </div>
             <button

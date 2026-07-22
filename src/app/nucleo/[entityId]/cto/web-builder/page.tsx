@@ -35,7 +35,7 @@ import { BrowserAddressBar } from "./components/BrowserAddressBar";
 import { Suspense } from "react";
 
 function WebBuilderContent() {
-    const { currentUser, activeEntity } = useAuth();
+    const { currentUser, activeEntity, activeEntityRoute } = useAuth();
     // --- Global UI State ---
     const [activeTool, setActiveTool] = useState("select");
     const [viewMode, setViewMode] = useState<"desktop" | "tablet" | "mobile">("desktop");
@@ -164,12 +164,12 @@ function WebBuilderContent() {
         // Clear project from memory and localStorage (via switch to null)
         handleSwitchProject('');
         // Force refresh to the dashboard URL to ensure a clean state
-        if (activeEntity) {
-            window.location.href = `/nucleo/${activeEntity}/cto/web-builder`;
+        if (activeEntityRoute || activeEntity) {
+            window.location.href = `/nucleo/${activeEntityRoute || activeEntity}/cto/web-builder`;
         } else {
             router.push('/');
         }
-    }, [handleSwitchProject, activeEntity, router]);
+    }, [handleSwitchProject, activeEntity, activeEntityRoute, router]);
 
     // Derived states
     const deploymentUrl = activeProject?.deploymentUrl || "";

@@ -102,6 +102,8 @@ interface ChatbotCanvasProps {
     setEdges: React.Dispatch<React.SetStateAction<Edge[]>>;
     targetPlatforms?: string[];
     onSelectedNodeChange?: (node: Node | null) => void;
+    linkedPhoneDigits?: string;
+    linkedSlotLabel?: string;
 }
 
 interface SidebarNodeProps {
@@ -189,7 +191,7 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => 
 };
 
 const ChatbotCanvas = forwardRef<ChatbotCanvasRef, ChatbotCanvasProps>(
-    ({ nodes, edges, onNodesChange, onEdgesChange, onConnect, setNodes, setEdges, targetPlatforms, onSelectedNodeChange }, ref) => {
+    ({ nodes, edges, onNodesChange, onEdgesChange, onConnect, setNodes, setEdges, targetPlatforms, onSelectedNodeChange, linkedPhoneDigits, linkedSlotLabel }, ref) => {
 
         const [selectedNode, setSelectedNode] = useState<Node | null>(null);
         const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
@@ -460,6 +462,8 @@ const ChatbotCanvas = forwardRef<ChatbotCanvasRef, ChatbotCanvasProps>(
                         deleteNode={deleteNode}
                         isOpen={isRightSidebarOpen}
                         onToggle={() => setRightSidebarOpen((o) => !o)}
+                        linkedPhoneDigits={linkedPhoneDigits}
+                        linkedSlotLabel={linkedSlotLabel}
                     />
                 </div>
             </div>

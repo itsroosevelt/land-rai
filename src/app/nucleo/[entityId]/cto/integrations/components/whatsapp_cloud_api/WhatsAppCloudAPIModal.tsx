@@ -4,7 +4,7 @@ import { X, AlertCircle, CheckCircle2, ChevronLeft, Settings, Copy, ShieldCheck,
 import { toast } from 'sonner';
 import { Integration } from '../../config';
 import { useAuth } from '@/contexts/AuthContext';
-import { useParams } from 'next/navigation';
+import { useEntityRoute } from '@/hooks/useEntityRoute';
 import { db } from '@/lib/firebase';
 import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
 import { getWhatsAppIntegrationHealth } from '@/lib/omnichannel/whatsappIntegrationStatus';
@@ -26,8 +26,7 @@ interface Props {
 
 export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Props) {
     const { currentUser } = useAuth();
-    const params = useParams();
-    const activeEntity = params?.entityId as string;
+    const { firestoreId: activeEntity, routeSegment } = useEntityRoute();
 
     const [step, setStep] = useState<number>(1);
     const [isEditing, setIsEditing] = useState(false);

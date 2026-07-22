@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Video, UserPlus, Monitor, Clock, Shield, Sparkles, MessageSquare, Bot, Settings, Trash2, Plus, Power, PowerOff, Edit3, Globe, Calendar, BarChart3 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
-import { useParams } from "next/navigation";
+import { useEntityRoute } from "@/hooks/useEntityRoute";
 import { db } from "@/lib/firebase";
 import { collection, onSnapshot, query, doc, setDoc, deleteDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { toast } from "sonner";
@@ -148,8 +148,7 @@ function CreateAgentModal({ isOpen, onClose, onSave }: { isOpen: boolean; onClos
 
 export default function MeetAgentsPage() {
     const { currentUser } = useAuth();
-    const params = useParams();
-    const entityId = params?.entityId as string;
+    const { firestoreId: entityId } = useEntityRoute();
 
     const [agents, setAgents] = useState<MeetAgent[]>(DEMO_AGENTS);
     const [selectedAgent, setSelectedAgent] = useState<MeetAgent | null>(null);

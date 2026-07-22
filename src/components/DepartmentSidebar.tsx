@@ -32,7 +32,7 @@ interface DepartmentSidebarProps {
 export function DepartmentSidebar({ items, title, colorClass = "bg-blue-600" }: DepartmentSidebarProps) {
     const { isCollapsed, toggleSidebar } = useSidebar();
     const pathname = usePathname();
-    const { activeEntity } = useAuth();
+    const { activeEntityRoute } = useAuth();
 
     return (
         <TooltipProvider delayDuration={0}>
@@ -52,7 +52,7 @@ export function DepartmentSidebar({ items, title, colorClass = "bg-blue-600" }: 
                 <nav className="flex-grow p-2 flex flex-col overflow-y-auto custom-scrollbar">
                     <ul className="space-y-1 flex-grow">
                         {items.map((item) => {
-                            const actualHref = item.href.replace('{entity}', activeEntity || '');
+                            const actualHref = item.href.replace('{entity}', activeEntityRoute || '');
                             const isActive = pathname.startsWith(actualHref);
                             const linkContent = (
                                 <div className={`flex items-center p-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isActive
@@ -88,7 +88,7 @@ export function DepartmentSidebar({ items, title, colorClass = "bg-blue-600" }: 
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <Link
-                                    href={`/nucleo/${activeEntity || ''}`}
+                                    href={`/nucleo/${activeEntityRoute || ''}`}
                                     className={`group flex items-center justify-center ${isCollapsed ? 'p-2' : 'px-4 py-2'} mx-auto rounded-full bg-neutral-900 border border-neutral-800 hover:border-neutral-700 hover:bg-neutral-800 text-neutral-400 hover:text-white transition-all duration-200`}
                                 >
                                     <ChevronLeft className={`w-4 h-4 ${isCollapsed ? '' : 'mr-2 group-hover:-translate-x-0.5 transition-transform'}`} />

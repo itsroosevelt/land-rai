@@ -57,16 +57,62 @@ export function resolveEntityFromSegment(
 ): EntitySlugRecord | null {
   const normalized = segment.trim();
   if (!normalized) return null;
-  const byId = entities.find((e) => e.id === normalized);
-  if (byId) return byId;
-  const bySlug = entities.find((e) => e.slug?.trim().toLowerCase() === normalized.toLowerCase());
-  return bySlug || null;
+
+  const realEntities = filterRealEntities(entities);
+  const lower = normalized.toLowerCase();
+
+  // URLs use slugs — match slug before doc id so ghost docs (id === slug) never win.
+  const bySlug = realEntities.find((e) => e.slug?.trim().toLowerCase() === lower);
+  if (bySlug) return bySlug;
+
+  const byId = realEntities.find((e) => e.id === normalized);
+  return byId || null;
+}
+
+/** Resolve segment via entity list + entity_slugs index (for tenants without slug on doc yet). */
+export async function resolveEntityFromSegmentWithIndex(
+  userId: string,
+  entities: EntitySlugRecord[],
+  segment: string
+): Promise<EntitySlugRecord | null> {
+  const fromList = resolveEntityFromSegment(entities, segment);
+  if (fromList) return fromList;
+
+  const normalized = segment.trim().toLowerCase();
+  if (!normalized) return null;
+
+  const slugSnap = await getDoc(doc(db, `users/${userId}/entity_slugs/${normalized}`));
+  if (!slugSnap.exists()) return null;
+
+  const entityId = slugSnap.data()?.entityId as string | undefined;
+  if (!entityId) return null;
+
+  const realEntities = filterRealEntities(entities);
+  return realEntities.find((e) => e.id === entityId) || null;
 }
 
 export function buildEntityPath(routeSegment: string, suffix = ''): string {
   const base = `/nucleo/${routeSegment}`;
   if (!suffix) return base;
   return suffix.startsWith('/') ? `${base}${suffix}` : `${base}/${suffix}`;
+}
+
+/** Duplicates created when a route slug was mistaken for a Firestore entity id. */
+export function findGhostEntities(entities: EntitySlugRecord[]): EntitySlugRecord[] {
+  const slugToEntityId = new Map<string, string>();
+  for (const entity of entities) {
+    const slug = entity.slug?.trim().toLowerCase();
+    if (slug) slugToEntityId.set(slug, entity.id);
+  }
+  return entities.filter((entity) => {
+    const realOwnerId = slugToEntityId.get(entity.id.toLowerCase());
+    return realOwnerId !== undefined && realOwnerId !== entity.id;
+  });
+}
+
+export function filterRealEntities<T extends EntitySlugRecord>(entities: T[]): T[] {
+  const ghostIds = new Set(findGhostEntities(entities).map((e) => e.id));
+  return entities.filter((e) => !ghostIds.has(e.id));
 }
 
 export async function isEntitySlugAvailable(

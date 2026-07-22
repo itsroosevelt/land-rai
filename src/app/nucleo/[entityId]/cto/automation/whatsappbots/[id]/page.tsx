@@ -5,6 +5,18 @@ import { useParams, useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc, onSnapshot, collection } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEntityRoute } from '@/hooks/useEntityRoute';
+import {
+  subscribeSlotConnections,
+  SLOTS,
+  type NumberSlot,
+  type SlotConnections,
+} from '@/lib/whatsapp/numbers';
+import {
+  phoneDigitsFromConnection,
+  patchStartNodePhone,
+  flowNeedsStartPhoneSync,
+} from '@/lib/chatbot/syncStartNodePhone';
 import {
   addEdge,
   applyNodeChanges,
@@ -157,12 +169,37 @@ function FlowPage() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [isLoading, setIsLoading] = useState(true);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [botNumberId, setBotNumberId] = useState<NumberSlot>('general');
+  const [connections, setConnections] = useState<SlotConnections | null>(null);
     const params = useParams();
     const router = useRouter();
     const { currentUser, activeEntity } = useAuth();
+    const { routeSegment } = useEntityRoute();
     const chatbotId = params.id as string;
     const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
     const importFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const tenantPath = currentUser?.uid && activeEntity
+    ? `users/${currentUser.uid}/entities/${activeEntity}`
+    : '';
+
+  useEffect(() => {
+    if (!tenantPath) return;
+    return subscribeSlotConnections(tenantPath, setConnections);
+  }, [tenantPath]);
+
+  const linkedSlot = botNumberId;
+  const linkedConn = connections?.[linkedSlot];
+  const linkedPhoneDigits = phoneDigitsFromConnection(linkedConn);
+  const linkedSlotLabel = SLOTS.find((s) => s.id === linkedSlot)?.label;
+
+  useEffect(() => {
+    if (!linkedPhoneDigits) return;
+    setNodes((prev) => {
+      if (prev.length === 0 || !flowNeedsStartPhoneSync(prev, linkedPhoneDigits)) return prev;
+      return patchStartNodePhone(prev, linkedPhoneDigits);
+    });
+  }, [linkedPhoneDigits, setNodes]);
 
   const saveData = useCallback(async (currentNodes: Node[], currentEdges: Edge[], name: string, extraFields?: Record<string, unknown>) => {
     if (!chatbotId || !currentUser || !activeEntity) return;
@@ -218,6 +255,8 @@ function FlowPage() {
         setChatbotName(data.name || 'Mi Chatbot');
         setTargetPlatforms(normalizeTargetPlatforms(data.targetPlatforms));
         setHumanizeTone(!!data.humanizeTone);
+        const slot = (data.numberId || 'general') as NumberSlot;
+        setBotNumberId(slot === 'support' || slot === 'broadcast' ? slot : 'general');
 
         const flowData = data.flow || {};
         const savedNodes = flowData.nodes || [];
@@ -488,8 +527,8 @@ function FlowPage() {
                   variant="ghost"
                   size="icon"
                   onClick={() => {
-                    if (activeEntity) {
-                      router.push(`/nucleo/${activeEntity}/cto/automation/whatsappbots`);
+                    if (routeSegment) {
+                      router.push(`/nucleo/${routeSegment}/cto/automation/whatsappbots`);
                     }
                   }}
                   className={TOOLBAR_ICON_BTN}
@@ -675,6 +714,8 @@ function FlowPage() {
           setEdges={setEdges}
           targetPlatforms={targetPlatforms}
           onSelectedNodeChange={handleSelectedNodeChange}
+          linkedPhoneDigits={linkedPhoneDigits}
+          linkedSlotLabel={linkedSlotLabel}
         />
         {currentUser && activeEntity && (
           <FlowGeneratorBar
