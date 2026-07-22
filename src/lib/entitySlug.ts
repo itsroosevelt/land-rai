@@ -69,6 +69,24 @@ export function buildEntityPath(routeSegment: string, suffix = ''): string {
   return suffix.startsWith('/') ? `${base}${suffix}` : `${base}/${suffix}`;
 }
 
+/** Duplicates created when a route slug was mistaken for a Firestore entity id. */
+export function findGhostEntities(entities: EntitySlugRecord[]): EntitySlugRecord[] {
+  const slugToEntityId = new Map<string, string>();
+  for (const entity of entities) {
+    const slug = entity.slug?.trim().toLowerCase();
+    if (slug) slugToEntityId.set(slug, entity.id);
+  }
+  return entities.filter((entity) => {
+    const realOwnerId = slugToEntityId.get(entity.id.toLowerCase());
+    return realOwnerId !== undefined && realOwnerId !== entity.id;
+  });
+}
+
+export function filterRealEntities<T extends EntitySlugRecord>(entities: T[]): T[] {
+  const ghostIds = new Set(findGhostEntities(entities).map((e) => e.id));
+  return entities.filter((e) => !ghostIds.has(e.id));
+}
+
 export async function isEntitySlugAvailable(
   userId: string,
   slug: string,

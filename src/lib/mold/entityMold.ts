@@ -150,7 +150,13 @@ export async function ensureEntityMoldUpToDate(
 ): Promise<void> {
     const entityRef = doc(db, tenantPath(userId, entityId));
     const snap = await getDoc(entityRef);
-    const currentVersion = snap.data()?.moldVersion ?? 0;
+    if (!snap.exists()) return;
+
+    const data = snap.data() || {};
+    // Never provision mold on a phantom doc (e.g. slug used as path segment by mistake).
+    if (!data.initialized && !data.name) return;
+
+    const currentVersion = data.moldVersion ?? 0;
 
     if (currentVersion >= ENTITY_MOLD_VERSION) return;
 
