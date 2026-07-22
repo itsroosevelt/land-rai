@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import { MANUAL_KANBAN_COLUMNS } from './mold/manualKanbanColumns';
 
 /** Mantener alineado con src/lib/mold/entityMold.ts */
-export const ENTITY_MOLD_VERSION = 13;
+export const ENTITY_MOLD_VERSION = 14;
 
 const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
@@ -24,6 +24,8 @@ const ENTITY_MOLD_FEATURES = {
     ghostEntityGuard: true,
     entityRouteContext: true,
     whatsappBotsRoute: true,
+    whatsappBotPhoneBinding: true,
+    multiNumberBotIsolation: true,
 } as const;
 
 const MOLD_INTEGRATIONS_INIT = {

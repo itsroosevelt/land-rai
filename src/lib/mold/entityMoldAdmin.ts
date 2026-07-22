@@ -9,6 +9,7 @@ import {
     STARTER_CHATBOT_ID,
 } from './starterChatbot';
 import { ensureWhatsAppSlotNormalizationAdmin } from './whatsappSlotNormalizationAdmin';
+import { ensureWhatsAppBotPhoneBindingAdmin } from './whatsappBotPhoneBindingAdmin';
 import { ensureEntitySlugNormalizationAdmin } from './entitySlugNormalizationAdmin';
 import { isSlugOwnedByOtherEntity } from './entityRouteContract';
 import { MOLD_INTEGRATIONS_INIT } from './integrationsCatalog';
@@ -107,6 +108,7 @@ export async function provisionEntityMoldAdmin(
     await ensureReceptionColumnAdmin(db, path);
     await ensureStarterChatbotAdmin(db, path);
     await ensureWhatsAppSlotNormalizationAdmin(db, path);
+    await ensureWhatsAppBotPhoneBindingAdmin(db, path);
     await ensureEntitySlugNormalizationAdmin(db, userId, entityId);
     await ensureIntegrationsInitAdmin(db, path);
 

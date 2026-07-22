@@ -11,22 +11,23 @@ import { toast } from 'sonner';
 interface StartSettingsProps {
   node: Node;
   updateNodeConfig: (nodeId: string, data: object) => void;
-  /** Phone digits from the bot's linked WhatsApp slot (auto-sync). */
   linkedPhoneDigits?: string;
-  linkedSlotLabel?: string;
+  linkedPhoneLabel?: string;
 }
 
 export const StartSettings: React.FC<StartSettingsProps> = ({
   node,
   updateNodeConfig,
   linkedPhoneDigits,
-  linkedSlotLabel,
+  linkedPhoneLabel,
 }) => {
   const [triggerPhrase, setTriggerPhrase] = useState(node.data.triggerPhrase || 'Hola, quiero más información');
+  const [welcomeMessage, setWelcomeMessage] = useState(
+    node.data.welcomeMessage || node.data.greeting || '¡Hola! ¿En qué puedo ayudarte?'
+  );
   const [phoneNumber, setPhoneNumber] = useState(node.data.phoneNumber || linkedPhoneDigits || '');
   const [copied, setCopied] = useState(false);
 
-  // Sync phone when bot is linked to a different WhatsApp number slot.
   useEffect(() => {
     if (!linkedPhoneDigits) return;
     const current = String(node.data.phoneNumber || '').replace(/\D/g, '');
@@ -50,6 +51,12 @@ export const StartSettings: React.FC<StartSettingsProps> = ({
     updateNodeConfig(node.id, { ...node.data, triggerPhrase: newPhrase });
   };
 
+  const handleWelcomeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newWelcome = e.target.value;
+    setWelcomeMessage(newWelcome);
+    updateNodeConfig(node.id, { ...node.data, welcomeMessage: newWelcome });
+  };
+
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newPhone = e.target.value.replace(/\D/g, '');
     setPhoneNumber(newPhone);
@@ -58,58 +65,40 @@ export const StartSettings: React.FC<StartSettingsProps> = ({
 
   const copyToClipboard = async () => {
     if (!waLink) return;
-
     try {
       await navigator.clipboard.writeText(waLink);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
       toast.success('Enlace copiado al portapapeles');
-    } catch (err) {
-      console.warn('Falló clipboard.writeText, usando fallback:', err);
-      
-      try {
-        const textArea = document.createElement("textarea");
-        textArea.value = waLink;
-        textArea.style.position = "fixed";
-        textArea.style.left = "0";
-        textArea.style.top = "0";
-        textArea.style.opacity = "0";
-        textArea.style.width = "1px";
-        textArea.style.height = "1px";
-        textArea.style.padding = "0";
-        
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        
-        const successful = document.execCommand('copy');
-        document.body.removeChild(textArea);
-        
-        if (successful) {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-          toast.success('Enlace copiado al portapapeles');
-        } else {
-            throw new Error('execCommand devolvió false');
-        }
-      } catch (fallbackErr) {
-        console.error('Error al copiar:', fallbackErr);
-        toast.error('No se pudo copiar automáticamente. Por favor selecciona y copia el texto manualmente.');
-      }
+    } catch {
+      toast.error('No se pudo copiar el enlace.');
     }
   };
 
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label>Frase Activadora (Trigger)</Label>
+        <Label>Saludo inicial del bot</Label>
         <p className="text-xs text-neutral-400">
-          Cuando un usuario envíe esta frase exacta, el bot iniciará este flujo.
+          Mensaje que envía el bot al iniciar. Cualquier mensaje del usuario (incluso &quot;.&quot;) activa el flujo.
         </p>
-        <Input 
-          value={triggerPhrase} 
-          onChange={handlePhraseChange} 
-          placeholder="Ej: Deseo mayor información" 
+        <Input
+          value={welcomeMessage}
+          onChange={handleWelcomeChange}
+          placeholder="Ej: ¡Hola! Bienvenido a UDreamms"
+          className="bg-neutral-900 border-neutral-700"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Texto del enlace wa.me (opcional)</Label>
+        <p className="text-xs text-neutral-400">
+          Solo prellena el link de WhatsApp. El usuario no necesita escribir esta frase exacta.
+        </p>
+        <Input
+          value={triggerPhrase}
+          onChange={handlePhraseChange}
+          placeholder="Ej: Deseo mayor información"
           className="bg-neutral-900 border-neutral-700"
         />
       </div>
@@ -117,14 +106,14 @@ export const StartSettings: React.FC<StartSettingsProps> = ({
       <div className="space-y-2">
         <Label>Número de WhatsApp del bot</Label>
         <p className="text-xs text-neutral-400">
-          {linkedSlotLabel
-            ? `Vinculado al slot ${linkedSlotLabel}. Se actualiza al cambiar el número en la lista de bots.`
+          {linkedPhoneLabel
+            ? `Vinculado a ${linkedPhoneLabel}. Se actualiza al cambiar el número en la lista de bots.`
             : 'Número E.164 sin símbolos (solo dígitos).'}
         </p>
-        <Input 
-          value={phoneNumber} 
-          onChange={handlePhoneChange} 
-          placeholder="Ej: 13858882799" 
+        <Input
+          value={phoneNumber}
+          onChange={handlePhoneChange}
+          placeholder="Ej: 13858882799"
           type="tel"
           className="bg-neutral-900 border-neutral-700 font-mono"
         />
@@ -143,23 +132,23 @@ export const StartSettings: React.FC<StartSettingsProps> = ({
               {waLink}
             </div>
             <div className="flex gap-2 mt-2">
-                <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="flex-1 bg-neutral-800 border-neutral-700 hover:bg-neutral-700 text-white"
-                    onClick={copyToClipboard}
-                >
-                    {copied ? <Check className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
-                    {copied ? 'Copiado' : 'Copiar'}
-                </Button>
-                 <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="text-neutral-400 hover:text-white"
-                    onClick={() => window.open(waLink, '_blank')}
-                >
-                    <ExternalLink className="h-4 w-4" />
-                </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 bg-neutral-800 border-neutral-700 hover:bg-neutral-700 text-white"
+                onClick={copyToClipboard}
+              >
+                {copied ? <Check className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
+                {copied ? 'Copiado' : 'Copiar'}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-neutral-400 hover:text-white"
+                onClick={() => window.open(waLink, '_blank')}
+              >
+                <ExternalLink className="h-4 w-4" />
+              </Button>
             </div>
           </CardContent>
         </Card>

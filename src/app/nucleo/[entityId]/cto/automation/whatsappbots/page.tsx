@@ -37,11 +37,18 @@ import {
 } from '@/components/ui/select';
 import { db } from '@/lib/firebase';
 import { toast } from 'sonner';
-import { isBotActiveValue, toggleBotForNumber } from './utils';
+import { isBotActiveValue, toggleBotForPhone } from './utils';
 import {
   phoneDigitsFromConnection,
   syncBotStartPhoneInFirestore,
 } from '@/lib/chatbot/syncStartNodePhone';
+import {
+  listConnectedPhones,
+  resolveBotPhoneNumberId,
+  formatConnectedPhoneLabel,
+  findConnectedPhone,
+  type ConnectedPhone,
+} from '@/lib/whatsapp/botPhoneBinding';
 import {
   subscribeSlotConnections,
   saveSlotConnection,
@@ -56,10 +63,11 @@ interface Bot {
   id: string;
   name: string;
   isActive: boolean;
+  phoneNumberId?: string;
   numberId?: string;
 }
 
-type SlotFilter = 'all' | NumberSlot;
+type PhoneFilter = 'all' | string;
 
 const WhatsAppIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" className={className} fill="currentColor">
@@ -67,22 +75,11 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-const botSlot = (bot: Bot): NumberSlot => {
-  const v = (bot.numberId || '').trim();
-  if (v === 'support' || v === 'broadcast') return v;
-  return 'general';
-};
-
 const emptyConnections = (): SlotConnections => ({
   general: { connected: false },
   support: { connected: false },
   broadcast: { connected: false },
 });
-
-const slotLabel = (slot: NumberSlot) => SLOTS.find((s) => s.id === slot)?.label ?? slot;
-
-const formatPhone = (conn: WhatsAppNumberConnection) =>
-  conn.displayPhoneNumber || conn.phoneNumberId || 'Sin número';
 
 const ChatbotsPage = () => {
   const router = useRouter();
@@ -96,9 +93,9 @@ const ChatbotsPage = () => {
 
   const [connections, setConnections] = useState<SlotConnections>(emptyConnections());
   const [connectSlot, setConnectSlot] = useState<NumberSlot | null>(null);
-  const [slotFilter, setSlotFilter] = useState<SlotFilter>('all');
+  const [phoneFilter, setPhoneFilter] = useState<PhoneFilter>('all');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [createSlot, setCreateSlot] = useState<NumberSlot>('general');
+  const [createPhoneId, setCreatePhoneId] = useState('');
 
   useEffect(() => {
     if (!currentUser || !firestoreId) return;
@@ -110,6 +107,7 @@ const ChatbotsPage = () => {
           id: d.id,
           name: d.data().name || 'Unnamed Bot',
           isActive: isBotActiveValue(d.data().isActive),
+          phoneNumberId: d.data().phoneNumberId || undefined,
           numberId: d.data().numberId || undefined,
         } as Bot)));
         setIsLoading(false);
@@ -129,34 +127,80 @@ const ChatbotsPage = () => {
     return () => unsub();
   }, [tenantPath]);
 
-  const connectedSlots = useMemo(
-    () => SLOTS.filter((s) => connections[s.id].connected),
+  const connectedPhones = useMemo(
+    () => listConnectedPhones(connections),
     [connections]
   );
 
-  const firstConnectedSlot = connectedSlots[0]?.id ?? 'general';
+  const firstConnectedPhoneId = connectedPhones[0]?.phoneNumberId ?? '';
 
   const filteredBots = useMemo(() => {
-    if (slotFilter === 'all') return bots;
-    return bots.filter((b) => botSlot(b) === slotFilter);
-  }, [bots, slotFilter]);
+    if (phoneFilter === 'all') return bots;
+    return bots.filter(
+      (b) => resolveBotPhoneNumberId(b, connections) === phoneFilter
+    );
+  }, [bots, phoneFilter, connections]);
 
   const stats = useMemo(() => ({
     total: bots.length,
     active: bots.filter((b) => b.isActive).length,
-    connectedNumbers: connectedSlots.length,
-  }), [bots, connectedSlots]);
+    connectedNumbers: connectedPhones.length,
+  }), [bots, connectedPhones]);
+
+  const nextEmptySlot = useMemo(
+    () => SLOTS.find((s) => !connections[s.id].connected)?.id ?? null,
+    [connections]
+  );
+
+  const openAddNumber = () => {
+    if (!nextEmptySlot) {
+      toast.message('Máximo 3 números. Edita o desconecta uno para agregar otro.');
+      return;
+    }
+    setConnectSlot(nextEmptySlot);
+  };
 
   const openCreateDialog = () => {
-    setCreateSlot(firstConnectedSlot);
+    setCreatePhoneId(firstConnectedPhoneId);
     setShowCreateDialog(true);
+  };
+
+  const bindBotToPhone = async (
+    bot: Bot,
+    phone: ConnectedPhone,
+    options?: { activate?: boolean }
+  ) => {
+    if (!currentUser || !firestoreId) return;
+    const botRef = doc(db, 'users', currentUser.uid, 'entities', firestoreId, 'chatbots', bot.id);
+    const shouldActivate = options?.activate ?? bot.isActive;
+
+    if (shouldActivate) {
+      await toggleBotForPhone({
+        db,
+        userId: currentUser.uid,
+        entityId: firestoreId,
+        botId: bot.id,
+        phoneNumberId: phone.phoneNumberId,
+        numberId: phone.slot,
+        activate: true,
+      });
+    } else {
+      await updateDoc(botRef, {
+        phoneNumberId: phone.phoneNumberId,
+        numberId: phone.slot,
+        updatedAt: new Date(),
+      });
+    }
+
+    const digits = phoneDigitsFromConnection(connections[phone.slot]);
+    await syncBotStartPhoneInFirestore(botRef, digits);
   };
 
   const handleCreateNewBot = async () => {
     if (!currentUser || !firestoreId) return;
-    if (!connections[createSlot]?.connected) {
-      toast.error('Conecta ese número de WhatsApp antes de crear un bot.');
-      setConnectSlot(createSlot);
+    const phone = findConnectedPhone(connections, createPhoneId);
+    if (!phone) {
+      toast.error('Selecciona un número de WhatsApp conectado.');
       return;
     }
     setShowCreateDialog(false);
@@ -177,10 +221,20 @@ const ChatbotsPage = () => {
           channel: 'whatsapp',
           botType: 'dm',
           targetPlatforms: ['whatsapp'],
-          numberId: createSlot,
+          phoneNumberId: phone.phoneNumberId,
+          numberId: phone.slot,
           createdAt: new Date(),
           flow: {
-            nodes: [{ id: '1', type: 'startNode', position: { x: 250, y: 5 }, data: { label: 'Start' } }],
+            nodes: [{
+              id: '1',
+              type: 'startNode',
+              position: { x: 250, y: 5 },
+              data: {
+                label: 'Start',
+                welcomeMessage: '¡Hola! ¿En qué puedo ayudarte?',
+                triggerPhrase: 'Hola, quiero más información',
+              },
+            }],
             edges: [],
           },
         });
@@ -196,21 +250,26 @@ const ChatbotsPage = () => {
 
   const handleToggleBotStatus = async (bot: Bot) => {
     if (!currentUser || !firestoreId) return;
-    const slot = botSlot(bot);
-    if (!connections[slot].connected) {
-      toast.error('Conecta un número de WhatsApp a este bot antes de activarlo.');
-      setConnectSlot(slot);
+    const phoneId = resolveBotPhoneNumberId(bot, connections);
+    if (!phoneId) {
+      toast.error('Vincula este bot a un número de WhatsApp antes de activarlo.');
+      return;
+    }
+    const phone = findConnectedPhone(connections, phoneId);
+    if (!phone) {
+      toast.error('El número vinculado ya no está conectado. Elige otro número.');
       return;
     }
     setUpdatingBots((prev) => [...prev, bot.id]);
     try {
       const newStatus = !bot.isActive;
-      await toggleBotForNumber({
+      await toggleBotForPhone({
         db,
         userId: currentUser.uid,
         entityId: firestoreId,
         botId: bot.id,
-        numberId: slot,
+        phoneNumberId: phone.phoneNumberId,
+        numberId: phone.slot,
         activate: newStatus,
       });
       toast.success(`Bot "${bot.name}" ${newStatus ? 'activado' : 'desactivado'}.`);
@@ -222,32 +281,23 @@ const ChatbotsPage = () => {
     }
   };
 
-  const handleChangeBotNumber = async (bot: Bot, newSlot: NumberSlot) => {
+  const handleChangeBotPhone = async (bot: Bot, newPhoneId: string) => {
     if (!currentUser || !firestoreId) return;
-    if (botSlot(bot) === newSlot) return;
-    if (!connections[newSlot].connected) {
-      toast.error('Ese número no está conectado. Configúralo primero.');
-      setConnectSlot(newSlot);
+    const currentPhoneId = resolveBotPhoneNumberId(bot, connections);
+    if (currentPhoneId === newPhoneId) return;
+    const phone = findConnectedPhone(connections, newPhoneId);
+    if (!phone) {
+      toast.error('Ese número no está conectado.');
       return;
     }
     setUpdatingBots((prev) => [...prev, bot.id]);
     try {
-      const botRef = doc(db, 'users', currentUser.uid, 'entities', firestoreId, 'chatbots', bot.id);
+      await bindBotToPhone(bot, phone, { activate: bot.isActive });
       if (bot.isActive) {
-        await toggleBotForNumber({
-          db,
-          userId: currentUser.uid,
-          entityId: firestoreId,
-          botId: bot.id,
-          numberId: newSlot,
-          activate: true,
-        });
+        toast.success(`Bot activo en ${formatConnectedPhoneLabel(phone)}.`);
       } else {
-        await updateDoc(botRef, { numberId: newSlot, updatedAt: new Date() });
+        toast.success(`Bot vinculado a ${formatConnectedPhoneLabel(phone)}. Actívalo cuando quieras.`);
       }
-      const digits = phoneDigitsFromConnection(connections[newSlot]);
-      await syncBotStartPhoneInFirestore(botRef, digits);
-      toast.success(`Bot vinculado a ${slotLabel(newSlot)}.`);
     } catch (error) {
       console.error('Error changing bot number:', error);
       toast.error('No se pudo cambiar el número vinculado.');
@@ -299,7 +349,7 @@ const ChatbotsPage = () => {
             </div>
             <button
               onClick={openCreateDialog}
-              disabled={connectedSlots.length === 0}
+              disabled={connectedPhones.length === 0}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-white/15 bg-white/[0.04] text-white text-sm font-medium hover:bg-white/[0.08] hover:border-white/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Plus className="w-4 h-4" /> Crear Bot
@@ -328,79 +378,68 @@ const ChatbotsPage = () => {
           ))}
         </div>
 
-        <section>
-          <div className="mb-4">
-            <h2 className="text-sm font-medium text-white">Números de WhatsApp</h2>
-            <p className="text-[11px] text-neutral-500 mt-0.5">
-              Cada bot se vincula a uno de estos números. Un bot activo por número.
-            </p>
+        <section className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 md:p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-medium text-white">Números conectados</h2>
+              <p className="text-[11px] text-neutral-500 mt-0.5">
+                Hasta 3 números. Cada bot puede vincularse a cualquiera desde su tarjeta.
+              </p>
+            </div>
+            <button
+              onClick={openAddNumber}
+              disabled={!nextEmptySlot}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-dashed border-white/15 text-xs text-neutral-300 hover:text-white hover:border-white/30 hover:bg-white/[0.04] transition-all disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" /> Añadir número
+            </button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {SLOTS.map((slot) => {
-              const conn = connections[slot.id];
-              const activeBot = bots.find((b) => botSlot(b) === slot.id && b.isActive);
-              return (
-                <div
-                  key={slot.id}
-                  className={`relative rounded-2xl border p-4 transition-all backdrop-blur-sm ${
-                    conn.connected
-                      ? 'border-[#25D366]/30 bg-white/[0.03]'
-                      : 'border-white/[0.06] bg-white/[0.02]'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <WhatsAppIcon className={`w-5 h-5 shrink-0 ${conn.connected ? 'text-[#25D366]' : 'text-white/40'}`} />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-white">{slot.label}</p>
-                        <p className="text-[10px] text-neutral-500 truncate">{slot.description}</p>
-                      </div>
+          {connectedPhones.length > 0 ? (
+            <div className="mt-4 flex flex-col gap-2">
+              {connectedPhones.map((phone) => {
+                const activeBot = bots.find(
+                  (b) =>
+                    b.isActive &&
+                    resolveBotPhoneNumberId(b, connections) === phone.phoneNumberId
+                );
+                return (
+                  <div
+                    key={phone.phoneNumberId}
+                    className="flex items-center gap-3 px-4 py-3 rounded-xl border border-white/[0.06] bg-[#050505]/40"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-[#25D366] shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-white truncate">{formatConnectedPhoneLabel(phone)}</p>
+                      {activeBot ? (
+                        <p className="text-[10px] text-neutral-500 truncate mt-0.5">
+                          Bot activo: <span className="text-neutral-400">{activeBot.name}</span>
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-neutral-600 mt-0.5">Sin bot activo</p>
+                      )}
                     </div>
-                    <span
-                      className={`shrink-0 px-2 py-0.5 rounded-full text-[9px] uppercase tracking-wider font-medium ${
-                        conn.connected
-                          ? 'bg-green-500/15 text-green-400'
-                          : 'bg-white/5 text-neutral-500'
-                      }`}
-                    >
-                      {conn.connected ? 'Conectado' : 'Sin conectar'}
-                    </span>
-                  </div>
-
-                  {conn.connected ? (
-                    <div className="mt-3 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <Phone className="w-3 h-3 text-[#25D366] shrink-0" />
-                        <span className="text-xs text-neutral-300 truncate">{formatPhone(conn)}</span>
-                      </div>
-                      <button
-                        onClick={() => setConnectSlot(slot.id)}
-                        className="text-[10px] text-neutral-500 hover:text-white transition-colors flex items-center gap-0.5 shrink-0"
-                      >
-                        <Settings2 className="w-3 h-3" /> Editar
-                      </button>
-                    </div>
-                  ) : (
                     <button
-                      onClick={() => setConnectSlot(slot.id)}
-                      className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border border-dashed border-white/10 text-[11px] text-neutral-400 hover:text-white hover:border-white/20 transition-all"
+                      onClick={() => setConnectSlot(phone.slot)}
+                      className="shrink-0 flex items-center gap-1 text-[10px] text-neutral-500 hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-white/5"
                     >
-                      <Link2 className="w-3.5 h-3.5" /> Conectar número
+                      <Settings2 className="w-3.5 h-3.5" /> Editar
                     </button>
-                  )}
-
-                  {activeBot && (
-                    <div className="mt-2.5 pt-2.5 border-t border-white/[0.05] flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                      <span className="text-[10px] text-neutral-400 truncate">
-                        Bot activo: <span className="text-neutral-300">{activeBot.name}</span>
-                      </span>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="mt-4 py-8 text-center rounded-xl border border-dashed border-white/10">
+              <Phone className="w-8 h-8 text-neutral-700 mx-auto mb-2" />
+              <p className="text-sm text-neutral-400 mb-3">Aún no hay números conectados</p>
+              <button
+                onClick={openAddNumber}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-white/15 text-xs text-white hover:bg-white/[0.06] transition-all"
+              >
+                <Link2 className="w-3.5 h-3.5" /> Añadir primer número
+              </button>
+            </div>
+          )}
         </section>
 
         <section>
@@ -408,14 +447,24 @@ const ChatbotsPage = () => {
             <h2 className="text-sm font-medium text-white">Mis Bots</h2>
             <div className="flex items-center gap-1.5 flex-wrap">
               <Filter className="w-3.5 h-3.5 text-neutral-600 mr-1" />
-              {(['all', ...SLOTS.map((s) => s.id)] as SlotFilter[]).map((filter) => {
-                const label = filter === 'all' ? 'Todos' : slotLabel(filter);
-                const count = filter === 'all' ? bots.length : bots.filter((b) => botSlot(b) === filter).length;
-                const isActive = slotFilter === filter;
+              {(['all', ...connectedPhones.map((p) => p.phoneNumberId)] as PhoneFilter[]).map((filter) => {
+                const label =
+                  filter === 'all'
+                    ? 'Todos'
+                    : formatConnectedPhoneLabel(
+                        connectedPhones.find((p) => p.phoneNumberId === filter)!
+                      );
+                const count =
+                  filter === 'all'
+                    ? bots.length
+                    : bots.filter(
+                        (b) => resolveBotPhoneNumberId(b, connections) === filter
+                      ).length;
+                const isActive = phoneFilter === filter;
                 return (
                   <button
                     key={filter}
-                    onClick={() => setSlotFilter(filter)}
+                    onClick={() => setPhoneFilter(filter)}
                     className={`px-3 py-1.5 rounded-lg text-[11px] transition-all ${
                       isActive
                         ? 'bg-white/10 text-white border border-white/15'
@@ -435,7 +484,7 @@ const ChatbotsPage = () => {
               <Loader2 className="h-10 w-10 animate-spin text-neutral-500" />
               <p className="text-neutral-500 text-[10px] uppercase tracking-widest">Cargando...</p>
             </div>
-          ) : connectedSlots.length === 0 ? (
+          ) : connectedPhones.length === 0 ? (
             <div className="text-center py-20 bg-white/[0.02] rounded-2xl border border-dashed border-white/10">
               <Link2 size={36} className="text-neutral-700 mx-auto mb-4" />
               <h3 className="text-base font-medium text-white mb-2">Conecta tu primer número</h3>
@@ -443,7 +492,7 @@ const ChatbotsPage = () => {
                 Para crear bots necesitas conectar al menos un número de WhatsApp Cloud API.
               </p>
               <button
-                onClick={() => setConnectSlot('general')}
+                onClick={openAddNumber}
                 className="inline-flex items-center gap-2 border border-white/15 bg-white/[0.04] text-white font-medium px-6 py-2.5 rounded-xl text-sm hover:bg-white/[0.08] transition-all"
               >
                 <Link2 className="w-4 h-4" /> Conectar número
@@ -460,8 +509,8 @@ const ChatbotsPage = () => {
                   onOpen={() => router.push(`/nucleo/${routeSegment}/cto/automation/whatsappbots/${bot.id}`)}
                   onDelete={() => { setBotToDelete(bot); setDeleteConfirmation(''); }}
                   onToggle={() => handleToggleBotStatus(bot)}
-                  onChangeNumber={(slot) => handleChangeBotNumber(bot, slot)}
-                  onConnectSlot={(slot) => setConnectSlot(slot)}
+                  onChangePhone={(phoneId) => handleChangeBotPhone(bot, phoneId)}
+                  connectedPhones={connectedPhones}
                 />
               ))}
             </div>
@@ -469,7 +518,7 @@ const ChatbotsPage = () => {
             <div className="text-center py-20 bg-white/[0.02] rounded-2xl border border-dashed border-white/10">
               <MessageCircle size={36} className="text-neutral-700 mx-auto mb-4" />
               <h3 className="text-base font-medium text-white mb-2">
-                {slotFilter === 'all' ? 'Aún no tienes bots' : `Sin bots en ${slotLabel(slotFilter)}`}
+                {phoneFilter === 'all' ? 'Aún no tienes bots' : 'Sin bots en este número'}
               </h3>
               <p className="text-neutral-500 text-sm mb-6">
                 Crea un flujo automatizado y elige con qué número de WhatsApp responder.
@@ -524,30 +573,25 @@ const ChatbotsPage = () => {
           <div className="py-4 space-y-4">
             <div className="space-y-2">
               <label className="text-[10px] uppercase tracking-widest text-neutral-500">Número de WhatsApp</label>
-              <Select value={createSlot} onValueChange={(v) => setCreateSlot(v as NumberSlot)}>
+              <Select value={createPhoneId} onValueChange={setCreatePhoneId}>
                 <SelectTrigger className="bg-white/5 border-white/10 text-white rounded-xl h-11">
                   <SelectValue placeholder="Selecciona un número" />
                 </SelectTrigger>
                 <SelectContent className="bg-[#141414] border-white/10 text-white">
-                  {SLOTS.map((s) => {
-                    const conn = connections[s.id];
-                    const connected = conn.connected;
-                    return (
-                      <SelectItem key={s.id} value={s.id} disabled={!connected} className="text-sm">
-                        {s.label}
-                        {connected ? ` · ${formatPhone(conn)}` : ' · sin conectar'}
-                      </SelectItem>
-                    );
-                  })}
+                  {connectedPhones.map((phone) => (
+                    <SelectItem key={phone.phoneNumberId} value={phone.phoneNumberId} className="text-sm">
+                      {formatConnectedPhoneLabel(phone)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
-            {!connections[createSlot]?.connected && (
+            {connectedPhones.length === 0 && (
               <button
-                onClick={() => { setShowCreateDialog(false); setConnectSlot(createSlot); }}
+                onClick={() => { setShowCreateDialog(false); openAddNumber(); }}
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-white/15 text-neutral-400 text-xs hover:text-white hover:border-white/25 transition-all"
               >
-                <Link2 className="w-3.5 h-3.5" /> Conectar {slotLabel(createSlot)}
+                <Link2 className="w-3.5 h-3.5" /> Conectar un número
               </button>
             )}
           </div>
@@ -557,7 +601,7 @@ const ChatbotsPage = () => {
             </button>
             <button
               onClick={handleCreateNewBot}
-              disabled={!connections[createSlot]?.connected}
+              disabled={!createPhoneId}
               className="flex-1 h-11 border border-white/15 bg-white/[0.04] text-white hover:bg-white/[0.08] rounded-xl text-xs font-medium disabled:opacity-40 flex items-center justify-center gap-1.5"
             >
               <Plus className="w-3.5 h-3.5" /> Crear bot
@@ -580,27 +624,27 @@ const ChatbotsPage = () => {
 interface BotCardProps {
   bot: Bot;
   connections: SlotConnections;
+  connectedPhones: ConnectedPhone[];
   isUpdating: boolean;
   onOpen: () => void;
   onDelete: () => void;
   onToggle: () => void;
-  onChangeNumber: (slot: NumberSlot) => void;
-  onConnectSlot: (slot: NumberSlot) => void;
+  onChangePhone: (phoneNumberId: string) => void;
 }
 
 function BotCard({
   bot,
   connections,
+  connectedPhones,
   isUpdating,
   onOpen,
   onDelete,
   onToggle,
-  onChangeNumber,
-  onConnectSlot,
+  onChangePhone,
 }: BotCardProps) {
-  const currentSlot = botSlot(bot);
-  const currentConn = connections[currentSlot];
-  const isNumberConnected = currentConn.connected;
+  const currentPhoneId = resolveBotPhoneNumberId(bot, connections) || '';
+  const currentPhone = findConnectedPhone(connections, currentPhoneId);
+  const isNumberConnected = !!currentPhone;
 
   return (
     <div className="group bg-white/[0.02] border border-white/[0.06] rounded-2xl hover:border-white/15 transition-all duration-300 flex flex-col overflow-hidden">
@@ -647,41 +691,32 @@ function BotCard({
           <Phone className="w-3 h-3" /> Número vinculado
         </label>
         <Select
-          value={currentSlot}
-          onValueChange={(v) => onChangeNumber(v as NumberSlot)}
+          value={currentPhoneId || undefined}
+          onValueChange={onChangePhone}
           disabled={isUpdating}
         >
           <SelectTrigger className="bg-white/[0.03] border-white/[0.08] text-white rounded-xl h-10 text-xs">
-            <SelectValue>
+            <SelectValue placeholder="Elige un número">
               {isNumberConnected ? (
                 <span className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#25D366]" />
-                  {slotLabel(currentSlot)} · {formatPhone(currentConn)}
+                  {formatConnectedPhoneLabel(currentPhone)}
                 </span>
               ) : (
-                <span className="text-neutral-400">{slotLabel(currentSlot)} · sin conectar</span>
+                <span className="text-neutral-400">Sin número vinculado</span>
               )}
             </SelectValue>
           </SelectTrigger>
           <SelectContent className="bg-[#141414] border-white/10 text-white">
-            {SLOTS.map((s) => {
-              const conn = connections[s.id];
-              return (
-                <SelectItem key={s.id} value={s.id} disabled={!conn.connected} className="text-xs">
-                  {s.label}
-                  {conn.connected ? ` · ${formatPhone(conn)}` : ' · sin conectar'}
-                </SelectItem>
-              );
-            })}
+            {connectedPhones.map((phone) => (
+              <SelectItem key={phone.phoneNumberId} value={phone.phoneNumberId} className="text-xs">
+                {formatConnectedPhoneLabel(phone)}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
-        {!isNumberConnected && (
-          <button
-            onClick={() => onConnectSlot(currentSlot)}
-            className="w-full text-[10px] text-neutral-400 hover:text-white hover:underline text-left"
-          >
-            Conectar número para {slotLabel(currentSlot)} →
-          </button>
+        {!isNumberConnected && connectedPhones.length > 0 && (
+          <p className="text-[10px] text-neutral-500">Elige un número conectado para este bot.</p>
         )}
       </div>
 
@@ -742,7 +777,7 @@ function ConnectNumberDialog({
     }
   }, [open, connection]);
 
-  const slotDef = SLOTS.find((s) => s.id === slot);
+  const isEditing = !!connection?.connected;
 
   const handleSave = async () => {
     if (!tenantPath || !slot) return;
@@ -758,7 +793,7 @@ function ConnectNumberDialog({
         accessToken,
         displayPhoneNumber,
       });
-      toast.success(`Número conectado a ${slotDef?.label}.`);
+      toast.success(isEditing ? 'Número actualizado.' : 'Número conectado.');
       onClose();
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'No se pudo guardar.');
@@ -786,10 +821,10 @@ function ConnectNumberDialog({
       <DialogContent className="bg-[#0a0a0a] border-white/10 text-white sm:max-w-md rounded-2xl">
         <DialogHeader>
           <DialogTitle className="font-medium tracking-tight">
-            Conectar número · {slotDef?.label}
+            {isEditing ? 'Editar número' : 'Añadir número'}
           </DialogTitle>
           <DialogDescription className="text-neutral-400 text-xs">
-            Ingresa las credenciales de WhatsApp Cloud API. Cada número puede tener un bot activo a la vez.
+            Credenciales de WhatsApp Cloud API. Puedes vincular cualquier bot a este número después.
           </DialogDescription>
         </DialogHeader>
 

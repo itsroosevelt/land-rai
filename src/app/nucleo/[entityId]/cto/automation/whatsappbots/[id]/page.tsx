@@ -8,10 +8,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useEntityRoute } from '@/hooks/useEntityRoute';
 import {
   subscribeSlotConnections,
-  SLOTS,
-  type NumberSlot,
   type SlotConnections,
 } from '@/lib/whatsapp/numbers';
+import {
+  resolveBotPhoneNumberId,
+  findConnectedPhone,
+  formatConnectedPhoneLabel,
+} from '@/lib/whatsapp/botPhoneBinding';
 import {
   phoneDigitsFromConnection,
   patchStartNodePhone,
@@ -169,7 +172,7 @@ function FlowPage() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [isLoading, setIsLoading] = useState(true);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
-  const [botNumberId, setBotNumberId] = useState<NumberSlot>('general');
+  const [botPhoneNumberId, setBotPhoneNumberId] = useState('');
   const [connections, setConnections] = useState<SlotConnections | null>(null);
     const params = useParams();
     const router = useRouter();
@@ -188,10 +191,12 @@ function FlowPage() {
     return subscribeSlotConnections(tenantPath, setConnections);
   }, [tenantPath]);
 
-  const linkedSlot = botNumberId;
-  const linkedConn = connections?.[linkedSlot];
+  const linkedPhone = botPhoneNumberId && connections
+    ? findConnectedPhone(connections, botPhoneNumberId)
+    : null;
+  const linkedConn = linkedPhone ? connections?.[linkedPhone.slot] : undefined;
   const linkedPhoneDigits = phoneDigitsFromConnection(linkedConn);
-  const linkedSlotLabel = SLOTS.find((s) => s.id === linkedSlot)?.label;
+  const linkedPhoneLabel = linkedPhone ? formatConnectedPhoneLabel(linkedPhone) : undefined;
 
   useEffect(() => {
     if (!linkedPhoneDigits) return;
@@ -255,8 +260,11 @@ function FlowPage() {
         setChatbotName(data.name || 'Mi Chatbot');
         setTargetPlatforms(normalizeTargetPlatforms(data.targetPlatforms));
         setHumanizeTone(!!data.humanizeTone);
-        const slot = (data.numberId || 'general') as NumberSlot;
-        setBotNumberId(slot === 'support' || slot === 'broadcast' ? slot : 'general');
+        const resolvedPhoneId = resolveBotPhoneNumberId(
+          { phoneNumberId: data.phoneNumberId, numberId: data.numberId },
+          connections || { general: { connected: false }, support: { connected: false }, broadcast: { connected: false } }
+        );
+        setBotPhoneNumberId(resolvedPhoneId || '');
 
         const flowData = data.flow || {};
         const savedNodes = flowData.nodes || [];
@@ -280,7 +288,7 @@ function FlowPage() {
     };
 
     fetchChatbotData();
-  }, [chatbotId, saveData, currentUser, activeEntity]);
+  }, [chatbotId, saveData, currentUser, activeEntity, connections]);
 
   useEffect(() => {
     if (!chatbotId || !currentUser || !activeEntity) return;
@@ -296,10 +304,16 @@ function FlowPage() {
       if (typeof data.name === 'string') {
         setChatbotName((prev) => prev === data.name ? prev : data.name);
       }
+      const resolvedPhoneId = resolveBotPhoneNumberId(
+        { phoneNumberId: data.phoneNumberId, numberId: data.numberId },
+        connections || { general: { connected: false }, support: { connected: false }, broadcast: { connected: false } }
+      );
+      const nextPhoneId = resolvedPhoneId || '';
+      setBotPhoneNumberId((prev) => (prev === nextPhoneId ? prev : nextPhoneId));
     });
 
     return () => unsubscribe();
-  }, [chatbotId, currentUser, activeEntity]);
+  }, [chatbotId, currentUser, activeEntity, connections]);
 
   // Fetch connected integrations to filter options
   useEffect(() => {
@@ -715,7 +729,7 @@ function FlowPage() {
           targetPlatforms={targetPlatforms}
           onSelectedNodeChange={handleSelectedNodeChange}
           linkedPhoneDigits={linkedPhoneDigits}
-          linkedSlotLabel={linkedSlotLabel}
+          linkedPhoneLabel={linkedPhoneLabel}
         />
         {currentUser && activeEntity && (
           <FlowGeneratorBar

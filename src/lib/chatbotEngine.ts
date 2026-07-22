@@ -117,6 +117,37 @@ async function resolveSlotForPhoneId(
     return null;
 }
 
+async function resolveBotPhoneNumberIdFromEntity(
+    entityPath: string,
+    bot: { phoneNumberId?: string; numberId?: string }
+): Promise<string | null> {
+    const direct = String(bot.phoneNumberId || '').trim();
+    if (direct) return direct;
+
+    const slot = normalizeBotNumberSlot(bot.numberId);
+    try {
+        const slotSnap = await db.doc(`${entityPath}/whatsapp_numbers/${slot}`).get();
+        const slotData = slotSnap.data() || {};
+        const fromSlot = String(slotData.phoneNumberId || slotData.phone_number_id || '').trim();
+        if (fromSlot) return fromSlot;
+
+        if (slot === 'general') {
+            const [std, internal] = await Promise.all([
+                db.doc(`${entityPath}/integrations/whatsapp`).get(),
+                db.doc(`${entityPath}/integrations/whatsapp_internal`).get(),
+            ]);
+            for (const snap of [std, internal]) {
+                const data = snap.data() || {};
+                const pid = String(data.phoneNumberId || data.phone_number_id || '').trim();
+                if (pid) return pid;
+            }
+        }
+    } catch (e) {
+        console.warn('[ChatbotEngine] resolveBotPhoneNumberIdFromEntity failed:', e);
+    }
+    return null;
+}
+
 function normalizeBotNumberSlot(numberId: unknown): string {
     const v = String(numberId || '').trim().toLowerCase();
     if (v === 'support' || v === 'broadcast') return v;
@@ -529,11 +560,21 @@ async function runEngineCycle(
     // If the bot is waiting for an answer, greetings are part of the reply — not a new session.
     const wasWaitingForInput = !!cardData.botState?.waitingForInput;
     const statusForWake = cardData.botState?.status;
-    // Truly idle = finished / inactive session. Do NOT treat "active + missing node"
-    // (lost state after a kanban move) as idle-any-message — that made names like
-    // "Roosevelt" restart the greeting instead of answering the capture step.
+    const hasCurrentNode = !!cardData.botState?.currentNodeId;
+    const lastStepForWake = cardData.botState?.lastStep;
+    const isRecoverableCapture =
+        lastStepForWake === 'captureInputNode' || lastStepForWake === 'textMessageNode';
+    // Stuck active (no node, not waiting) — e.g. after switching bots/numbers. Any message restarts.
+    const isStuckWithoutNode =
+        statusForWake === 'active' &&
+        !wasWaitingForInput &&
+        !hasCurrentNode &&
+        !isRecoverableCapture;
     const isTrulyIdle =
-        statusForWake === 'completed' || statusForWake === 'inactive' || !statusForWake;
+        statusForWake === 'completed' ||
+        statusForWake === 'inactive' ||
+        !statusForWake ||
+        isStuckWithoutNode;
     const hasAnyUserContent = String(text || '').trim().length > 0;
 
     // Wake rules:
@@ -692,18 +733,22 @@ async function runEngineCycle(
     // one number steals another number's bot (esp. after broadcast activation).
     let selectedBots = platformBots;
     if (platform === 'whatsapp' && channelAccountId) {
-        const incomingSlot = await resolveSlotForPhoneId(entityPath, channelAccountId);
-        if (incomingSlot) {
-            const matching = platformBots.filter(
-                (b) => normalizeBotNumberSlot(b.numberId) === String(incomingSlot)
+        const incomingId = String(channelAccountId).trim();
+        const phoneMatches: typeof platformBots = [];
+        for (const bot of platformBots) {
+            const botPhone = await resolveBotPhoneNumberIdFromEntity(entityPath, bot);
+            if (botPhone === incomingId) phoneMatches.push(bot);
+        }
+        if (phoneMatches.length > 0) {
+            selectedBots = phoneMatches;
+            console.log(
+                `[ChatbotEngine] 📍 Routing to phone ${incomingId} (${phoneMatches.length} bot[s])`
             );
-            if (matching.length > 0) {
-                selectedBots = matching;
-                console.log(`[ChatbotEngine] 📍 Routing to slot "${incomingSlot}" (${matching.length} bot[s]) for number ${channelAccountId}`);
-            } else {
-                console.log(`[ChatbotEngine] ⛔ No bot bound to slot "${incomingSlot}" for number ${channelAccountId} — skipping (no cross-number fallback).`);
-                return;
-            }
+        } else {
+            console.log(
+                `[ChatbotEngine] ⛔ No bot bound to phone ${incomingId} — skipping.`
+            );
+            return;
         }
     }
 
@@ -714,6 +759,52 @@ async function runEngineCycle(
     });
 
     const botData = selectedBots[0];
+    const activePhoneNumberId =
+        (platform === 'whatsapp' && channelAccountId
+            ? String(channelAccountId).trim()
+            : '') ||
+        (await resolveBotPhoneNumberIdFromEntity(entityPath, botData)) ||
+        '';
+    let forceFlowRestart = false;
+    const prevBotId = String(cardData.botState?.activeBotId || '').trim();
+    const prevPhone = String(cardData.botState?.activePhoneNumberId || '').trim();
+    const botContextChanged =
+        (prevBotId && prevBotId !== String(botData.id)) ||
+        (prevPhone && activePhoneNumberId && prevPhone !== activePhoneNumberId);
+    if (botContextChanged && !wasWaitingForInput) {
+        console.log(
+            `[ChatbotEngine] 🔀 Bot/phone context changed (${prevBotId || '?'}→${botData.id}, ${prevPhone || '?'}→${activePhoneNumberId}) — resetting flow`
+        );
+        forceFlowRestart = true;
+        await box.ref.update({
+            'botState.status': 'active',
+            'botState.waitingForInput': false,
+            'botState.currentNodeId': null,
+            'botState.lastStep': admin.firestore.FieldValue.delete(),
+            'botState.activeBotId': String(botData.id),
+            'botState.activePhoneNumberId': activePhoneNumberId,
+        });
+        cardData.botState = {
+            ...(cardData.botState || {}),
+            status: 'active',
+            waitingForInput: false,
+            currentNodeId: null,
+            activeBotId: String(botData.id),
+            activePhoneNumberId,
+        };
+    } else if (!prevBotId || !prevPhone) {
+        await box.ref
+            .update({
+                'botState.activeBotId': String(botData.id),
+                'botState.activePhoneNumberId': activePhoneNumberId,
+            })
+            .catch(() => {});
+        cardData.botState = {
+            ...(cardData.botState || {}),
+            activeBotId: String(botData.id),
+            activePhoneNumberId,
+        };
+    }
     console.log(`[ChatbotEngine] 🤖 Selected Bot: "${botData.name}" (Score: ${botData._score}) for ${platform}`);
     humanizeConfig = {
         enabled: !!botData.humanizeTone,
@@ -974,7 +1065,7 @@ async function runEngineCycle(
     // Do not treat a missing currentNodeId alone as idle — that causes full restarts mid-funnel
     // after state is lost (e.g. card move), replaying the greeting when the user types their name.
     const botIsIdle = status === 'completed' || status === 'inactive' || !status;
-    const shouldRestart = (isReset || isMenu || shouldApplyStartTrigger)
+    const shouldRestart = (isReset || isMenu || shouldApplyStartTrigger || forceFlowRestart)
         ? true
         : (!isActivelyWaiting && botIsIdle);
 
@@ -1154,6 +1245,7 @@ async function runEngineCycle(
 
     // Node-by-Node Forward Execution
     let executionCount = 0;
+    let welcomeSentThisCycle = false;
     while (currentNodeId && executionCount < 15) {
         executionCount++;
         const node = flow.nodes.find((n: any) => n.id === currentNodeId);
@@ -1169,6 +1261,25 @@ async function runEngineCycle(
         
         // Skip start nodes in the middle of execution
         if (node.type === 'start' || node.type === 'startNode') {
+            if (shouldRestart && !welcomeSentThisCycle) {
+                const welcome = String(
+                    node.data?.welcomeMessage || node.data?.greeting || ''
+                ).trim();
+                if (welcome) {
+                    const content = replaceVars(welcome);
+                    const sent = await dispatchMessage(content, { nodeId: node.id });
+                    const outbound = (sent as any)?.sentText || content;
+                    if (String(outbound).trim()) {
+                        await appendAgentMessage({
+                            text: outbound,
+                            type: 'text',
+                            messageId: `bot_welcome_${Date.now()}`,
+                            preserveText: true,
+                        });
+                    }
+                    welcomeSentThisCycle = true;
+                }
+            }
             const edge = resolveDefaultNextEdge(flow.edges, node.id);
             currentNodeId = edge ? edge.target : null;
             continue;

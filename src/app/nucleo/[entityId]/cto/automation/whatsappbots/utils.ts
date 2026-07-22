@@ -4,7 +4,7 @@ import {
     isBotActiveValue,
     normalizeTargetPlatforms,
     updateExclusiveBotForChannel,
-    updateExclusiveBotForNumber,
+    updateExclusiveBotForPhone,
 } from '@/lib/automation/botActivation';
 
 export { normalizeTargetPlatforms, getPrimaryPlatform, isBotActiveValue };
@@ -22,15 +22,19 @@ interface UpdateExclusiveBotOptions {
 export const updateExclusiveBotPlatform = async (opts: UpdateExclusiveBotOptions) =>
     updateExclusiveBotForChannel({ ...opts, botsCollection: 'chatbots' });
 
-interface ToggleBotForNumberOptions {
+interface ToggleBotForPhoneOptions {
     db: Firestore;
     userId: string;
     entityId: string;
     botId: string;
-    numberId: string;
+    phoneNumberId: string;
+    numberId?: string;
     activate: boolean;
 }
 
-/** WhatsApp: one active bot per number in the `chatbots` collection. */
-export const toggleBotForNumber = async (opts: ToggleBotForNumberOptions) =>
-    updateExclusiveBotForNumber({ ...opts, botsCollection: 'chatbots' });
+/** WhatsApp: one active bot per phone_number_id in the `chatbots` collection. */
+export const toggleBotForPhone = async (opts: ToggleBotForPhoneOptions) =>
+    updateExclusiveBotForPhone({ ...opts, botsCollection: 'chatbots' });
+
+/** @deprecated Use toggleBotForPhone */
+export const toggleBotForNumber = toggleBotForPhone;

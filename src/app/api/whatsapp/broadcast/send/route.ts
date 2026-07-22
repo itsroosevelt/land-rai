@@ -201,27 +201,21 @@ export async function POST(req: Request) {
             if (i < recipients.length - 1) await sleep(delay);
         }
 
-        // Activate attached bot ONLY on the campaign slot (exclusive), without stealing
-        // bots from other numbers. Never overwrite numberId to another slot blindly when
-        // the bot already belongs elsewhere — bind explicitly to broadcastSlot.
-        if (broadcast.botId) {
+        // Activate attached bot on the campaign's phone number (exclusive per phone_number_id).
+        if (broadcast.botId && broadcastFromPhoneId) {
             try {
                 const botsSnap = await db.collection(`${tenantPath}/chatbots`).get();
-                const targetSlot = String(broadcastSlot || 'broadcast').trim() || 'broadcast';
+                const targetPhone = String(broadcastFromPhoneId).trim();
                 const batch = db.batch();
                 for (const botDoc of botsSnap.docs) {
                     const data = botDoc.data() || {};
-                    const botSlot = (() => {
-                        const v = String(data.numberId || '').trim().toLowerCase();
-                        if (v === 'support' || v === 'broadcast') return v;
-                        return 'general';
-                    })();
+                    const botPhone = String(data.phoneNumberId || '').trim();
                     if (botDoc.id === broadcast.botId) {
                         batch.set(
                             botDoc.ref,
                             {
                                 isActive: true,
-                                numberId: targetSlot,
+                                phoneNumberId: targetPhone,
                                 targetPlatforms: ['whatsapp'],
                                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                             },
@@ -229,9 +223,8 @@ export async function POST(req: Request) {
                         );
                     } else if (
                         (data.isActive === true || data.isActive === 'true') &&
-                        botSlot === targetSlot
+                        botPhone === targetPhone
                     ) {
-                        // Only deactivate peers on the SAME slot
                         batch.set(
                             botDoc.ref,
                             {

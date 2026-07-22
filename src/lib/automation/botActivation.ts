@@ -70,39 +70,40 @@ export const updateExclusiveBotForChannel = async ({
     await batch.commit();
 };
 
-interface UpdateExclusiveBotForNumberOptions {
+interface UpdateExclusiveBotForPhoneOptions {
     db: Firestore;
     userId: string;
     entityId: string;
     botId: string;
     botsCollection: string;
-    numberId: string;
+    /** Meta WhatsApp phone_number_id — the real number binding. */
+    phoneNumberId: string;
+    /** Legacy slot label kept for display/migration only. */
+    numberId?: string;
     activate: boolean;
 }
 
-// Treat a missing numberId as the general tab so legacy bots stay grouped.
-const effectiveNumberId = (value: unknown): string => {
-    const v = String(value || '').trim().toLowerCase();
-    if (v === 'support' || v === 'broadcast') return v;
-    // primary / empty / unknown → general (canonical slot)
-    return 'general';
-};
+function botBoundPhoneId(data: Record<string, unknown>): string {
+    return String(data.phoneNumberId || '').trim();
+}
 
 /**
- * Exclusive activation scoped to ONE WhatsApp number: activating a bot only
- * deactivates other active bots bound to the SAME number, so each number can
- * run its own bot without colliding.
+ * One active bot per physical WhatsApp number (phone_number_id).
+ * You can assign any bot to any connected number freely.
  */
-export const updateExclusiveBotForNumber = async ({
+export const updateExclusiveBotForPhone = async ({
     db,
     userId,
     entityId,
     botId,
     botsCollection,
+    phoneNumberId,
     numberId,
     activate,
-}: UpdateExclusiveBotForNumberOptions) => {
-    const targetNumber = effectiveNumberId(numberId);
+}: UpdateExclusiveBotForPhoneOptions) => {
+    const targetPhone = String(phoneNumberId || '').trim();
+    if (!targetPhone) throw new Error('Se requiere un número de WhatsApp vinculado.');
+
     const botsRef = collection(db, 'users', userId, 'entities', entityId, botsCollection);
     const snapshot = await getDocs(botsRef);
     const batch = writeBatch(db);
@@ -111,28 +112,28 @@ export const updateExclusiveBotForNumber = async ({
     snapshot.docs.forEach((botDoc) => {
         const data = botDoc.data();
         const isCurrentBot = botDoc.id === botId;
-        const botNumber = effectiveNumberId(data.numberId);
+        const botPhone = botBoundPhoneId(data);
         const currentlyActive = isBotActiveValue(data.isActive);
 
         if (isCurrentBot) {
-            batch.set(
-                botDoc.ref,
-                {
-                    isActive: activate,
-                    numberId: targetNumber,
-                    targetPlatforms: ['whatsapp'],
-                    updatedAt: now,
-                },
-                { merge: true }
-            );
+            const updates: Record<string, unknown> = {
+                isActive: activate,
+                phoneNumberId: targetPhone,
+                targetPlatforms: ['whatsapp'],
+                updatedAt: now,
+            };
+            if (numberId) updates.numberId = numberId;
+            batch.set(botDoc.ref, updates, { merge: true });
             return;
         }
 
-        // Deactivate any other active bot on the SAME number only.
-        if (activate === true && currentlyActive && botNumber === targetNumber) {
+        if (activate === true && currentlyActive && botPhone === targetPhone) {
             batch.set(botDoc.ref, { isActive: false, updatedAt: now }, { merge: true });
         }
     });
 
     await batch.commit();
 };
+
+/** @deprecated Use updateExclusiveBotForPhone — kept for imports that pass slot names. */
+export const updateExclusiveBotForNumber = updateExclusiveBotForPhone;

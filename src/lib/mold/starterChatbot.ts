@@ -19,7 +19,11 @@ export const STARTER_CHATBOT_FLOW = {
             id: '1',
             type: 'startNode',
             position: { x: 250, y: 5 },
-            data: { label: 'Inicio' },
+            data: {
+                label: 'Inicio',
+                welcomeMessage: '¡Hola! ¿En qué puedo ayudarte?',
+                triggerPhrase: 'Hola, quiero más información',
+            },
         },
         {
             id: '2',
@@ -72,6 +76,5 @@ export const STARTER_CHATBOT_FIELDS = {
     channel: 'whatsapp',
     botType: 'dm',
     targetPlatforms: ['whatsapp'],
-    numberId: 'general',
     flow: STARTER_CHATBOT_FLOW,
 } as const;

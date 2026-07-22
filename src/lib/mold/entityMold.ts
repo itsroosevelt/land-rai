@@ -7,13 +7,14 @@ import {
     STARTER_CHATBOT_FIELDS,
     STARTER_CHATBOT_ID,
 } from './starterChatbot';
+import { ensureWhatsAppBotPhoneBinding } from './whatsappBotPhoneBinding';
 import { ensureWhatsAppSlotNormalization } from './whatsappSlotNormalization';
 import { ensureEntitySlugNormalization } from './entitySlugNormalization';
 import { isSlugOwnedByOtherEntity } from './entityRouteContract';
 import { MOLD_INTEGRATIONS_INIT } from './integrationsCatalog';
 
 /** Incrementar cuando el molde multitenant gane nuevas estructuras obligatorias. */
-export const ENTITY_MOLD_VERSION = 13;
+export const ENTITY_MOLD_VERSION = 14;
 
 export const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
@@ -43,10 +44,12 @@ export const ENTITY_MOLD_FEATURES = {
     /** Importar/exportar JSON del bot completo en el editor. */
     chatbotJsonImportExport: true,
     /**
-     * Multi-número: slots general|support|broadcast; el bot Activo de la pestaña
-     * atiende ese número; apagar/no crear bot = ese número no responde (sin préstamo).
+     * Bots vinculados por phone_number_id (Meta): cualquier bot a cualquier número conectado.
+     * Un bot activo por número; el motor enruta por el ID del número que recibió el mensaje.
      */
     multiNumberBotIsolation: true,
+    /** Backfill phoneNumberId en chatbots legacy que solo tenían numberId (slot). */
+    whatsappBotPhoneBinding: true,
     /** Legacy whatsapp_numbers/primary migrado a general. */
     primarySlotNormalized: true,
     /** URLs de entidad con slug personalizable (/nucleo/{slug}/...). */
@@ -133,6 +136,7 @@ export async function provisionEntityMold(
     await ensureReceptionColumn(db, path);
     await ensureStarterChatbot(db, path);
     await ensureWhatsAppSlotNormalization(db, path);
+    await ensureWhatsAppBotPhoneBinding(db, path);
     await ensureEntitySlugNormalization(db, userId, entityId);
     await ensureIntegrationsInit(db, path);
 
