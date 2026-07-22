@@ -1,5 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.locateKanbanCard = locateKanbanCard;
+exports.ensureCardKanbanPlacement = ensureCardKanbanPlacement;
 exports.buildBotNodeGroupMap = buildBotNodeGroupMap;
 exports.syncKanbanGroupsFromBotAdmin = syncKanbanGroupsFromBotAdmin;
 exports.syncCardToBotNodeAdmin = syncCardToBotNodeAdmin;
@@ -28,6 +30,52 @@ async function moveKanbanCardAdmin(db, tenantPath, cardId, sourceGroupId, destGr
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true }).catch(() => undefined);
     }
+}
+async function locateKanbanCard(db, tenantPath, cardId) {
+    const groupsSnap = await db.collection(`${tenantPath}/kanban-groups`).get();
+    for (const groupDoc of groupsSnap.docs) {
+        const cardRef = groupDoc.ref.collection('cards').doc(cardId);
+        const snap = await cardRef.get();
+        if (snap.exists) {
+            return { groupId: groupDoc.id, ref: cardRef };
+        }
+    }
+    return null;
+}
+async function ensureCardKanbanPlacement(params) {
+    var _a;
+    const { db, tenantPath, cardId, botId, preferredGroupId } = params;
+    // Regla de oro: el bot no altera posición en el tablero manual
+    const manualPlacementRef = db.doc(`${tenantPath}/workspaces/manual_kanban/placements/${cardId}`);
+    const manualPlacementSnap = await manualPlacementRef.get();
+    if (manualPlacementSnap.exists && ((_a = manualPlacementSnap.data()) === null || _a === void 0 ? void 0 : _a.manualLocked)) {
+        return null;
+    }
+    let groupId = preferredGroupId;
+    let cardSnap = preferredGroupId
+        ? await db.doc(`${tenantPath}/kanban-groups/${preferredGroupId}/cards/${cardId}`).get()
+        : null;
+    if (!(cardSnap === null || cardSnap === void 0 ? void 0 : cardSnap.exists)) {
+        const located = await locateKanbanCard(db, tenantPath, cardId);
+        if (!located)
+            return null;
+        groupId = located.groupId;
+        cardSnap = await located.ref.get();
+    }
+    const data = cardSnap === null || cardSnap === void 0 ? void 0 : cardSnap.data();
+    const nodeId = (0, botNodeGroups_1.resolveCardBotNodeId)(data);
+    if (!nodeId || !groupId)
+        return groupId || null;
+    const nodeGroupMap = await buildBotNodeGroupMap(db, tenantPath, botId);
+    return syncCardToBotNodeAdmin({
+        db,
+        tenantPath,
+        cardId,
+        currentGroupId: groupId,
+        botId,
+        nodeId,
+        nodeGroupMap,
+    });
 }
 async function buildBotNodeGroupMap(db, tenantPath, botId) {
     const snap = await db.collection(`${tenantPath}/kanban-groups`).where('botId', '==', botId).get();
@@ -66,7 +114,8 @@ async function syncKanbanGroupsFromBotAdmin(params) {
         const node = ordered[i];
         const nodeId = String(node.id);
         seenNodeIds.add(nodeId);
-        const name = (0, botNodeGroups_1.getBotNodeLabel)(node);
+        const nodeDetails = (0, botNodeGroups_1.extractBotNodeDetails)(node);
+        const name = nodeDetails.title || (0, botNodeGroups_1.getBotNodeLabel)(node);
         const color = (0, botNodeGroups_1.getGroupColorForIndex)(i);
         const payload = {
             name,
@@ -75,7 +124,9 @@ async function syncKanbanGroupsFromBotAdmin(params) {
             botId,
             botNodeId: nodeId,
             botNodeType: node.type,
+            botNodeDetails: nodeDetails,
             autoManaged: true,
+            boardType: 'bot',
             botName: botName || null,
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         };
@@ -114,6 +165,7 @@ async function syncKanbanGroupsFromBotAdmin(params) {
     return { botId, created, updated, linked, removed, nodeGroupMap };
 }
 async function syncCardToBotNodeAdmin(params) {
+    var _a, _b;
     const { db, tenantPath, cardId, currentGroupId, botId, nodeId } = params;
     if (!nodeId || !botId || !cardId || !currentGroupId)
         return null;
@@ -134,6 +186,10 @@ async function syncCardToBotNodeAdmin(params) {
     }
     if (!targetGroupId || targetGroupId === currentGroupId)
         return targetGroupId || null;
+    const destGroupSnap = await db.doc(`${tenantPath}/kanban-groups/${targetGroupId}`).get();
+    if (!destGroupSnap.exists || ((_a = destGroupSnap.data()) === null || _a === void 0 ? void 0 : _a.boardType) === 'manual' || ((_b = destGroupSnap.data()) === null || _b === void 0 ? void 0 : _b.autoManaged) === false) {
+        return currentGroupId;
+    }
     await moveKanbanCardAdmin(db, tenantPath, cardId, currentGroupId, targetGroupId);
     return targetGroupId;
 }
@@ -143,7 +199,6 @@ async function relocateAllCardsToBotNodesAdmin(params) {
     const nodeGroupMap = new Map(Object.entries(syncResult.nodeGroupMap));
     const startNode = ((flow === null || flow === void 0 ? void 0 : flow.nodes) || []).find((n) => n.type === 'startNode' || n.type === 'start');
     const startNodeId = startNode ? String(startNode.id) : null;
-    const fallbackGroupId = startNodeId ? nodeGroupMap.get(startNodeId) : undefined;
     const groupsSnap = await db.collection(`${tenantPath}/kanban-groups`).get();
     let moved = 0;
     let skipped = 0;
@@ -151,15 +206,13 @@ async function relocateAllCardsToBotNodesAdmin(params) {
         const cardsSnap = await groupDoc.ref.collection('cards').get();
         for (const cardDoc of cardsSnap.docs) {
             const data = cardDoc.data();
-            const nodeId = (0, botNodeGroups_1.resolveCardBotNodeId)(data) || startNodeId;
+            const nodeId = (0, botNodeGroups_1.resolveCardBotNodeId)(data);
             const cardBotId = (0, botNodeGroups_1.resolveCardBotId)(data, botId) || botId;
             if (!nodeId || cardBotId !== botId) {
                 skipped++;
                 continue;
             }
             let targetGroupId = nodeGroupMap.get(String(nodeId));
-            if (!targetGroupId && fallbackGroupId)
-                targetGroupId = fallbackGroupId;
             if (!targetGroupId || targetGroupId === groupDoc.id) {
                 skipped++;
                 continue;

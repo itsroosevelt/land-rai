@@ -288,7 +288,6 @@ export async function relocateAllCardsToBotNodesAdmin(params: {
 
     const startNode = (flow?.nodes || []).find((n: any) => n.type === 'startNode' || n.type === 'start');
     const startNodeId = startNode ? String(startNode.id) : null;
-    const fallbackGroupId = startNodeId ? nodeGroupMap.get(startNodeId) : undefined;
 
     const groupsSnap = await db.collection(`${tenantPath}/kanban-groups`).get();
     let moved = 0;

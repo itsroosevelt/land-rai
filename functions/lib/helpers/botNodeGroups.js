@@ -1,5 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.getBotNodeTypeLabel = getBotNodeTypeLabel;
+exports.extractBotNodeDetails = extractBotNodeDetails;
 exports.getBotNodeLabel = getBotNodeLabel;
 exports.getKanbanEligibleNodes = getKanbanEligibleNodes;
 exports.orderNodesForKanban = orderNodesForKanban;
@@ -24,6 +26,129 @@ const TYPE_LABELS = {
     locationNode: 'Ubicación',
     templateNode: 'Plantilla',
 };
+function getBotNodeTypeLabel(nodeType) {
+    if (!nodeType)
+        return 'Nodo';
+    return TYPE_LABELS[nodeType] || nodeType.replace(/Node$/, '').replace(/([A-Z])/g, ' $1').trim();
+}
+function readNodePrompt(data, nodeType) {
+    const candidates = [
+        data.content,
+        data.text,
+        data.body,
+        data.bodyText,
+        data.caption,
+        data.label,
+    ];
+    if (nodeType === 'endNode') {
+        candidates.unshift(data.outcomeLabel);
+    }
+    const found = candidates.find((v) => typeof v === 'string' && v.trim());
+    return found ? String(found).trim() : undefined;
+}
+function readButtonLabel(button) {
+    var _a;
+    if (!button)
+        return '';
+    if (typeof button === 'string')
+        return button.trim();
+    return String(button.title ||
+        button.text ||
+        ((_a = button.reply) === null || _a === void 0 ? void 0 : _a.title) ||
+        button.label ||
+        button.payload ||
+        button.id ||
+        '').trim();
+}
+/** Rich node snapshot for kanban column headers (pregunta + respuestas esperadas). */
+function extractBotNodeDetails(node) {
+    const d = node.data || {};
+    const typeLabel = getBotNodeTypeLabel(node.type);
+    const prompt = readNodePrompt(d, node.type);
+    const title = (typeof d.label === 'string' && d.label.trim()) ||
+        (typeof d.kanbanGroupName === 'string' && d.kanbanGroupName.trim()) ||
+        (prompt === null || prompt === void 0 ? void 0 : prompt.slice(0, 48)) ||
+        typeLabel;
+    const details = { typeLabel, title };
+    if (prompt)
+        details.prompt = prompt;
+    const expectedAnswers = [];
+    const notes = [];
+    switch (node.type) {
+        case 'quickReplyNode': {
+            (d.buttons || []).forEach((button) => {
+                const label = readButtonLabel(button);
+                if (label)
+                    expectedAnswers.push(label);
+            });
+            if (expectedAnswers.length === 0)
+                notes.push('Sin botones configurados');
+            break;
+        }
+        case 'listMessageNode': {
+            const sections = d.sections || [];
+            sections.forEach((section) => {
+                (section.rows || []).forEach((row) => {
+                    const rowTitle = String(row.title || row.text || '').trim();
+                    const rowDesc = String(row.description || '').trim();
+                    if (rowTitle)
+                        expectedAnswers.push(rowDesc ? `${rowTitle} — ${rowDesc}` : rowTitle);
+                });
+            });
+            if (d.buttonText)
+                notes.push(`Botón del menú: ${d.buttonText}`);
+            if (expectedAnswers.length === 0)
+                notes.push('Sin opciones en la lista');
+            break;
+        }
+        case 'captureInputNode': {
+            if (d.variableName)
+                notes.push(`Variable: ${d.variableName}`);
+            if (d.inputType)
+                notes.push(`Tipo de entrada: ${d.inputType}`);
+            if (d.validationRegex)
+                notes.push(`Validación: ${d.validationRegex}`);
+            if (d.errorMessage)
+                notes.push(`Si falla: ${d.errorMessage}`);
+            expectedAnswers.push('El usuario escribe o envía su respuesta');
+            break;
+        }
+        case 'textMessageNode':
+            notes.push('El bot envía este mensaje y continúa el flujo');
+            break;
+        case 'mediaMessageNode': {
+            if (d.url)
+                notes.push(`Archivo: ${String(d.url).slice(0, 80)}`);
+            notes.push(`Tipo: ${d.type || d.mediaType || 'multimedia'}`);
+            break;
+        }
+        case 'startNode':
+        case 'start':
+            details.prompt = details.prompt || 'Punto de inicio — el cliente entra al flujo aquí';
+            notes.push('Nuevas conversaciones comienzan en esta etapa');
+            break;
+        case 'endNode':
+            if (d.outcome)
+                notes.push(`Resultado: ${d.outcome}`);
+            notes.push('El flujo del bot termina en esta etapa');
+            break;
+        case 'humanHandoffNode':
+            notes.push('Se transfiere a un agente humano');
+            break;
+        case 'conditionNode':
+            notes.push('El camino depende de condiciones del flujo');
+            break;
+        default:
+            if (!details.prompt)
+                notes.push('Nodo del flujo del chatbot');
+            break;
+    }
+    if (expectedAnswers.length)
+        details.expectedAnswers = expectedAnswers;
+    if (notes.length)
+        details.notes = notes;
+    return details;
+}
 const GROUP_COLORS = [
     'bg-blue-900/40',
     'bg-emerald-900/40',
