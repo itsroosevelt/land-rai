@@ -14,7 +14,7 @@ import { isSlugOwnedByOtherEntity } from './entityRouteContract';
 import { MOLD_INTEGRATIONS_INIT } from './integrationsCatalog';
 
 /** Incrementar cuando el molde multitenant gane nuevas estructuras obligatorias. */
-export const ENTITY_MOLD_VERSION = 14;
+export const ENTITY_MOLD_VERSION = 15;
 
 export const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
@@ -64,6 +64,8 @@ export const ENTITY_MOLD_FEATURES = {
     entityRouteContext: true,
     /** Ruta de bots WhatsApp en /cto/automation/whatsappbots. */
     whatsappBotsRoute: true,
+    /** Sanitizar payloads Firestore (omitir undefined) en broadcasts y escrituras CRM. */
+    firestoreWriteSanitize: true,
 } as const;
 
 function tenantPath(userId: string, entityId: string) {

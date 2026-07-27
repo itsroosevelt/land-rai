@@ -15,14 +15,7 @@ import {
 } from 'firebase/firestore';
 import { isInboxGroup } from './botNodeGroups';
 import { filterGroupsForPrincipalBot } from './principalKanban';
-
-function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
-    const out: Record<string, unknown> = {};
-    Object.entries(obj).forEach(([k, v]) => {
-        if (v !== undefined) out[k] = v;
-    });
-    return out as Partial<T>;
-}
+import { stripUndefined } from '@/lib/mold/firestoreWrite';
 
 export type CustomBoardSortMode = 'last_activity' | 'fifo' | 'lifo' | 'manual';
 export type CustomBoardDateFilter = 'all' | 'today' | 'yesterday' | 'week' | 'month' | 'custom';

@@ -12,14 +12,10 @@ import {
     deleteDoc,
     updateDoc,
 } from "firebase/firestore";
-import type {
-    Broadcast,
-    BroadcastMessage,
-    BroadcastRecipient,
-    SegmentConfig,
-} from "./types";
+import type { Broadcast, BroadcastMessage, BroadcastRecipient, SegmentConfig } from "./types";
 import { emptyStats } from "./types";
 import { resolveRecipients } from "./segments";
+import { stripUndefined } from "@/lib/mold/firestoreWrite";
 
 const broadcastsPath = (tenantPath: string) => `${tenantPath}/broadcasts`;
 
@@ -57,8 +53,8 @@ export const createBroadcast = async (
         labels: input.labels || "-",
         channel: input.channel || "-",
         segment: input.segment || "-",
-        segmentConfig: input.segmentConfig,
-        message: input.message,
+        segmentConfig: stripUndefined(input.segmentConfig as unknown as Record<string, unknown>),
+        message: stripUndefined(input.message as unknown as Record<string, unknown>),
         botId: input.botId || null,
         botName: input.botName || null,
         senderSlot: input.senderSlot || null,
@@ -111,8 +107,8 @@ export const updateBroadcast = async (
         labels: input.labels || "-",
         channel: input.channel || "-",
         segment: input.segment || "-",
-        segmentConfig: input.segmentConfig,
-        message: input.message,
+        segmentConfig: stripUndefined(input.segmentConfig as unknown as Record<string, unknown>),
+        message: stripUndefined(input.message as unknown as Record<string, unknown>),
         botId: input.botId || null,
         botName: input.botName || null,
         senderSlot: input.senderSlot || null,

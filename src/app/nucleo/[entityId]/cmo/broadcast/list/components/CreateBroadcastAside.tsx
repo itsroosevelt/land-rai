@@ -674,7 +674,7 @@ export default function CreateBroadcastAside({
             kanbanBoardName: board.name,
             kanbanColumnId: col.id,
             kanbanColumnName: col.name,
-            botId: board.botId,
+            ...(board.botId ? { botId: board.botId } : {}),
         });
         setExpandedHubBoardKey(null);
     };
