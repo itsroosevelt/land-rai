@@ -42,7 +42,7 @@ import {
 } from "@/components/ui/tooltip"
 import { toast } from 'sonner';
 
-const Card = ({ card, groupId, onClick, cardColor = 'bg-neutral-800', contacts = [], isCompact }: any) => {
+const Card = ({ card, groupId, onClick, cardColor = 'bg-neutral-800', contacts = [], isCompact, dragDisabled = false }: any) => {
   const { currentUser, activeEntity } = useAuth();
   const getTenantPath = () => {
     if (!currentUser?.uid || !activeEntity) return '';
@@ -61,6 +61,7 @@ const Card = ({ card, groupId, onClick, cardColor = 'bg-neutral-800', contacts =
   } = useSortable({
     id: card.id,
     data: { type: 'CARD', card: { ...card, groupId } },
+    disabled: dragDisabled,
   });
 
   const style = {
@@ -222,6 +223,7 @@ const Card = ({ card, groupId, onClick, cardColor = 'bg-neutral-800', contacts =
         )}
       >
         <div className="flex items-start gap-1.5 min-w-0">
+          {!dragDisabled && (
           <button
             type="button"
             aria-label="Arrastrar tarjeta"
@@ -234,6 +236,7 @@ const Card = ({ card, groupId, onClick, cardColor = 'bg-neutral-800', contacts =
           >
             <GripVertical size={14} />
           </button>
+          )}
 
           <div
             className="flex-1 min-w-0 cursor-pointer"

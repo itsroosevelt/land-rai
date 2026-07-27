@@ -3,8 +3,12 @@
 export const MOLD_WORKSPACE_ROUTES = {
     diagram: (entityId: string, role = 'coo') => `/nucleo/${entityId}/workspace?role=${role}`,
     hub: (entityId: string) => `/nucleo/${entityId}/workspace/hub`,
-    botKanban: (entityId: string) => `/nucleo/${entityId}/workspace/bot`,
+    botKanban: (entityId: string, botId?: string) =>
+        botId
+            ? `/nucleo/${entityId}/workspace/bot?botId=${botId}`
+            : `/nucleo/${entityId}/workspace/bot`,
     manualKanban: (entityId: string) => `/nucleo/${entityId}/workspace/manual`,
+    customBoard: (entityId: string, boardId: string) => `/nucleo/${entityId}/workspace/board/${boardId}`,
     broadcastList: (entityId: string) => `/nucleo/${entityId}/cmo/broadcast/list`,
     integrations: (entityId: string) => `/nucleo/${entityId}/cto/integrations`,
     chatbotEditor: (entityId: string, botId: string) =>

@@ -61,6 +61,7 @@ interface kambanColumnProps {
     onUpdateColor?: (groupId: string, color: string) => void;
     contacts?: any[];
     isCompact?: boolean;
+    locked?: boolean;
 }
 
 export const kambanColumn = ({
@@ -70,7 +71,8 @@ export const kambanColumn = ({
     onCardClick,
     onUpdateColor,
     contacts = [],
-    isCompact
+    isCompact,
+    locked = false,
 }: kambanColumnProps) => {
     const { currentUser, activeEntity } = useAuth();
     const getTenantPath = () => {
@@ -94,7 +96,8 @@ export const kambanColumn = ({
     // Droppable for receiving cards
     const { setNodeRef } = useDroppable({
         id: group.id,
-        data: { type: 'group', group }
+        data: { type: 'group', group },
+        disabled: locked,
     });
 
     // --- ADD CARD ---
@@ -346,6 +349,7 @@ export const kambanColumn = ({
                         <span className={cn("font-medium text-[12px] opacity-40 tabular-nums", selectedColor.textColor)}>
                             {isFiltering ? `${visibleCards.length}/${sortedCards.length}` : sortedCards.length}
                         </span>
+                        {!locked && (
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-7 w-7 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-colors">
@@ -414,6 +418,7 @@ export const kambanColumn = ({
                                 )}
                             </DropdownMenuContent>
                         </DropdownMenu>
+                        )}
                     </div>
                 </div>
 
@@ -521,6 +526,7 @@ export const kambanColumn = ({
                             cardColor={selectedColor.cardColor}
                             contacts={contacts}
                             isCompact={isCompact}
+                            dragDisabled={locked}
                         />
                     ))}
                 </SortableContext>
@@ -534,6 +540,7 @@ export const kambanColumn = ({
                 )}
 
                 {/* Bottom Add Link */}
+                {!locked && (
                 <button
                     onClick={() => setIsSelectContactOpen(true)}
                     className={cn(
@@ -544,6 +551,7 @@ export const kambanColumn = ({
                     <Plus size={14} />
                     <span className="text-[12px] font-medium">New conversation</span>
                 </button>
+                )}
             </div>
 
             {/* Modals */}

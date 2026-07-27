@@ -136,7 +136,7 @@ export default function BroadcastsTable({
                 iconElement = <Tag className="w-3 h-3 text-amber-400" />;
             } else if (config.type === "country") {
                 iconElement = <Globe className="w-3 h-3 text-blue-400" />;
-            } else if (config.type === "kanban_group") {
+            } else if (config.type === "kanban_group" || config.type === "kanban_board_column") {
                 iconElement = <Calendar className="w-3 h-3 text-purple-400" />;
             }
         }

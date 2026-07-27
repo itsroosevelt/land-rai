@@ -2,6 +2,7 @@ import { db } from "@/lib/firebase";
 import { collection, getDocs, onSnapshot, query, orderBy } from "firebase/firestore";
 import { normalizePhoneNumber } from "@/lib/phoneUtils";
 import { getCountryFromPhone } from "@/lib/countryCodes";
+import { resolveKanbanBoardColumnRecipients } from "@/lib/kanban/broadcastKanbanTargets";
 import type { BroadcastRecipient, SegmentConfig } from "./types";
 
 export interface KanbanGroupInfo {
@@ -191,6 +192,29 @@ export const resolveRecipients = async (
             });
         } catch (e) {
             console.error("[Broadcast] resolveRecipients kanban error:", e);
+        }
+        return Array.from(byPhone.values());
+    }
+
+    // Hub kanban board column (principal / manual CRM / custom copy).
+    if (
+        segment.type === "kanban_board_column" &&
+        segment.kanbanBoardSource &&
+        segment.kanbanBoardId &&
+        segment.kanbanColumnId
+    ) {
+        try {
+            const list = await resolveKanbanBoardColumnRecipients(tenantPath, {
+                kanbanBoardSource: segment.kanbanBoardSource,
+                kanbanBoardId: segment.kanbanBoardId,
+                kanbanColumnId: segment.kanbanColumnId,
+                kanbanBoardName: segment.kanbanBoardName,
+                kanbanColumnName: segment.kanbanColumnName,
+                botId: segment.botId,
+            });
+            list.forEach(push);
+        } catch (e) {
+            console.error("[Broadcast] resolveRecipients kanban board column error:", e);
         }
         return Array.from(byPhone.values());
     }

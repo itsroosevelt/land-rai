@@ -35,6 +35,7 @@ export interface SegmentConfig {
         | "tag"
         | "country"
         | "kanban_group"
+        | "kanban_board_column"
         | "created_recent"
         | "inactive"
         | "stage"
@@ -44,6 +45,13 @@ export interface SegmentConfig {
     countryIso?: string;
     kanbanGroupId?: string;
     kanbanGroupName?: string;
+    /** Hub kanban board column targeting */
+    kanbanBoardSource?: "principal" | "manual_crm" | "custom";
+    kanbanBoardId?: string;
+    kanbanBoardName?: string;
+    kanbanColumnId?: string;
+    kanbanColumnName?: string;
+    botId?: string;
     stage?: string;
     days?: number; // for created_recent / inactive
     label?: string; // human readable label for display

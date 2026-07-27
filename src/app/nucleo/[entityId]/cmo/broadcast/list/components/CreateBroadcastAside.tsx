@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { 
-    X, Megaphone, Sliders, ChevronDown, ChevronUp, Clock, HelpCircle, 
-    Bot, Send, Loader2, Search, Users, Sliders as SlidersIcon, Layers, Tag, Globe, Calendar
+    X, Megaphone, Sliders, ChevronDown, ChevronUp, ChevronRight, Clock, HelpCircle, 
+    Bot, Send, Loader2, Search, Users, Sliders as SlidersIcon, Layers, Tag, Globe, Calendar, Lock, Hand, Copy
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -14,12 +14,16 @@ import { collection, onSnapshot, getDocs } from "firebase/firestore";
 import type { Broadcast, SegmentConfig, BroadcastMessage, BroadcastRecipient } from "../lib/types";
 import { createBroadcast, updateBroadcast } from "../lib/broadcastService";
 import {
-    subscribeKanbanGroups,
     subscribeAvailableTags,
     subscribeAvailableCountries,
     estimateRecipients,
-    type KanbanGroupInfo
 } from "../lib/segments";
+import {
+    subscribeHubKanbanBoards,
+    fetchHubKanbanColumns,
+    type HubKanbanBoardOption,
+    type HubKanbanColumnOption,
+} from "@/lib/kanban/broadcastKanbanTargets";
 import { normalizePhoneNumber } from "@/lib/phoneUtils";
 import { getCountryFromPhone } from "@/lib/countryCodes";
 import { subscribeSlotConnections, SLOTS, type SlotConnections, type NumberSlot } from "@/lib/whatsapp/numbers";
@@ -85,7 +89,10 @@ export default function CreateBroadcastAside({
     const [estimatedRecipients, setEstimatedRecipients] = useState<number | null>(null);
 
     // Segment options lists
-    const [kanbanGroups, setKanbanGroups] = useState<KanbanGroupInfo[]>([]);
+    const [hubKanbanBoards, setHubKanbanBoards] = useState<HubKanbanBoardOption[]>([]);
+    const [expandedHubBoardKey, setExpandedHubBoardKey] = useState<string | null>(null);
+    const [hubBoardColumns, setHubBoardColumns] = useState<Record<string, HubKanbanColumnOption[]>>({});
+    const [loadingHubColumnsKey, setLoadingHubColumnsKey] = useState<string | null>(null);
     const [availableTags, setAvailableTags] = useState<string[]>([]);
     const [availableCountries, setAvailableCountries] = useState<
         { iso: string; country: string; flag: string; count: number }[]
@@ -223,7 +230,7 @@ export default function CreateBroadcastAside({
     useEffect(() => {
         if (!tenantPath || !isOpen) return;
 
-        const unsubKanban = subscribeKanbanGroups(tenantPath, setKanbanGroups);
+        const unsubHubBoards = subscribeHubKanbanBoards(tenantPath, setHubKanbanBoards);
         const unsubTags = subscribeAvailableTags(tenantPath, setAvailableTags);
         const unsubCountries = subscribeAvailableCountries(tenantPath, setAvailableCountries);
 
@@ -242,7 +249,7 @@ export default function CreateBroadcastAside({
         const unsubSlots = subscribeSlotConnections(tenantPath, setSlotConnections);
 
         return () => {
-            unsubKanban();
+            unsubHubBoards();
             unsubTags();
             unsubCountries();
             unsubContacts();
@@ -251,20 +258,54 @@ export default function CreateBroadcastAside({
         };
     }, [tenantPath, isOpen]);
 
-    // Keep selected Kanban segment label in sync when a column is renamed.
+    // Keep selected Hub kanban segment label in sync when board/column names change.
     useEffect(() => {
-        if (!formSegmentConfig?.kanbanGroupId) return;
-        const group = kanbanGroups.find((g) => g.id === formSegmentConfig.kanbanGroupId);
-        if (!group) return;
+        if (!formSegmentConfig || formSegmentConfig.type !== "kanban_board_column") return;
+        if (!formSegmentConfig.kanbanBoardId || !formSegmentConfig.kanbanColumnId) return;
 
-        const newLabel = `Kanban: ${group.name}`;
-        if (formSegmentConfig.kanbanGroupName === group.name && formSegment === newLabel) return;
+        const board = hubKanbanBoards.find(
+            (b) =>
+                b.id === formSegmentConfig.kanbanBoardId &&
+                b.source === formSegmentConfig.kanbanBoardSource
+        );
+        if (!board) return;
+
+        const key = `${board.source}:${board.id}`;
+        const col = hubBoardColumns[key]?.find((c) => c.id === formSegmentConfig.kanbanColumnId);
+        if (!col) return;
+
+        const newLabel = `${board.name} · ${col.name}`;
+        if (formSegment === newLabel) return;
 
         setFormSegment(newLabel);
         setFormSegmentConfig((prev) =>
-            prev ? { ...prev, kanbanGroupName: group.name, label: newLabel } : prev
+            prev
+                ? {
+                      ...prev,
+                      kanbanBoardName: board.name,
+                      kanbanColumnName: col.name,
+                      label: newLabel,
+                  }
+                : prev
         );
-    }, [kanbanGroups, formSegmentConfig?.kanbanGroupId, formSegmentConfig?.kanbanGroupName, formSegment]);
+    }, [hubKanbanBoards, hubBoardColumns, formSegmentConfig, formSegment]);
+
+    // Legacy kanban_group label sync
+    useEffect(() => {
+        if (!formSegmentConfig?.kanbanGroupId || formSegmentConfig.type !== "kanban_group") return;
+        const key = `principal:${formSegmentConfig.botId || ""}`;
+        const col = hubBoardColumns[key]?.find((c) => c.id === formSegmentConfig.kanbanGroupId);
+        if (!col) return;
+
+        const board = hubKanbanBoards.find((b) => b.source === "principal" && b.id === formSegmentConfig.botId);
+        const newLabel = board ? `${board.name} · ${col.name}` : `Kanban: ${col.name}`;
+        if (formSegment === newLabel) return;
+
+        setFormSegment(newLabel);
+        setFormSegmentConfig((prev) =>
+            prev ? { ...prev, kanbanGroupName: col.name, label: newLabel } : prev
+        );
+    }, [hubKanbanBoards, hubBoardColumns, formSegmentConfig, formSegment]);
 
     // Resolve templates when WhatsApp channel selected
     useEffect(() => {
@@ -592,6 +633,111 @@ export default function CreateBroadcastAside({
     const segmentSectionLabel = "px-3 pt-2 pb-1 text-[9px] uppercase tracking-wider text-neutral-600 font-bold";
     const segmentOptionClass = "w-full text-left px-3 py-2 text-xs hover:bg-white/5 text-neutral-300 hover:text-white";
 
+    const hubBoardKey = (board: HubKanbanBoardOption) => `${board.source}:${board.id}`;
+
+    const hubBoardIcon = (board: HubKanbanBoardOption) => {
+        if (board.source === "principal") return <Lock className="w-3 h-3 text-emerald-400 shrink-0" />;
+        if (board.source === "manual_crm") return <Hand className="w-3 h-3 text-blue-400 shrink-0" />;
+        return board.kindLabel === "Manual" ? (
+            <Hand className="w-3 h-3 text-blue-400 shrink-0" />
+        ) : (
+            <Copy className="w-3 h-3 text-violet-400 shrink-0" />
+        );
+    };
+
+    const toggleHubBoard = async (board: HubKanbanBoardOption) => {
+        const key = hubBoardKey(board);
+        if (expandedHubBoardKey === key) {
+            setExpandedHubBoardKey(null);
+            return;
+        }
+        setExpandedHubBoardKey(key);
+        if (!hubBoardColumns[key]) {
+            setLoadingHubColumnsKey(key);
+            try {
+                const cols = await fetchHubKanbanColumns(tenantPath, board);
+                setHubBoardColumns((prev) => ({ ...prev, [key]: cols }));
+            } catch (e) {
+                console.error("[Broadcast] fetch hub columns error:", e);
+            } finally {
+                setLoadingHubColumnsKey(null);
+            }
+        }
+    };
+
+    const selectKanbanBoardColumn = (board: HubKanbanBoardOption, col: HubKanbanColumnOption) => {
+        const label = `${board.name} · ${col.name}`;
+        selectSegment(label, {
+            type: "kanban_board_column",
+            kanbanBoardSource: board.source,
+            kanbanBoardId: board.id,
+            kanbanBoardName: board.name,
+            kanbanColumnId: col.id,
+            kanbanColumnName: col.name,
+            botId: board.botId,
+        });
+        setExpandedHubBoardKey(null);
+    };
+
+    const renderHubKanbanSegmentOptions = () => (
+        <>
+            {hubKanbanBoards.length > 0 && (
+                <div className={segmentSectionLabel}>Tableros Kanban (Hub)</div>
+            )}
+            {hubKanbanBoards.map((board) => {
+                const key = hubBoardKey(board);
+                const isExpanded = expandedHubBoardKey === key;
+                const columns = hubBoardColumns[key] || [];
+                const loadingCols = loadingHubColumnsKey === key;
+
+                return (
+                    <div key={key} className="border-b border-white/[0.03] last:border-0">
+                        <button
+                            type="button"
+                            onClick={() => toggleHubBoard(board)}
+                            className={cn(segmentOptionClass, "flex items-center justify-between gap-2")}
+                        >
+                            <span className="flex items-center gap-2 min-w-0">
+                                {hubBoardIcon(board)}
+                                <span className="truncate">
+                                    <span className="text-[9px] text-neutral-600 mr-1">{board.kindLabel}</span>
+                                    {board.name}
+                                </span>
+                            </span>
+                            <ChevronRight
+                                className={cn("w-3 h-3 text-neutral-600 shrink-0 transition-transform", isExpanded && "rotate-90")}
+                            />
+                        </button>
+                        {isExpanded && (
+                            <div className="pb-1">
+                                {loadingCols ? (
+                                    <div className="px-4 py-2 text-[10px] text-neutral-600 flex items-center gap-2">
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                        Cargando columnas...
+                                    </div>
+                                ) : columns.length === 0 ? (
+                                    <div className="px-4 py-2 text-[10px] text-neutral-600">Sin columnas</div>
+                                ) : (
+                                    columns.map((col) => (
+                                        <button
+                                            key={col.id}
+                                            type="button"
+                                            onClick={() => selectKanbanBoardColumn(board, col)}
+                                            className="w-full text-left pl-8 pr-3 py-1.5 text-[11px] hover:bg-white/5 text-neutral-400 hover:text-white truncate"
+                                            title={col.name}
+                                        >
+                                            {col.name}
+                                        </button>
+                                    ))
+                                )}
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+        </>
+    );
+
     const renderSegmentOptions = () => (
         <>
             <div className={segmentSectionLabel}>General</div>
@@ -608,17 +754,7 @@ export default function CreateBroadcastAside({
                 Inactivos hace +30 días
             </button>
 
-            {kanbanGroups.length > 0 && <div className={segmentSectionLabel}>Etapa del Kanban</div>}
-            {kanbanGroups.map((g) => (
-                <button
-                    key={g.id}
-                    type="button"
-                    onClick={() => selectSegment(`Kanban: ${g.name}`, { type: "kanban_group", kanbanGroupId: g.id, kanbanGroupName: g.name })}
-                    className={segmentOptionClass}
-                >
-                    {g.name}
-                </button>
-            ))}
+            {renderHubKanbanSegmentOptions()}
 
             {availableTags.length > 0 && <div className={segmentSectionLabel}>Etiquetas</div>}
             {availableTags.map((t) => (

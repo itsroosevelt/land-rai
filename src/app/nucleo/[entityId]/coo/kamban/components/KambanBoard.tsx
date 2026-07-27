@@ -29,8 +29,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { resolveCardChannel } from '@/lib/omnichannel/resolveCardChannel';
 import { getContactHeaderNames } from '@/lib/omnichannel/contactHeaderInfo';
 import { isInboxGroup } from '@/lib/kanban/botNodeGroups';
-export default function KambanBoard({ boardMode = 'all' }: { boardMode?: 'bot' | 'all' }) {
+export default function KambanBoard({
+    boardMode = 'all',
+    botId,
+}: {
+    boardMode?: 'bot' | 'all';
+    botId?: string;
+}) {
     const { currentUser, activeEntity, activeEntityRoute } = useAuth();
+    const isLocked = boardMode === 'bot';
     const getTenantPath = () => {
         if (!currentUser?.uid || !activeEntity) return '';
         return `users/${currentUser.uid}/entities/${activeEntity}`;
@@ -51,7 +58,7 @@ export default function KambanBoard({ boardMode = 'all' }: { boardMode?: 'bot' |
   const router = useRouter();
 
   const { isCollapsed, toggleSidebar } = useSidebar();
-  const { groups, cards, loading, handleDragEnd, handleUpdateColor, handleAddGroup } = useKambanBoard(searchTerm, boardMode);
+  const { groups, cards, loading, handleDragEnd, handleUpdateColor, handleAddGroup } = useKambanBoard(searchTerm, boardMode, botId);
 
   useEffect(() => {
     const tenantPath = getTenantPath();
@@ -129,11 +136,13 @@ export default function KambanBoard({ boardMode = 'all' }: { boardMode?: 'bot' |
   );
 
   const handleDragStart = (event: DragStartEvent) => {
+    if (isLocked) return;
     setActiveId(event.active.id as string);
   };
 
   const handleDragEndWrapper = async (event: Parameters<typeof handleDragEnd>[0]) => {
     setActiveId(null);
+    if (isLocked) return;
     await handleDragEnd(event);
   };
 
@@ -152,7 +161,7 @@ export default function KambanBoard({ boardMode = 'all' }: { boardMode?: 'bot' |
         body: JSON.stringify({
           userId: currentUser.uid,
           entityId: activeEntity,
-          botId: '00000003',
+          botId: botId || '00000003',
           relocateCards: true,
         }),
       });
@@ -252,13 +261,13 @@ export default function KambanBoard({ boardMode = 'all' }: { boardMode?: 'bot' |
 
   useEffect(() => {
     if (loading || hasAttemptedAutoSync.current || !currentUser?.uid || !activeEntity) return;
-    const hasBotGroups = groups.some((g) => g.autoManaged && g.botId === '00000003');
+    const syncBotId = botId || '00000003';
+    const hasBotGroups = groups.some((g) => g.autoManaged && (botId ? g.botId === botId : g.botId === syncBotId));
     const hasInbox = groups.some((g) => isInboxGroup(g));
-    // Sync when the bot columns are missing OR when the permanent reception column is gone.
     if (hasBotGroups && hasInbox) return;
     hasAttemptedAutoSync.current = true;
     handleSyncBotGroups();
-  }, [loading, groups, currentUser?.uid, activeEntity]);
+  }, [loading, groups, currentUser?.uid, activeEntity, botId]);
 
   const activeCard = useMemo(() => cards.find(c => c.id === activeId), [cards, activeId]);
 
@@ -303,6 +312,7 @@ export default function KambanBoard({ boardMode = 'all' }: { boardMode?: 'bot' |
         onSyncBotGroups={handleSyncBotGroups}
         isSyncingBotGroups={isSyncingBotGroups}
         onExportAll={handleExportAllVCF}
+        locked={isLocked}
       />
 
       <div className="flex-1 overflow-x-auto overflow-y-auto">
@@ -323,6 +333,7 @@ export default function KambanBoard({ boardMode = 'all' }: { boardMode?: 'bot' |
                 onUpdateColor={handleUpdateColor}
                 contacts={contacts}
                 isCompact={isCompact}
+                locked={isLocked}
               />
             ))}
 

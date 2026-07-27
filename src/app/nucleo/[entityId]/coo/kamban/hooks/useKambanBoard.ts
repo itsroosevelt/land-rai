@@ -6,8 +6,13 @@ import { collection, query, orderBy, onSnapshot, doc, updateDoc, Timestamp, addD
 import { toast } from 'sonner';
 import { moveCardBetweenGroups } from '@/lib/kanban/moveCardClient';
 import { isInboxGroup } from '@/lib/kanban/botNodeGroups';
+import { groupBelongsToPrincipalBot } from '@/lib/kanban/principalKanban';
 
-export const useKambanBoard = (filterTerm: string = '', boardMode: 'bot' | 'all' = 'all') => {
+export const useKambanBoard = (
+    filterTerm: string = '',
+    boardMode: 'bot' | 'all' = 'all',
+    botId?: string
+) => {
     const { currentUser, activeEntity } = useAuth();
     const getTenantPath = () => {
         if (!currentUser?.uid || !activeEntity) return '';
@@ -27,13 +32,15 @@ export const useKambanBoard = (filterTerm: string = '', boardMode: 'bot' | 'all'
                 ...doc.data()
             }));
             if (boardMode === 'bot') {
-                // Bot columns + the permanent reception column (so messages are always visible).
-                groupsData = groupsData.filter((g: any) => g.autoManaged === true || isInboxGroup(g));
+                groupsData = groupsData.filter((g: any) => {
+                    if (botId) return groupBelongsToPrincipalBot(g, botId);
+                    return g.autoManaged === true || isInboxGroup(g);
+                });
             }
             setGroups(groupsData);
         });
         return () => unsubscribe();
-    }, [currentUser?.uid, activeEntity, boardMode]);
+    }, [currentUser?.uid, activeEntity, boardMode, botId]);
 
     // Load Cards
     useEffect(() => {

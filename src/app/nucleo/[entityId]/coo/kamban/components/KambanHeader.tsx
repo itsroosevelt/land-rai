@@ -1,4 +1,4 @@
-import { Search, Filter, MoreHorizontal, ArrowLeft, UserPlus, Download, RefreshCw, Settings, Instagram, Facebook, Globe, Ghost, MessageSquare, Twitter, Send, Music, LayoutGrid, Columns2, Check, Mail } from 'lucide-react';
+import { Search, Filter, MoreHorizontal, ArrowLeft, UserPlus, Download, RefreshCw, Settings, Instagram, Facebook, Globe, Ghost, MessageSquare, Twitter, Send, Music, LayoutGrid, Columns2, Check, Mail, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -23,7 +23,8 @@ export const KambanHeader = ({
     onSettings,
     onSyncBotGroups,
     isSyncingBotGroups,
-    onExportAll
+    onExportAll,
+    locked = false,
 }: any) => {
     return (
         <div className="h-[52px] border-b border-white/5 bg-black/40 backdrop-blur-xl flex items-center justify-between px-4 flex-shrink-0 z-20">
@@ -31,10 +32,19 @@ export const KambanHeader = ({
                 <div className="flex items-center gap-3">
 
                     <div className="flex items-center gap-2">
-                        <div className="bg-blue-500/10 p-1.5 rounded-lg border border-blue-500/20">
-                            <MessageSquare size={16} className="text-blue-500" />
+                        <div className={cn(
+                            "p-1.5 rounded-lg border",
+                            locked ? "bg-emerald-500/10 border-emerald-500/25" : "bg-blue-500/10 border-blue-500/20"
+                        )}>
+                            {locked ? (
+                                <Lock size={16} className="text-emerald-400" />
+                            ) : (
+                                <MessageSquare size={16} className="text-blue-500" />
+                            )}
                         </div>
-                        <h1 className="text-[14px] font-semibold text-white tracking-tight truncate hidden sm:block">Inbox</h1>
+                        <h1 className="text-[14px] font-semibold text-white tracking-tight truncate hidden sm:block">
+                            {locked ? 'Kamban Inamovible' : 'Inbox'}
+                        </h1>
                     </div>
                 </div>
 
@@ -156,6 +166,7 @@ export const KambanHeader = ({
 
                 <div className="flex items-center gap-0.5">
 
+                    {!locked && (
                     <Button
                         variant="ghost"
                         size="sm"
@@ -167,6 +178,7 @@ export const KambanHeader = ({
                         <RefreshCw size={13} className={isSyncingBotGroups ? 'animate-spin' : ''} />
                         <span className="hidden lg:inline text-[11px]">Sync bot</span>
                     </Button>
+                    )}
 
                     <Button 
                         variant="ghost" 
@@ -190,6 +202,7 @@ export const KambanHeader = ({
                 </div>
 
                 <div className="pl-2">
+                    {!locked && (
                     <Button 
                         size="sm" 
                         onClick={onNewChat}
@@ -198,6 +211,12 @@ export const KambanHeader = ({
                         <UserPlus size={14} />
                         <span className="hidden sm:inline">New Chat</span>
                     </Button>
+                    )}
+                    {locked && (
+                        <span className="text-[9px] uppercase tracking-wider text-emerald-500/70 border border-emerald-500/20 bg-emerald-500/5 px-2 py-1 rounded-lg hidden sm:inline">
+                            Solo lectura
+                        </span>
+                    )}
                 </div>
             </div>
         </div>
