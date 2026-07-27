@@ -97,6 +97,18 @@ async function ensureIntegrationsInitAdmin(db: AdminDb, path: string): Promise<v
     );
 }
 
+async function ensureCustomKanbanHubInitializedAdmin(db: AdminDb, path: string): Promise<void> {
+    await db.doc(`${path}/workspaces/custom_kanban_hub`).set(
+        {
+            initialized: true,
+            boardType: 'custom_hub',
+            version: 1,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+    );
+}
+
 /** Versión servidor del aprovisionamiento del molde (webhooks, API, scripts). */
 export async function provisionEntityMoldAdmin(
     db: AdminDb,
@@ -105,6 +117,7 @@ export async function provisionEntityMoldAdmin(
 ): Promise<void> {
     const path = tenantPath(userId, entityId);
     await ensureManualKanbanInitializedAdmin(db, path);
+    await ensureCustomKanbanHubInitializedAdmin(db, path);
     await ensureReceptionColumnAdmin(db, path);
     await ensureStarterChatbotAdmin(db, path);
     await ensureWhatsAppSlotNormalizationAdmin(db, path);

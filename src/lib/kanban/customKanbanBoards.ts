@@ -108,7 +108,8 @@ export interface CustomBoardPlacement {
 
 const DEFAULT_FILTERS: CustomBoardFilters = { ...DEFAULT_BOARD_FILTERS };
 
-const CUSTOM_BOARDS_HUB_ID = 'custom_kanban_hub';
+/** Firestore hub doc id under workspaces — boards live in subcollection. */
+export const CUSTOM_BOARDS_HUB_ID = 'custom_kanban_hub';
 
 /** Hub doc under workspaces — boards live in subcollection (odd segment count). */
 function hubRef(db: Firestore, tenantPath: string) {
@@ -449,4 +450,18 @@ export async function getBoard(
     const snap = await getDoc(boardRef(db, tenantPath, boardId));
     if (!snap.exists()) return null;
     return { id: snap.id, ...snap.data() } as CustomKanbanBoard;
+}
+
+/** Molde multitenant: contenedor del hub de tableros personalizados (copias/manuales). Idempotente. */
+export async function ensureCustomKanbanHubInitialized(db: Firestore, tenantPath: string): Promise<void> {
+    await setDoc(
+        hubRef(db, tenantPath),
+        {
+            initialized: true,
+            boardType: 'custom_hub',
+            version: 1,
+            updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+    );
 }

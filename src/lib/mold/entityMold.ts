@@ -1,5 +1,6 @@
 import { doc, getDoc, setDoc, serverTimestamp, Firestore } from 'firebase/firestore';
 import { ensureManualKanbanInitialized } from '@/lib/kanban/manualKanban';
+import { ensureCustomKanbanHubInitialized } from '@/lib/kanban/customKanbanBoards';
 import { MOLD_WHATSAPP_MESSAGING } from './whatsappMessaging';
 import { SYSTEM_INBOX_GROUP_FIELDS, SYSTEM_INBOX_GROUP_ID } from '@/lib/kanban/botNodeGroups';
 import {
@@ -14,7 +15,7 @@ import { isSlugOwnedByOtherEntity } from './entityRouteContract';
 import { MOLD_INTEGRATIONS_INIT } from './integrationsCatalog';
 
 /** Incrementar cuando el molde multitenant gane nuevas estructuras obligatorias. */
-export const ENTITY_MOLD_VERSION = 15;
+export const ENTITY_MOLD_VERSION = 16;
 
 export const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
@@ -66,6 +67,14 @@ export const ENTITY_MOLD_FEATURES = {
     whatsappBotsRoute: true,
     /** Sanitizar payloads Firestore (omitir undefined) en broadcasts y escrituras CRM. */
     firestoreWriteSanitize: true,
+    /** Hub de tableros Kanban personalizados (copias/manuales) bajo workspaces/custom_kanban_hub. */
+    customKanbanHub: true,
+    /** Tipos de tablero: copia (fusionar columnas) y manual (organización libre). */
+    customKanbanBoardKinds: true,
+    /** Kamban principal inamovible (solo lectura, sincronizado al bot). */
+    principalKanbanLocked: true,
+    /** Segmentación de broadcasts por tablero/columna del Hub Kanban. */
+    broadcastKanbanHubSegments: true,
 } as const;
 
 function tenantPath(userId: string, entityId: string) {
@@ -135,6 +144,7 @@ export async function provisionEntityMold(
     const path = tenantPath(userId, entityId);
 
     await ensureManualKanbanInitialized(db, path);
+    await ensureCustomKanbanHubInitialized(db, path);
     await ensureReceptionColumn(db, path);
     await ensureStarterChatbot(db, path);
     await ensureWhatsAppSlotNormalization(db, path);

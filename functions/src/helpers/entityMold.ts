@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import { MANUAL_KANBAN_COLUMNS } from './mold/manualKanbanColumns';
 
 /** Mantener alineado con src/lib/mold/entityMold.ts */
-export const ENTITY_MOLD_VERSION = 14;
+export const ENTITY_MOLD_VERSION = 16;
 
 const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
@@ -11,6 +11,10 @@ const ENTITY_MOLD_FEATURES = {
     whatsappOutbound: true,
     whatsappBroadcast: true,
     whatsappMultiNumber: true,
+    whatsappInboundMedia: true,
+    botAdvancedNodes: true,
+    conversationsStore: true,
+    flowHumanize: true,
     geminiIntegration: true,
     stripeIntegration: true,
     gmailMultiAccount: true,
@@ -18,14 +22,20 @@ const ENTITY_MOLD_FEATURES = {
     integrationsHubV2: true,
     chatbotRulesExport: true,
     chatbotJsonImportExport: true,
+    multiNumberBotIsolation: true,
+    whatsappBotPhoneBinding: true,
+    primarySlotNormalized: true,
     entityRouteSlugs: true,
     entitySlugsIndex: true,
     slugFirstRouteResolution: true,
     ghostEntityGuard: true,
     entityRouteContext: true,
     whatsappBotsRoute: true,
-    whatsappBotPhoneBinding: true,
-    multiNumberBotIsolation: true,
+    firestoreWriteSanitize: true,
+    customKanbanHub: true,
+    customKanbanBoardKinds: true,
+    principalKanbanLocked: true,
+    broadcastKanbanHubSegments: true,
 } as const;
 
 const MOLD_INTEGRATIONS_INIT = {
@@ -85,6 +95,18 @@ async function ensureManualKanbanInitializedAdmin(db: AdminDb, path: string): Pr
     );
 }
 
+async function ensureCustomKanbanHubInitializedAdmin(db: AdminDb, path: string): Promise<void> {
+    await db.doc(`${path}/workspaces/custom_kanban_hub`).set(
+        {
+            initialized: true,
+            boardType: 'custom_hub',
+            version: 1,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+    );
+}
+
 export async function provisionEntityMoldAdmin(
     db: AdminDb,
     userId: string,
@@ -92,6 +114,7 @@ export async function provisionEntityMoldAdmin(
 ): Promise<void> {
     const path = tenantPath(userId, entityId);
     await ensureManualKanbanInitializedAdmin(db, path);
+    await ensureCustomKanbanHubInitializedAdmin(db, path);
 
     await db.doc(`${path}/integrations/_init`).set(
         {

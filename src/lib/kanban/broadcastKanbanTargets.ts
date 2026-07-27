@@ -16,6 +16,7 @@ import {
     resolveBoardKind,
     BOARD_KIND_LABELS,
     DEFAULT_BOARD_FILTERS,
+    CUSTOM_BOARDS_HUB_ID,
     type CustomKanbanBoard,
     type CustomBoardPlacement,
 } from './customKanbanBoards';
@@ -39,7 +40,6 @@ export interface HubKanbanColumnOption {
     order: number;
 }
 
-const CUSTOM_BOARDS_HUB_ID = 'custom_kanban_hub';
 const MANUAL_CRM_BOARD_ID = 'system_manual';
 
 function hubBoardsCol(tenantPath: string) {

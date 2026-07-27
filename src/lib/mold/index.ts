@@ -5,6 +5,8 @@ export {
     ensureEntityMoldUpToDate,
 } from './entityMold';
 
+export { CUSTOM_BOARDS_HUB_ID } from '@/lib/kanban/customKanbanBoards';
+
 export {
     ENTITY_ROUTE_CONTRACT_VERSION,
     ENTITY_ROUTE_MOLD_FIELDS,
