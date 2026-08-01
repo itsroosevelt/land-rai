@@ -37,6 +37,7 @@ interface BroadcastsTableProps {
     handleClone: (broadcast: Broadcast) => void;
     handleDeleteClick: (broadcast: Broadcast) => void;
     onLaunch: (broadcast: Broadcast) => void;
+    onResume: (broadcast: Broadcast) => void;
     onViewResults: (broadcast: Broadcast) => void;
     handleRename: (broadcast: Broadcast, name: string) => void;
 }
@@ -59,6 +60,7 @@ export default function BroadcastsTable({
     handleClone,
     handleDeleteClick,
     onLaunch,
+    onResume,
     onViewResults,
     handleRename,
 }: BroadcastsTableProps) {
@@ -326,9 +328,15 @@ export default function BroadcastsTable({
                                                 </button>
                                             )}
                                             {isSending && (
-                                                <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] text-neutral-500">
-                                                    <Loader2 className="w-3 h-3 animate-spin" /> Enviando
-                                                </span>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onResume(broadcast);
+                                                    }}
+                                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 text-amber-100 text-[10px] font-normal border border-amber-500/20 active:scale-95 transition-all"
+                                                >
+                                                    <Play className="w-3 h-3" /> Reanudar
+                                                </button>
                                             )}
                                             {canViewResults && (
                                                 <button
@@ -364,6 +372,14 @@ export default function BroadcastsTable({
                                                         className="w-full px-3 py-1.5 text-xs text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 transition-colors flex items-center gap-2"
                                                     >
                                                         <Play className="w-3 h-3" /> Iniciar campaña
+                                                    </button>
+                                                )}
+                                                {isSending && (
+                                                    <button
+                                                        onClick={() => onResume(broadcast)}
+                                                        className="w-full px-3 py-1.5 text-xs text-amber-300 hover:text-amber-200 hover:bg-amber-500/10 transition-colors flex items-center gap-2"
+                                                    >
+                                                        <Play className="w-3 h-3" /> Reanudar envío
                                                     </button>
                                                 )}
                                                 {canViewResults && (

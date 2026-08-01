@@ -40,6 +40,7 @@ import {
     deleteBroadcast as deleteBroadcastDoc,
     renameBroadcast,
     launchBroadcast,
+    finalizeBroadcast,
 } from "./lib/broadcastService";
 
 export type { Broadcast } from "./lib/types";
@@ -91,6 +92,21 @@ export default function BroadcastsListPage() {
         const unsub = subscribeBroadcasts(tenantPath, setBroadcasts);
         return () => unsub();
     }, [tenantPath]);
+
+    // Auto-close campaigns stuck in "Sending" when every recipient is already sent/failed.
+    const finalizeTriedRef = useRef<Set<string>>(new Set());
+    useEffect(() => {
+        if (!currentUser?.uid || !entityId) return;
+        broadcasts
+            .filter((b) => b.status === "Sending")
+            .forEach((b) => {
+                if (finalizeTriedRef.current.has(b.id)) return;
+                finalizeTriedRef.current.add(b.id);
+                finalizeBroadcast(currentUser.uid!, entityId, b.id).catch(() => {
+                    finalizeTriedRef.current.delete(b.id);
+                });
+            });
+    }, [broadcasts, currentUser?.uid, entityId]);
 
     // Row menu click outside listener
     const rowMenuRef = useRef<HTMLDivElement>(null);
@@ -309,6 +325,27 @@ export default function BroadcastsListPage() {
         }
     };
 
+    const handleResumeBroadcast = async (broadcast: Broadcast) => {
+        if (!currentUser?.uid) return;
+        setActiveRowMenuId(null);
+        toast.loading("Reanudando campaña...", { id: `resume-${broadcast.id}` });
+        try {
+            const result = await launchBroadcast(currentUser.uid, entityId, broadcast.id, {
+                resume: true,
+            });
+            if (result.ok) {
+                toast.success(
+                    `Campaña reanudada: ${result.summary?.sent || 0} enviados, ${result.summary?.failed || 0} fallidos.`,
+                    { id: `resume-${broadcast.id}` }
+                );
+            } else {
+                toast.error(result.error || "No se pudo reanudar.", { id: `resume-${broadcast.id}` });
+            }
+        } catch (e: any) {
+            toast.error(e.message, { id: `resume-${broadcast.id}` });
+        }
+    };
+
     const handleViewResults = (broadcast: Broadcast) => {
         setActiveRowMenuId(null);
         setResultsBroadcast(broadcast);
@@ -449,6 +486,7 @@ export default function BroadcastsListPage() {
                             handleClone={handleClone}
                             handleDeleteClick={handleDeleteClick}
                             onLaunch={handleRequestLaunch}
+                            onResume={handleResumeBroadcast}
                             onViewResults={handleViewResults}
                             handleRename={handleRename}
                         />

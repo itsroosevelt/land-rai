@@ -1,8 +1,24 @@
 import * as admin from 'firebase-admin';
 import * as path from 'path';
 import * as fs from 'fs';
+import { config as loadEnv } from 'dotenv';
 
-// Patrón Singleton para evitar múltiples inicializaciones
+// Ensure .env.local is loaded before credential resolution (dev webpack can init early).
+loadEnv({ path: path.join(process.cwd(), '.env.local') });
+loadEnv({ path: path.join(process.cwd(), '.env') });
+
+function normalizePrivateKey(raw: string): string {
+    let privateKey = raw.trim().replace(/^['"]|['"]$/g, '');
+    while (privateKey.includes('\\n')) {
+        privateKey = privateKey.replace(/\\n/g, '\n');
+    }
+    if (!privateKey.includes('\n') && privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+        privateKey = privateKey
+            .replace('-----BEGIN PRIVATE KEY-----', '-----BEGIN PRIVATE KEY-----\n')
+            .replace('-----END PRIVATE KEY-----', '\n-----END PRIVATE KEY-----');
+    }
+    return privateKey;
+}
 if (!admin.apps.length) {
     try {
         const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
@@ -42,24 +58,15 @@ if (!admin.apps.length) {
 
         if (!initialized && firebaseClientEmail && firebasePrivateKey) {
             try {
-                let privateKey = firebasePrivateKey.trim();
-                privateKey = privateKey.replace(/^['"]|['"]$/g, '');
-                while (privateKey.includes('\\n')) {
-                    privateKey = privateKey.replace(/\\n/g, '\n');
-                }
-                if (!privateKey.includes('\n') && privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
-                    privateKey = privateKey
-                        .replace('-----BEGIN PRIVATE KEY-----', '-----BEGIN PRIVATE KEY-----\n')
-                        .replace('-----END PRIVATE KEY-----', '\n-----END PRIVATE KEY-----');
-                }
+                const privateKey = normalizePrivateKey(firebasePrivateKey);
 
                 admin.initializeApp({
                     credential: admin.credential.cert({
                         projectId: projectId || process.env.FIREBASE_PROJECT_ID || 'roosevelt-491004',
-                        clientEmail: firebaseClientEmail,
+                        clientEmail: firebaseClientEmail.trim(),
                         privateKey,
                     }),
-                    projectId,
+                    projectId: projectId || process.env.FIREBASE_PROJECT_ID,
                 });
                 console.log('[Firebase Admin] ✅ SUCCESS: Initialized from FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY.');
                 initialized = true;
@@ -153,8 +160,13 @@ if (!admin.apps.length) {
         } 
         
         if (!initialized) {
-            admin.initializeApp({ projectId });
-            console.log(`[Firebase Admin] Initialized with default credentials (ADC).`);
+            const resolvedProject = projectId || process.env.FIREBASE_PROJECT_ID || 'roosevelt-491004';
+            console.error(
+                '[Firebase Admin] ❌ No service account credentials found. ' +
+                    'Set FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY in .env.local ' +
+                    'or FIREBASE_SERVICE_ACCOUNT_BASE64. Firestore API routes will fail.'
+            );
+            admin.initializeApp({ projectId: resolvedProject });
         }
     } catch (error: any) {
         console.error('[Firebase Admin] ❌ CRITICAL ERROR:', error.message);

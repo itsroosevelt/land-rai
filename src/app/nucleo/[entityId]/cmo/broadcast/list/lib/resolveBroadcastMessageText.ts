@@ -45,9 +45,10 @@ export function resolveTemplateBodyForRecipient(
 
 /** The literal text this recipient received from the campaign. */
 export function resolveBroadcastRecipientText(
-    broadcast: Broadcast,
+    broadcast: Broadcast | null | undefined,
     recipient: BroadcastRecipient
 ): string {
+    if (!broadcast) return "";
     if (recipient.sentText && !isBroadcastTemplatePlaceholder(recipient.sentText)) {
         return recipient.sentText;
     }

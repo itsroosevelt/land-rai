@@ -210,17 +210,38 @@ export const renameBroadcast = async (
 export const launchBroadcast = async (
     userId: string,
     entityId: string,
-    broadcastId: string
+    broadcastId: string,
+    options?: { resume?: boolean }
 ): Promise<{ ok: boolean; error?: string; summary?: any }> => {
     try {
         const res = await fetch("/api/whatsapp/broadcast/send", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId, entityId, broadcastId }),
+            body: JSON.stringify({ userId, entityId, broadcastId, resume: options?.resume }),
         });
         const data = await res.json();
         if (!res.ok) return { ok: false, error: data.error || "Error al iniciar la campaña" };
         return { ok: true, summary: data };
+    } catch (e: any) {
+        return { ok: false, error: e.message };
+    }
+};
+
+/** Mark Completed when all recipients are already sent (unsticks "Sending"). */
+export const finalizeBroadcast = async (
+    userId: string,
+    entityId: string,
+    broadcastId: string
+): Promise<{ ok: boolean; error?: string; data?: any }> => {
+    try {
+        const res = await fetch("/api/whatsapp/broadcast/finalize", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId, entityId, broadcastId }),
+        });
+        const data = await res.json();
+        if (!res.ok) return { ok: false, error: data.error || "Error al finalizar" };
+        return { ok: true, data };
     } catch (e: any) {
         return { ok: false, error: e.message };
     }
