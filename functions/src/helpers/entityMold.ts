@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import { MANUAL_KANBAN_COLUMNS } from './mold/manualKanbanColumns';
 
 /** Mantener alineado con src/lib/mold/entityMold.ts */
-export const ENTITY_MOLD_VERSION = 17;
+export const ENTITY_MOLD_VERSION = 18;
 
 const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
@@ -40,6 +40,9 @@ const ENTITY_MOLD_FEATURES = {
     broadcastConversationOutbound: true,
     broadcastWebhookReplySync: true,
     broadcastRepliedFilterStrict: true,
+    broadcastSendRecovery: true,
+    broadcastSendHeartbeat: true,
+    broadcastConversationBackfill: true,
 } as const;
 
 const MOLD_INTEGRATIONS_INIT = {

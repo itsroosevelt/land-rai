@@ -31,6 +31,20 @@ export const MOLD_BROADCAST_RECIPIENT_REPLY_FIELDS = {
     sentText: 'sentText',
 } as const;
 
+/** Campos de control de envío en el documento broadcast. */
+export const MOLD_BROADCAST_SEND_CONTROL_FIELDS = {
+    sendHeartbeatAt: 'sendHeartbeatAt',
+    launchedAt: 'launchedAt',
+    completedAt: 'completedAt',
+} as const;
+
+/** Rutas API del pipeline de campañas (servidor / tenant). */
+export const MOLD_BROADCAST_API_ROUTES = {
+    send: '/api/whatsapp/broadcast/send',
+    finalize: '/api/whatsapp/broadcast/finalize',
+    backfillChat: '/api/whatsapp/broadcast/backfill-chat',
+} as const;
+
 /** Metadatos en mensajes de conversación generados por campaña. */
 export const MOLD_BROADCAST_CONVERSATION_MESSAGE = {
     source: 'broadcast',

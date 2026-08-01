@@ -15,7 +15,7 @@ import { isSlugOwnedByOtherEntity } from './entityRouteContract';
 import { MOLD_INTEGRATIONS_INIT } from './integrationsCatalog';
 
 /** Incrementar cuando el molde multitenant gane nuevas estructuras obligatorias. */
-export const ENTITY_MOLD_VERSION = 17;
+export const ENTITY_MOLD_VERSION = 18;
 
 export const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
@@ -83,6 +83,12 @@ export const ENTITY_MOLD_FEATURES = {
     broadcastWebhookReplySync: true,
     /** Filtro "Respondió" exige evidencia post-envío (no mensajes previos). */
     broadcastRepliedFilterStrict: true,
+    /** Reanudar / finalizar campañas atascadas en Sending (resume + finalize APIs). */
+    broadcastSendRecovery: true,
+    /** Heartbeat sendHeartbeatAt en campañas para detectar envíos interrumpidos. */
+    broadcastSendHeartbeat: true,
+    /** Backfill automático de texto real y respuestas en /conversations post-envío. */
+    broadcastConversationBackfill: true,
 } as const;
 
 function tenantPath(userId: string, entityId: string) {

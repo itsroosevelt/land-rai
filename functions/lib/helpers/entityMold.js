@@ -6,7 +6,7 @@ exports.ensureEntityMoldUpToDateAdmin = ensureEntityMoldUpToDateAdmin;
 const admin = require("firebase-admin");
 const manualKanbanColumns_1 = require("./mold/manualKanbanColumns");
 /** Mantener alineado con src/lib/mold/entityMold.ts */
-exports.ENTITY_MOLD_VERSION = 11;
+exports.ENTITY_MOLD_VERSION = 18;
 const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
     botKanban: true,
@@ -14,6 +14,10 @@ const ENTITY_MOLD_FEATURES = {
     whatsappOutbound: true,
     whatsappBroadcast: true,
     whatsappMultiNumber: true,
+    whatsappInboundMedia: true,
+    botAdvancedNodes: true,
+    conversationsStore: true,
+    flowHumanize: true,
     geminiIntegration: true,
     stripeIntegration: true,
     gmailMultiAccount: true,
@@ -21,6 +25,27 @@ const ENTITY_MOLD_FEATURES = {
     integrationsHubV2: true,
     chatbotRulesExport: true,
     chatbotJsonImportExport: true,
+    multiNumberBotIsolation: true,
+    whatsappBotPhoneBinding: true,
+    primarySlotNormalized: true,
+    entityRouteSlugs: true,
+    entitySlugsIndex: true,
+    slugFirstRouteResolution: true,
+    ghostEntityGuard: true,
+    entityRouteContext: true,
+    whatsappBotsRoute: true,
+    firestoreWriteSanitize: true,
+    customKanbanHub: true,
+    customKanbanBoardKinds: true,
+    principalKanbanLocked: true,
+    broadcastKanbanHubSegments: true,
+    broadcastTemplateBodyPersisted: true,
+    broadcastConversationOutbound: true,
+    broadcastWebhookReplySync: true,
+    broadcastRepliedFilterStrict: true,
+    broadcastSendRecovery: true,
+    broadcastSendHeartbeat: true,
+    broadcastConversationBackfill: true,
 };
 const MOLD_INTEGRATIONS_INIT = {
     encrypted: false,
@@ -59,9 +84,18 @@ async function ensureManualKanbanInitializedAdmin(db, path) {
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
 }
+async function ensureCustomKanbanHubInitializedAdmin(db, path) {
+    await db.doc(`${path}/workspaces/custom_kanban_hub`).set({
+        initialized: true,
+        boardType: 'custom_hub',
+        version: 1,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+}
 async function provisionEntityMoldAdmin(db, userId, entityId) {
     const path = tenantPath(userId, entityId);
     await ensureManualKanbanInitializedAdmin(db, path);
+    await ensureCustomKanbanHubInitializedAdmin(db, path);
     await db.doc(`${path}/integrations/_init`).set(Object.assign(Object.assign({}, MOLD_INTEGRATIONS_INIT), { updatedAt: admin.firestore.FieldValue.serverTimestamp() }), { merge: true });
     await db.doc(path).set({
         moldVersion: exports.ENTITY_MOLD_VERSION,
