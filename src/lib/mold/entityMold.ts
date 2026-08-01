@@ -15,7 +15,7 @@ import { isSlugOwnedByOtherEntity } from './entityRouteContract';
 import { MOLD_INTEGRATIONS_INIT } from './integrationsCatalog';
 
 /** Incrementar cuando el molde multitenant gane nuevas estructuras obligatorias. */
-export const ENTITY_MOLD_VERSION = 16;
+export const ENTITY_MOLD_VERSION = 17;
 
 export const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
@@ -75,6 +75,14 @@ export const ENTITY_MOLD_FEATURES = {
     principalKanbanLocked: true,
     /** Segmentación de broadcasts por tablero/columna del Hub Kanban. */
     broadcastKanbanHubSegments: true,
+    /** Texto real de plantilla guardado al crear campaña (templateBody + messagePreview). */
+    broadcastTemplateBodyPersisted: true,
+    /** Envío de campaña persiste burbuja morada en /conversations con texto real. */
+    broadcastConversationOutbound: true,
+    /** Webhook marca replyText y enlaza respuesta al hilo de la campaña. */
+    broadcastWebhookReplySync: true,
+    /** Filtro "Respondió" exige evidencia post-envío (no mensajes previos). */
+    broadcastRepliedFilterStrict: true,
 } as const;
 
 function tenantPath(userId: string, entityId: string) {

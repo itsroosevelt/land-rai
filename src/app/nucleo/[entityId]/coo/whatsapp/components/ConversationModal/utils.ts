@@ -45,10 +45,17 @@ export const groupMessagesByDate = (messages: Message[] = []) => {
         }
     }
 
-    // 3. Group by Date (handle both Firestore Timestamp and epoch formats)
-    return deduped.reduce((acc, msg) => {
+    // 3. Group by Date (include messages even if timestamp is missing)
+    const dated: Message[] = [];
+    const undated: Message[] = [];
+
+    deduped.forEach((msg) => {
+        if (getMs(msg.timestamp) === 0) undated.push(msg);
+        else dated.push(msg);
+    });
+
+    const grouped = dated.reduce((acc, msg) => {
         const ms = getMs(msg.timestamp);
-        if (ms === 0) return acc;
         const ts = new Date(ms);
         const date = ts.toLocaleDateString('es-ES', {
             day: 'numeric',
@@ -59,4 +66,10 @@ export const groupMessagesByDate = (messages: Message[] = []) => {
         acc[date].push(msg);
         return acc;
     }, {} as { [key: string]: Message[] });
+
+    if (undated.length > 0) {
+        grouped['Mensajes anteriores'] = undated;
+    }
+
+    return grouped;
 };

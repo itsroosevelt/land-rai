@@ -5,6 +5,7 @@ import { ConversationModalProps } from '../types';
 import { useCardSubscription } from './useCardSubscription';
 import { useMessageSender } from './useMessageSender';
 import { useCardOperations } from './useCardOperations';
+import { mergeConversationMessages } from '@/lib/conversations/mergeMessages';
 
 export const useConversationLogic = (props: ConversationModalProps) => {
     // 1. Subscription & Data Layer
@@ -79,10 +80,20 @@ export const useConversationLogic = (props: ConversationModalProps) => {
         setIsEditing
     });
 
-    // 5. Computed Helpers
+    // 5. Computed Helpers — broadcast override wins; otherwise merge all sources
+    const resolvedMessages = useMemo(() => {
+        if (Array.isArray(props.messagesOverride) && props.messagesOverride.length > 0) {
+            return props.messagesOverride as any[];
+        }
+        return mergeConversationMessages(
+            props.card?.messages,
+            liveCardData?.messages
+        ) as any[];
+    }, [props.messagesOverride, liveCardData?.messages, props.card?.messages]);
+
     const groupedMessages = useMemo(() =>
-        groupMessagesByDate(liveCardData?.messages || props.card?.messages || []),
-        [liveCardData?.messages, props.card?.messages]
+        groupMessagesByDate(resolvedMessages),
+        [resolvedMessages]
     );
 
     const isMessageRead = (msg: any) =>
@@ -122,6 +133,7 @@ export const useConversationLogic = (props: ConversationModalProps) => {
         onEmojiClick,
 
         // Messages
+        resolvedMessages,
         groupedMessages,
         isMessageRead,
         messagesEndRef,

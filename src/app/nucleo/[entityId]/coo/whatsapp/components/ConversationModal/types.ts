@@ -227,6 +227,10 @@ export interface ConversationModalProps {
         contactNumber?: string;
         [key: string]: any;
     } | null;
+    /** Override tenant path (e.g. broadcast results panel with slug routing). */
+    tenantPath?: string;
+    /** When set, used as the message list instead of subscription data (broadcast panel). */
+    messagesOverride?: unknown[];
     position?: DOMRect | null;
     hideInternalTray?: boolean;
     hideSidebar?: boolean;

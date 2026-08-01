@@ -18,7 +18,7 @@ export default function DeleteBroadcastModal({
             <div className="bg-[#121319] border border-white/10 rounded-2xl w-[440px] max-w-[90vw] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
                 {/* Title Bar */}
                 <div className="p-4 border-b border-white/5 flex items-center justify-between">
-                    <h3 className="font-semibold text-sm text-white/95">
+                    <h3 className="font-normal text-sm text-white/95 tracking-tight">
                         Delete Broadcast ({deleteTarget.name})
                     </h3>
                     <button 

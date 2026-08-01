@@ -27,7 +27,7 @@ export default function LaunchConfirmModal({
                         <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
                             <AlertTriangle className="w-4 h-4 text-amber-400" />
                         </div>
-                        <h2 className="text-sm font-semibold text-white">Iniciar campaña</h2>
+                        <h2 className="text-sm font-normal text-white">Iniciar campaña</h2>
                     </div>
                     <button
                         onClick={onCancel}

@@ -47,7 +47,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Broadcast not found" }, { status: 404 });
         }
 
-        const broadcast: any = snap.data();
+        let broadcast: any = snap.data();
         if (broadcast.status === "Sending") {
             return NextResponse.json(
                 { error: "La campaña ya se está enviando." },
@@ -61,7 +61,21 @@ export async function POST(req: Request) {
             );
         }
 
-        const message = broadcast.message || { kind: "text", text: "" };
+        let message = broadcast.message || { kind: "text", text: "" };
+
+        const { ensureBroadcastTemplateBody } = await import("@/lib/broadcast/ensureBroadcastTemplateBody");
+        const ensured = await ensureBroadcastTemplateBody({
+            db,
+            tenantPath,
+            broadcastId,
+            broadcast,
+            userId,
+            entityId,
+        });
+        if (ensured.updated) {
+            message = ensured.message;
+            broadcast = { ...broadcast, message };
+        }
 
         // Mark as sending.
         await broadcastRef.update({
@@ -132,7 +146,13 @@ export async function POST(req: Request) {
                         language: { code: message.templateLanguage || "es" },
                         components: params.length ? [{ type: "body", parameters: params }] : [],
                     };
-                    text = `Campaign template: ${message.templateName}`;
+                    const { resolveBroadcastRecipientText } = await import(
+                        "@/app/nucleo/[entityId]/cmo/broadcast/list/lib/resolveBroadcastMessageText"
+                    );
+                    text = resolveBroadcastRecipientText(
+                        { id: broadcastId, ...broadcast, message } as any,
+                        { id: r.id, ...r, status: r.status || "pending" } as any
+                    );
                 } else if (message.kind === "media") {
                     type = message.mediaType || "image";
                     url = message.mediaUrl;
@@ -159,16 +179,57 @@ export async function POST(req: Request) {
                     messageId,
                     error: null,
                     sentAt: admin.firestore.FieldValue.serverTimestamp(),
+                    sentText: text,
                 });
+
+                // Log outbound message into conversation history (visible in chat).
+                try {
+                    const { isBroadcastTemplatePlaceholder } = await import(
+                        "@/app/nucleo/[entityId]/cmo/broadcast/list/lib/resolveBroadcastMessageText"
+                    );
+                    if (text && !isBroadcastTemplatePlaceholder(text)) {
+                        const { logBroadcastMessageToConversation } = await import(
+                            "@/lib/broadcast/logBroadcastToConversationAdmin"
+                        );
+                        await logBroadcastMessageToConversation({
+                            db,
+                            tenantPath,
+                            userId,
+                            entityId,
+                            phone: r.phone,
+                            text,
+                            broadcastId,
+                            broadcastName: broadcast.name,
+                            messageId,
+                            mediaUrl: url,
+                            mediaType: type !== "text" && type !== "template" ? type : undefined,
+                            filename,
+                        });
+                    } else {
+                        console.warn(
+                            `[Broadcast] Conversation log skipped for ${r.phone}: unresolved template text`
+                        );
+                    }
+                } catch (logErr) {
+                    console.warn("[Broadcast] Conversation log skipped:", logErr);
+                }
 
                 // Lightweight reverse indexes so the inbound webhook can track
                 // delivered/read (by messageId) and replies (by phone digits).
-                const digits = String(r.phone || "").replace(/\D/g, "");
-                if (digits) {
-                    await db
-                        .doc(`${tenantPath}/broadcast_reply_index/${digits}`)
-                        .set({ broadcastId, recipientId: r.id, sentAt: admin.firestore.FieldValue.serverTimestamp() })
-                        .catch(() => {});
+                const replyKeys = (await import("@/lib/phoneUtils")).phoneReplyIndexKeys(r.phone);
+                if (replyKeys.length > 0) {
+                    await Promise.all(
+                        replyKeys.map((key) =>
+                            db
+                                .doc(`${tenantPath}/broadcast_reply_index/${key}`)
+                                .set({
+                                    broadcastId,
+                                    recipientId: r.id,
+                                    sentAt: admin.firestore.FieldValue.serverTimestamp(),
+                                })
+                                .catch(() => {})
+                        )
+                    );
                 }
                 if (messageId) {
                     await db
@@ -249,6 +310,15 @@ export async function POST(req: Request) {
             "stats.pending": Math.max(0, recipients.length - sent - failed),
             completedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
+
+        try {
+            const { backfillBroadcastConversations } = await import(
+                "@/lib/broadcast/backfillBroadcastConversations"
+            );
+            await backfillBroadcastConversations({ db, userId, entityId, broadcastId });
+        } catch (backfillErr) {
+            console.warn("[Broadcast] Post-send conversation backfill skipped:", backfillErr);
+        }
 
         return NextResponse.json({
             success: true,

@@ -19,6 +19,10 @@ export interface BroadcastMessage {
     templateLanguage?: string;
     templateVariables?: string[]; // e.g. ["{{1}}", "{{2}}"]
     templateParamValues?: Record<string, string>; // {{1}} -> "{{Nombre}}" (dynamic token or literal)
+    /** Meta template BODY text at creation time (for chat preview / history). */
+    templateBody?: string;
+    /** Resolved preview shown in the campaign builder (param values applied). */
+    messagePreview?: string;
     // Plain text (only valid inside the 24h customer service window)
     text?: string;
     // Media
@@ -116,8 +120,12 @@ export interface BroadcastRecipient {
     status: RecipientStatus;
     error?: string | null;
     messageId?: string | null;
+    sentText?: string | null;
     sentAt?: any;
     repliedAt?: any;
+    /** Inbound text captured when webhook marks recipient as replied. */
+    replyText?: string | null;
+    replyMessageId?: string | null;
 }
 
 export const emptyStats = (): BroadcastStats => ({

@@ -49,7 +49,7 @@ export default function SidebarFilters({
 
     return (
         <aside className={cn(
-            "absolute left-3 top-3 bottom-3 z-40 w-56 bg-[#0b0c10]/95 backdrop-blur-xl border border-white/10 rounded-2xl flex flex-col transition-all duration-300 shadow-[0_20px_50px_rgba(0,0,0,0.5)]",
+            "absolute left-3 top-3 bottom-3 z-40 w-56 bg-[#0b0c10]/95 backdrop-blur-xl border border-white/10 rounded-2xl flex flex-col transition-all duration-300 shadow-[0_20px_50px_rgba(0,0,0,0.5)] font-outfit font-normal antialiased tracking-tight",
             isSidebarOpen ? "translate-x-0 opacity-100" : "-translate-x-64 opacity-0 pointer-events-none"
         )}>
             {/* Header */}
@@ -62,7 +62,7 @@ export default function SidebarFilters({
                     >
                         <Menu className="w-4 h-4" />
                     </button>
-                    <span className="font-semibold text-xs tracking-wide text-white/90 uppercase">CMO / Marketing</span>
+                    <span className="font-normal text-[10px] tracking-[0.2em] text-neutral-500 uppercase">CMO / Marketing</span>
                 </div>
             </div>
 
@@ -78,11 +78,11 @@ export default function SidebarFilters({
                             className={cn(
                                 "flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-normal transition-all duration-200",
                                 isActive
-                                    ? "bg-orange-500/15 text-orange-400 border border-orange-500/20 shadow-md shadow-orange-500/5 font-medium"
-                                    : "text-neutral-400 hover:bg-white/[0.02] hover:text-white/80 border border-transparent"
+                                    ? "bg-violet-600/10 text-white border border-violet-500/20"
+                                    : "text-neutral-500 hover:bg-white/[0.02] hover:text-neutral-300 border border-transparent"
                             )}
                         >
-                            <Icon className={cn("w-4 h-4", isActive ? "text-orange-400" : "text-neutral-500")} />
+                            <Icon className={cn("w-4 h-4", isActive ? "text-violet-400" : "text-neutral-600")} />
                             <span>{item.label}</span>
                         </Link>
                     );
@@ -93,7 +93,7 @@ export default function SidebarFilters({
             <div className="p-2 border-t border-white/5">
                 <Link
                     href={`/nucleo/${entityId}/workspace?role=cmo`}
-                    className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium text-neutral-400 hover:bg-white/5 hover:text-white border border-white/5 transition-all duration-200"
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs font-normal text-neutral-500 hover:bg-white/5 hover:text-neutral-300 border border-white/5 transition-all duration-200"
                 >
                     <ArrowLeft className="w-3.5 h-3.5" />
                     <span>Volver al Workspace</span>

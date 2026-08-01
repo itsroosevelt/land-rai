@@ -72,6 +72,7 @@ export default function BroadcastsListPage() {
     const [launching, setLaunching] = useState(false);
     const [resultsBroadcast, setResultsBroadcast] = useState<Broadcast | null>(null);
     const [resultsRecipients, setResultsRecipients] = useState<BroadcastRecipient[]>([]);
+    const [resultsRecipientsLoading, setResultsRecipientsLoading] = useState(false);
 
     // Selected campaign for viewing
     const [selectedCampaignForEdit, setSelectedCampaignForEdit] = useState<Broadcast | null>(null);
@@ -108,9 +109,14 @@ export default function BroadcastsListPage() {
     useEffect(() => {
         if (!tenantPath || !resultsBroadcast) {
             setResultsRecipients([]);
+            setResultsRecipientsLoading(false);
             return;
         }
-        const unsub = subscribeRecipients(tenantPath, resultsBroadcast.id, setResultsRecipients);
+        setResultsRecipientsLoading(true);
+        const unsub = subscribeRecipients(tenantPath, resultsBroadcast.id, (list) => {
+            setResultsRecipients(list);
+            setResultsRecipientsLoading(false);
+        });
         return () => unsub();
     }, [tenantPath, resultsBroadcast]);
 
@@ -139,6 +145,17 @@ export default function BroadcastsListPage() {
     ];
 
     // Filter and Sort Broadcasts
+    const aggregateStats = useMemo(() => {
+        const totals = { campaigns: broadcasts.length, recipients: 0, replied: 0, failed: 0, completed: 0 };
+        broadcasts.forEach((b) => {
+            totals.recipients += b.stats?.total ?? b.recipients ?? 0;
+            totals.replied += b.stats?.replied ?? 0;
+            totals.failed += b.stats?.failed ?? 0;
+            if (b.status === "Completed") totals.completed += 1;
+        });
+        return totals;
+    }, [broadcasts]);
+
     const processedBroadcasts = useMemo(() => {
         let list = [...broadcasts];
 
@@ -312,7 +329,7 @@ export default function BroadcastsListPage() {
     };
 
     return (
-        <div className="flex h-screen w-screen bg-[#07080a] text-white font-sans overflow-hidden">
+        <div className="flex h-screen w-screen bg-[#07080a] text-white font-outfit font-normal antialiased tracking-tight overflow-hidden">
             {/* Side Navigation Menu */}
             <SidebarFilters
                 isSidebarOpen={isSidebarOpen}
@@ -338,9 +355,9 @@ export default function BroadcastsListPage() {
                         <div className="flex items-center bg-[#13151a] p-1 rounded-lg border border-white/5">
                             <button
                                 onClick={() => setViewMode("Table")}
-                                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-normal transition-all ${
                                     viewMode === "Table"
-                                        ? "bg-white/5 text-blue-400"
+                                        ? "bg-white/5 text-violet-300"
                                         : "text-neutral-400 hover:text-white"
                                 }`}
                             >
@@ -349,9 +366,9 @@ export default function BroadcastsListPage() {
                             </button>
                             <button
                                 onClick={() => setViewMode("Calendar")}
-                                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-normal transition-all ${
                                     viewMode === "Calendar"
-                                        ? "bg-white/5 text-blue-400"
+                                        ? "bg-white/5 text-violet-300"
                                         : "text-neutral-400 hover:text-white"
                                 }`}
                             >
@@ -362,7 +379,7 @@ export default function BroadcastsListPage() {
 
                         <Button 
                             onClick={handleOpenAddSidebar}
-                            className="bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-lg active:scale-95 transition-all"
+                            className="bg-violet-600/80 hover:bg-violet-600/90 text-white font-normal text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 active:scale-95 transition-all"
                         >
                             <Plus className="w-3.5 h-3.5" />
                             <span>Add Broadcast</span>
@@ -374,6 +391,22 @@ export default function BroadcastsListPage() {
                     </div>
                 </div>
 
+                {/* Summary stats */}
+                <div className="flex items-center gap-6 px-1 mb-3 shrink-0 text-[11px]">
+                    {[
+                        { label: "Campañas", value: aggregateStats.campaigns },
+                        { label: "Destinatarios", value: aggregateStats.recipients },
+                        { label: "Completadas", value: aggregateStats.completed },
+                        { label: "Respuestas", value: aggregateStats.replied },
+                        { label: "Fallos", value: aggregateStats.failed },
+                    ].map((s) => (
+                        <div key={s.label} className="flex items-baseline gap-1.5">
+                            <span className="text-neutral-500">{s.label}</span>
+                            <span className="text-white font-normal tabular-nums">{s.value}</span>
+                        </div>
+                    ))}
+                </div>
+
                 {/* Status Filter Tabs */}
                 <div className="flex items-center gap-1.5 mb-3 px-1 overflow-x-auto no-scrollbar shrink-0">
                     {categories.map((cat) => {
@@ -383,7 +416,7 @@ export default function BroadcastsListPage() {
                                 key={cat.name}
                                 onClick={() => setSelectedFilter(cat.name)}
                                 className={cn(
-                                    "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200",
+                                    "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-normal border transition-all duration-200",
                                     selectedFilter === cat.name
                                         ? "bg-white/5 border-white/10 text-white shadow-sm"
                                         : "bg-transparent border-transparent text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.02]"
@@ -422,7 +455,7 @@ export default function BroadcastsListPage() {
                     ) : (
                         <div className="flex flex-col items-center justify-center py-20 text-center text-neutral-500 border border-white/5 rounded-xl bg-[#0b0c10]/40">
                             <CalendarIcon className="w-10 h-10 mb-3 text-neutral-600" />
-                            <p className="text-sm font-medium">Calendar View is not active</p>
+                            <p className="text-sm font-normal text-neutral-400">Calendar View is not active</p>
                             <p className="text-xs text-neutral-600 mt-1">Switch to Table view to manage campaigns.</p>
                         </div>
                     )}
@@ -472,8 +505,8 @@ export default function BroadcastsListPage() {
                 <CampaignResults
                     broadcast={resultsBroadcast}
                     recipients={resultsRecipients}
-                    userId={currentUser?.uid}
-                    entityId={entityId}
+                    recipientsLoading={resultsRecipientsLoading}
+                    tenantPath={tenantPath}
                     onClose={() => setResultsBroadcast(null)}
                 />
             )}

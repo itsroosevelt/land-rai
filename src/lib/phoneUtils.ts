@@ -35,3 +35,38 @@ export const normalizePhoneNumber = (phone: string): string => {
     return `+${clean}`;
 };
 
+/** Digit keys for broadcast_reply_index (send + webhook must use the same set). */
+export function phoneReplyIndexKeys(phone: string): string[] {
+    const digits = String(phone || '').replace(/\D/g, '');
+    if (!digits) return [];
+
+    const keys = new Set<string>([digits]);
+
+    // Mexico: Meta often sends 521… while CRM stores 52… (or the reverse).
+    if (digits.length === 13 && digits.startsWith('521')) {
+        keys.add(`52${digits.slice(3)}`);
+    } else if (digits.length === 12 && digits.startsWith('52')) {
+        keys.add(`521${digits.slice(2)}`);
+    }
+
+    // Argentina mobile: 549… vs 54…
+    if (digits.length === 13 && digits.startsWith('549')) {
+        keys.add(`54${digits.slice(3)}`);
+    } else if (digits.length === 12 && digits.startsWith('54') && !digits.startsWith('549')) {
+        keys.add(`549${digits.slice(2)}`);
+    }
+
+    return Array.from(keys);
+}
+
+/** All digit/+digit variants for CRM lookup (contacts, conversations, kanban cards). */
+export function phoneSearchVariants(phone: string): string[] {
+    const keys = phoneReplyIndexKeys(phone);
+    const variants = new Set<string>();
+    keys.forEach((digits) => {
+        variants.add(digits);
+        variants.add(`+${digits}`);
+    });
+    return Array.from(variants);
+}
+

@@ -15,7 +15,6 @@ import {
     Globe,
     Layers,
     Bot,
-    Flame,
     Pencil
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -96,30 +95,30 @@ export default function BroadcastsTable({
         const norm = channel.toLowerCase();
         if (norm.includes("whatsapp")) {
             return (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-medium">
-                    <MessageSquare className="w-3 h-3 text-emerald-400" />
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/5 text-neutral-300 border border-white/10 text-[10px] font-normal">
+                    <MessageSquare className="w-3 h-3 text-neutral-400" />
                     WhatsApp
                 </span>
             );
         }
         if (norm.includes("instagram")) {
             return (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-pink-500/10 text-pink-400 border border-pink-500/20 text-[10px] font-medium">
-                    <Instagram className="w-3 h-3 text-pink-400" />
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/5 text-neutral-300 border border-white/10 text-[10px] font-normal">
+                    <Instagram className="w-3 h-3 text-neutral-400" />
                     Instagram
                 </span>
             );
         }
         if (norm.includes("messenger") || norm.includes("facebook")) {
             return (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] font-medium">
-                    <Facebook className="w-3 h-3 text-blue-400" />
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/5 text-neutral-300 border border-white/10 text-[10px] font-normal">
+                    <Facebook className="w-3 h-3 text-neutral-400" />
                     Messenger
                 </span>
             );
         }
         return (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400 border border-neutral-700 text-[10px]">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400 border border-neutral-700 text-[10px] font-normal">
                 {channel}
             </span>
         );
@@ -188,21 +187,21 @@ export default function BroadcastsTable({
             <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
                 <thead>
-                    <tr className="border-b border-white/5 bg-[#13151a]/30 text-[11px] font-normal uppercase tracking-wider text-neutral-400 select-none">
-                        <th onClick={() => handleSort("status")} className="px-4 py-3.5 font-medium cursor-pointer hover:text-white transition-colors">
+                    <tr className="border-b border-white/5 bg-[#13151a]/30 text-[10px] font-normal uppercase tracking-[0.15em] text-neutral-500 select-none">
+                        <th onClick={() => handleSort("status")} className="px-4 py-3.5 cursor-pointer hover:text-neutral-300 transition-colors">
                             <div className="flex items-center gap-1.5">Estado / Progreso {sortIcon("status")}</div>
                         </th>
-                        <th onClick={() => handleSort("broadcastTime")} className="px-4 py-3.5 font-medium cursor-pointer hover:text-white transition-colors">
+                        <th onClick={() => handleSort("broadcastTime")} className="px-4 py-3.5 cursor-pointer hover:text-neutral-300 transition-colors">
                             <div className="flex items-center gap-1.5">Broadcast Time {sortIcon("broadcastTime")}</div>
                         </th>
-                        <th onClick={() => handleSort("name")} className="px-4 py-3.5 font-medium cursor-pointer hover:text-white transition-colors">
+                        <th onClick={() => handleSort("name")} className="px-4 py-3.5 cursor-pointer hover:text-neutral-300 transition-colors">
                             <div className="flex items-center gap-1.5">Name {sortIcon("name")}</div>
                         </th>
-                        <th className="px-4 py-3.5 font-medium text-neutral-400">Labels</th>
-                        <th className="px-4 py-3.5 font-medium text-neutral-400">Channel</th>
-                        <th className="px-4 py-3.5 font-medium text-neutral-400">Segment</th>
-                        <th className="px-4 py-3.5 font-medium text-neutral-400">Recipients</th>
-                        <th className="px-4 py-3.5 font-medium text-right text-neutral-400">Actions</th>
+                        <th className="px-4 py-3.5">Labels</th>
+                        <th className="px-4 py-3.5">Channel</th>
+                        <th className="px-4 py-3.5">Segment</th>
+                        <th className="px-4 py-3.5">Recipients</th>
+                        <th className="px-4 py-3.5 text-right">Actions</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5 text-xs text-neutral-300">
@@ -219,10 +218,18 @@ export default function BroadcastsTable({
 
                             // Advanced Performance Metrics
                             const deliveryRate = stats && stats.sent > 0 ? Math.round((stats.delivered / stats.sent) * 100) : 0;
+                            const readRate = stats && stats.sent > 0 ? Math.round(((stats.read + stats.replied) / stats.sent) * 100) : 0;
                             const replyRate = stats && stats.sent > 0 ? Math.round((stats.replied / stats.sent) * 100) : 0;
 
                             return (
-                                <tr key={broadcast.id} className="hover:bg-white/[0.015] active:bg-white/[0.005] transition-all relative group">
+                                <tr
+                                    key={broadcast.id}
+                                    onClick={() => canViewResults && onViewResults(broadcast)}
+                                    className={cn(
+                                        "hover:bg-white/[0.015] active:bg-white/[0.005] transition-all relative group",
+                                        canViewResults && "cursor-pointer"
+                                    )}
+                                >
                                     <td className="px-4 py-4 text-neutral-400 min-w-[200px]">
                                         <div className="flex flex-col gap-1.5">
                                             <div className="flex items-center gap-2">
@@ -236,40 +243,24 @@ export default function BroadcastsTable({
                                             
                                             {stats && (isSending || done > 0) ? (
                                                 <div className="space-y-1 w-full max-w-[180px]">
-                                                    <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                                                    <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
                                                         <div
                                                             className={cn(
-                                                                "h-full rounded-full transition-all duration-500",
-                                                                isSending ? "bg-emerald-500 animate-pulse" : "bg-blue-500"
+                                                                "h-full rounded-full transition-all duration-500 bg-gradient-to-r from-blue-600 to-violet-500",
+                                                                isSending && "opacity-80"
                                                             )}
                                                             style={{ width: `${pct}%` }}
                                                         />
                                                     </div>
-                                                    
-                                                    {/* Standard micro stats */}
                                                     <div className="flex items-center justify-between text-[9px] text-neutral-500">
                                                         <span>{pct}% ({done}/{total})</span>
-                                                        {stats.failed > 0 && <span className="text-rose-400 font-medium">{stats.failed} fall.</span>}
+                                                        {stats.failed > 0 && <span>{stats.failed} fall.</span>}
                                                     </div>
-
-                                                    {/* Advanced engagement metrics */}
-                                                    <div className="flex flex-wrap gap-1 mt-1">
-                                                        {stats.sent > 0 && (
-                                                            <span className="px-1 py-0.5 rounded bg-blue-500/5 text-blue-400/90 text-[8px] border border-blue-500/10 font-mono">
-                                                                {deliveryRate}% Deliv.
-                                                            </span>
-                                                        )}
-                                                        {stats.sent > 0 && replyRate > 0 && (
-                                                            <span className={cn(
-                                                                "px-1 py-0.5 rounded text-[8px] font-mono border flex items-center gap-0.5",
-                                                                replyRate >= 15 
-                                                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 font-bold" 
-                                                                    : "bg-neutral-800/80 text-neutral-400 border-neutral-700"
-                                                            )}>
-                                                                {replyRate}% Resp. {replyRate >= 15 && <Flame className="w-2.5 h-2.5 text-emerald-400" />}
-                                                            </span>
-                                                        )}
-                                                    </div>
+                                                    {stats.sent > 0 && (
+                                                        <p className="text-[9px] text-neutral-600">
+                                                            {deliveryRate}% entrega · {readRate}% lectura · {replyRate}% resp.
+                                                        </p>
+                                                    )}
                                                 </div>
                                             ) : broadcast.status === "Scheduled" && (broadcast.scheduleAt || broadcast.broadcastTime) ? (
                                                 <div className="text-[10px] text-neutral-500 flex items-center gap-1">
@@ -286,10 +277,10 @@ export default function BroadcastsTable({
                                     
                                     <td
                                         onClick={() => (canViewResults ? onViewResults(broadcast) : handleViewBroadcast(broadcast))}
-                                        className="px-4 py-4 font-medium text-blue-400 hover:text-blue-300 cursor-pointer max-w-[200px]"
+                                        className="px-4 py-4 cursor-pointer max-w-[200px]"
                                     >
                                         <div className="flex flex-col gap-0.5">
-                                            <span className="font-semibold text-white/95 group-hover:text-blue-400 transition-colors">
+                                            <span className="font-normal text-white group-hover:text-neutral-300 transition-colors tracking-tight">
                                                 {broadcast.name}
                                             </span>
                                             <span className="text-[10px] text-neutral-500 truncate max-w-[220px]">
@@ -312,9 +303,16 @@ export default function BroadcastsTable({
                                     
                                     <td className="px-4 py-4">{renderSegmentBadge(broadcast)}</td>
                                     
-                                    <td className="px-4 py-4 text-neutral-400 font-mono">{total}</td>
+                                    <td className="px-4 py-4 text-neutral-400 font-mono text-[11px]">
+                                        <div className="flex flex-col gap-0.5">
+                                            <span className="text-neutral-300">{total}</span>
+                                            {stats && stats.replied > 0 && (
+                                                <span className="text-[9px] text-neutral-600">{stats.replied} resp.</span>
+                                            )}
+                                        </div>
+                                    </td>
                                     
-                                    <td className="px-4 py-4 text-right relative">
+                                    <td className="px-4 py-4 text-right relative" onClick={(e) => e.stopPropagation()}>
                                         <div className="flex items-center justify-end gap-1.5">
                                             {canLaunch && (
                                                 <button
@@ -322,13 +320,13 @@ export default function BroadcastsTable({
                                                         e.stopPropagation();
                                                         onLaunch(broadcast);
                                                     }}
-                                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-medium shadow active:scale-95 transition-all"
+                                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 text-white text-[10px] font-normal border border-violet-500/20 active:scale-95 transition-all"
                                                 >
                                                     <Play className="w-3 h-3" /> Iniciar
                                                 </button>
                                             )}
                                             {isSending && (
-                                                <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] text-emerald-400">
+                                                <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] text-neutral-500">
                                                     <Loader2 className="w-3 h-3 animate-spin" /> Enviando
                                                 </span>
                                             )}
@@ -338,7 +336,7 @@ export default function BroadcastsTable({
                                                         e.stopPropagation();
                                                         onViewResults(broadcast);
                                                     }}
-                                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#13151a] border border-white/5 text-neutral-300 hover:text-white hover:border-blue-500/40 text-[10px] transition-all"
+                                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-white/[0.08] text-neutral-400 hover:text-white hover:border-violet-500/30 text-[10px] transition-all"
                                                 >
                                                     <BarChart3 className="w-3 h-3" /> Resultados
                                                 </button>

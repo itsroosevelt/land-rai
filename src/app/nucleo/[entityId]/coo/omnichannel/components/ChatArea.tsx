@@ -11,6 +11,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getContactHeaderNames, getContactPhoneDisplay } from '@/lib/omnichannel/contactHeaderInfo';
 import { isHumanTakeoverActive } from '@/lib/omnichannel/humanTakeover';
 import { CountryFlag } from '@/components/CountryFlag';
+import { groupMessagesByDate } from '../../whatsapp/components/ConversationModal/utils';
+import { isBroadcastTemplatePlaceholder } from '@/app/nucleo/[entityId]/cmo/broadcast/list/lib/resolveBroadcastMessageText';
 
 interface ChatAreaProps {
     card: any;
@@ -18,9 +20,55 @@ interface ChatAreaProps {
     groupName: string;
     allConversations: any[];
     onBack?: () => void;
+    /** When set, colors broadcast vs manual agent vs client replies distinctly. */
+    messageColorMode?: 'broadcast';
+    /** Explicit tenant path for multi-tenant slug routes. */
+    tenantPath?: string;
+    /** Full merged history for broadcast results (bypasses thin subscription). */
+    messagesOverride?: unknown[];
 }
 
-export default function ChatArea({ card, groups, groupName, allConversations, onBack }: ChatAreaProps) {
+function isBroadcastMessage(msg: any): boolean {
+    if (
+        msg?.metadata?.source === 'broadcast' ||
+        msg?.source === 'broadcast' ||
+        msg?.isBroadcast === true
+    ) {
+        return true;
+    }
+    return isBroadcastTemplatePlaceholder(String(msg?.text || ''));
+}
+
+function isAgentMessage(msg: any): boolean {
+    return msg?.sender === 'agent';
+}
+
+function isUserMessage(msg: any): boolean {
+    return msg?.sender === 'user';
+}
+
+function displayMessageText(msg: any): string {
+    return String(msg?.text || '');
+}
+
+function getChatBubbleClasses(msg: any, messageColorMode?: 'broadcast'): string {
+    const base = 'px-3.5 py-2 rounded-2xl relative font-normal';
+    if (isAgentMessage(msg)) {
+        if (isBroadcastMessage(msg)) {
+            return `${base} bg-violet-600 text-white rounded-br-none shadow-lg shadow-violet-900/25`;
+        }
+        if (messageColorMode === 'broadcast') {
+            return `${base} bg-blue-600 text-white rounded-br-none shadow-lg`;
+        }
+        return `${base} bg-blue-600 text-white rounded-br-none shadow-lg`;
+    }
+    if (messageColorMode === 'broadcast' && !isAgentMessage(msg)) {
+        return `${base} bg-white text-neutral-900 rounded-bl-none shadow-sm`;
+    }
+    return `${base} bg-[#1e1e1e] text-neutral-200 rounded-bl-none shadow-sm shadow-black/50`;
+}
+
+export default function ChatArea({ card, groups, groupName, allConversations, onBack, messageColorMode, tenantPath, messagesOverride }: ChatAreaProps) {
     const [showMoreMenu, setShowMoreMenu] = useState(false);
     const [showAttachments, setShowAttachments] = useState(false);
     const [takeoverLoading, setTakeoverLoading] = useState(false);
@@ -115,7 +163,9 @@ export default function ChatArea({ card, groups, groupName, allConversations, on
         card: card,
         groupName: groupName,
         groups: groups,
-        allConversations: allConversations
+        allConversations: allConversations,
+        tenantPath,
+        messagesOverride,
     });
 
     // Reset unread ONLY when the user actively opens a different conversation (card?.id changes).
@@ -192,6 +242,11 @@ export default function ChatArea({ card, groups, groupName, allConversations, on
             liveCard?.source,
             liveCard?.primary_channel,
         ]
+    );
+
+    const groupedMessages = useMemo(
+        () => groupMessagesByDate(logic.resolvedMessages as any[]),
+        [logic.resolvedMessages]
     );
 
     const handleSelectFile = (file: File | null | undefined) => {
@@ -501,9 +556,9 @@ export default function ChatArea({ card, groups, groupName, allConversations, on
 
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto p-4 bg-[#0a0a0a] space-y-3 no-scrollbar">
-                {Object.entries(logic.groupedMessages).map(([date, msgs], dateIdx) => (
+                {Object.entries(groupedMessages).map(([date, msgs], dateIdx) => (
                     <React.Fragment key={date}>
-                        <div className="text-center text-[10px] text-neutral-600 my-4 uppercase tracking-widest font-bold opacity-60">{date}</div>
+                        <div className="text-center text-[10px] text-neutral-600 my-4 uppercase tracking-widest font-normal opacity-60">{date}</div>
 
                         {(msgs as any[]).map((msg: any, msgIdx: number) => {
                             const prevMsg = (msgs as any[])[msgIdx - 1];
@@ -529,14 +584,14 @@ export default function ChatArea({ card, groups, groupName, allConversations, on
                                 <React.Fragment key={msgIdx}>
                                     {showGapMarker && (
                                         <div className="flex justify-center my-6">
-                                            <div className="bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] px-4 py-1.5 rounded-full font-black uppercase tracking-widest shadow-lg backdrop-blur-sm">
+                                            <div className="bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] px-4 py-1.5 rounded-full font-normal uppercase tracking-widest shadow-lg backdrop-blur-sm">
                                                 No hubo respuesta y terminó la conversación
                                             </div>
                                         </div>
                                     )}
                                     <div className={`flex ${msg.sender === 'agent' ? 'justify-end' : 'justify-start'} mb-1`}>
                                         {msg.sender !== 'agent' && (
-                                            <div className="w-8 h-8 rounded-full bg-neutral-800 mr-2 flex-shrink-0 self-end mb-1 flex items-center justify-center text-[11px] font-bold text-neutral-400 border border-white/5 shadow-inner">
+                                            <div className="w-8 h-8 rounded-full bg-neutral-800 mr-2 flex-shrink-0 self-end mb-1 flex items-center justify-center text-[11px] font-normal text-neutral-400 border border-white/5 shadow-inner">
                                                 {contactName.charAt(0).toUpperCase()}
                                             </div>
                                         )}
@@ -553,10 +608,10 @@ export default function ChatArea({ card, groups, groupName, allConversations, on
                                                                 <Mail size={12} className={msg.sender === 'agent' ? 'text-blue-400' : 'text-red-500'} />
                                                             </div>
                                                             <div className="flex flex-col">
-                                                                <span className={`text-[9px] font-black uppercase tracking-widest leading-none mb-1 ${msg.sender === 'agent' ? 'text-blue-400' : 'text-neutral-500'}`}>
+                                                                <span className={`text-[9px] font-normal uppercase tracking-widest leading-none mb-1 ${msg.sender === 'agent' ? 'text-blue-400' : 'text-neutral-500'}`}>
                                                                     {msg.sender === 'agent' ? 'Outgoing Email' : 'Incoming Email'}
                                                                 </span>
-                                                                <span className="text-white text-[12px] font-bold truncate max-w-[200px] sm:max-w-[400px]">
+                                                                <span className="text-white text-[12px] font-normal truncate max-w-[200px] sm:max-w-[400px]">
                                                                     {msg.subject || msg.metadata?.subject || msg.text?.split(' -- ')[0] || 'Sin Asunto'}
                                                                 </span>
                                                             </div>
@@ -586,7 +641,7 @@ export default function ChatArea({ card, groups, groupName, allConversations, on
                                                     </div>
 
                                                     {/* Footer / Meta */}
-                                                    <div className="bg-black/20 px-4 py-2 flex items-center gap-4 text-[9px] font-bold text-neutral-600 border-t border-white/5">
+                                                    <div className="bg-black/20 px-4 py-2 flex items-center gap-4 text-[9px] font-normal text-neutral-600 border-t border-white/5">
                                                         <span className="flex items-center gap-1 font-medium">
                                                             {msg.sender === 'agent' ? <Zap size={10} className="text-blue-500" /> : <User size={10} className="text-neutral-500" />} 
                                                             {msg.sender === 'agent' ? 'Tú (Agente)' : (msg.metadata?.from || contactName)}
@@ -597,10 +652,7 @@ export default function ChatArea({ card, groups, groupName, allConversations, on
                                                 </div>
                                             ) : (
                                                 /* Standard Chat Bubble for other platforms or agent replies (e.g. WhatsApp, etc.) */
-                                                <div className={`px-3.5 py-2 rounded-2xl relative ${msg.sender === 'agent'
-                                                    ? 'bg-blue-600 text-white rounded-br-none shadow-lg'
-                                                    : 'bg-[#1e1e1e] text-neutral-200 rounded-bl-none shadow-sm shadow-black/50'
-                                                    }`}>
+                                                <div className={getChatBubbleClasses(msg, messageColorMode)}>
 
                                                     {/* File Support */}
                                                     {attachment.fileUrl && !isAgentMedia && (
@@ -620,14 +672,14 @@ export default function ChatArea({ card, groups, groupName, allConversations, on
                                                         <div className="mb-2 space-y-2 min-w-[200px]">
                                                             {msg.metadata?.header && msg.metadata.header.type !== 'none' && (
                                                                 <div className="mb-2 pb-2 border-b border-white/10">
-                                                                    {msg.metadata.header.type === 'text' && <div className="font-bold text-[11px] uppercase tracking-wide opacity-80">{msg.metadata.header.text}</div>}
+                                                                    {msg.metadata.header.type === 'text' && <div className="font-normal text-[11px] uppercase tracking-wide opacity-80">{msg.metadata.header.text}</div>}
                                                                     {msg.metadata.header.type === 'image' && msg.metadata.header.url && <img src={msg.metadata.header.url} alt="header" className="rounded-lg w-full max-h-32 object-cover" />}
                                                                 </div>
                                                             )}
-                                                            {msg.text && <p className="text-[13px] leading-snug whitespace-pre-wrap mb-2 font-medium">{msg.text}</p>}
+                                                            {msg.text && <p className="text-[13px] leading-snug whitespace-pre-wrap mb-2 font-normal">{msg.text}</p>}
                                                             <div className="flex flex-col gap-1.5 pt-1">
                                                                 {(msg.metadata?.buttons || msg.buttons || []).map((btn: any, idx: number) => (
-                                                                    <div key={idx} className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 flex items-center justify-between text-[11px] font-bold shadow-sm hover:bg-white/20 transition-colors cursor-default group/btn">
+                                                                    <div key={idx} className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 flex items-center justify-between text-[11px] font-normal shadow-sm hover:bg-white/20 transition-colors cursor-default group/btn">
                                                                         {btn.text || btn.reply?.title || btn.title || btn}
                                                                         <MousePointer2 size={10} className="text-blue-200 opacity-0 group-hover/btn:opacity-100 transition-opacity" />
                                                                     </div>
@@ -638,14 +690,14 @@ export default function ChatArea({ card, groups, groupName, allConversations, on
 
                                                     {isAgentList && (
                                                         <div className="mb-1 min-w-[200px]">
-                                                            {msg.text && <p className="text-[13px] leading-snug whitespace-pre-wrap mb-3 font-medium">{msg.text}</p>}
+                                                            {msg.text && <p className="text-[13px] leading-snug whitespace-pre-wrap mb-3 font-normal">{msg.text}</p>}
                                                             <div className="bg-black/30 border border-white/10 rounded-xl overflow-hidden">
                                                                 <div className="px-4 py-3 flex items-center justify-between border-b border-white/5 transition-colors cursor-pointer group/list">
                                                                     <div className="flex items-center gap-3">
                                                                         <div className="w-6 h-6 bg-blue-500/20 rounded-lg flex items-center justify-center border border-blue-500/30">
                                                                             <List size={14} className="text-blue-400" />
                                                                         </div>
-                                                                        <span className="text-[12px] font-bold tracking-tight text-white/90">{msg.metadata?.buttonText || 'Ver opciones'}</span>
+                                                                        <span className="text-[12px] font-normal tracking-tight text-white/90">{msg.metadata?.buttonText || 'Ver opciones'}</span>
                                                                     </div>
                                                                     <ExternalLink size={12} className="text-neutral-500 group-hover/list:text-blue-400 transition-colors" />
                                                                 </div>
@@ -653,7 +705,11 @@ export default function ChatArea({ card, groups, groupName, allConversations, on
                                                         </div>
                                                     )}
 
-                                                    {shouldRenderPlainText && <p className="text-[13.5px] leading-relaxed whitespace-pre-wrap font-normal selection:bg-blue-400/30">{msg.text}</p>}
+                                                    {shouldRenderPlainText && (
+                                                        <p className="text-[13.5px] leading-relaxed whitespace-pre-wrap font-normal selection:bg-blue-400/30">
+                                                            {displayMessageText(msg)}
+                                                        </p>
+                                                    )}
 
                                                     {isAgentMedia && (
                                                         <div className="mb-1 min-w-[200px]">
@@ -668,14 +724,17 @@ export default function ChatArea({ card, groups, groupName, allConversations, on
                                                                     </a>
                                                                 )
                                                             )}
-                                                            {msg.text && <p className="text-[13px] leading-snug whitespace-pre-wrap font-medium">{msg.text}</p>}
+                                                            {msg.text && <p className="text-[13px] leading-snug whitespace-pre-wrap font-normal">{msg.text}</p>}
                                                         </div>
                                                     )}
                                                 </div>
                                             )}
 
                                             {/* Status and Time Under the bubble/card */}
-                                            <div className="flex items-center mt-1 text-[9px] text-neutral-600 px-1 font-bold">
+                                            <div className="flex items-center mt-1 text-[9px] text-neutral-600 px-1 font-normal">
+                                                {msg.sender === 'agent' && isBroadcastMessage(msg) && (
+                                                    <span className="text-violet-400 mr-1.5 font-normal">Campaña</span>
+                                                )}
                                                 <span>{msg.timestamp?.toDate ? msg.timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
                                                 {msg.sender === 'agent' && (
                                                     msg.status === 'sending' ? (
@@ -686,7 +745,7 @@ export default function ChatArea({ card, groups, groupName, allConversations, on
                                                             onClick={(e) => { e.stopPropagation(); logic.retryMessage?.(msg); }}
                                                         >
                                                             <AlertCircle size={10} />
-                                                            <span className="text-[8px] font-black uppercase tracking-tighter">Error</span>
+                                                            <span className="text-[8px] font-normal uppercase tracking-tighter">Error</span>
                                                             <RefreshCw size={10} className="ml-0.5" />
                                                         </div>
                                                     ) : (

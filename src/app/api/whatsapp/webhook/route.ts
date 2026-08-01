@@ -8,10 +8,10 @@ import { extractWhatsAppInboundPayload } from '@/lib/whatsappInbound';
 import { buildInboundWhatsAppUserMessage } from '@/lib/whatsapp/inboundMessageBuilder';
 import {
     cleanWhatsAppSenderId,
-    phoneLookupVariants,
     resolveWhatsAppTenant,
 } from '@/lib/whatsappTenant';
 import { isInboxGroup, SYSTEM_INBOX_GROUP_ID, SYSTEM_INBOX_GROUP_FIELDS } from '@/lib/kanban/botNodeGroups';
+import { phoneReplyIndexKeys, phoneSearchVariants } from '@/lib/phoneUtils';
 import {
     appendInboundToConversation,
     createConversationWithThinCard,
@@ -19,6 +19,10 @@ import {
     findConversationByPhone,
     syncThinCardPreview,
 } from '@/lib/conversations/store';
+import {
+    findConversationForBroadcastReply,
+    syncBroadcastRecipientReply,
+} from '@/lib/broadcast/syncBroadcastRecipientReplies'; // BROADCAST ONLY
 
 const DEBUG_FILE = '/tmp/webhook.log';
 
@@ -249,32 +253,67 @@ export async function POST(req: Request) {
                     return NextResponse.json({ success: true, ignored: 'invalid_sender_format' });
                 }
 
-                // --- Broadcast reply tracking (best-effort, fully isolated) ---
+                // ─── BROADCAST ONLY: reply tracking (aislado; no afecta bots) ───
+                let broadcastReplyMatch: {
+                    broadcastId: string;
+                    recipientId: string;
+                    recipientRef: FirebaseFirestore.DocumentReference;
+                } | null = null;
+
                 try {
-                    const replyKey = cleanFrom.replace(/\D/g, '');
-                    if (replyKey) {
-                        const replyIdxRef = db.doc(`${entityPath}/broadcast_reply_index/${replyKey}`);
-                        const replyIdxSnap = await replyIdxRef.get();
-                        if (replyIdxSnap.exists) {
-                            const { broadcastId, recipientId } = replyIdxSnap.data() as any;
-                            const recRef = db.doc(`${entityPath}/broadcasts/${broadcastId}/recipients/${recipientId}`);
-                            const recSnap = await recRef.get();
-                            if (recSnap.exists && (recSnap.data() as any).status !== 'replied') {
+                    const replyKeys = phoneReplyIndexKeys(cleanFrom);
+                    let replyIdxSnap: admin.firestore.DocumentSnapshot | null = null;
+                    let matchedReplyKey = '';
+
+                    for (const replyKey of replyKeys) {
+                        const snap = await db.doc(`${entityPath}/broadcast_reply_index/${replyKey}`).get();
+                        if (snap.exists) {
+                            replyIdxSnap = snap;
+                            matchedReplyKey = replyKey;
+                            break;
+                        }
+                    }
+
+                    if (replyIdxSnap?.exists) {
+                        const { broadcastId, recipientId } = replyIdxSnap.data() as any;
+                        const recRef = db.doc(`${entityPath}/broadcasts/${broadcastId}/recipients/${recipientId}`);
+                        const recSnap = await recRef.get();
+                        if (recSnap.exists) {
+                            const cur = recSnap.data() as any;
+                            const replyBody = String(displayPrefText || text || '').trim();
+                            broadcastReplyMatch = { broadcastId, recipientId, recipientRef: recRef };
+
+                            if (cur.status !== 'replied') {
                                 await recRef.update({
                                     status: 'replied',
                                     repliedAt: admin.firestore.FieldValue.serverTimestamp(),
+                                    ...(replyBody ? { replyText: replyBody.slice(0, 2000) } : {}),
+                                    ...(messageId ? { replyMessageId: messageId } : {}),
                                 });
                                 await db.doc(`${entityPath}/broadcasts/${broadcastId}`).update({
                                     'stats.replied': admin.firestore.FieldValue.increment(1),
                                 });
+                            } else if (replyBody && !cur.replyText) {
+                                await recRef.update({
+                                    replyText: replyBody.slice(0, 2000),
+                                    ...(messageId ? { replyMessageId: messageId } : {}),
+                                });
                             }
-                            // Consume the index so subsequent messages aren't recounted.
-                            await replyIdxRef.delete().catch(() => {});
+                        }
+                        // Consume all variant keys so subsequent messages aren't recounted.
+                        await Promise.all(
+                            replyKeys.map((key) =>
+                                db.doc(`${entityPath}/broadcast_reply_index/${key}`).delete().catch(() => {})
+                            )
+                        );
+                        if (matchedReplyKey) {
+                            debugLog(`[POST] Broadcast reply tracked via key ${matchedReplyKey}`);
                         }
                     }
                 } catch (e) {
                     debugLog('[POST] Broadcast reply tracking skipped (non-fatal).');
                 }
+                // ─── FIN BROADCAST ONLY (tracking) ───
 
                 // OPTIMIZED O(1) Search: Find group and card via indexed Contacts context
                 let targetCardDoc: any = null;
@@ -283,7 +322,7 @@ export async function POST(req: Request) {
                 let existingContactName: string | null = null;
 
                 let contactDoc: { id: string; data: () => Record<string, any> } | null = null;
-                for (const phoneVariant of phoneLookupVariants(cleanFrom)) {
+                for (const phoneVariant of phoneSearchVariants(cleanFrom)) {
                     const snap = await db.collection(`${entityPath}/contacts`)
                         .where('phone', '==', phoneVariant)
                         .limit(1)
@@ -327,14 +366,17 @@ export async function POST(req: Request) {
 
                     for (const groupDoc of groupsSnapshot.docs) {
                         try {
-                            const cardsSnapshot = await groupDoc.ref.collection('cards')
-                                .where('contactNumberClean', '==', cleanFrom)
-                                .limit(5)
-                                .get();
+                            for (const phoneVariant of phoneSearchVariants(cleanFrom)) {
+                                const cardsSnapshot = await groupDoc.ref.collection('cards')
+                                    .where('contactNumberClean', '==', phoneVariant)
+                                    .limit(5)
+                                    .get();
 
-                            cardsSnapshot.forEach(doc => {
-                                allMatches.push({ doc, groupId: groupDoc.id });
-                            });
+                                cardsSnapshot.forEach(doc => {
+                                    allMatches.push({ doc, groupId: groupDoc.id });
+                                });
+                                if (allMatches.length > 0) break;
+                            }
                         } catch (searchErr: any) {
                             debugLog(`[POST] Card search skipped in group ${groupDoc.id}: ${searchErr.message}`);
                         }
@@ -375,6 +417,24 @@ export async function POST(req: Request) {
                     (contactDoc?.data?.()?.conversationId as string) || null;
                 let cardId = targetCardDoc?.id as string | undefined;
                 let groupId = targetGroupId as string | null;
+                let preferredConvRef: FirebaseFirestore.DocumentReference | null = null;
+
+                // ─── BROADCAST ONLY: preferir hilo con burbuja morada de esta campaña ───
+                if (broadcastReplyMatch) {
+                    const broadcastConv = await findConversationForBroadcastReply(
+                        db,
+                        entityPath,
+                        cleanFrom,
+                        broadcastReplyMatch.broadcastId
+                    );
+                    if (broadcastConv) {
+                        conversationId = broadcastConv.id;
+                        preferredConvRef = broadcastConv.ref;
+                        cardId = String(broadcastConv.data.kanbanCardId || cardId || broadcastConv.id);
+                        groupId = String(broadcastConv.data.kanbanGroupId || groupId || '');
+                    }
+                }
+                // ─── FIN BROADCAST ONLY (conversación preferida) ───
 
                 if (!conversationId) {
                     const byPhone = await findConversationByPhone(db, entityPath, cleanFrom);
@@ -396,12 +456,42 @@ export async function POST(req: Request) {
                 }
 
                 if (conversationId) {
-                    const convRef = db.doc(`${entityPath}/conversations/${conversationId}`);
-                    const convSnap = await convRef.get();
-                    const convData = convSnap.exists ? convSnap.data() || {} : {};
+                    let convRef = preferredConvRef || db.doc(`${entityPath}/conversations/${conversationId}`);
+                    let convSnap = await convRef.get();
+                    let convData = convSnap.exists ? convSnap.data() || {} : {};
+
+                    // Stale conversationId on contact — promote from card or find by phone.
+                    if (!convSnap.exists) {
+                        debugLog(`[POST] Stale conversationId ${conversationId} — recovering thread.`);
+                        if (targetCardDoc && targetGroupId) {
+                            const promoted = await ensureConversationFromCard({
+                                db,
+                                tenantPath: entityPath,
+                                cardId: targetCardDoc.id,
+                                groupId: targetGroupId,
+                                cardData: targetCardDoc.data() || {},
+                                cardRef: targetCardDoc.ref,
+                            });
+                            conversationId = promoted.conversationId;
+                            convRef = promoted.ref;
+                            convSnap = await convRef.get();
+                            convData = convSnap.exists ? convSnap.data() || {} : {};
+                        } else {
+                            const byPhone = await findConversationByPhone(db, entityPath, cleanFrom);
+                            if (byPhone) {
+                                conversationId = byPhone.id;
+                                convRef = byPhone.ref;
+                                convSnap = await convRef.get();
+                                convData = convSnap.exists ? convSnap.data() || {} : {};
+                            } else {
+                                conversationId = null;
+                            }
+                        }
+                    }
+
                     const alreadyQueued = isDuplicateQueueMessage(convData, messageId);
 
-                    if (convSnap.exists) {
+                    if (conversationId && convSnap.exists) {
                         await appendInboundToConversation({
                             db,
                             tenantPath: entityPath,
@@ -412,39 +502,64 @@ export async function POST(req: Request) {
                             displayPrefText,
                             recipientPhoneNumberId,
                         });
-                    }
 
-                    cardId = String(convData.kanbanCardId || cardId || conversationId);
-                    groupId = String(convData.kanbanGroupId || groupId || '');
+                        // ─── BROADCAST ONLY: asegurar replyText en recipient + conversación ───
+                        if (broadcastReplyMatch) {
+                            try {
+                                const recSnap = await broadcastReplyMatch.recipientRef.get();
+                                if (recSnap.exists) {
+                                    await syncBroadcastRecipientReply({
+                                        db,
+                                        tenantPath: entityPath,
+                                        recipient: {
+                                            id: broadcastReplyMatch.recipientId,
+                                            ...(recSnap.data() as Record<string, unknown>),
+                                        },
+                                        recipientRef: broadcastReplyMatch.recipientRef,
+                                    });
+                                }
+                            } catch {
+                                debugLog('[POST] Broadcast reply conversation sync skipped (non-fatal).');
+                            }
+                        }
+                        // ─── FIN BROADCAST ONLY (sync post-inbound) ───
 
-                    if (!groupId) {
-                        const groupsSnapshot2 = await db.collection(`${entityPath}/kanban-groups`).get();
-                        const inboxDoc =
-                            groupsSnapshot2.docs.find((g) => g.id === SYSTEM_INBOX_GROUP_ID) ||
-                            groupsSnapshot2.docs.find((g) => isInboxGroup({ id: g.id, ...g.data() })) ||
-                            groupsSnapshot2.docs[0];
-                        groupId = inboxDoc?.id || SYSTEM_INBOX_GROUP_ID;
-                    }
+                        cardId = String(convData.kanbanCardId || cardId || conversationId);
+                        groupId = String(convData.kanbanGroupId || groupId || '');
 
-                    const freshConv = (await convRef.get()).data() || {};
-                    await syncThinCardPreview({
-                        db,
-                        tenantPath: entityPath,
-                        conversationId,
-                        groupId,
-                        cardId,
-                        data: freshConv,
-                    });
+                        if (!groupId) {
+                            const groupsSnapshot2 = await db.collection(`${entityPath}/kanban-groups`).get();
+                            const inboxDoc =
+                                groupsSnapshot2.docs.find((g) => g.id === SYSTEM_INBOX_GROUP_ID) ||
+                                groupsSnapshot2.docs.find((g) => isInboxGroup({ id: g.id, ...g.data() })) ||
+                                groupsSnapshot2.docs[0];
+                            groupId = inboxDoc?.id || SYSTEM_INBOX_GROUP_ID;
+                        }
 
-                    if (existingContactId) {
-                        await db.collection(`${entityPath}/contacts`).doc(existingContactId).set({
+                        const freshConv = (await convRef.get()).data() || {};
+                        await syncThinCardPreview({
+                            db,
+                            tenantPath: entityPath,
                             conversationId,
-                            kanbanGroupId: groupId,
-                            kanbanCardId: cardId,
-                            updatedAt: new Date().toISOString(),
-                        }, { merge: true }).catch(() => {});
+                            groupId,
+                            cardId,
+                            data: freshConv,
+                        });
+
+                        if (existingContactId) {
+                            await db.collection(`${entityPath}/contacts`).doc(existingContactId).set({
+                                conversationId,
+                                kanbanGroupId: groupId,
+                                kanbanCardId: cardId,
+                                updatedAt: new Date().toISOString(),
+                            }, { merge: true }).catch(() => {});
+                        }
+                    } else {
+                        conversationId = null;
                     }
-                } else {
+                }
+
+                if (!conversationId) {
                     let destinationGroupId = targetGroupId;
                     if (!destinationGroupId) {
                         const inboxDoc =
@@ -524,6 +639,7 @@ export async function POST(req: Request) {
 
                 if (groupId && cardId && conversationId) {
                     debugLog(`[POST] Triggering chatbot for conversation ${conversationId} (card ${cardId})...`);
+                    // Bots: sin cambios — se ejecuta después de guardar el mensaje entrante.
                     await processChatbotFlow({
                         userId, entityId, groupId, cardId, conversationId,
                         platform: 'whatsapp', from: from, text: text,

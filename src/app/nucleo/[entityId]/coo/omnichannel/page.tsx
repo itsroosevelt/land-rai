@@ -6,6 +6,8 @@ import ChatList from './components/ChatList';
 import ChatArea from './components/ChatArea';
 import { useKanbanBoard } from '../whatsapp/hooks/useKanbanBoard';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEntityRoute } from '@/hooks/useEntityRoute';
+import { preloadWhatsAppTemplateBodies } from '@/lib/broadcast/templateDisplayCache';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { AlertTriangle, ChevronLeft, Menu, X as CloseIcon } from 'lucide-react';
@@ -18,6 +20,14 @@ export default function OmnichannelInboxPage() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
     const { cards, groups, loading } = useKanbanBoard();
+    const { currentUser, activeEntity, activeEntityRoute } = useAuth();
+    const { firestoreId } = useEntityRoute();
+    const entityIdForApi = firestoreId || activeEntity || '';
+
+    useEffect(() => {
+        if (!currentUser?.uid || !entityIdForApi) return;
+        preloadWhatsAppTemplateBodies(currentUser.uid, entityIdForApi);
+    }, [currentUser?.uid, entityIdForApi]);
 
     // Close sidebar when a folder is selected on mobile
     useEffect(() => {
@@ -40,7 +50,6 @@ export default function OmnichannelInboxPage() {
 
     // Global Integration Status Watchdog
     const [integrationStatuses, setIntegrationStatuses] = useState<Record<string, string>>({});
-    const { currentUser, activeEntity, activeEntityRoute } = useAuth();
     
     React.useEffect(() => {
         if (!currentUser || !activeEntity) return;

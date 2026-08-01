@@ -5,6 +5,8 @@
 import type { firestore } from 'firebase-admin';
 import { admin } from '@/lib/firebase-admin';
 import { createQueuedBotState, type BotQueueItem } from '@/lib/botQueue';
+import { phoneSearchVariants } from '@/lib/phoneUtils';
+import { SYSTEM_INBOX_GROUP_FIELDS, SYSTEM_INBOX_GROUP_ID } from '@/lib/kanban/botNodeGroups';
 
 export type AdminDb = firestore.Firestore;
 
@@ -136,7 +138,7 @@ export async function findConversationByPhone(
     tenantPath: string,
     cleanPhone: string
 ): Promise<{ id: string; ref: firestore.DocumentReference; data: Record<string, any> } | null> {
-    const variants = [cleanPhone, `+${cleanPhone}`];
+    const variants = phoneSearchVariants(cleanPhone);
     for (const field of ['contactNumberClean', 'contactNumber'] as const) {
         for (const val of variants) {
             try {
@@ -155,6 +157,90 @@ export async function findConversationByPhone(
         }
     }
     return null;
+}
+
+/**
+ * Omnicanal source of truth: find or create /conversations/{id} for a phone number.
+ * Used when outbound (broadcast) or inbound must land in the inbox.
+ */
+export async function ensureConversationByPhone(params: {
+    db: AdminDb;
+    tenantPath: string;
+    phone: string;
+    cleanPhone: string;
+    contactName?: string;
+}): Promise<{
+    id: string;
+    ref: firestore.DocumentReference;
+    groupId: string;
+    cardId: string;
+    created: boolean;
+}> {
+    const { db, tenantPath, phone, cleanPhone, contactName } = params;
+
+    const existing = await findConversationByPhone(db, tenantPath, cleanPhone);
+    if (existing) {
+        return {
+            id: existing.id,
+            ref: existing.ref,
+            groupId: String(existing.data.kanbanGroupId || SYSTEM_INBOX_GROUP_ID),
+            cardId: String(existing.data.kanbanCardId || existing.id),
+            created: false,
+        };
+    }
+
+    const groupsSnap = await db.collection(`${tenantPath}/kanban-groups`).get();
+    let groupId =
+        groupsSnap.docs.find((g) => g.id === SYSTEM_INBOX_GROUP_ID)?.id ||
+        groupsSnap.docs[0]?.id ||
+        SYSTEM_INBOX_GROUP_ID;
+
+    if (!groupsSnap.docs.some((g) => g.id === groupId)) {
+        await db
+            .doc(`${tenantPath}/kanban-groups/${SYSTEM_INBOX_GROUP_ID}`)
+            .set(
+                {
+                    ...SYSTEM_INBOX_GROUP_FIELDS,
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                },
+                { merge: true }
+            );
+        groupId = SYSTEM_INBOX_GROUP_ID;
+    }
+
+    const convRef = db.collection(conversationsCollectionPath(tenantPath)).doc();
+    const conversationId = convRef.id;
+    const cardId = conversationId;
+    const displayName = contactName || phone || `+${cleanPhone}`;
+
+    const base: Record<string, unknown> = {
+        id: conversationId,
+        conversationId,
+        contactName: displayName,
+        contactNumber: phone,
+        contactNumberClean: cleanPhone,
+        messages: [],
+        unreadCount: 0,
+        status: 'open',
+        source: 'WHATSAPP',
+        primary_channel: 'whatsapp',
+        platform_ids: { whatsapp: phone },
+        kanbanCardId: cardId,
+        kanbanGroupId: groupId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    await convRef.set(base);
+    await db.doc(`${tenantPath}/kanban-groups/${groupId}/cards/${cardId}`).set(
+        buildThinCardPayload({
+            conversationId,
+            groupId,
+            data: base,
+        })
+    );
+
+    return { id: conversationId, ref: convRef, groupId, cardId, created: true };
 }
 
 export async function syncThinCardPreview(params: {

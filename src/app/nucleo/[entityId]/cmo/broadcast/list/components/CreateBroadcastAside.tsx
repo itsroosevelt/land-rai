@@ -166,7 +166,7 @@ export default function CreateBroadcastAside({
                 setSelectedTemplate({
                     name: msg.templateName,
                     language: msg.templateLanguage || "es",
-                    components: [{ type: "BODY", text: "" }],
+                    components: [{ type: "BODY", text: msg.templateBody || msg.messagePreview || "" }],
                 });
                 setTemplateVariables(msg.templateVariables || []);
                 setTemplateParamValues(msg.templateParamValues || {});
@@ -477,12 +477,16 @@ export default function CreateBroadcastAside({
 
     const buildMessagePayload = (): BroadcastMessage => {
         if (isWhatsAppSelected && messageKind === "template" && selectedTemplate) {
+            const bodyComp = selectedTemplate.components?.find((c: any) => c.type === "BODY");
+            const rawBody = bodyComp?.text || "";
             return {
                 kind: "template",
                 templateName: selectedTemplate.name,
                 templateLanguage: selectedTemplate.language || "es",
                 templateVariables: templateVariables,
                 templateParamValues: templateParamValues,
+                templateBody: rawBody || livePreviewBody || "",
+                messagePreview: livePreviewBody || rawBody || "",
             };
         }
         if (messageKind === "media") {
@@ -509,6 +513,16 @@ export default function CreateBroadcastAside({
 
         setCreating(true);
         try {
+            const message = buildMessagePayload();
+            if (
+                isWhatsAppSelected &&
+                message.kind === "template" &&
+                !String(message.templateBody || "").trim()
+            ) {
+                alert("La plantilla no tiene texto. Vuelve a seleccionarla antes de guardar.");
+                return;
+            }
+
             const bot = chatbots.find((b) => b.id === selectedBotId);
             const slotConn = selectedSlot ? slotConnections?.[selectedSlot as NumberSlot] : null;
             const { recipientCount } = await createBroadcast(tenantPath, {
@@ -517,7 +531,7 @@ export default function CreateBroadcastAside({
                 channel: formChannel || "-",
                 segment: formSegment,
                 segmentConfig: formSegmentConfig,
-                message: buildMessagePayload(),
+                message,
                 botId: selectedBotId || null,
                 botName: bot?.name || null,
                 senderSlot: selectedSlot || null,
@@ -549,6 +563,16 @@ export default function CreateBroadcastAside({
 
         setCreating(true);
         try {
+            const message = buildMessagePayload();
+            if (
+                isWhatsAppSelected &&
+                message.kind === "template" &&
+                !String(message.templateBody || "").trim()
+            ) {
+                alert("La plantilla no tiene texto. Vuelve a seleccionarla antes de guardar.");
+                return;
+            }
+
             const bot = chatbots.find((b) => b.id === selectedBotId);
             const slotConn = selectedSlot ? slotConnections?.[selectedSlot as NumberSlot] : null;
             const { recipientCount } = await updateBroadcast(tenantPath, initialData.id, {
@@ -557,7 +581,7 @@ export default function CreateBroadcastAside({
                 channel: formChannel || "-",
                 segment: formSegment,
                 segmentConfig: formSegmentConfig,
-                message: buildMessagePayload(),
+                message,
                 botId: selectedBotId || null,
                 botName: bot?.name || null,
                 senderSlot: selectedSlot || null,

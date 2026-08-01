@@ -5,7 +5,7 @@ import { CardData, ConversationModalProps } from '../types';
 import { normalizePhoneNumber } from '@/lib/phoneUtils';
 import { useAuth } from '@/contexts/AuthContext';
 
-export const useCardSubscription = ({ card, groups = [], groupName }: ConversationModalProps) => {
+export const useCardSubscription = ({ card, groups = [], groupName, tenantPath: tenantPathProp }: ConversationModalProps) => {
     const { currentUser, activeEntity } = useAuth();
     const [liveCardData, setLiveCardData] = useState<CardData | null>(null);
     const [contactInfo, setContactInfo] = useState<Partial<CardData>>({});
@@ -14,6 +14,7 @@ export const useCardSubscription = ({ card, groups = [], groupName }: Conversati
     const [forcedGroupId, setForcedGroupId] = useState<string | null>(null);
 
     const getTenantPath = () => {
+        if (tenantPathProp) return tenantPathProp;
         if (!currentUser?.uid || !activeEntity) return null;
         return `users/${currentUser.uid}/entities/${activeEntity}`;
     };
@@ -240,7 +241,7 @@ export const useCardSubscription = ({ card, groups = [], groupName }: Conversati
             if (unsubscribeConv) unsubscribeConv();
             if (unsubscribeCRM) unsubscribeCRM();
         };
-    }, [card?.id, card?.groupId, groups, card?.contactNumber, currentUser?.uid, activeEntity]);
+    }, [card?.id, card?.groupId, groups, card?.contactNumber, currentUser?.uid, activeEntity, tenantPathProp]);
 
     return {
         liveCardData,
