@@ -29,7 +29,7 @@ export function PhilosophySection() {
                 title="Our Philosophy: The Hemisphere of Abundance"
                 subtitle="Born to innovate, Roosevelt aligns with the values of technological transformation. We believe abundance is not awaited, it is created."
                 items={items}
-                imageSrc="/assets/newlogo.png"
+                imageSrc="/assets/rai-logo-circular.png"
                 imageClassName="object-contain p-12"
                 imageRight={false}
                 gradient="from-orange-500/20 via-red-500/10 to-transparent"

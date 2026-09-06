@@ -10,7 +10,7 @@ const Footer = () => {
           <div className="md:col-span-1">
             <p className="text-white text-2xl font-medium tracking-tight">Haciendo que Roosevelt sea útil para todos</p>
             <div className="mt-8">
-              <img src="/assets/newlogo.png" alt="Roosevelt Logo" className="w-16 h-auto opacity-80 mb-4" />
+              <img src="/assets/rai-logo-circular.png" alt="Roosevelt Logo" className="w-24 h-24 md:w-28 md:h-28 object-contain opacity-90 mb-4 rounded-full" />
               <p className="text-gray-500 text-sm">
                 Tu puente seguro a los Estados Unidos.
                 <br />

@@ -40,9 +40,9 @@ export function CTASection() {
                 <div className="mt-32 md:mt-48 flex justify-center">
                     <div className="w-64 h-64 md:w-80 md:h-80 relative rounded-3xl overflow-hidden shadow-[0_0_60px_rgba(59,130,246,0.15)] group bg-black">
                         <img
-                            src="/assets/newlogo.png"
+                            src="/assets/rai-logo-circular.png"
                             alt="Roosevelt Logo"
-                            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500 bg-black"
+                            className="w-full h-full object-contain rounded-full group-hover:scale-105 transition-transform duration-500 bg-black"
                         />
                     </div>
 

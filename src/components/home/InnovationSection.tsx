@@ -27,7 +27,7 @@ export function InnovationSection() {
             subtitle="Roosevelt is a Next-Generation Artificial Intelligence infrastructure designed to act as a unified command center. It is the bridge between strategy and operational execution, evolving with your business."
             description="By using Roosevelt, you don't just use an AI agent; you gain superpowers within our network:"
             items={items}
-            imageSrc="/assets/newlogo.png"
+            imageSrc="/assets/rai-logo-circular.png"
             imageClassName="object-contain p-12"
             showButton={true}
             buttonText="Watch the movie"

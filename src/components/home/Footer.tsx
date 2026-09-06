@@ -372,9 +372,9 @@ export default function Footer() {
                     {/* Logo Area */}
                     <div className="flex items-center gap-3 group cursor-default">
                         <img
-                            src="/assets/newlogo.png"
+                            src="/assets/rai-logo-circular.png"
                             alt="Roosevelt Logo"
-                            className="w-8 h-8 object-contain brightness-125 filter group-hover:rotate-12 transition-transform duration-500"
+                            className="w-12 h-12 md:w-14 md:h-14 object-contain rounded-full brightness-125 filter group-hover:rotate-12 transition-transform duration-500"
                         />
                         <span className="text-lg font-sans font-medium tracking-tighter">Roosevelt Economy</span>
                     </div>

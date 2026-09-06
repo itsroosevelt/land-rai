@@ -133,8 +133,8 @@ export default function Header() {
           {/* GRUPO IZQUIERDA: LOGO + NAV */}
           <div className="flex items-center gap-12 h-full">
             <Link href="/" className="flex items-center gap-3 z-50 shrink-0 group">
-              <div className="w-9 h-9 relative transition-transform duration-300 group-hover:scale-110">
-                <img src="/assets/newlogo.png" alt="Roosevelt" className="object-contain w-full h-full drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]" />
+              <div className="w-12 h-12 md:w-14 md:h-14 relative shrink-0">
+                <img src="/assets/rai-logo-circular.png" alt="Roosevelt" className="object-contain w-full h-full rounded-full brightness-125 filter group-hover:rotate-12 group-hover:scale-110 transition-transform duration-500 drop-shadow-[0_0_12px_rgba(255,255,255,0.3)]" />
               </div>
               <span className="text-xl font-normal tracking-tight text-white">Roosevelt</span>
             </Link>
