@@ -15,10 +15,12 @@ import { isSlugOwnedByOtherEntity } from './entityRouteContract';
 import { MOLD_INTEGRATIONS_INIT } from './integrationsCatalog';
 
 /** Incrementar cuando el molde multitenant gane nuevas estructuras obligatorias. */
-export const ENTITY_MOLD_VERSION = 19;
+export const ENTITY_MOLD_VERSION = 20;
 
 export const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
+    /** Rediseño Plano Cartesiano Workspace (esquema claro/oscuro puro, láminas 3D transparentes, barra inferior de controles, toggle plano). */
+    workspaceCartesianPlaneV2: true,
     botKanban: true,
     manualKanban: true,
     whatsappOutbound: true,

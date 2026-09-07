@@ -51,13 +51,13 @@ const themes: Record<string, any> = {
 };
 
 const DEPARTMENTS_DATA: Record<string, { title: string, layers: any[] }> = {
-    board: { title: "Board of Directors", layers: [
+    board: { title: "BOARD OF DIRECTORS", layers: [
         { id: 'board-treasury', label: 'MultiSig Treasury', path: 'board-treasury', icon: Landmark, theme: 'slate' },
         { id: 'legal-audit', label: 'Protocol Compliance', path: 'legal-audit', icon: FileCheck, theme: 'slate' },
         { id: 'governance', label: 'Protocol Governance', path: 'governance', icon: Gavel, theme: 'slate' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
     
-    ceo: { title: "Chief Executive Officer", layers: [
+    ceo: { title: "CHIEF EXECUTIVE OFFICER", layers: [
         { id: 'board-liaison', label: 'Board Liaison', path: 'board-liaison', icon: Users, theme: 'amber' },
         { id: 'crisis-management', label: 'Crisis Management', path: 'crisis-management', icon: ShieldAlert, theme: 'amber' },
         { id: 'culture-steering', label: 'Culture Steering', path: 'culture-steering', icon: Heart, theme: 'amber' },
@@ -70,7 +70,7 @@ const DEPARTMENTS_DATA: Record<string, { title: string, layers: any[] }> = {
         { id: 'strategy', label: 'Vision & Strategy', path: 'strategy', icon: Target, theme: 'amber' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
     
-    coo: { title: "Chief Operating Officer", layers: [
+    coo: { title: "CHIEF OPERATING OFFICER", layers: [
         { id: 'cx', label: 'Customer Experience', path: 'cx', icon: Smile, theme: 'cyan' },
         { id: 'facilities', label: 'Facilities Management', path: 'facilities', icon: Building, theme: 'cyan' },
         { id: 'procurement', label: 'Global Procurement', path: 'procurement', icon: ShoppingBag, theme: 'cyan' },
@@ -84,7 +84,7 @@ const DEPARTMENTS_DATA: Record<string, { title: string, layers: any[] }> = {
         { id: 'whatsapp', label: 'WhatsApp Flows', path: 'whatsapp', icon: Smartphone, theme: 'cyan' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
     
-    cto: { title: "Chief Technology Officer", layers: [
+    cto: { title: "CHIEF TECHNOLOGY OFFICER", layers: [
         { id: 'orchestrator', label: 'AI Orchestrator', path: 'orchestrator', icon: Cpu, theme: 'cyan' },
         { id: 'voice-center', label: 'AI Voice Center', path: 'voice-center', icon: Phone, theme: 'cyan' },
         { id: 'web-builder', label: 'AI Web Builder', path: 'web-builder', icon: Globe, theme: 'cyan' },
@@ -100,7 +100,7 @@ const DEPARTMENTS_DATA: Record<string, { title: string, layers: any[] }> = {
         { id: 'smart-contracts', label: 'Smart Contracts', path: 'smart-contracts', icon: FileText, theme: 'cyan' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
     
-    cfo: { title: "Chief Financial Officer", layers: [
+    cfo: { title: "CHIEF FINANCIAL OFFICER", layers: [
         { id: 'audit-prep', label: 'Audit Prep', path: 'audit-prep', icon: FileCheck, theme: 'emerald' },
         { id: 'billing', label: 'Billing Engine', path: 'billing', icon: CreditCard, theme: 'emerald' },
         { id: 'cash-flow', label: 'Cash Flow', path: 'cash-flow', icon: Landmark, theme: 'emerald' },
@@ -108,7 +108,7 @@ const DEPARTMENTS_DATA: Record<string, { title: string, layers: any[] }> = {
         { id: 'tax', label: 'Tax Management', path: 'tax', icon: Gavel, theme: 'emerald' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
     
-    cmo: { title: "Chief Marketing Officer", layers: [
+    cmo: { title: "CHIEF MARKETING OFFICER", layers: [
         { id: 'affiliates', label: 'Affiliate Program', path: 'affiliates', icon: Link, theme: 'orange' },
         { id: 'brand', label: 'Brand Identity', path: 'brand', icon: Award, theme: 'orange' },
         { id: 'content', label: 'Content Factory', path: 'content', icon: PenTool, theme: 'orange' },
@@ -123,37 +123,37 @@ const DEPARTMENTS_DATA: Record<string, { title: string, layers: any[] }> = {
         { id: 'social', label: 'Social Media', path: 'social', icon: Share2, theme: 'orange' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
     
-    chro: { title: "Chief Human Resources Officer", layers: [
+    chro: { title: "CHIEF HUMAN RESOURCES OFFICER", layers: [
         { id: 'hris', label: 'HR Registry', path: 'hris', icon: Users, theme: 'purple' },
         { id: 'payroll', label: 'Payroll Engine', path: 'payroll', icon: DollarSign, theme: 'purple' },
         { id: 'heart', label: 'Performance', path: 'heart', icon: Heart, theme: 'purple' },
         { id: 'recruitment', label: 'Talent Acquisition', path: 'recruitment', icon: UserPlus, theme: 'purple' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
     
-    cso: { title: "Chief Strategy Officer", layers: [
+    cso: { title: "CHIEF STRATEGY OFFICER", layers: [
         { id: 'expansion', label: 'Global Expansion', path: 'expansion', icon: Globe, theme: 'red' },
         { id: 'growth', label: 'Growth Strategy', path: 'growth', icon: Zap, theme: 'red' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
 
-    ciso: { title: "Chief Information Security Officer", layers: [
+    ciso: { title: "CHIEF INFORMATION SECURITY OFFICER", layers: [
         { id: 'threats', label: 'Threat Intelligence', path: 'threats', icon: ShieldAlert, theme: 'blue' },
         { id: 'compliance', label: 'InfoSec Compliance', path: 'compliance', icon: ShieldCheck, theme: 'blue' },
         { id: 'sec-ops', label: 'Security Ops', path: 'sec-ops', icon: Lock, theme: 'blue' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
 
-    clo: { title: "Chief Legal Officer", layers: [
+    clo: { title: "CHIEF LEGAL OFFICER", layers: [
         { id: 'contracts', label: 'Contract Lifecycle', path: 'contracts', icon: FileText, theme: 'slate' },
         { id: 'litigation', label: 'Litigation Center', path: 'litigation', icon: Gavel, theme: 'slate' },
         { id: 'ip', label: 'Intellectual Property', path: 'ip', icon: Lightbulb, theme: 'slate' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
 
-    cpo: { title: "Chief Product Officer", layers: [
+    cpo: { title: "CHIEF PRODUCT OFFICER", layers: [
         { id: 'roadmap', label: 'Product Roadmap', path: 'roadmap', icon: Map, theme: 'indigo' },
         { id: 'discovery', label: 'User Discovery', path: 'discovery', icon: Search, theme: 'indigo' },
         { id: 'design', label: 'Design System', path: 'design', icon: PenTool, theme: 'indigo' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
 
-    cdo: { title: "Chief Data Officer", layers: [
+    cdo: { title: "CHIEF DATA OFFICER", layers: [
         { id: 'governance', label: 'Data Governance', path: 'governance', icon: Database, theme: 'purple' },
         { id: 'bi', label: 'Business Intelligence', path: 'bi', icon: BarChart, theme: 'purple' },
         { id: 'ml', label: 'Neural Modeling', path: 'ml', icon: Brain, theme: 'purple' }
@@ -162,37 +162,40 @@ const DEPARTMENTS_DATA: Record<string, { title: string, layers: any[] }> = {
 
 // --- NODES ---
 
-const AxesNode = () => (
-    <div className="relative pointer-events-none w-[20000px] h-[20000px] -translate-x-1/2 -translate-y-1/2">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1px] h-full border-l border-dashed border-white/20 z-[1]" />
-        <div className="absolute top-1/2 left-0 w-full h-[1px] border-t border-dashed border-white/20 z-[1]" />
-        <div className="absolute inset-0 z-[1]">
-            {Array.from({ length: 100 }).map((_, i) => {
-                const pos = (i - 50) * PIXELS_PER_INCH;
-                if (i === 50) return null;
-                return (
-                    <div key={`tick-y-${i}`} style={{ top: `calc(50% + ${pos}px)`, left: '50%' }} className="absolute -translate-x-1/2 -translate-y-1/2 flex items-center">
-                        <div className="w-2 h-[1px] bg-white/40" />
-                        <span className="ml-2 text-[8px] font-mono text-white/20">{- (i - 50)}"</span>
-                    </div>
-                );
-            })}
-            {Array.from({ length: 100 }).map((_, i) => {
-                const pos = (i - 50) * PIXELS_PER_INCH;
-                if (i === 50) return null;
-                return (
-                    <div key={`tick-x-${i}`} style={{ left: `calc(50% + ${pos}px)`, top: '50%' }} className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-                        <div className="h-2 w-[1px] bg-white/40" />
-                        <span className="mt-2 text-[8px] font-mono text-white/20">{i - 50}"</span>
-                    </div>
-                );
-            })}
+const AxesNode = ({ data }: NodeProps) => {
+    const isLight = data?.isLight;
+    return (
+        <div className="relative pointer-events-none w-[20000px] h-[20000px] -translate-x-1/2 -translate-y-1/2">
+            <div className={cn("absolute top-0 left-1/2 -translate-x-1/2 w-[1px] h-full border-l border-dashed z-[1]", isLight ? "border-black/25" : "border-white/20")} />
+            <div className={cn("absolute top-1/2 left-0 w-full h-[1px] border-t border-dashed z-[1]", isLight ? "border-black/25" : "border-white/20")} />
+            <div className="absolute inset-0 z-[1]">
+                {Array.from({ length: 100 }).map((_, i) => {
+                    const pos = (i - 50) * PIXELS_PER_INCH;
+                    if (i === 50) return null;
+                    return (
+                        <div key={`tick-y-${i}`} style={{ top: `calc(50% + ${pos}px)`, left: '50%' }} className="absolute -translate-x-1/2 -translate-y-1/2 flex items-center">
+                            <div className={cn("w-2 h-[1px]", isLight ? "bg-black/40" : "bg-white/40")} />
+                            <span className={cn("ml-2 text-[8px] font-mono", isLight ? "text-black/50 font-semibold" : "text-white/20")}>{- (i - 50)}"</span>
+                        </div>
+                    );
+                })}
+                {Array.from({ length: 100 }).map((_, i) => {
+                    const pos = (i - 50) * PIXELS_PER_INCH;
+                    if (i === 50) return null;
+                    return (
+                        <div key={`tick-x-${i}`} style={{ left: `calc(50% + ${pos}px)`, top: '50%' }} className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
+                            <div className={cn("h-2 w-[1px]", isLight ? "bg-black/40" : "bg-white/40")} />
+                            <span className={cn("mt-2 text-[8px] font-mono", isLight ? "text-black/50 font-semibold" : "text-white/20")}>{i - 50}"</span>
+                        </div>
+                    );
+                })}
+            </div>
+            <div className={cn("absolute top-[10%] left-1/2 -translate-x-1/2 text-xl font-mono uppercase tracking-[1em]", isLight ? "text-black/30 font-bold" : "text-white/10")}>Y+ NORTE</div>
+            <div className={cn("absolute bottom-[10%] left-1/2 -translate-x-1/2 text-xl font-mono uppercase tracking-[1em]", isLight ? "text-black/30 font-bold" : "text-white/10")}>Y- SUR</div>
+            <div className={cn("absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full blur-[2px] z-[2]", isLight ? "bg-black/50" : "bg-white/40")} />
         </div>
-        <div className="absolute top-[10%] left-1/2 -translate-x-1/2 text-white/10 text-xl font-mono uppercase tracking-[1em]">Y+ NORTE</div>
-        <div className="absolute bottom-[10%] left-1/2 -translate-x-1/2 text-white/10 text-xl font-mono uppercase tracking-[1em]">Y- SUR</div>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 bg-white/40 rounded-full blur-[2px] z-[2]" />
-    </div>
-);
+    );
+};
 
 const TitleNode = ({ data }: NodeProps) => {
     const [menuOpen, setMenuOpen] = useState(false);
@@ -214,12 +217,20 @@ const TitleNode = ({ data }: NodeProps) => {
                     type="button"
                     onClick={(e) => { e.stopPropagation(); data.onBack(); }}
                     title="Volver a la suite"
-                    className="nodrag pointer-events-auto shrink-0 text-white/40 hover:text-white transition-colors cursor-pointer"
+                    className={cn(
+                        "nodrag pointer-events-auto shrink-0 transition-colors cursor-pointer",
+                        data?.isLight ? "text-black/50 hover:text-black" : "text-white/40 hover:text-white"
+                    )}
                 >
                     <ChevronLeft className="w-16 h-16 md:w-24 md:h-24" strokeWidth={1.25} />
                 </button>
             )}
-            <h1 className="text-6xl md:text-8xl font-thin text-white tracking-tighter whitespace-nowrap drop-shadow-[0_0_30px_rgba(255,255,255,0.1)]">
+            <h1 className={cn(
+                "text-6xl md:text-8xl font-thin tracking-tighter whitespace-nowrap uppercase",
+                data?.isLight 
+                    ? "text-slate-900 drop-shadow-[0_0_30px_rgba(0,0,0,0.1)]" 
+                    : "text-white drop-shadow-[0_0_30px_rgba(255,255,255,0.1)]"
+            )}>
                 {data.title}
             </h1>
             {data.roles && (
@@ -230,7 +241,9 @@ const TitleNode = ({ data }: NodeProps) => {
                         title="Cambiar de oficial"
                         className={cn(
                             "nodrag cursor-pointer transition-colors",
-                            menuOpen ? "text-white" : "text-white/40 hover:text-white"
+                            menuOpen 
+                                ? (data?.isLight ? "text-black" : "text-white") 
+                                : (data?.isLight ? "text-black/40 hover:text-black" : "text-white/40 hover:text-white")
                         )}
                     >
                         <ChevronDown
@@ -239,28 +252,35 @@ const TitleNode = ({ data }: NodeProps) => {
                         />
                     </button>
                     {menuOpen && (
-                        <div className="absolute left-1/2 -translate-x-1/2 top-[100%] mt-3 w-72 max-h-[55vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#0c0d12]/95 backdrop-blur-2xl py-2 shadow-[0_20px_50px_rgba(0,0,0,0.8)] z-[400] custom-scrollbar">
+                        <div className={cn(
+                            "absolute left-1/2 -translate-x-1/2 top-[100%] mt-3 w-max max-w-[90vw] max-h-[75vh] sm:max-h-[680px] overflow-y-auto rounded-3xl border p-2 shadow-[0_25px_60px_rgba(0,0,0,0.8)] z-[400] custom-scrollbar backdrop-blur-2xl transition-all",
+                            data?.isLight 
+                                ? "bg-white/95 border-black/10 shadow-slate-300/60" 
+                                : "bg-[#0c0d12]/95 border-white/10"
+                        )}>
                             {data.roles.map((r: any) => (
                                 <button
                                     key={r.id}
                                     type="button"
                                     onClick={(e) => { e.stopPropagation(); data.onSelectRole?.(r.id); setMenuOpen(false); }}
                                     className={cn(
-                                        "w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-3",
+                                        "w-full text-left px-5 py-3 text-sm rounded-2xl transition-colors flex items-center gap-4",
                                         r.id === data.activeRole
-                                            ? "bg-white/10 text-white font-medium"
-                                            : "text-white/60 hover:text-white hover:bg-white/5"
+                                            ? (data?.isLight ? "bg-black/10 text-black font-semibold" : "bg-white/10 text-white font-semibold")
+                                            : (data?.isLight ? "text-black/60 hover:text-black hover:bg-black/5" : "text-white/60 hover:text-white hover:bg-white/5")
                                     )}
                                 >
                                     <span
                                         className={cn(
-                                            "shrink-0 w-12 text-xs font-bold tracking-wider tabular-nums",
-                                            r.id === data.activeRole ? "text-white" : "text-white/40"
+                                            "shrink-0 w-14 text-xs font-bold tracking-wider tabular-nums",
+                                            r.id === data.activeRole 
+                                                ? (data?.isLight ? "text-black" : "text-white") 
+                                                : (data?.isLight ? "text-black/40" : "text-white/40")
                                         )}
                                     >
                                         {r.acronym}
                                     </span>
-                                    <span>{r.title}</span>
+                                    <span className="whitespace-nowrap">{r.title}</span>
                                 </button>
                             ))}
                         </div>
@@ -286,125 +306,80 @@ const LayerNode = ({ data }: NodeProps) => {
         setLastTap(now);
     };
 
-    // Hexagon variant: flat-top hexagon (wide top/bottom edges so the name fits)
-    // rendered with the same isometric 3D tilt as the diamond layers below.
-    if (data.isHex) {
-        const hexClip = 'polygon(14% 0%, 86% 0%, 100% 50%, 86% 100%, 14% 100%, 0% 50%)';
-        return (
-            <div className="relative group">
+    return (
+        <div className="relative group">
+            <div
+                className="pointer-events-none transition-all duration-300"
+                style={{
+                    transform: `translate(-50%, -50%) rotateX(60deg) rotateZ(-45deg) scale(${isHovered ? 1.05 : 1})`,
+                    transformStyle: 'preserve-3d',
+                    filter: 'none',
+                }}
+            >
+                {/* Contenedor 100% Transparente sin fondo ni sombra */}
+                {/* Contenedor Transparente con Borde Sutil Visible y Ancho Dinámico */}
                 <div
-                    className="pointer-events-none transition-all duration-300"
+                    onMouseEnter={() => setIsHovered(true)}
+                    onMouseLeave={() => setIsHovered(false)}
+                    onClick={handleTap}
+                    className={cn(
+                        "pointer-events-auto cursor-pointer flex flex-row items-center justify-center gap-4 px-12 sm:px-16 py-8 transition-all duration-300 bg-transparent rounded-[3rem] border min-w-[580px] w-max",
+                        data.isLight 
+                            ? (isHovered ? "border-slate-500" : "border-slate-300/80") 
+                            : (isHovered ? "border-white/50" : "border-white/20")
+                    )}
                     style={{
-                        transform: `translate(-50%, -50%) rotateX(60deg) rotateZ(-45deg) scale(${isHovered ? 1.05 : 1})`,
-                        transformStyle: 'preserve-3d',
-                        filter: isHovered
-                            ? 'drop-shadow(0 0 45px rgba(255,255,255,0.35)) drop-shadow(0 40px 50px rgba(0,0,0,0.7))'
-                            : 'drop-shadow(0 35px 55px rgba(0,0,0,0.6))',
+                        minWidth: 580,
+                        width: 'max-content',
+                        height: 340,
+                        backgroundColor: 'transparent',
+                        boxShadow: 'none',
                     }}
                 >
-                    {/* Glass fill (no border line). */}
+                    {/* Contenido en proporción real 1:1 con texto en una sola línea */}
                     <div
-                        onMouseEnter={() => setIsHovered(true)}
-                        onMouseLeave={() => setIsHovered(false)}
-                        onClick={handleTap}
-                        className="pointer-events-auto cursor-pointer flex flex-row items-center justify-center gap-4 px-16 transition-colors duration-300"
-                        style={{
-                            width: 560,
-                            height: 360,
-                            clipPath: hexClip,
-                            backgroundColor: isHovered ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)',
-                            backdropFilter: 'blur(40px)',
-                            WebkitBackdropFilter: 'blur(40px)',
-                        }}
+                        className="flex flex-row items-center justify-start gap-4 w-max shrink-0"
+                        style={{ transform: 'rotateZ(45deg) scaleY(1.8)' }}
                     >
-                        {/* Counter-rotate the content so it stays readable in the tilt.
-                            Fixed width + left alignment keeps the handle and icon in the
-                            exact same spot across every hexagon (consistent alignment). */}
+                        {/* Puntos para arrastrar y reordenar */}
                         <div
-                            className="flex flex-row items-center justify-start gap-4 w-[360px]"
-                            style={{ transform: 'rotateZ(45deg) rotateX(-20deg)' }}
-                        >
-                            {/* Drag handle (6 dots): grab here to reorder the layer. */}
-                            <div
-                                className="hex-drag-handle pointer-events-auto cursor-grab active:cursor-grabbing shrink-0 p-1.5 rounded-lg hover:bg-white/10 transition-colors"
-                                onClick={(e) => e.stopPropagation()}
-                                title="Arrastra para mover / reordenar la lámina"
-                            >
-                                <GripVertical
-                                    className={cn(
-                                        'w-9 h-9 transition-colors',
-                                        isHovered ? 'text-white/80' : 'text-white/35'
-                                    )}
-                                />
-                            </div>
-                            {data.icon && (
-                                <data.icon
-                                    className={cn(
-                                        'w-20 h-20 shrink-0 transition-all duration-300',
-                                        isHovered
-                                            ? 'text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.8)]'
-                                            : 'text-white/30'
-                                    )}
-                                />
+                            className={cn(
+                                "hex-drag-handle pointer-events-auto cursor-grab active:cursor-grabbing shrink-0 p-1.5 rounded-xl transition-colors",
+                                data.isLight ? "hover:bg-black/10" : "hover:bg-white/10"
                             )}
-                            <span className="flex-1 text-left text-3xl font-bold uppercase tracking-wide text-white leading-tight drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">
-                                {data.label}
-                            </span>
+                            onClick={(e) => e.stopPropagation()}
+                            title="Arrastra para mover / reordenar la lámina"
+                        >
+                            <GripVertical
+                                className={cn(
+                                    'w-6 h-6 transition-colors',
+                                    isHovered 
+                                        ? (data.isLight ? 'text-slate-900' : 'text-white') 
+                                        : (data.isLight ? 'text-slate-500' : 'text-white/40')
+                                )}
+                            />
                         </div>
+                        {data.icon && (
+                            <data.icon
+                                className={cn(
+                                    'w-11 h-11 sm:w-12 sm:h-12 shrink-0 transition-all duration-300',
+                                    isHovered
+                                        ? (data.isLight ? 'text-black drop-shadow-[0_0_15px_rgba(0,0,0,0.3)]' : 'text-white drop-shadow-[0_0_25px_rgba(255,255,255,0.9)]')
+                                        : (data.isLight ? 'text-slate-900' : 'text-white/90')
+                                )}
+                            />
+                        )}
+                        <span className={cn(
+                            "whitespace-nowrap text-left text-2xl sm:text-3xl font-normal tracking-wide transition-all duration-300",
+                            data.isLight 
+                                ? (isHovered ? "text-black drop-shadow-[0_0_10px_rgba(0,0,0,0.15)]" : "text-slate-900")
+                                : (isHovered ? "text-white drop-shadow-[0_0_25px_rgba(255,255,255,0.8)]" : "text-white/90 drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]")
+                        )}>
+                            {data.label}
+                        </span>
                     </div>
                 </div>
             </div>
-        );
-    }
-
-    return (
-        <div className="relative group">
-            <AnimatePresence>
-                {isHovered && (
-                    <motion.div initial={{ opacity: 0, y: 0 }} animate={{ opacity: 1, y: -280 }} exit={{ opacity: 0, y: 0 }} className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 z-[50] pointer-events-none">
-                        <span className="text-2xl font-black tracking-[0.4em] uppercase text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.6)] whitespace-nowrap">
-                            {data.label}
-                        </span>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-            <motion.div
-                onMouseEnter={() => setIsHovered(true)}
-                onMouseLeave={() => setIsHovered(false)}
-                onClick={() => {
-                    const now = Date.now();
-                    const DOUBLE_TAP_DELAY = 500;
-                    if (now - lastTap < DOUBLE_TAP_DELAY) {
-                        data.onDoubleClick?.();
-                    } else {
-                        data.onClick?.();
-                    }
-                    setLastTap(now);
-                }}
-                className={cn(
-                    "w-[380px] md:w-[460px] h-[380px] md:h-[460px] rounded-[6rem] backdrop-blur-[40px] border transition-all duration-300 flex flex-col items-center justify-center cursor-pointer pointer-events-auto",
-                    isHovered ? "scale-105" : "scale-100"
-                )}
-                style={{
-                    transform: 'translate(-50%, -50%) rotateX(60deg) rotateZ(-45deg)',
-                    transformStyle: 'preserve-3d',
-                    backgroundColor: isHovered ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.03)',
-                    borderColor: isHovered ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.2)',
-                    boxShadow: isHovered 
-                        ? 'inset 0 0 100px rgba(255, 255, 255, 0.1), 0 50px 100px rgba(0,0,0,0.8), 0 0 40px rgba(255, 255, 255, 0.3)' 
-                        : '0 30px 60px rgba(0,0,0,0.5), inset 0 0 40px rgba(255,255,255,0.05), 0 0 20px rgba(255,255,255,0.05)',
-                }}
-            >
-                {data.icon && (
-                    <data.icon 
-                        style={{ transform: 'rotateZ(45deg) rotateX(-20deg)' }} 
-                        className={cn(
-                            "w-32 h-32 transition-all duration-300",
-                            isHovered ? "text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.8)]" : "text-white/25"
-                        )} 
-                    />
-                )}
-            </motion.div>
         </div>
     );
 };
@@ -501,6 +476,9 @@ function WorkspaceContent() {
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
     const [gridType, setGridType] = useState<'none' | 'dots' | 'lines'>('none');
+    const [canvasTheme, setCanvasTheme] = useState<'dark' | 'light'>('dark');
+    const [isMicActive, setIsMicActive] = useState(false);
+    const [showCartesianPlane, setShowCartesianPlane] = useState(false);
     const [savedLayout, setSavedLayout] = useState<Record<string, { x: number, y: number }>>({});
     const [layerOrder, setLayerOrder] = useState<Record<string, string[]>>({});
     const [expandedDepts, setExpandedDepts] = useState<string[]>([]);
@@ -643,8 +621,10 @@ function WorkspaceContent() {
     useEffect(() => {
         const newNodes: Node[] = [];
         
-        // Ejes
-        newNodes.push({ id: 'global-axes', type: 'axesNode', position: { x: 0, y: 0 }, draggable: false, selectable: false, zIndex: -1, data: {} });
+        // Ejes del Plano Cartesiano (visibles según showCartesianPlane)
+        if (showCartesianPlane) {
+            newNodes.push({ id: 'global-axes', type: 'axesNode', position: { x: 0, y: 0 }, draggable: false, selectable: false, zIndex: -1, data: { isLight: canvasTheme === 'light' } });
+        }
 
         // Título (con flecha de regreso "<" a la izquierda y selector de oficial "v" a la derecha)
         const titleSaved = savedLayout['dept-title'] || { x: 0, y: -3 };
@@ -656,6 +636,7 @@ function WorkspaceContent() {
             draggable: true, zIndex: 2000, style: { pointerEvents: 'none' },
             data: {
                 title: currentDeptData.title,
+                isLight: canvasTheme === 'light',
                 onBack: () => router.push(`/nucleo/${routeSegment}`),
                 roles: roleOptions,
                 activeRole,
@@ -690,7 +671,7 @@ function WorkspaceContent() {
                 newNodes.push({
                     id: nodeId, type: 'folderNode', position: toCanvas(saved.x, saved.y),
                     draggable: false, zIndex: 1000 - index,
-                    data: { ...item }
+                    data: { ...item, isLight: canvasTheme === 'light' }
                 });
             } else {
                 // Layers always sit in their fixed, aligned slot (by order index),
@@ -704,6 +685,7 @@ function WorkspaceContent() {
                     data: { 
                         ...item, 
                         isHex: true,
+                        isLight: canvasTheme === 'light',
                         onClick: () => spawnWindow(item, canvasPos),
                         onDoubleClick: () => spawnWindow(item, canvasPos)
                     }
@@ -715,7 +697,7 @@ function WorkspaceContent() {
             const windowNodes = prev.filter(n => n.type === 'windowNode');
             return [...newNodes, ...windowNodes];
         });
-    }, [activeRole, routeSegment, savedLayout, currentDeptData, expandedDepts, getOrderedLayerIds, router]);
+    }, [activeRole, routeSegment, savedLayout, currentDeptData, expandedDepts, getOrderedLayerIds, router, canvasTheme, showCartesianPlane]);
 
     // Snap a dragged layer into the nearest fixed slot and reorder the list.
     const handleLayerReorder = (node: Node) => {
@@ -757,25 +739,71 @@ function WorkspaceContent() {
     };
 
     return (
-        <div className="w-full h-screen bg-black flex flex-col relative overflow-hidden">
+        <div className={cn("w-full h-screen flex flex-col relative overflow-hidden transition-colors duration-500", canvasTheme === 'light' ? "bg-white" : "bg-black")}>
             
-            {/* Top Hover Menu containing all workspace controls */}
-            <div className="fixed top-0 left-0 right-0 h-16 z-[3000] group flex items-start justify-center pt-4 pointer-events-none">
-                <div className="flex items-center gap-4 bg-[#0D0F14]/90 backdrop-blur-3xl border border-white/10 p-2 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] opacity-0 -translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-auto">
+            {/* Controls area in bottom-right corner */}
+            <div className="fixed bottom-6 right-6 z-[3000] flex items-center gap-3 pointer-events-auto">
+                {/* Main Controls Bar */}
+                <div className={cn(
+                    "flex items-center gap-3 backdrop-blur-3xl border p-2 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] transition-colors duration-300",
+                    canvasTheme === 'light' 
+                        ? "bg-white/90 border-black/10 text-black shadow-slate-300/50" 
+                        : "bg-[#0D0F14]/90 border-white/10 text-white"
+                )}>
                     {/* Grid Type Controls */}
-                    <div className="flex gap-1 border-r border-white/10 pr-3 mr-1">
-                        <button onClick={() => setGridType('none')} className={cn("p-2 rounded-xl transition-all", gridType === 'none' ? "bg-white/10 text-white" : "text-white/20 hover:text-white/40")} title="Sin Cuadrícula"><Square className="w-4 h-4" /></button>
-                        <button onClick={() => setGridType('dots')} className={cn("p-2 rounded-xl transition-all", gridType === 'dots' ? "bg-white/10 text-white" : "text-white/20 hover:text-white/40")} title="Puntos"><div className="w-4 h-4 flex items-center justify-center font-black text-[10px]">.</div></button>
-                        <button onClick={() => setGridType('lines')} className={cn("p-2 rounded-xl transition-all", gridType === 'lines' ? "bg-white/10 text-white" : "text-white/20 hover:text-white/40")} title="Líneas"><Grid3X3 className="w-4 h-4" /></button>
+                    <div className={cn("flex gap-1 border-r pr-2 mr-1", canvasTheme === 'light' ? "border-black/10" : "border-white/10")}>
+                        <button onClick={() => setGridType('none')} className={cn("p-2 rounded-xl transition-all", gridType === 'none' ? (canvasTheme === 'light' ? "bg-black/10 text-black" : "bg-white/10 text-white") : (canvasTheme === 'light' ? "text-black/40 hover:text-black" : "text-white/40 hover:text-white"))} title="Sin Cuadrícula"><Square className="w-4 h-4" /></button>
+                        <button onClick={() => setGridType('dots')} className={cn("p-2 rounded-xl transition-all", gridType === 'dots' ? (canvasTheme === 'light' ? "bg-black/10 text-black" : "bg-white/10 text-white") : (canvasTheme === 'light' ? "text-black/40 hover:text-black" : "text-white/40 hover:text-white"))} title="Puntos"><div className="w-4 h-4 flex items-center justify-center font-black text-[10px]">.</div></button>
+                        <button onClick={() => setGridType('lines')} className={cn("p-2 rounded-xl transition-all", gridType === 'lines' ? (canvasTheme === 'light' ? "bg-black/10 text-black" : "bg-white/10 text-white") : (canvasTheme === 'light' ? "text-black/40 hover:text-black" : "text-white/40 hover:text-white"))} title="Líneas"><Grid3X3 className="w-4 h-4" /></button>
                     </div>
                     {/* Zoom / View Controls */}
+                    <div className={cn("flex gap-1 border-r pr-2 mr-1", canvasTheme === 'light' ? "border-black/10" : "border-white/10")}>
+                        <button onClick={() => zoomIn()} className={cn("p-2 rounded-xl transition-all", canvasTheme === 'light' ? "text-black/40 hover:text-black hover:bg-black/5" : "text-white/40 hover:text-white hover:bg-white/10")} title="Acercar"><ZoomIn className="w-4 h-4" /></button>
+                        <button onClick={() => zoomOut()} className={cn("p-2 rounded-xl transition-all", canvasTheme === 'light' ? "text-black/40 hover:text-black hover:bg-black/5" : "text-white/40 hover:text-white hover:bg-white/10")} title="Alejar"><ZoomOut className="w-4 h-4" /></button>
+                        <button onClick={() => setCenter(0, 0, { zoom: 1, duration: 800 })} className={cn("p-2 rounded-xl transition-all", canvasTheme === 'light' ? "text-black/40 hover:text-black hover:bg-black/5" : "text-white/40 hover:text-white hover:bg-white/10")} title="Ir al Origen (0,0)"><Navigation className="w-4 h-4 -rotate-45" /></button>
+                        <button onClick={() => fitView({ duration: 800 })} className={cn("p-2 rounded-xl transition-all", canvasTheme === 'light' ? "text-black/40 hover:text-black hover:bg-black/5" : "text-white/40 hover:text-white hover:bg-white/10")} title="Ajustar Vista"><Maximize2 className="w-4 h-4" /></button>
+                    </div>
+                    {/* Theme Switcher (Sun / Moon) & Cartesian Plane Toggle */}
                     <div className="flex gap-1">
-                        <button onClick={() => zoomIn()} className="p-2 rounded-xl text-white/20 hover:text-white hover:bg-white/10 transition-all" title="Acercar"><ZoomIn className="w-4 h-4" /></button>
-                        <button onClick={() => zoomOut()} className="p-2 rounded-xl text-white/20 hover:text-white hover:bg-white/10 transition-all" title="Alejar"><ZoomOut className="w-4 h-4" /></button>
-                        <button onClick={() => setCenter(0, 0, { zoom: 1, duration: 800 })} className="p-2 rounded-xl text-white/20 hover:text-white hover:bg-white/10 transition-all" title="Ir al Origen (0,0)"><Navigation className="w-4 h-4 -rotate-45" /></button>
-                        <button onClick={() => fitView({ duration: 800 })} className="p-2 rounded-xl text-white/20 hover:text-white hover:bg-white/10 transition-all" title="Ajustar Vista"><Maximize2 className="w-4 h-4" /></button>
+                        <button 
+                            onClick={() => setShowCartesianPlane(prev => !prev)} 
+                            className={cn(
+                                "p-2 rounded-xl transition-all", 
+                                showCartesianPlane
+                                    ? (canvasTheme === 'light' ? "bg-black/10 text-black font-semibold" : "bg-white/10 text-white font-semibold")
+                                    : (canvasTheme === 'light' ? "text-black/40 hover:text-black hover:bg-black/5" : "text-white/40 hover:text-white hover:bg-white/10")
+                            )} 
+                            title={showCartesianPlane ? "Ocultar Plano Cartesiano" : "Mostrar Plano Cartesiano"}
+                        >
+                            <Compass className="w-4 h-4" />
+                        </button>
+                        <button 
+                            onClick={() => setCanvasTheme(prev => prev === 'dark' ? 'light' : 'dark')} 
+                            className={cn(
+                                "p-2 rounded-xl transition-all", 
+                                canvasTheme === 'light' 
+                                    ? "text-black/40 hover:text-black hover:bg-black/5" 
+                                    : "text-white/40 hover:text-white hover:bg-white/10"
+                            )} 
+                            title={canvasTheme === 'dark' ? "Cambiar a modo Claro (Sol)" : "Cambiar a modo Oscuro (Luna)"}
+                        >
+                            {canvasTheme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                        </button>
                     </div>
                 </div>
+
+                {/* Botón único: Círculo azul en Gradiente Eléctrico */}
+                <button
+                    onClick={() => {
+                        setIsMicActive(!isMicActive);
+                        toast.info(!isMicActive ? "Modo de voz activado" : "Modo de voz desactivado");
+                    }}
+                    className={cn(
+                        "w-14 h-14 rounded-full shadow-[0_0_25px_rgba(29,78,216,0.6)] transition-all duration-300 bg-[linear-gradient(90deg,#387BFF_0%,#0038FF_50%,#1E3EAF_100%)] hover:scale-105 hover:brightness-110 active:scale-95 shrink-0 border-0 outline-none cursor-pointer",
+                        isMicActive && "animate-pulse scale-105 ring-2 ring-blue-500 shadow-[0_0_30px_rgba(37,99,235,0.8)]"
+                    )}
+                    title={isMicActive ? "Desactivar modo de voz" : "Activar modo de voz"}
+                />
             </div>
 
             <div className="flex-1 w-full h-full relative z-0">
@@ -786,7 +814,7 @@ function WorkspaceContent() {
                     onEdgesChange={onEdgesChange} 
                     onNodeDragStop={onNodeDragStop} 
                     nodeTypes={nodeTypes} 
-                    className="bg-[#050505]" 
+                    className={canvasTheme === 'light' ? "bg-white" : "bg-black"} 
                     proOptions={{ hideAttribution: true }} 
                     minZoom={0.01} 
                     maxZoom={4} 
@@ -798,7 +826,7 @@ function WorkspaceContent() {
                         duration: 800
                     }}
                 >
-                    {gridType !== 'none' && <Background variant={gridType === 'dots' ? BackgroundVariant.Dots : BackgroundVariant.Lines} color="#ffffff" gap={PIXELS_PER_INCH} size={1} className="opacity-[0.03]" />}
+                    {gridType !== 'none' && <Background variant={gridType === 'dots' ? BackgroundVariant.Dots : BackgroundVariant.Lines} color={canvasTheme === 'light' ? "#000000" : "#ffffff"} gap={PIXELS_PER_INCH} size={1} className={canvasTheme === 'light' ? "opacity-[0.08]" : "opacity-[0.03]"} />}
                 </ReactFlow>
             </div>
         </div>
