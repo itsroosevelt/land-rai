@@ -24,6 +24,36 @@ const NON_PHONE_CHANNELS = new Set([
     'snapchat',
 ]);
 
+export function extractCardPhoneNumber(card: Record<string, any> | null | undefined): string | null {
+    if (!card) return null;
+    const candidates = [
+        card.contactNumber,
+        card.contactNumberClean,
+        card.phone,
+        card.phoneNumber,
+        card.customerPhone,
+        card.userPhone,
+        card.recipientPhone,
+        card.botPhoneNumber,
+        card.wabaPhoneNumber,
+        card.displayPhoneNumber,
+        card.whatsapp_account,
+        card.platform_ids?.whatsapp,
+        card.customFields?.telefono,
+        card.customFields?.phone,
+        card.customFields?.celular,
+    ];
+    for (const val of candidates) {
+        if (val && typeof val === 'string' && val.trim().length >= 7) {
+            return val.trim();
+        }
+    }
+    if (typeof card.id === 'string' && card.id.replace(/\D/g, '').length >= 7 && !card.id.includes('@')) {
+        return card.id;
+    }
+    return null;
+}
+
 function collectPhoneContacts(cards: readonly Record<string, any>[]) {
     const byCountry = new Map<string, { iso: string; country: string; phones: Set<string> }>();
     const allPhones = new Set<string>();
@@ -32,7 +62,7 @@ function collectPhoneContacts(cards: readonly Record<string, any>[]) {
         const channel = resolveCardChannel(card);
         if (NON_PHONE_CHANNELS.has(channel)) continue;
 
-        const rawPhone = card.contactNumber || card.contactNumberClean || card.phone;
+        const rawPhone = extractCardPhoneNumber(card);
         if (!rawPhone) continue;
 
         const normalized = normalizePhoneNumber(String(rawPhone));

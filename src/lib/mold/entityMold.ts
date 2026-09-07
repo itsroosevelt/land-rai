@@ -15,7 +15,7 @@ import { isSlugOwnedByOtherEntity } from './entityRouteContract';
 import { MOLD_INTEGRATIONS_INIT } from './integrationsCatalog';
 
 /** Incrementar cuando el molde multitenant gane nuevas estructuras obligatorias. */
-export const ENTITY_MOLD_VERSION = 18;
+export const ENTITY_MOLD_VERSION = 19;
 
 export const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
@@ -89,6 +89,10 @@ export const ENTITY_MOLD_FEATURES = {
     broadcastSendHeartbeat: true,
     /** Backfill automático de texto real y respuestas en /conversations post-envío. */
     broadcastConversationBackfill: true,
+    /** UI Omnicanal V2: fotos reales de perfil, tabs & filtros uniformes, doble vistas full, bandera + hora. */
+    omnichannelV2UI: true,
+    /** Sincronización automática de snippet lastMessage/lastMessageDirection/updatedAt en motor Bot AI. */
+    botEngineSnippetSync: true,
 } as const;
 
 function tenantPath(userId: string, entityId: string) {

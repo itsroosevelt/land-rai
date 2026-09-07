@@ -5,7 +5,11 @@
 export const normalizePhoneNumber = (phone: string): string => {
     if (!phone) return '';
 
-    const trimmed = phone.trim();
+    let trimmed = phone.trim();
+    if (trimmed.startsWith('00')) {
+        trimmed = `+${trimmed.slice(2)}`;
+    }
+
     if (trimmed.startsWith('+')) {
         const digits = trimmed.replace(/\D/g, '');
         return digits ? `+${digits}` : '';
@@ -14,18 +18,23 @@ export const normalizePhoneNumber = (phone: string): string => {
     let clean = trimmed.replace(/\D/g, '');
     if (!clean) return '';
 
-    // International numbers from Meta/WhatsApp already include country code (>10 digits).
+    // North America (US/Canada): 11 digits starting with 1 (e.g. 13055551234)
+    if (clean.length === 11 && clean.startsWith('1')) {
+        return `+${clean}`;
+    }
+
+    // North America (US/Canada): 10 digits not starting with 0 (e.g. 3055551234 or 4155551234)
+    if (clean.length === 10 && !clean.startsWith('0') && !clean.startsWith('9')) {
+        return `+1${clean}`;
+    }
+
+    // International numbers from Meta/WhatsApp (>10 digits)
     if (clean.length > 10) {
         return `+${clean}`;
     }
 
-    // North America without leading country digit in some legacy imports.
-    if (clean.length === 10 && clean.startsWith('1') === false) {
-        return `+1${clean}`;
-    }
-
-    // Ecuador local numbers only when clearly local length (avoid mis-tagging foreign short codes).
-    if (clean.length >= 9 && clean.length <= 10) {
+    // Ecuador local numbers (9-10 digits starting with 0 or 9)
+    if (clean.length >= 9 && clean.length <= 10 && (clean.startsWith('0') || clean.startsWith('9'))) {
         if (clean.startsWith('0')) {
             clean = clean.substring(1);
         }

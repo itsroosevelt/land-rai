@@ -452,9 +452,28 @@ export default function ChatArea({ card, groups, groupName, allConversations, on
                             <ChevronLeft size={24} />
                         </button>
                     )}
-                    <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center font-bold text-white text-[13px] shadow-sm flex-shrink-0">
-                        {displayInitial}
-                    </div>
+                    {(() => {
+                        const photoUrl = card?.photoUrl || card?.profilePictureUrl || card?.profilePicUrl || card?.avatarUrl || card?.picture || card?.photo || card?.profilePic || null;
+                        return (
+                            <div className="w-12 h-12 bg-[#26282e] border border-neutral-700/60 rounded-full flex items-center justify-center font-bold text-white text-lg shadow-sm flex-shrink-0 overflow-hidden relative">
+                                {photoUrl ? (
+                                    <img
+                                        src={photoUrl}
+                                        alt="Avatar"
+                                        className="w-full h-full object-cover rounded-full"
+                                        onError={(e) => {
+                                            (e.target as HTMLElement).style.display = 'none';
+                                            const initialEl = (e.target as HTMLElement).nextElementSibling;
+                                            if (initialEl) initialEl.classList.remove('hidden');
+                                        }}
+                                    />
+                                ) : null}
+                                <span className={photoUrl ? 'hidden' : ''}>
+                                    {displayInitial}
+                                </span>
+                            </div>
+                        );
+                    })()}
                     <div className="min-w-0 flex flex-col gap-1">
                         <div className="flex items-baseline gap-x-2 gap-y-0.5 min-w-0 flex-wrap">
                             <h2 className="font-semibold text-white tracking-tight text-[15px] leading-tight truncate">

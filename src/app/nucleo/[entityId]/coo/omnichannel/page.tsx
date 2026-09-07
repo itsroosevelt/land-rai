@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import InboxSidebar from './components/InboxSidebar';
 import ChatList from './components/ChatList';
 import ChatArea from './components/ChatArea';
 import { useKanbanBoard } from '../whatsapp/hooks/useKanbanBoard';
@@ -10,7 +9,7 @@ import { useEntityRoute } from '@/hooks/useEntityRoute';
 import { preloadWhatsAppTemplateBodies } from '@/lib/broadcast/templateDisplayCache';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
-import { AlertTriangle, ChevronLeft, Menu, X as CloseIcon } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 
 export default function OmnichannelInboxPage() {
     // State to manage which conversation is active
@@ -93,42 +92,12 @@ export default function OmnichannelInboxPage() {
                 </div>
             )}
 
-            <div className="flex flex-1 overflow-hidden relative">
-                {/* 1. Left Sidebar: Folders, Channels, Tags (Drawer on Mobile) */}
-                <div 
-                    className={`fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm transition-opacity duration-300 md:hidden ${isSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-                    onClick={() => setIsSidebarOpen(false)}
-                />
-                
-                <div className={`fixed inset-y-0 left-0 z-[70] transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} flex`}>
-                    <div className="relative">
-                        <InboxSidebar
-                            selectedFolder={selectedFolder}
-                            setSelectedFolder={setSelectedFolder}
-                            cards={cards}
-                        />
-                    </div>
-                </div>
-
-                {/* 2. Middle Column: List of conversations */}
-                <div className={`${activeConversationId ? 'hidden' : 'flex'} md:flex flex-col w-full md:w-[600px] h-full bg-[#0d0d0d] flex-shrink-0`}>
-                    {/* Mobile Header for List View */}
-                    {!activeConversationId && (
-                        <div className="md:hidden h-14 border-b border-neutral-900 flex items-center px-4 justify-between bg-[#0a0a0a]">
-                            <div className="flex items-center gap-3">
-                                <button onClick={() => setIsSidebarOpen(true)} className="p-2 -ml-2 text-neutral-400 hover:text-white">
-                                    <Menu size={20} />
-                                </button>
-                                <span className="font-bold uppercase tracking-widest text-xs text-white/90">Inbox</span>
-                            </div>
-                            <div className="w-8 h-8 rounded-full bg-blue-600/20 flex items-center justify-center text-blue-500 font-bold text-xs border border-blue-500/20">
-                                {cards.reduce((acc, c) => acc + (c.unreadCount || 0), 0)}
-                            </div>
-                        </div>
-                    )}
-
+            <div className="flex flex-1 overflow-hidden relative p-2.5 gap-2.5 bg-[#050505]">
+                {/* 1. Left Column: Floating card with List of conversations & top channel browser tabs */}
+                <div className={`${activeConversationId ? 'hidden' : 'flex'} md:flex flex-col w-full md:w-[50%] lg:w-[50%] h-full bg-[#0d0d0d] rounded-2xl border border-neutral-800/80 shadow-2xl shadow-black/80 overflow-hidden flex-shrink-0`}>
                     <ChatList
                         selectedFolder={selectedFolder}
+                        setSelectedFolder={setSelectedFolder}
                         activeConversationId={activeConversationId}
                         setActiveConversationId={setActiveConversationId}
                         cards={cards}
@@ -136,8 +105,8 @@ export default function OmnichannelInboxPage() {
                     />
                 </div>
 
-                {/* 3. Right Area: Chat history */}
-                <div className={`${activeConversationId ? 'flex' : 'hidden'} md:flex flex-1 flex-col overflow-hidden bg-[#111111]`}>
+                {/* 2. Right Area: Floating card with Chat history */}
+                <div className={`${activeConversationId ? 'flex' : 'hidden'} md:flex flex-1 flex-col overflow-hidden bg-[#111111] rounded-2xl border border-neutral-800/80 shadow-2xl shadow-black/80`}>
                     {activeCard ? (
                         <div className="flex flex-1 flex-col overflow-hidden">
                             <ChatArea
@@ -150,12 +119,12 @@ export default function OmnichannelInboxPage() {
                         </div>
                     ) : (
                         <div className="hidden md:flex flex-1 items-center justify-center flex-col text-neutral-500">
-                            <div className="w-16 h-16 rounded-full bg-neutral-800/50 flex items-center justify-center mb-4">
+                            <div className="w-16 h-16 rounded-full bg-neutral-800/50 flex items-center justify-center mb-4 border border-neutral-700/40 shadow-inner">
                                 <svg className="w-8 h-8 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                                 </svg>
                             </div>
-                            <p className="text-lg font-light tracking-wide">Select a conversation to start messaging</p>
+                            <p className="text-lg font-light tracking-wide text-neutral-400">Selecciona una conversación para comenzar</p>
                         </div>
                     )}
                 </div>

@@ -428,7 +428,19 @@ async function runEngineCycle(
             resolved.text = lastOutboundText;
         }
         lastOutboundText = null;
+        const snippetText = typeof resolved.text === 'string' && resolved.text.trim()
+            ? resolved.text.trim()
+            : typeof message.text === 'string' && message.text.trim()
+            ? message.text.trim()
+            : 'Mensaje del Bot';
+
+        const truncatedSnippet = snippetText.length > 60 ? snippetText.substring(0, 57) + '...' : snippetText;
+
         await box.ref.update({
+            lastMessage: truncatedSnippet,
+            lastMessageDirection: 'outbound',
+            lastMessageStatus: 'read',
+            updatedAt: new Date(),
             messages: admin.firestore.FieldValue.arrayUnion({
                 sender: 'agent',
                 platform,
