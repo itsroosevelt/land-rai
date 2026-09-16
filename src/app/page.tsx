@@ -124,17 +124,29 @@ export default function LandingPage() {
           transition={{ duration: 0.8, ease: "easeOut" }}
           className="w-full xl:w-2/3 flex flex-col items-center xl:items-start text-center xl:text-left justify-center mt-4 md:mt-8 relative top-0"
         >
-          <span className="text-blue-500 text-[10px] md:text-xs tracking-[0.3em] uppercase font-normal mb-5 block">
-            {t('hero.tag')}
+          {/* Eyebrow / Overline */}
+          <span className="text-blue-400 text-xs md:text-sm tracking-[0.2em] uppercase font-semibold mb-3 block">
+            Autonomous Infrastructure
           </span>
-          <h1 className="text-3xl md:text-5xl xl:text-6xl font-normal tracking-tight text-white mb-6 md:mb-8 leading-[1.1]">
-            {t('hero.titleLine1')} <br className="hidden xl:block" />
-            {t('hero.titleLine2')} <br className="hidden xl:block" />
-            {t('hero.titleLine3')}{' '}
-            <span className="bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent font-normal">Roosevelt</span>
+
+          {/* Main Title (H1) */}
+          <h1 className="text-3xl md:text-5xl xl:text-6xl font-bold tracking-tight text-white mb-4 leading-[1.08]">
+            Welcome to the <br className="hidden xl:block" />
+            new era of autonomy <br className="hidden xl:block" />
+            with{' '}
+            <span className="bg-gradient-to-r from-blue-400 via-blue-300 to-blue-500 bg-clip-text text-transparent font-bold">
+              Roosevelt
+            </span>
           </h1>
-          <p className="text-xs md:text-sm text-white/60 font-normal leading-relaxed max-w-lg">
-            {t('hero.description')}
+
+          {/* Subtitle */}
+          <p className="text-base md:text-xl font-medium text-white/90 tracking-tight leading-snug mb-2 max-w-xl">
+            Stop configuring processes and start delegating results.
+          </p>
+
+          {/* Body Description */}
+          <p className="text-sm md:text-base text-zinc-400 font-normal leading-relaxed max-w-lg">
+            Roosevelt is the intelligent agent that manages your personal and business infrastructure from end to end.
           </p>
         </motion.div>
 
@@ -149,7 +161,7 @@ export default function LandingPage() {
             <button 
               className="px-8 py-2.5 text-base font-normal bg-transparent text-white border border-white/30 rounded-full hover:scale-105 hover:bg-white/5 transition-all shadow-lg"
             >
-              {language === 'es' ? 'Iniciar Asistente Personal' : 'Connect Personal Assistant'}
+              Connect Personal Assistant
             </button>
           </Link>
         </motion.div>

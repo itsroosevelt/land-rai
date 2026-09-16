@@ -41,9 +41,11 @@ function PaymentForm({
   userId,
   entityId,
   clientSecret,
+  grossAmount,
+  stripeFee,
   billingData,
   isBillingValid,
-}: CardPaymentProps & { clientSecret: string }) {
+}: CardPaymentProps & { clientSecret: string; grossAmount: number; stripeFee: number }) {
   const stripe = useStripe();
   const elements = useElements();
   const { currentUser } = useAuth();
@@ -79,10 +81,10 @@ function PaymentForm({
         });
 
         if (!response.ok) {
-          throw new Error('Error activando suscripción');
+          throw new Error('Error activando suscripción recurrente');
         }
 
-        toast.success('¡Suscripción activada exitosamente!');
+        toast.success('¡Suscripción y pagos recurrentes activados exitosamente!');
         onSuccess();
       }
     } catch (error: any) {
@@ -95,13 +97,23 @@ function PaymentForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="bg-white/5 border border-white/10 rounded-lg p-4">
-        <div className="text-sm text-white/60 mb-2">Monto a pagar:</div>
-        <div className="text-3xl font-light text-white">
-          ${(priceUSD * 1.1).toFixed(2)}
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-3">
+        <div className="flex justify-between items-center text-xs text-white/60">
+          <span>Plan {planName}:</span>
+          <span className="text-white font-medium">${Number(priceUSD).toFixed(2)} USD</span>
         </div>
-        <div className="text-xs text-white/40 mt-1">
-          (Incluye 10% de impuestos)
+        <div className="flex justify-between items-center text-xs text-white/60">
+          <span>Comisión de procesamiento (Stripe 2.9% + $0.30):</span>
+          <span className="text-white/80 font-medium">+${Number(stripeFee).toFixed(2)} USD</span>
+        </div>
+        <div className="border-t border-white/10 pt-3 flex justify-between items-baseline">
+          <div className="text-sm font-semibold text-white">Total a pagar:</div>
+          <div className="text-2xl font-bold text-white tracking-tight">
+            ${Number(grossAmount).toFixed(2)} <span className="text-xs font-normal text-white/50">USD</span>
+          </div>
+        </div>
+        <div className="text-[11px] text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-lg p-2 text-center">
+          🔄 Cobro recurrente automático mensual. Cancela cuando desees.
         </div>
       </div>
 
@@ -119,15 +131,15 @@ function PaymentForm({
       <Button
         type="submit"
         disabled={isProcessing || !stripe || !isBillingValid}
-        className="w-full h-12 rounded-full bg-white text-black hover:bg-white/90 disabled:opacity-50"
+        className="w-full h-12 rounded-full bg-white text-black hover:bg-neutral-200 font-medium text-sm transition-all shadow-md disabled:opacity-50"
       >
         {isProcessing ? (
           <>
             <Loader2 className="w-4 h-4 animate-spin mr-2" />
-            Procesando...
+            Procesando suscripción...
           </>
         ) : (
-          `Pagar $${(priceUSD * 1.1).toFixed(2)}`
+          `Activar Suscripción ($${Number(grossAmount).toFixed(2)} USD)`
         )}
       </Button>
 
@@ -139,7 +151,7 @@ function PaymentForm({
       )}
 
       <p className="text-xs text-white/40 text-center">
-        ✓ Pago seguro con Stripe
+        🔒 Pago seguro y encriptado procesado directamente por Stripe
       </p>
     </form>
   );
@@ -159,6 +171,8 @@ export default function CardPayment({
 }: CardPaymentProps) {
   const { currentUser } = useAuth();
   const [clientSecret, setClientSecret] = useState('');
+  const [grossAmount, setGrossAmount] = useState(priceUSD);
+  const [stripeFee, setStripeFee] = useState(0);
   const [loadingIntent, setLoadingIntent] = useState(true);
   const [mounted, setMounted] = useState(false);
 
@@ -179,15 +193,19 @@ export default function CardPayment({
             entityId,
             priceUSD,
             planName,
+            email: currentUser?.email || '',
           }),
         });
 
         if (!response.ok) {
-          throw new Error('Error creando PaymentIntent');
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || 'Error creando sesión de pago en Stripe');
         }
 
         const data = await response.json();
         setClientSecret(data.clientSecret);
+        if (data.grossAmount) setGrossAmount(data.grossAmount);
+        if (data.stripeFee) setStripeFee(data.stripeFee);
       } catch (error: any) {
         console.error('Error:', error);
         toast.error('Error inicializando pago: ' + error.message);
@@ -199,14 +217,28 @@ export default function CardPayment({
     if (currentUser && mounted) {
       createPaymentIntent();
     }
-  }, [plan, currentUser, priceUSD, planName, mounted]);
+  }, [plan, currentUser, priceUSD, planName, entityId, userId, mounted]);
+
+  const hasPublishableKey = !!process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+
+  if (!hasPublishableKey) {
+    return (
+      <div className="p-6 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-center space-y-3">
+        <AlertCircle className="w-8 h-8 text-amber-400 mx-auto" />
+        <h4 className="text-sm font-semibold text-white">Publishable Key requerida para el frontend</h4>
+        <p className="text-xs text-white/60 leading-relaxed">
+          Ya se configuró la <span className="text-white font-mono">Secret Key</span> en el backend. Para habilitar el formulario de tarjeta en el navegador, agrega tu <span className="text-amber-300 font-mono">NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</span> (empieza con <span className="font-mono">pk_live_...</span>) a las variables de entorno.
+        </p>
+      </div>
+    );
+  }
 
   if (!mounted || loadingIntent || !clientSecret) {
     return (
       <div className="flex items-center justify-center py-8">
         <Loader2 className="w-5 h-5 animate-spin text-blue-500 mr-2" />
         <span className="text-sm text-white/60">
-          {loadingIntent ? 'Inicializando pago...' : 'Cargando...'}
+          {loadingIntent ? 'Inicializando pasarela segura de Stripe...' : 'Cargando...'}
         </span>
       </div>
     );
@@ -221,9 +253,10 @@ export default function CardPayment({
           theme: 'night',
           variables: {
             colorPrimary: '#ffffff',
-            colorBackground: '#000000',
+            colorBackground: '#0a0a0a',
             colorText: '#ffffff',
-            borderRadius: '0.5rem',
+            borderRadius: '0.75rem',
+            fontFamily: 'SF Pro Display, -apple-system, BlinkMacSystemFont, sans-serif',
           },
         },
       }}
@@ -238,6 +271,8 @@ export default function CardPayment({
         userId={userId}
         entityId={entityId}
         clientSecret={clientSecret}
+        grossAmount={grossAmount}
+        stripeFee={stripeFee}
         billingData={billingData}
         isBillingValid={isBillingValid}
       />

@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
-import { Outfit } from "next/font/google";
+import { Inter } from "next/font/google";
 
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -10,9 +10,9 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { GmailAutoConnect } from "@/components/integrations/GmailAutoConnect";
 
-const outfit = Outfit({
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-outfit",
+  variable: "--font-inter",
   display: "swap",
   weight: ["300", "400", "500", "600", "700", "800", "900"],
 });
@@ -55,7 +55,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" suppressHydrationWarning>
-      <body className={`${outfit.variable} ${outfit.className} font-sans`}>
+      <body className={`${inter.variable} ${inter.className} font-sans antialiased`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"

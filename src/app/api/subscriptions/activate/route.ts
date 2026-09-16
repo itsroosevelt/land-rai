@@ -1,9 +1,81 @@
 import { NextRequest, NextResponse } from 'next/server';
+import Stripe from 'stripe';
+import { db } from '@/lib/firebase-admin';
+import { getSubscriptionCurrentDocPath } from '@/lib/subscriptions/payment-config';
 
-// TODO: Stripe integration - configure after setting STRIPE_SECRET_KEY env var
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+
 export async function POST(request: NextRequest) {
-  return NextResponse.json(
-    { error: 'Stripe integration not configured yet. Add STRIPE_SECRET_KEY to .env.local' },
-    { status: 503 }
-  );
+  try {
+    if (!stripeSecretKey) {
+      return NextResponse.json(
+        { error: 'STRIPE_SECRET_KEY is not configured in .env.local' },
+        { status: 500 }
+      );
+    }
+
+    const stripe = new Stripe(stripeSecretKey);
+    const body = await request.json();
+    const { paymentIntentId, userId, entityId, plan, billingData } = body;
+
+    if (!paymentIntentId || !userId || !plan) {
+      return NextResponse.json(
+        { error: 'Missing required parameters: paymentIntentId, userId, plan' },
+        { status: 400 }
+      );
+    }
+
+    // Verificar el estado del PaymentIntent directamente con Stripe
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    if (paymentIntent.status !== 'succeeded') {
+      return NextResponse.json(
+        { error: `Payment is not completed. Current status: ${paymentIntent.status}` },
+        { status: 400 }
+      );
+    }
+
+    const priceUSD = Number(paymentIntent.metadata.netAmount) || (paymentIntent.amount / 100);
+    const activatedAt = new Date().toISOString();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
+    // Guardar suscripción activa en Firestore
+    await db.doc(getSubscriptionCurrentDocPath(userId, entityId || 'default')).set(
+      {
+        status: 'active',
+        plan: plan,
+        priceUSD: priceUSD,
+        paymentMethod: 'card_stripe',
+        stripePaymentIntentId: paymentIntent.id,
+        stripeCustomerId: paymentIntent.customer || null,
+        stripePaymentMethodId: paymentIntent.payment_method || null,
+        recurring: true,
+        activatedAt: activatedAt,
+        expiresAt: expiresAt.toISOString(),
+        updatedAt: activatedAt,
+        cancelAtPeriodEnd: false,
+        cancelledAt: null,
+        ...(billingData && { billing: billingData }),
+      },
+      { merge: true }
+    );
+
+    return NextResponse.json({
+      success: true,
+      message: 'Subscription activated successfully with recurring payment enabled',
+      subscription: {
+        status: 'active',
+        plan: plan,
+        expiresAt: expiresAt.toISOString(),
+        recurring: true,
+      },
+    });
+  } catch (error: any) {
+    console.error('[API] /subscriptions/activate error:', error);
+    return NextResponse.json(
+      { error: error.message || 'Error activating subscription' },
+      { status: 500 }
+    );
+  }
 }

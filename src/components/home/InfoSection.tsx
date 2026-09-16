@@ -72,13 +72,13 @@ export function InfoSection({
 
             <div className={`max-w-[1600px] mx-auto flex flex-col ${imageRight ? 'lg:flex-row' : 'lg:flex-row-reverse'} items-center gap-20`}>
                 {/* Text Content */}
-                <div className="flex-1 space-y-6 z-10">
-                    <div className="space-y-6">
+                <div className="flex-1 space-y-8 z-10">
+                    <div className="space-y-4">
                         <motion.h2 
                             initial={{ opacity: 0, y: 20 }}
                             whileInView={{ opacity: 1, y: 0 }}
                             viewport={{ once: true }}
-                            className="text-2xl md:text-4xl lg:text-4xl font-normal text-white tracking-tight leading-tight"
+                            className="text-3xl md:text-4xl lg:text-5xl font-bold text-white tracking-tight leading-[1.1]"
                         >
                             {title}
                         </motion.h2>
@@ -87,7 +87,7 @@ export function InfoSection({
                             whileInView={{ opacity: 1, y: 0 }}
                             viewport={{ once: true }}
                             transition={{ delay: 0.1 }}
-                            className="text-base md:text-lg text-zinc-400 font-light leading-relaxed max-w-lg"
+                            className="text-base md:text-lg text-zinc-300 font-normal leading-relaxed max-w-xl"
                         >
                             {subtitle}
                         </motion.p>
@@ -97,7 +97,7 @@ export function InfoSection({
                                 whileInView={{ opacity: 1, y: 0 }}
                                 viewport={{ once: true }}
                                 transition={{ delay: 0.15 }}
-                                className="text-sm text-zinc-500 leading-relaxed max-w-lg"
+                                className="text-sm md:text-base text-zinc-400 font-normal leading-relaxed max-w-lg"
                             >
                                 {description}
                             </motion.p>
@@ -116,13 +116,13 @@ export function InfoSection({
                                     transition={{ delay: 0.2 + (idx * 0.1) }}
                                     className="group space-y-1.5"
                                 >
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-5 h-5 rounded bg-white/5 border border-white/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
-                                            <Icon className="w-2.5 h-2.5 text-zinc-300" />
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="w-6 h-6 rounded-md bg-white/5 border border-white/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
+                                            <Icon className="w-3.5 h-3.5 text-zinc-200" />
                                         </div>
-                                        <h3 className="text-[13px] font-medium text-white tracking-wide">{item.title}</h3>
+                                        <h3 className="text-sm md:text-base font-semibold text-white tracking-tight">{item.title}</h3>
                                     </div>
-                                    <p className="text-zinc-500 leading-relaxed text-[10px] md:text-[11px] pr-2 max-w-md">
+                                    <p className="text-zinc-400 leading-relaxed text-xs md:text-sm pr-2 max-w-md">
                                         {item.desc}
                                     </p>
                                 </motion.div>

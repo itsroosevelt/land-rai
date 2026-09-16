@@ -39,8 +39,8 @@ export const LandingNavbar = () => {
           
           {/* Logo and Left-aligned Menu Container */}
           <div className="flex items-center gap-12">
-            <Link href="/" className="font-normal flex items-center gap-2.5 hover:opacity-90 transition-opacity shrink-0">
-              <img src="/assets/rai-logo-circular.png" alt="Roosevelt Logo" className="h-[48px] w-[48px] md:h-[54px] md:w-[54px] object-contain rounded-full brightness-125 filter group-hover:rotate-12 group-hover:scale-110 transition-transform duration-500 drop-shadow-[0_0_12px_rgba(37,99,235,0.35)]" />
+            <Link href="/" className="font-normal flex items-center gap-3 hover:opacity-90 transition-opacity shrink-0">
+              <img src="/assets/rai-logo.png" alt="Roosevelt Logo" className="h-[56px] w-[56px] md:h-[64px] md:w-[64px] object-contain transition-transform duration-300" />
               <span className="text-[22px] tracking-tight leading-none text-white">Roosevelt</span>
             </Link>
 
@@ -144,8 +144,8 @@ export const LandingNavbar = () => {
             className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-2xl xl:hidden flex flex-col p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
           >
             <div className="flex justify-between items-center mb-8">
-              <div className="flex items-center gap-2.5">
-                <img src="/assets/rai-logo-circular.png" alt="Roosevelt Logo" className="w-9 h-9 object-contain rounded-full brightness-125 filter group-hover:rotate-12 group-hover:scale-110 transition-transform duration-500 drop-shadow-[0_0_10px_rgba(37,99,235,0.4)]" />
+              <div className="flex items-center gap-3">
+                <img src="/assets/rai-logo.png" alt="Roosevelt Logo" className="w-10 h-10 object-contain transition-transform duration-300" />
                 <span className="text-lg font-normal text-white tracking-tight">Roosevelt</span>
                 
                 {/* Language Switcher */}

@@ -2,7 +2,22 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, Mail, CheckCircle, ArrowRight, LogOut, Clock, Wallet } from 'lucide-react';
+import {
+  Check,
+  Mail,
+  Calendar,
+  HardDrive,
+  FileText,
+  Video,
+  Sparkles,
+  Layers,
+  Workflow,
+  FileSignature,
+  BookOpen,
+  ShieldCheck,
+  CheckCircle,
+  Wallet,
+} from 'lucide-react';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
@@ -93,65 +108,192 @@ const BlueParticles = () => {
   );
 };
 
-const plans = [
+interface FeatureItem {
+  iconType: 'storage' | 'email' | 'suite' | 'ai' | 'workflow' | 'video' | 'esign' | 'booking' | 'notebook' | 'security' | 'check';
+  boldText: string;
+  normalText: string;
+  highlightText?: string;
+  isLink?: boolean;
+}
+
+interface PlanConfig {
+  id: string;
+  name: string;
+  monthlyPrice: string;
+  monthlyPriceUSD: number;
+  annualPrice: string;
+  annualPriceUSD: number;
+  isEnterprise?: boolean;
+  featuresHeader: string;
+  features: FeatureItem[];
+  highlighted?: boolean;
+}
+
+const plans: PlanConfig[] = [
   {
     id: 'starter',
     name: 'Starter',
-    monthlyPrice: '$49.00',
-    monthlyPriceUSD: 49.00,
-    annualPrice: '$39.20',
-    annualPriceUSD: 39.20,
-    description: 'Initial access to start operating within Roosevelt.',
+    monthlyPrice: '$49.99',
+    monthlyPriceUSD: 49.99,
+    annualPrice: '$39.99',
+    annualPriceUSD: 39.99,
     featuresHeader: 'Starter includes:',
     features: [
-      '1 active workspace',
-      'Base dashboard & essential support',
-      'Up to 1,000 monthly automations',
-      'Standard integrations',
-      'Chat with Roosevelt AI Assistant'
+      {
+        iconType: 'storage',
+        boldText: '30 GB',
+        normalText: 'pooled storage per user for files, emails and assets*',
+      },
+      {
+        iconType: 'email',
+        boldText: 'Custom business email',
+        normalText: ', you@your-company.com + Roosevelt AI assistant in Mail',
+      },
+      {
+        iconType: 'suite',
+        boldText: 'Full suite of Roosevelt apps',
+        normalText: ', including Mail, Calendar, Chat, Drive, Docs, Sheets, and Sites',
+      },
+      {
+        iconType: 'ai',
+        boldText: 'Chat with AI in the Roosevelt app',
+        normalText: 'with enterprise-grade security & privacy, your company data is ',
+        highlightText: 'not used to train models',
+      },
+      {
+        iconType: 'workflow',
+        boldText: 'Create AI-powered workflows',
+        normalText: 'across Roosevelt apps to automate everyday work',
+      },
+      {
+        iconType: 'check',
+        boldText: 'Host longer video calls',
+        normalText: 'with noise cancellation and high-definition audio',
+      },
+      {
+        iconType: 'check',
+        boldText: 'Set up emails for your team',
+        normalText: 'like priya@your-company.com or sales@your-company.com',
+      },
+      {
+        iconType: 'check',
+        boldText: 'Generate and edit content with AI',
+        normalText: 'in Roosevelt Creator & Vids',
+      },
+      {
+        iconType: 'check',
+        boldText: 'Create shared drives and manage members',
+        normalText: ', access, files, and permissions',
+      },
+      {
+        iconType: 'check',
+        boldText: 'Add and manage up to 300 users',
+        normalText: ', with built-in security and management controls',
+      },
     ],
-    accent: 'border-white/10 bg-black',
-    highlighted: false,
   },
   {
     id: 'standard',
     name: 'Standard',
-    monthlyPrice: '$100.00',
-    monthlyPriceUSD: 100.00,
-    annualPrice: '$80.00',
-    annualPriceUSD: 80.00,
-    description: 'Expanded workflow for high-paced teams and operations.',
-    featuresHeader: 'All of Starter, and:',
+    monthlyPrice: '$99.99',
+    monthlyPriceUSD: 99.99,
+    annualPrice: '$79.99',
+    annualPriceUSD: 79.99,
+    highlighted: true,
+    featuresHeader: 'Includes all of Starter, and:',
     features: [
-      '3 active workspaces',
-      'Priority dashboard & support',
-      'Up to 10,000 monthly automations',
-      'Custom branding & forms',
-      'AI research assistant',
-      'Shared team workspace'
+      {
+        iconType: 'storage',
+        boldText: '2 TB',
+        normalText: 'pooled storage per user. Get 65x more than Starter*',
+      },
+      {
+        iconType: 'email',
+        boldText: 'Custom business email',
+        normalText: ', you@your-company.com + custom layouts, and mail merge',
+      },
+      {
+        iconType: 'suite',
+        boldText: 'Unlock premium AI built-in',
+        normalText: 'across Mail, Docs, Drive, Sheets, and more',
+      },
+      {
+        iconType: 'ai',
+        boldText: 'Chat with AI in the Roosevelt app',
+        normalText: 'with additional access to advanced reasoning models',
+      },
+      {
+        iconType: 'esign',
+        boldText: 'eSignature',
+        normalText: 'with Docs and PDFs to create, send, and sign contracts',
+      },
+      {
+        iconType: 'video',
+        boldText: 'Better video meetings',
+        normalText: 'with AI note taking, real-time speech translation, and recordings',
+      },
+      {
+        iconType: 'booking',
+        boldText: 'Appointment booking pages',
+        normalText: 'to let clients book time directly with you',
+      },
+      {
+        iconType: 'notebook',
+        boldText: 'Roosevelt Notebook AI',
+        normalText: 'research and thinking partner with expanded access',
+      },
+      {
+        iconType: 'check',
+        boldText: 'Data migration tool',
+        normalText: 'to move emails, contacts, and files seamlessly to Roosevelt',
+      },
     ],
-    accent: 'border-white/10 bg-black',
-    highlighted: false,
   },
   {
-    id: 'plus',
-    name: 'Plus',
-    monthlyPrice: '$199.00',
-    monthlyPriceUSD: 199.00,
-    annualPrice: '$159.20',
-    annualPriceUSD: 159.20,
-    description: 'Advanced coverage for more robust operations.',
+    id: 'pro',
+    name: 'Pro',
+    monthlyPrice: '$199.99',
+    monthlyPriceUSD: 199.99,
+    annualPrice: '$159.99',
+    annualPriceUSD: 159.99,
     featuresHeader: 'All of Standard, and:',
     features: [
-      '10 active workspaces',
-      'Premium support & faster responses',
-      'Up to 50,000 monthly automations',
-      'Advanced API access & webhooks',
-      'Detailed analytics & audit logs',
-      'Enhanced security & data controls'
+      {
+        iconType: 'storage',
+        boldText: '5 TB',
+        normalText: 'pooled storage per user. Get 2.5x more than Standard*',
+      },
+      {
+        iconType: 'email',
+        boldText: 'Custom business email',
+        normalText: '+ eDiscovery and corporate retention policies',
+      },
+      {
+        iconType: 'video',
+        boldText: 'Video meetings with attendance tracking',
+        normalText: ', up to 500 concurrent participants',
+      },
+      {
+        iconType: 'security',
+        boldText: 'Vault',
+        normalText: 'to retain, archive, export, and search organizational data',
+      },
+      {
+        iconType: 'check',
+        boldText: 'Secure LDAP',
+        normalText: 'authentication integration for infrastructure',
+      },
+      {
+        iconType: 'check',
+        boldText: 'Advanced endpoint management',
+        normalText: 'for corporate devices and fleet controls',
+      },
+      {
+        iconType: 'check',
+        boldText: 'Enhanced security and management controls',
+        normalText: 'with custom access tiering',
+      },
     ],
-    accent: 'border-blue-500/50 bg-black shadow-lg shadow-blue-500/5',
-    highlighted: true,
   },
   {
     id: 'enterprise',
@@ -160,21 +302,100 @@ const plans = [
     monthlyPriceUSD: 0,
     annualPrice: 'Contact',
     annualPriceUSD: 0,
-    description: 'Dedicated resources for complex corporate requirements.',
+    isEnterprise: true,
     featuresHeader: 'All features mentioned, and:',
     features: [
-      'Unlimited workspaces & members',
-      'Dedicated manager & Custom SLA',
-      'Unlimited automation runs',
-      'Custom integrations & database',
-      'Enterprise security & SSO',
-      'Assured compliance controls'
+      {
+        iconType: 'storage',
+        boldText: '5 TB',
+        normalText: 'pooled storage per user or upgrade for flexible custom capacity*',
+      },
+      {
+        iconType: 'email',
+        boldText: 'Custom business email',
+        normalText: '+ S/MIME encryption and data governance',
+      },
+      {
+        iconType: 'video',
+        boldText: 'Video meetings with in-domain live streaming',
+        normalText: ', up to 1,000 participants',
+      },
+      {
+        iconType: 'check',
+        boldText: 'Data Loss Prevention (DLP)',
+        normalText: 'for Drive and communication channels',
+      },
+      {
+        iconType: 'check',
+        boldText: 'Context-Aware Access (CAA)',
+        normalText: 'with granular location & IP policies',
+      },
+      {
+        iconType: 'check',
+        boldText: 'Enterprise data regions',
+        normalText: 'and localized data residency',
+      },
+      {
+        iconType: 'check',
+        boldText: 'Cloud Identity Premium',
+        normalText: 'and automated user provisioning',
+      },
+      {
+        iconType: 'check',
+        boldText: 'Enterprise endpoint management',
+        normalText: 'with remote wipe and sandbox security',
+      },
+      {
+        iconType: 'check',
+        boldText: 'AI Classification for Roosevelt Drive',
+        normalText: 'and sensitive document labeling',
+      },
+      {
+        iconType: 'check',
+        boldText: 'Assured controls available as an add-on',
+        normalText: 'for strict regulatory compliance',
+      },
+      {
+        iconType: 'check',
+        boldText: 'Enhanced Support',
+        normalText: 'with 15-minute response times for critical P1 issues',
+      },
+      {
+        iconType: 'check',
+        boldText: 'No minimum or maximum user limits',
+        normalText: 'for elastic global enterprise scaling',
+      },
     ],
-    accent: 'border-white/10 bg-black',
-    highlighted: false,
-    isEnterprise: true,
   },
-] as const;
+];
+
+const renderFeatureIcon = (type: FeatureItem['iconType']) => {
+  switch (type) {
+    case 'storage':
+      return <HardDrive className="w-3.5 h-3.5 text-white/50 shrink-0 mt-0.5" />;
+    case 'email':
+      return <Mail className="w-3.5 h-3.5 text-white/50 shrink-0 mt-0.5" />;
+    case 'suite':
+      return <Layers className="w-3.5 h-3.5 text-white/50 shrink-0 mt-0.5" />;
+    case 'ai':
+      return <Sparkles className="w-3.5 h-3.5 text-white/50 shrink-0 mt-0.5" />;
+    case 'workflow':
+      return <Workflow className="w-3.5 h-3.5 text-white/50 shrink-0 mt-0.5" />;
+    case 'video':
+      return <Video className="w-3.5 h-3.5 text-white/50 shrink-0 mt-0.5" />;
+    case 'esign':
+      return <FileSignature className="w-3.5 h-3.5 text-white/50 shrink-0 mt-0.5" />;
+    case 'booking':
+      return <Calendar className="w-3.5 h-3.5 text-white/50 shrink-0 mt-0.5" />;
+    case 'notebook':
+      return <BookOpen className="w-3.5 h-3.5 text-white/50 shrink-0 mt-0.5" />;
+    case 'security':
+      return <ShieldCheck className="w-3.5 h-3.5 text-white/50 shrink-0 mt-0.5" />;
+    case 'check':
+    default:
+      return <Check className="w-3.5 h-3.5 text-white/50 shrink-0 mt-0.5" />;
+  }
+};
 
 export default function SubscriptionsPage() {
   const router = useRouter();
@@ -182,7 +403,7 @@ export default function SubscriptionsPage() {
   const { status: subscriptionStatus, plan: activePlanId, expiresAt, isExpired } = useSubscriptionStatus();
   const [selectedPlan, setSelectedPlan] = useState<typeof plans[number] | null>(null);
   const [hasHistory, setHasHistory] = useState(false);
-  const [isAnnual, setIsAnnual] = useState(true);
+  const [isAnnual, setIsAnnual] = useState(false);
   const [isBypassOpen, setIsBypassOpen] = useState(false);
   const [bypassCode, setBypassCode] = useState('');
 
@@ -256,19 +477,19 @@ export default function SubscriptionsPage() {
         priceUSD: isAnnual ? selectedPlan.annualPriceUSD : selectedPlan.monthlyPriceUSD,
         lxrPrice: isAnnual ? `$${(selectedPlan.annualPriceUSD * 0.75).toFixed(2)}` : `$${(selectedPlan.monthlyPriceUSD * 0.75).toFixed(2)}`,
         lxrPriceUSD: isAnnual ? selectedPlan.annualPriceUSD * 0.75 : selectedPlan.monthlyPriceUSD * 0.75,
-        features: [...selectedPlan.features],
+        features: selectedPlan.features.map(f => `${f.boldText} ${f.normalText}`),
       }
     : null;
 
   return (
     <ProtectedRoute>
-      <main className="min-h-screen bg-black text-white relative selection:bg-white/10">
+      <main className="min-h-screen bg-[#000000] text-white relative selection:bg-white/10 font-sans">
         <BlueParticles />
         
-        {/* We need relative z-[10] on the content so it stays above the fixed particles background */}
+        {/* Content container */}
         <div className="relative z-[10]">
           {hasActiveSubscription && (
-            <div className="relative z-[50] bg-gradient-to-r from-emerald-950/30 via-emerald-900/20 to-emerald-950/30 border-b border-emerald-500/20 px-6 py-3.5 backdrop-blur-xl shadow-lg shadow-emerald-950/20">
+            <div className="relative z-[50] bg-gradient-to-r from-emerald-950/40 via-emerald-900/30 to-emerald-950/40 border-b border-emerald-500/20 px-6 py-3.5 backdrop-blur-xl shadow-lg shadow-emerald-950/20">
               <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <div className="flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/30 animate-pulse">
@@ -293,46 +514,58 @@ export default function SubscriptionsPage() {
             </div>
           )}
 
-          <section className="mx-auto flex min-h-screen w-full max-w-[90rem] flex-col justify-center px-6 py-16 sm:px-10 lg:px-12 relative z-[10]">
+          <section className="mx-auto flex min-h-screen w-full max-w-[102rem] flex-col justify-center px-4 py-16 sm:px-6 lg:px-8 relative z-[10]">
 
-
-            <div className="mx-auto mb-10 max-w-2xl text-center z-[40] space-y-3">
-              <h1 className="text-xl sm:text-2xl font-light tracking-wide text-white/90">
-                Find the right plan for your business
+            {/* Main Clean Header */}
+            <div className="mx-auto mb-10 max-w-3xl text-center z-[40] space-y-2">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-normal tracking-tight text-white">
+                Find the right plan for your business.
               </h1>
-              <p className="text-[11px] text-white/50 leading-relaxed font-normal max-w-lg mx-auto">
-                Si realizaste el pago y no pudiste avanzar al núcleo contacta a{" "}
-                <a href="mailto:support@byroosevelt.com" className="text-blue-400 hover:underline">
-                  support@byroosevelt.com
-                </a>{" "}
-                y lo resolveremos de inmediato trabajamos 24/7 con mas de 10000 agentes para resolver solicitudes
+              <p className="text-sm sm:text-base text-white/60 font-normal">
+                Choose the Roosevelt edition that best fits your business.
               </p>
             </div>
 
-            <div className="mx-auto w-full max-w-[90rem] rounded-3xl border border-white/5 bg-white/[0.03] backdrop-blur-md p-8 sm:p-10 shadow-2xl relative z-[20]">
-              {/* Toggle switch for billing cycle */}
-              {!hasActiveSubscription && (
-                <div className="flex justify-end items-center gap-3 mb-8 w-full z-[40]">
-                  <span className="text-xs uppercase tracking-wider text-white/60">
-                    Annual <span className="bg-gradient-to-r from-[#53a7ff] to-[#0055ff] bg-clip-text text-transparent font-semibold">(Save 20% with one-year commitment)</span>
-                  </span>
-                  <button
-                    onClick={() => setIsAnnual(!isAnnual)}
-                    className={`w-12 h-6 rounded-full transition-colors duration-300 focus:outline-none p-1 relative flex items-center ${
-                      isAnnual ? 'bg-blue-600' : 'bg-white/20'
-                    }`}
-                    aria-label="Toggle billing cycle"
-                  >
-                    <div
-                      className={`w-4 h-4 rounded-full bg-white transition-transform duration-300 ${
-                        isAnnual ? 'translate-x-6' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
+            {/* Google Workspace Style Container */}
+            <div className="mx-auto w-full rounded-[2rem] border border-white/10 bg-[#0a0a0c]/80 backdrop-blur-xl p-8 sm:p-10 lg:p-12 shadow-2xl relative z-[20]">
+              
+              {/* Top Bar: Clean unboxed icons on Left, Annual Switch on Right */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-8 border-b border-white/5 mb-8">
+                {/* Clean Suite Icons */}
+                <div className="flex items-center gap-4">
+                  <Mail className="w-5 h-5 text-white/60 hover:text-white transition-colors" />
+                  <Calendar className="w-5 h-5 text-white/60 hover:text-white transition-colors" />
+                  <HardDrive className="w-5 h-5 text-white/60 hover:text-white transition-colors" />
+                  <FileText className="w-5 h-5 text-white/60 hover:text-white transition-colors" />
+                  <Video className="w-5 h-5 text-white/60 hover:text-white transition-colors" />
+                  <Sparkles className="w-5 h-5 text-white/60 hover:text-white transition-colors" />
                 </div>
-              )}
 
-              <div className={`grid gap-6 ${hasActiveSubscription ? 'max-w-md mx-auto grid-cols-1 w-full' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'}`}>
+                {/* Annual Toggle Switch */}
+                {!hasActiveSubscription && (
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs sm:text-sm text-white/70 font-normal">
+                      Annual <span className="text-blue-400 font-normal">(Save 20% with one-year commitment)</span>
+                    </span>
+                    <button
+                      onClick={() => setIsAnnual(!isAnnual)}
+                      className={`w-12 h-6 rounded-full transition-colors duration-300 focus:outline-none p-1 relative flex items-center ${
+                        isAnnual ? 'bg-blue-600' : 'bg-white/20'
+                      }`}
+                      aria-label="Toggle billing cycle"
+                    >
+                      <div
+                        className={`w-4 h-4 rounded-full bg-white transition-transform duration-300 ${
+                          isAnnual ? 'translate-x-6' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* 4 Cards Grid */}
+              <div className={`grid gap-6 lg:gap-8 ${hasActiveSubscription ? 'max-w-md mx-auto grid-cols-1 w-full' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'}`}>
                 {plansToRender.map((plan) => {
                   const isCurrentPlan = subscriptionStatus === 'active' && activePlanId?.toLowerCase() === plan.id.toLowerCase();
                   const displayPrice = isAnnual ? plan.annualPrice : plan.monthlyPrice;
@@ -342,16 +575,16 @@ export default function SubscriptionsPage() {
                   const renderButton = () => {
                     if (plan.isEnterprise) {
                       const emailSubject = encodeURIComponent("Interés en Plan Enterprise");
-                      const emailBody = encodeURIComponent("Hola, estoy interesado en comprar un plan Enterprise para más empresas y mejoras.");
+                      const emailBody = encodeURIComponent("Hola, estoy interesado en comprar un plan Enterprise para mi empresa.");
                       return (
                         <a
                           href={`https://mail.google.com/mail/?view=cm&fs=1&to=sales@byroosevelt.com&su=${emailSubject}&body=${emailBody}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="w-full"
+                          className="w-full block"
                         >
-                          <Button className="w-full h-10 rounded-full bg-white/10 hover:bg-white/20 text-white border border-white/20 flex items-center justify-center font-normal tracking-wider text-[11px] transition-all duration-300">
-                            Contact Sales
+                          <Button className="w-full h-11 rounded-full bg-transparent hover:bg-white/10 text-blue-400 hover:text-blue-300 border border-blue-500/40 flex items-center justify-center font-medium text-sm transition-all duration-300">
+                            Contact sales
                           </Button>
                         </a>
                       );
@@ -361,9 +594,9 @@ export default function SubscriptionsPage() {
                       return (
                         <Button
                           disabled
-                          className="h-10 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold tracking-widest text-[10px] uppercase cursor-default flex items-center justify-center gap-2 w-full"
+                          className="h-11 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium tracking-wider text-xs uppercase cursor-default flex items-center justify-center gap-2 w-full"
                         >
-                          <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                          <CheckCircle className="w-4 h-4 text-emerald-400" />
                           Current Plan
                         </Button>
                       );
@@ -371,11 +604,11 @@ export default function SubscriptionsPage() {
 
                     return (
                       <Button
-                        onClick={() => setSelectedPlan(plan as any)}
-                        className={`h-10 rounded-full text-[11px] transition-all duration-300 w-full ${
+                        onClick={() => setSelectedPlan(plan)}
+                        className={`h-11 rounded-full text-sm font-medium transition-all duration-300 w-full ${
                           plan.highlighted
-                            ? 'bg-blue-600 hover:bg-blue-700 text-white font-normal shadow-md shadow-blue-900/20'
-                            : 'bg-transparent border border-white/10 text-blue-400 hover:text-blue-300 hover:bg-white/5 font-normal'
+                            ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/30 active:scale-[0.99]'
+                            : 'bg-transparent border border-blue-500/40 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10'
                         }`}
                       >
                         {hasActiveSubscription 
@@ -387,83 +620,77 @@ export default function SubscriptionsPage() {
                     );
                   };
 
+                  const isHighlightedStandard = plan.highlighted && !isCurrentPlan;
+
                   return (
                     <article
                       key={plan.id}
-                      className={`rounded-3xl border backdrop-blur-sm p-7 ${plan.accent} flex min-h-[540px] flex-col relative overflow-hidden transition-all duration-300 hover:border-white/20 ${
-                        plan.highlighted && !isCurrentPlan ? 'ring-2 ring-blue-500/50 shadow-lg shadow-blue-500/10' : ''
+                      className={`p-7 sm:p-8 lg:p-8 flex min-h-[640px] flex-col relative transition-all duration-300 ${
+                        isHighlightedStandard
+                          ? 'border-2 border-blue-500 rounded-[1.75rem] bg-blue-500/[0.03] shadow-xl shadow-blue-500/10'
+                          : 'border border-white/10 rounded-[1.75rem] bg-white/[0.01] hover:border-white/20'
                       } ${
                         isCurrentPlan ? 'ring-2 ring-emerald-500/80 shadow-2xl shadow-emerald-500/20 border-emerald-500/40 bg-gradient-to-b from-emerald-950/15 via-black/40 to-black/80' : ''
                       }`}
                     >
-                      {isCurrentPlan && (
-                        <div className="absolute -top-12 -left-12 w-32 h-32 bg-emerald-500/20 blur-3xl rounded-full pointer-events-none" />
-                      )}
-                      {plan.highlighted && !isCurrentPlan && (
-                        <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-blue-600/30 to-transparent h-px" />
-                      )}
-
                       {/* Header Title */}
-                      <div className="flex items-center justify-between mb-1.5">
-                        <h2 className="text-lg sm:text-xl font-light text-white tracking-wide">
+                      <div className="flex items-center justify-between mb-1">
+                        <h2 className="text-2xl font-normal text-white tracking-tight">
                           {plan.name}
                         </h2>
                         {isCurrentPlan ? (
-                          <span className="text-[8px] px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full uppercase tracking-widest font-semibold animate-pulse">
+                          <span className="text-[9px] px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full uppercase tracking-wider font-semibold animate-pulse">
                             Active
                           </span>
-                        ) : plan.highlighted && (
-                          <span className="text-[8px] px-2 py-0.5 bg-blue-600/30 text-blue-200 rounded-full uppercase tracking-widest font-semibold">
-                            Popular
-                          </span>
-                        )}
+                        ) : null}
                       </div>
 
                       {/* Price Section */}
-                      <div className="mt-1 mb-4">
+                      <div className="mt-1 mb-5">
                         {!plan.isEnterprise ? (
                           <div className="flex flex-col">
-                            <span className="text-2xl sm:text-3xl font-normal text-white tracking-tight">
+                            <span className="text-3xl sm:text-4xl font-normal text-white tracking-tight">
                               {displayPrice}
                             </span>
-                            <span className="text-[10px] text-white/40 mt-0.5 font-normal">
+                            <span className="text-xs text-white/50 mt-0.5 font-normal">
                               per user / month
                             </span>
                           </div>
                         ) : (
                           <div className="flex flex-col">
-                            <span className="text-xl sm:text-2xl font-light text-white tracking-tight">
-                              Contact
-                            </span>
-                            <span className="text-[10px] text-white/40 mt-0.5 font-normal">
-                              sales for pricing
+                            <span className="text-xs text-white/60 mt-3 font-normal">
+                              Contact sales for pricing
                             </span>
                           </div>
                         )}
                       </div>
 
                       {/* Button Placement directly below pricing */}
-                      <div className="mb-5 w-full">
+                      <div className="mb-6 w-full">
                         {renderButton()}
                       </div>
 
-                      <p className="text-[11px] leading-relaxed text-white/40 font-normal mb-5">{plan.description}</p>
-
                       {/* Features List */}
                       <div className="flex-grow">
-                        <p className="text-[9px] font-semibold text-white/40 mb-3 tracking-wider uppercase">
+                        <p className="text-xs font-semibold text-white/90 mb-4 tracking-tight">
                           {plan.featuresHeader}
                         </p>
-                        <div className="space-y-3">
-                          {plan.features.map((feature) => (
+                        <div className="space-y-3.5">
+                          {plan.features.map((feature, idx) => (
                             <div
-                              key={feature}
-                              className="flex items-start gap-2.5 text-[11px] text-white/60 font-normal"
+                              key={idx}
+                              className="flex items-start gap-2.5 text-xs text-white/80 font-normal leading-relaxed"
                             >
-                              <div className="flex h-4 w-4 items-center justify-center rounded-full border border-white/10 bg-white/5 shrink-0 mt-0.5">
-                                <Check className="h-2.5 w-2.5 text-white/70" />
+                              {renderFeatureIcon(feature.iconType)}
+                              <div>
+                                <span className="font-semibold text-white">{feature.boldText}</span>
+                                {feature.normalText}
+                                {feature.highlightText && (
+                                  <span className="underline underline-offset-2 decoration-blue-400/60 text-white font-medium">
+                                    {feature.highlightText}
+                                  </span>
+                                )}
                               </div>
-                              <span className="leading-tight">{feature}</span>
                             </div>
                           ))}
                         </div>
@@ -472,6 +699,22 @@ export default function SubscriptionsPage() {
                   );
                 })}
               </div>
+
+              {/* Bottom footer text inside container */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-8 mt-8 border-t border-white/5 text-[11px] text-white/40">
+                <span>{isAnnual ? 'All plans billed annually' : 'All plans billed monthly'}</span>
+                <span>All prices $USD</span>
+              </div>
+            </div>
+
+            {/* Bottom Disclaimers */}
+            <div className="mx-auto w-full max-w-[92rem] mt-6 px-4 space-y-2 text-[11px] text-white/40 leading-relaxed">
+              <p>
+                Business Starter, Business Standard, and Business Pro plans can be purchased for a maximum of 300 users. There is no minimum or maximum user limit for Enterprise plans. Roosevelt customers may have access to additional features for a limited promotional period.
+              </p>
+              <p>
+                *Roosevelt provides flexible pooled storage per user that is shared across the organization. Starter includes 30 GB pooled storage per user, Standard includes 2 TB, Pro and Enterprise include 5 TB. Contact support to learn more about getting additional storage for your organization.
+              </p>
             </div>
 
           </section>

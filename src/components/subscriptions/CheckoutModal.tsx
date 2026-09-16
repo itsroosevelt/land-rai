@@ -33,9 +33,10 @@ interface CheckoutModalProps {
 }
 
 const PLAN_RATES = {
-  starter: { monthly: 49.00, annual: 39.20 },
-  standard: { monthly: 100.00, annual: 80.00 },
-  plus: { monthly: 199.00, annual: 159.20 },
+  starter: { monthly: 49.99, annual: 39.99 },
+  standard: { monthly: 99.99, annual: 79.99 },
+  pro: { monthly: 199.99, annual: 159.99 },
+  plus: { monthly: 199.99, annual: 159.99 },
   enterprise: { monthly: 0, annual: 0 }
 } as const;
 
