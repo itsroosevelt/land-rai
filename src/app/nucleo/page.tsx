@@ -407,10 +407,7 @@ export default function NucleoPage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#030611] text-white flex flex-col items-center justify-center selection:bg-blue-500/20 relative overflow-hidden">
-
-            {/* Ambient deep space blue illumination behind particles */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[1000px] bg-[radial-gradient(circle_at_center,rgba(14,165,233,0.16)_0%,rgba(59,130,246,0.08)_40%,transparent_70%)] rounded-full blur-[120px] pointer-events-none z-0" />
+        <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center selection:bg-white/10 relative overflow-hidden">
 
             {/* Blue Particles Dynamic Canvas Background */}
             <BlueParticles />
