@@ -40,7 +40,6 @@ interface Particle {
   vy: number;
   size: number;
   seed: number;
-  colorType: number;
 }
 
 const BlueParticles = () => {
@@ -61,79 +60,30 @@ const BlueParticles = () => {
     window.addEventListener('resize', resize);
     resize();
 
-    const particleCount = 380;
+    const particleCount = 450;
     particles.current = Array.from({ length: particleCount }).map(() => ({
       x: Math.random() * canvas.width,
       y: Math.random() * canvas.height,
-      vx: (Math.random() - 0.5) * 0.35,
-      vy: (Math.random() - 0.5) * 0.35,
-      size: Math.random() * 2.6 + 1.0,
-      seed: Math.random(),
-      colorType: Math.floor(Math.random() * 4)
+      vx: (Math.random() - 0.5) * 0.2,
+      vy: (Math.random() - 0.5) * 0.2,
+      size: Math.random() * 1.5 + 0.5,
+      seed: Math.random()
     }));
 
     const animate = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      const count = particles.current.length;
-
-      // Draw glowing constellation links between close particles for a vivid network feel
-      for (let i = 0; i < Math.min(count, 130); i++) {
-        const p1 = particles.current[i];
-        for (let j = i + 1; j < Math.min(count, 130); j++) {
-          const p2 = particles.current[j];
-          const dx = p1.x - p2.x;
-          const dy = p1.y - p2.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 85) {
-            const lineAlpha = (1 - dist / 85) * 0.28;
-            ctx.strokeStyle = `rgba(56, 189, 248, ${lineAlpha})`;
-            ctx.lineWidth = 0.85;
-            ctx.beginPath();
-            ctx.moveTo(p1.x, p1.y);
-            ctx.lineTo(p2.x, p2.y);
-            ctx.stroke();
-          }
-        }
-      }
-
-      // Render vivid particles
       particles.current.forEach((p) => {
-        p.x += p.vx + Math.sin(Date.now() * 0.0012 + p.seed * 10) * 0.25;
-        p.y += p.vy + Math.cos(Date.now() * 0.0012 + p.seed * 10) * 0.25;
+        p.x += p.vx + Math.sin(Date.now() * 0.001 + p.seed * 10) * 0.2;
+        p.y += p.vy + Math.cos(Date.now() * 0.001 + p.seed * 10) * 0.2;
 
         if (p.x < 0) p.x = canvas.width;
         if (p.x > canvas.width) p.x = 0;
         if (p.y < 0) p.y = canvas.height;
         if (p.y > canvas.height) p.y = 0;
 
-        // Bright, vibrant opacity range (0.65 to 1.0) with zero dark veil
-        const opacity = 0.65 + p.seed * 0.35;
-
-        let color = `rgba(56, 189, 248, ${opacity})`;
-        let shadow = 'rgba(56, 189, 248, 0.9)';
-
-        if (p.colorType === 0) {
-          // Electric Neon Cyan
-          color = `rgba(0, 245, 255, ${opacity})`;
-          shadow = 'rgba(0, 245, 255, 0.95)';
-        } else if (p.colorType === 1) {
-          // Bright Electric Blue
-          color = `rgba(59, 130, 246, ${opacity})`;
-          shadow = 'rgba(59, 130, 246, 0.9)';
-        } else if (p.colorType === 2) {
-          // Deep Luminous Azure / Violet-blue
-          color = `rgba(99, 102, 241, ${opacity})`;
-          shadow = 'rgba(99, 102, 241, 0.85)';
-        } else {
-          // Brilliant Diamond Sky
-          color = `rgba(186, 230, 253, ${opacity})`;
-          shadow = 'rgba(56, 189, 248, 1)';
-        }
-
-        ctx.fillStyle = color;
-        ctx.shadowColor = shadow;
-        ctx.shadowBlur = 8 + p.seed * 10;
+        const opacity = 0.1 + p.seed * 0.3;
+        ctx.fillStyle = `rgba(59, 130, 246, ${opacity})`;
 
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
@@ -147,9 +97,7 @@ const BlueParticles = () => {
 
     return () => {
       window.removeEventListener('resize', resize);
-      if (animationFrame.current) {
-        cancelAnimationFrame(animationFrame.current);
-      }
+      if (animationFrame.current) cancelAnimationFrame(animationFrame.current);
     };
   }, []);
 
