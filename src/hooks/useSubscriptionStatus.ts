@@ -23,21 +23,15 @@ const normalizePlanId = (plan?: string | null, priceUSD?: number | null) => {
 };
 
 const getSubscriptionSnapshot = async (userId: string, entityId: string | null) => {
-  const refs: DocumentReference<DocumentData>[] = [];
-  if (entityId) {
-    refs.push(doc(db, `users/${userId}/entities/${entityId}/subscriptions/current`));
+  if (entityId && entityId !== 'default') {
+    const entitySubRef = doc(db, `users/${userId}/entities/${entityId}/subscriptions/current`);
+    const snap = await getDoc(entitySubRef);
+    if (snap.exists()) return snap;
+    return null;
   }
-  refs.push(doc(db, `users/${userId}/subscriptions/current`));
-
-  const snapshots = await Promise.all(refs.map((subscriptionRef) => getDoc(subscriptionRef)));
-  const activeSnapshot = snapshots.find((snapshot) => snapshot.exists() && snapshot.data()?.status === 'active');
-  if (activeSnapshot) {
-    return activeSnapshot;
-  }
-  const existingSnapshot = snapshots.find((snapshot) => snapshot.exists());
-  return existingSnapshot || null;
-
-  return null;
+  const globalRef = doc(db, `users/${userId}/subscriptions/current`);
+  const snap = await getDoc(globalRef);
+  return snap.exists() ? snap : null;
 };
 
 interface SubscriptionData {
@@ -50,8 +44,9 @@ interface SubscriptionData {
   cancelAtPeriodEnd: boolean;
 }
 
-export function useSubscriptionStatus(): SubscriptionData & { loading: boolean } {
+export function useSubscriptionStatus(customEntityId?: string | null): SubscriptionData & { loading: boolean } {
   const { currentUser, activeEntity } = useAuth();
+  const entity = customEntityId !== undefined ? customEntityId : activeEntity;
   const [subscriptionData, setSubscriptionData] = useState<SubscriptionData>({
     status: null,
     plan: null,
@@ -70,13 +65,17 @@ export function useSubscriptionStatus(): SubscriptionData & { loading: boolean }
         return;
       }
 
-      const entity = activeEntity || 'life';
-      const globalSubRef = doc(db, `users/${currentUser.uid}/subscriptions/current`);
+      const targetEntity = entity && entity !== 'default' ? entity : null;
+      const subscriptionRef = doc(
+        db,
+        targetEntity
+          ? `users/${currentUser.uid}/entities/${targetEntity}/subscriptions/current`
+          : `users/${currentUser.uid}/subscriptions/current`
+      );
 
       try {
-        // 1. Check subscription state in the current entity first, then fallback to the global subscription document.
-        const snapshot = await getSubscriptionSnapshot(currentUser.uid, entity);
-        const subscriptionRef = snapshot?.ref || globalSubRef;
+        // 1. Check subscription state for the specific entity
+        const snapshot = await getSubscriptionSnapshot(currentUser.uid, targetEntity);
         let data = snapshot?.exists() ? (snapshot.data() as Record<string, any>) : null;
         let isExpired = false;
         let normalizedPlan: string | null = null;
@@ -97,7 +96,7 @@ export function useSubscriptionStatus(): SubscriptionData & { loading: boolean }
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 userId: currentUser.uid,
-                entityId: entity,
+                entityId: targetEntity,
               }),
             });
             const recoveredSnap = await getDoc(subscriptionRef);
@@ -292,7 +291,7 @@ export function useSubscriptionStatus(): SubscriptionData & { loading: boolean }
     };
 
     checkSubscription();
-  }, [currentUser, activeEntity]);
+  }, [currentUser, entity]);
 
   return { ...subscriptionData, loading };
 }

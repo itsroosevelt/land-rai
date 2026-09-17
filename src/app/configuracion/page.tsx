@@ -82,6 +82,8 @@ const ActiveSubCard = ({
         }
     };
 
+    const isCard = details.paymentMethod === 'card_stripe' || details.paymentMethod === 'card';
+
     return (
         <div className="w-full max-w-2xl bg-gradient-to-b from-[#1C1D21] to-[#121316] border border-white/5 rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden">
             {/* Ambient Accent Light */}
@@ -105,7 +107,11 @@ const ActiveSubCard = ({
                                 </span>
                             )}
                         </div>
-                        <p className="text-xs text-gray-400 mt-0.5">Suscripción gestionada a través de Blockchain / Smart Contract</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                            {isCard
+                                ? 'Suscripción recurrente gestionada con Tarjeta (Stripe)'
+                                : 'Suscripción gestionada a través de Blockchain / Solana'}
+                        </p>
                     </div>
                 </div>
                 <div className="text-left sm:text-right">
@@ -144,16 +150,28 @@ const ActiveSubCard = ({
                     <div className="bg-[#17181C] border border-white/5 p-4 rounded-2xl flex flex-col justify-between gap-1">
                         <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Método de Pago</span>
                         <span className="text-sm font-semibold text-white uppercase tracking-wider flex items-center gap-1.5 mt-1">
-                            Solana Network (LXR/SOL)
+                            {isCard ? (
+                                <>
+                                    <CreditCard className="w-4 h-4 text-blue-400" /> Tarjeta (Stripe)
+                                </>
+                            ) : (
+                                <>
+                                    Solana ({String(details.paymentMethod || 'SOL').toUpperCase()})
+                                </>
+                            )}
                         </span>
                     </div>
                     <div className="bg-[#17181C] border border-white/5 p-4 rounded-2xl flex flex-col justify-between gap-1 relative group">
-                        <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Firma de Pago (Signature)</span>
+                        <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">
+                            {isCard ? 'ID de Pago Stripe' : 'Firma de Pago (Signature)'}
+                        </span>
                         <div className="flex items-center justify-between gap-2 mt-1">
                             <span className="text-xs text-gray-300 font-mono">
-                                {details.paymentSignature ? `${details.paymentSignature.slice(0, 8)}...${details.paymentSignature.slice(-8)}` : 'N/A'}
+                                {isCard
+                                    ? (details.stripePaymentIntentId ? `${details.stripePaymentIntentId.slice(0, 12)}...` : 'Stripe Auto')
+                                    : (details.paymentSignature ? `${details.paymentSignature.slice(0, 8)}...${details.paymentSignature.slice(-8)}` : 'N/A')}
                             </span>
-                            {details.paymentSignature && (
+                            {details.paymentSignature && !isCard && (
                                 <div className="flex items-center gap-1">
                                     <button
                                         onClick={handleCopySignature}

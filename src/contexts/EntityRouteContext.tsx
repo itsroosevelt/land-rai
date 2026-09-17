@@ -9,6 +9,8 @@ export interface EntityRouteContextValue {
   routeSegment: string;
   /** Display name from the entity document. */
   entityName?: string;
+  /** Type of entity ('empresa' | 'persona' | 'creador'). */
+  entityType?: string;
 }
 
 const EntityRouteContext = createContext<EntityRouteContextValue | null>(null);

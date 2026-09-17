@@ -520,39 +520,39 @@ export default function QrTokenPayment({
         </div>
       ) : preciseAmount ? (
         <>
-          <div className="bg-blue-600/10 border border-blue-600/20 rounded-xl p-3 flex items-center gap-2.5 mb-4 text-xs font-medium">
-            <Clock className="w-4 h-4 text-[#0055ff] shrink-0" />
+          <div className="bg-blue-600/10 border border-blue-600/20 rounded-xl p-2.5 flex items-center gap-2 mb-3.5 text-xs font-normal">
+            <Clock className="w-3.5 h-3.5 text-[#0055ff] shrink-0" />
             {paymentMethod === 'usdc' || paymentMethod === 'usdt' ? (
-              <span className="bg-gradient-to-r from-[#53a7ff] to-[#0055ff] bg-clip-text text-transparent font-semibold">
+              <span className="bg-gradient-to-r from-[#53a7ff] to-[#0055ff] bg-clip-text text-transparent font-normal text-xs">
                 Monto fijo en stablecoin
               </span>
             ) : (
-              <span className="bg-gradient-to-r from-[#53a7ff] to-[#0055ff] bg-clip-text text-transparent font-semibold">
+              <span className="bg-gradient-to-r from-[#53a7ff] to-[#0055ff] bg-clip-text text-transparent font-normal text-xs">
                 La cotización se actualizará cada 60 segundos
               </span>
             )}
           </div>
 
-          <div className="bg-white/[0.02] border border-white/5 rounded-xl p-4 mb-4 space-y-3">
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-white/50 font-normal">Monto en USD</span>
-              <span className="text-white font-semibold">${priceUSD.toFixed(2)}</span>
+          <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3.5 mb-3.5 space-y-2.5">
+            <div className="flex justify-between items-center text-xs font-normal">
+              <span className="text-white/50">Monto en USD</span>
+              <span className="text-white/80">${priceUSD.toFixed(2)}</span>
             </div>
             <div className="h-px bg-white/5" />
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-white/50 font-normal">Escanea y paga</span>
-              <span className="bg-gradient-to-r from-[#53a7ff] to-[#0055ff] bg-clip-text text-transparent font-bold">
+            <div className="flex justify-between items-center text-xs font-normal">
+              <span className="text-white/50">Escanea y paga</span>
+              <span className="bg-gradient-to-r from-[#53a7ff] to-[#0055ff] bg-clip-text text-transparent font-medium">
                 {preciseAmount.uiAmount} {config.label}
               </span>
             </div>
           </div>
 
           {paymentRequest ? (
-            <div className="rounded-2xl border border-white/10 bg-[#0f0f11] p-4 space-y-4">
+            <div className="rounded-xl border border-white/10 bg-[#0f0f11] p-3.5 space-y-3">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white">QR listo</p>
-                  <p className="text-[10px] text-white/40 mt-1 leading-normal">
+                  <p className="text-xs font-normal uppercase tracking-wider text-white/80">QR listo</p>
+                  <p className="text-[10px] text-white/40 mt-0.5 leading-normal font-normal">
                     Este código QR está vinculado únicamente a esta orden.
                   </p>
                 </div>
@@ -561,21 +561,21 @@ export default function QrTokenPayment({
                   variant="ghost"
                   onClick={() => handleGenerateQr(false)}
                   disabled={isProcessing}
-                  className="h-8 px-3 text-[10px] text-white/70 hover:text-white hover:bg-white/10 border border-white/5 rounded-lg"
+                  className="h-7 px-2.5 text-[10px] text-white/70 hover:text-white hover:bg-white/10 border border-white/5 rounded-lg font-normal"
                 >
-                  <RefreshCw className="w-3 h-3 mr-1.5" />
+                  <RefreshCw className="w-3 h-3 mr-1" />
                   Actualizar
                 </Button>
               </div>
 
-              <div className="bg-white rounded-2xl p-4 flex justify-center shadow-lg">
-                <QRCodeSVG value={paymentRequest.qrUrl} size={180} bgColor="#ffffff" fgColor="#111111" />
+              <div className="bg-white rounded-xl p-3 flex justify-center shadow-sm">
+                <QRCodeSVG value={paymentRequest.qrUrl} size={160} bgColor="#ffffff" fgColor="#111111" />
               </div>
 
               {isStable ? (
-                <div className="w-full rounded-xl border border-white/5 bg-black/40 p-2.5">
-                  <p className="text-[9px] uppercase tracking-wider text-white/35 font-semibold">Estado</p>
-                  <div className="mt-1 flex items-center gap-1.5 text-[11px] text-white">
+                <div className="w-full rounded-lg border border-white/5 bg-black/40 p-2">
+                  <p className="text-[9px] uppercase tracking-wider text-white/35 font-normal">Estado</p>
+                  <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-white/80 font-normal">
                     {paymentRequest.status === 'paid' ? (
                       <>
                         <CheckCircle2 className="w-3 h-3 text-green-400" />
@@ -595,10 +595,10 @@ export default function QrTokenPayment({
                   </div>
                 </div>
               ) : (
-                <div className="grid gap-3 grid-cols-2 w-full">
-                  <div className="rounded-xl border border-white/5 bg-black/40 p-2.5">
-                    <p className="text-[9px] uppercase tracking-wider text-white/35 font-semibold">Estado</p>
-                    <div className="mt-1 flex items-center gap-1.5 text-[11px] text-white">
+                <div className="grid gap-2.5 grid-cols-2 w-full">
+                  <div className="rounded-lg border border-white/5 bg-black/40 p-2">
+                    <p className="text-[9px] uppercase tracking-wider text-white/35 font-normal">Estado</p>
+                    <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-white/80 font-normal">
                       {paymentRequest.status === 'paid' ? (
                         <>
                           <CheckCircle2 className="w-3 h-3 text-green-400" />
@@ -618,9 +618,9 @@ export default function QrTokenPayment({
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-white/5 bg-black/40 p-2.5">
-                    <p className="text-[9px] uppercase tracking-wider text-white/35 font-semibold">Actualiza en</p>
-                    <p className="mt-1 text-[11px] text-white font-medium">
+                  <div className="rounded-lg border border-white/5 bg-black/40 p-2">
+                    <p className="text-[9px] uppercase tracking-wider text-white/35 font-normal">Actualiza en</p>
+                    <p className="mt-0.5 text-[11px] text-white/80 font-normal">
                       {secondsRemaining > 0 ? `${secondsRemaining}s` : 'Actualizando...'}
                     </p>
                   </div>
@@ -628,31 +628,31 @@ export default function QrTokenPayment({
               )}
 
               {/* Treasury Address Manual Copy Input */}
-              <div className="pt-2 border-t border-white/5 space-y-2">
-                <p className="text-[10px] text-white/40 leading-normal">
+              <div className="pt-2 border-t border-white/5 space-y-1.5">
+                <p className="text-[10px] text-white/40 leading-normal font-normal">
                   Toca para copiar la dirección de la wallet. Pégala en Phantom y envía el pago manualmente si no puedes escanear el código QR.
                 </p>
                 <div 
                   onClick={handleCopyAddress}
-                  className="flex items-center justify-between bg-black/40 border border-white/10 rounded-xl p-2.5 text-xs text-white/80 select-all cursor-pointer hover:bg-white/5 transition-all"
+                  className="flex items-center justify-between bg-black/40 border border-white/10 rounded-lg p-2 text-xs text-white/80 select-all cursor-pointer hover:bg-white/5 transition-all"
                 >
                   <span className="truncate font-mono text-[10px] mr-2">{SUBSCRIPTION_TREASURY_WALLET}</span>
-                  <Copy className="w-3.5 h-3.5 text-white/45 shrink-0" />
+                  <Copy className="w-3 h-3 text-white/45 shrink-0" />
                 </div>
               </div>
             </div>
           ) : (
-            <div className="rounded-2xl border border-white/10 bg-[#0f0f11] p-5">
-              <div className="border border-dashed border-white/10 bg-[#000000]/40 rounded-xl p-6 flex flex-col items-center justify-center min-h-[190px] text-center gap-3">
+            <div className="rounded-xl border border-white/10 bg-[#0f0f11] p-4">
+              <div className="border border-dashed border-white/10 bg-[#000000]/40 rounded-xl p-5 flex flex-col items-center justify-center min-h-[170px] text-center gap-2.5">
                 {isProcessing ? (
                   <>
-                    <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
-                    <p className="text-xs text-white/60">Generando tu código QR de Phantom...</p>
+                    <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+                    <p className="text-xs text-white/60 font-normal">Generando tu código QR de Phantom...</p>
                   </>
                 ) : (
                   <>
-                    <Smartphone className="w-6 h-6 text-white/30" />
-                    <p className="text-xs text-white/50 max-w-[280px] leading-relaxed">
+                    <Smartphone className="w-5 h-5 text-white/30" />
+                    <p className="text-xs text-white/50 max-w-[260px] leading-relaxed font-normal">
                       Completa nombre, correo y teléfono para generar el QR
                     </p>
                   </>
@@ -662,9 +662,9 @@ export default function QrTokenPayment({
           )}
 
           {!isBillingValid && (
-            <div className="flex items-center gap-2 py-1 px-0.5">
-              <AlertCircle className="w-4 h-4 text-[#0055ff] flex-shrink-0" />
-              <p className="text-xs font-semibold bg-gradient-to-r from-[#53a7ff] to-[#0055ff] bg-clip-text text-transparent">
+            <div className="flex items-center gap-2 p-2.5 bg-white/[0.03] border border-white/10 rounded-xl">
+              <AlertCircle className="w-3.5 h-3.5 text-white/50 flex-shrink-0" />
+              <p className="text-[11px] font-normal text-white/70">
                 Completa los datos de facturación para continuar
               </p>
             </div>

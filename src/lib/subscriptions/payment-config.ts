@@ -47,10 +47,16 @@ export function getSubscriptionPaymentConfig(method: SubscriptionPaymentMethod):
   return SOLANA_PAYMENT_CONFIG[method];
 }
 
-export function getSubscriptionCurrentDocPath(userId: string, _entityId?: string) {
+export function getSubscriptionCurrentDocPath(userId: string, entityId?: string) {
+  if (entityId && entityId !== 'default' && entityId !== 'undefined') {
+    return `users/${userId}/entities/${entityId}/subscriptions/current`;
+  }
   return `users/${userId}/subscriptions/current`;
 }
 
-export function getSubscriptionPaymentRequestsCollectionPath(userId: string, _entityId?: string) {
+export function getSubscriptionPaymentRequestsCollectionPath(userId: string, entityId?: string) {
+  if (entityId && entityId !== 'default' && entityId !== 'undefined') {
+    return `users/${userId}/entities/${entityId}/paymentRequests`;
+  }
   return `users/${userId}/paymentRequests`;
 }

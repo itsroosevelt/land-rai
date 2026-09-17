@@ -15,7 +15,7 @@ import { isSlugOwnedByOtherEntity } from './entityRouteContract';
 import { MOLD_INTEGRATIONS_INIT } from './integrationsCatalog';
 
 /** Incrementar cuando el molde multitenant gane nuevas estructuras obligatorias. */
-export const ENTITY_MOLD_VERSION = 20;
+export const ENTITY_MOLD_VERSION = 21;
 
 export const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
@@ -95,6 +95,14 @@ export const ENTITY_MOLD_FEATURES = {
     omnichannelV2UI: true,
     /** Sincronización automática de snippet lastMessage/lastMessageDirection/updatedAt en motor Bot AI. */
     botEngineSnippetSync: true,
+    /** Control de acceso empresarial: solo suites CTO, CMO y COO activas; otras bloqueadas con 'coming soon'. */
+    enterpriseSuiteGateV1: true,
+    /** Modales de plataforma translúcidos con frosted glass, sin cajas contenedor pesadas y partículas ultra-vívidas. */
+    nucleoFrostedGlassUI: true,
+    /** Tipografía Outfit unificada globalmente en todos los módulos y layouts. */
+    globalOutfitFont: true,
+    /** Idioma inglés por defecto automático al acceder a entornos (/nucleo/[entityId]). */
+    environmentEnglishDefault: true,
 } as const;
 
 function tenantPath(userId: string, entityId: string) {

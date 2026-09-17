@@ -96,23 +96,23 @@ function PaymentForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-3">
-        <div className="flex justify-between items-center text-xs text-white/60">
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-2.5">
+        <div className="flex justify-between items-center text-xs font-normal text-white/50">
           <span>Plan {planName}:</span>
-          <span className="text-white font-medium">${Number(priceUSD).toFixed(2)} USD</span>
+          <span className="text-white/80">${Number(priceUSD).toFixed(2)} USD</span>
         </div>
-        <div className="flex justify-between items-center text-xs text-white/60">
+        <div className="flex justify-between items-center text-xs font-normal text-white/50">
           <span>Comisión de procesamiento (Stripe 2.9% + $0.30):</span>
-          <span className="text-white/80 font-medium">+${Number(stripeFee).toFixed(2)} USD</span>
+          <span className="text-white/70">+${Number(stripeFee).toFixed(2)} USD</span>
         </div>
-        <div className="border-t border-white/10 pt-3 flex justify-between items-baseline">
-          <div className="text-sm font-semibold text-white">Total a pagar:</div>
-          <div className="text-2xl font-bold text-white tracking-tight">
-            ${Number(grossAmount).toFixed(2)} <span className="text-xs font-normal text-white/50">USD</span>
+        <div className="border-t border-white/10 pt-2.5 flex justify-between items-baseline">
+          <div className="text-xs font-normal text-white/70">Total a pagar:</div>
+          <div className="text-base font-normal text-white tracking-tight">
+            ${Number(grossAmount).toFixed(2)} <span className="text-[11px] font-normal text-white/40">USD</span>
           </div>
         </div>
-        <div className="text-[11px] text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-lg p-2 text-center">
+        <div className="text-[10px] text-blue-400/90 bg-blue-500/10 border border-blue-500/20 rounded-lg p-2 text-center font-normal">
           🔄 Cobro recurrente automático mensual. Cancela cuando desees.
         </div>
       </div>
@@ -131,11 +131,11 @@ function PaymentForm({
       <Button
         type="submit"
         disabled={isProcessing || !stripe || !isBillingValid}
-        className="w-full h-12 rounded-full bg-white text-black hover:bg-neutral-200 font-medium text-sm transition-all shadow-md disabled:opacity-50"
+        className="w-full h-10 rounded-xl bg-white text-black hover:bg-neutral-200 font-normal text-xs transition-all shadow-sm disabled:opacity-50"
       >
         {isProcessing ? (
           <>
-            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" />
             Procesando suscripción...
           </>
         ) : (
@@ -144,13 +144,13 @@ function PaymentForm({
       </Button>
 
       {!isBillingValid && (
-        <div className="flex items-center gap-2 p-3 bg-yellow-600/10 border border-yellow-600/30 rounded-lg">
-          <AlertCircle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
-          <p className="text-xs text-yellow-300">Completa los datos de facturación para continuar</p>
+        <div className="flex items-center gap-2 p-2.5 bg-white/[0.03] border border-white/10 rounded-xl">
+          <AlertCircle className="w-3.5 h-3.5 text-white/50 flex-shrink-0" />
+          <p className="text-[11px] font-normal text-white/70">Completa los datos de facturación para continuar</p>
         </div>
       )}
 
-      <p className="text-xs text-white/40 text-center">
+      <p className="text-[11px] font-normal text-white/35 text-center">
         🔒 Pago seguro y encriptado procesado directamente por Stripe
       </p>
     </form>
@@ -256,7 +256,7 @@ export default function CardPayment({
             colorBackground: '#0a0a0a',
             colorText: '#ffffff',
             borderRadius: '0.75rem',
-            fontFamily: 'SF Pro Display, -apple-system, BlinkMacSystemFont, sans-serif',
+            fontFamily: 'Outfit, sans-serif',
           },
         },
       }}

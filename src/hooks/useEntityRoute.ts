@@ -30,6 +30,10 @@ export function useEntityRoute() {
     routeSegment,
     /** Display name from entity document. */
     entityName,
+    /** Entity type (e.g. 'empresa', 'persona', 'creador'). */
+    entityType: routeCtx?.entityType || '',
+    /** Whether the current entity environment is an enterprise/business profile. */
+    isEnterprise: routeCtx?.entityType === 'empresa' || (Boolean(routeCtx?.entityType) && routeCtx?.entityType !== 'persona'),
     isResolved: Boolean(firestoreId),
     tenantPath,
     entityPath: (suffix = '') => buildEntityPath(routeSegment, suffix),

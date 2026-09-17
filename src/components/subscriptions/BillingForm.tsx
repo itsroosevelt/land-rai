@@ -130,32 +130,32 @@ export default function BillingForm({
         <div className="flex flex-col border border-white/10 rounded-xl bg-white/[0.02]">
           
           {/* Email Input */}
-          <div className="relative flex items-center border-b border-white/5 h-11 px-3.5 rounded-t-xl">
-            <Mail className="w-4 h-4 text-white/35 mr-3 shrink-0" />
+          <div className="relative flex items-center border-b border-white/5 h-10 px-3 rounded-t-xl">
+            <Mail className="w-3.5 h-3.5 text-white/35 mr-2.5 shrink-0" />
             <input
               type="email"
               placeholder="correoelectrónico@ejemplo.com"
               value={data.email}
               onChange={(e) => handleChange('email', e.target.value)}
-              className="w-full bg-transparent text-sm font-sans text-white placeholder:text-white/30 focus:outline-none"
+              className="w-full bg-transparent text-xs font-normal text-white placeholder:text-white/30 focus:outline-none"
             />
           </div>
 
           {/* Full Name Input */}
-          <div className="relative flex items-center border-b border-white/5 h-11 px-3.5">
-            <User className="w-4 h-4 text-white/35 mr-3 shrink-0" />
+          <div className="relative flex items-center border-b border-white/5 h-10 px-3">
+            <User className="w-3.5 h-3.5 text-white/35 mr-2.5 shrink-0" />
             <input
               type="text"
               placeholder="Nombre completo"
               value={data.fullName}
               onChange={(e) => handleChange('fullName', e.target.value)}
-              className="w-full bg-transparent text-sm font-sans text-white placeholder:text-white/30 focus:outline-none"
+              className="w-full bg-transparent text-xs font-normal text-white placeholder:text-white/30 focus:outline-none"
             />
           </div>
 
           {/* Phone Prefix & Input */}
-          <div className="relative flex items-center h-11 px-3.5 rounded-b-xl">
-            <div className="flex items-center border-r border-white/5 pr-3 mr-3 shrink-0 relative z-50">
+          <div className="relative flex items-center h-10 px-3 rounded-b-xl">
+            <div className="flex items-center border-r border-white/5 pr-2.5 mr-2.5 shrink-0 relative z-50">
               <button
                 type="button"
                 onClick={() => setIsPhoneOpen(!isPhoneOpen)}
@@ -164,9 +164,9 @@ export default function BillingForm({
                 <img 
                   src={`https://flagcdn.com/w40/${currentPhoneIso}.png`}
                   alt={currentPhoneIso}
-                  className="w-5 h-3.5 object-cover rounded-sm shrink-0 border border-white/10" 
+                  className="w-4 h-3 object-cover rounded-sm shrink-0 border border-white/10" 
                 />
-                <span className="text-sm font-sans text-white/80">{data.phonePrefix}</span>
+                <span className="text-xs font-normal text-white/80">{data.phonePrefix}</span>
                 <ChevronDown className="w-3 h-3 text-white/30 pointer-events-none" />
               </button>
 
@@ -183,12 +183,12 @@ export default function BillingForm({
                           handleChange('phonePrefix', prefix);
                           setIsPhoneOpen(false);
                         }}
-                        className="w-full px-3 py-2.5 text-left text-sm font-sans text-white hover:bg-white/5 flex items-center gap-2 border-b border-white/[0.02] last:border-0 transition-colors"
+                        className="w-full px-3 py-2 text-left text-xs font-normal text-white hover:bg-white/5 flex items-center gap-2 border-b border-white/[0.02] last:border-0 transition-colors"
                       >
                         <img 
                           src={`https://flagcdn.com/w40/${iso}.png`}
                           alt={iso}
-                          className="w-5 h-3.5 object-cover rounded-sm border border-white/15" 
+                          className="w-4 h-3 object-cover rounded-sm border border-white/15" 
                         />
                         <span>{prefix}</span>
                       </button>
@@ -202,7 +202,7 @@ export default function BillingForm({
               placeholder="Número de teléfono"
               value={data.phone}
               onChange={(e) => handleChange('phone', e.target.value)}
-              className="w-full bg-transparent text-sm font-sans text-white placeholder:text-white/30 focus:outline-none"
+              className="w-full bg-transparent text-xs font-normal text-white placeholder:text-white/30 focus:outline-none"
             />
           </div>
 
@@ -215,25 +215,25 @@ export default function BillingForm({
         <div className="flex flex-col border border-white/10 rounded-xl bg-white/[0.02]">
           
           {/* Country Selection */}
-          <div className="relative flex items-center border-b border-white/5 h-11 px-3.5 z-50 rounded-t-xl">
+          <div className="relative flex items-center border-b border-white/5 h-10 px-3 z-50 rounded-t-xl">
             <button
               type="button"
               onClick={() => setIsCountryOpen(!isCountryOpen)}
               className="w-full flex items-center justify-between text-left focus:outline-none"
             >
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2">
                 {currentCountryIso === 'globe' ? (
-                  <span className="text-sm shrink-0">🌐</span>
+                  <span className="text-xs shrink-0">🌐</span>
                 ) : (
                   <img 
                     src={`https://flagcdn.com/w40/${currentCountryIso}.png`}
                     alt={currentCountryIso}
-                    className="w-5 h-3.5 object-cover rounded-sm shrink-0 border border-white/10" 
+                    className="w-4 h-3 object-cover rounded-sm shrink-0 border border-white/10" 
                   />
                 )}
-                <span className="text-sm font-sans text-white">{data.country}</span>
+                <span className="text-xs font-normal text-white">{data.country}</span>
               </div>
-              <ChevronDown className="w-4 h-4 text-white/35 shrink-0" />
+              <ChevronDown className="w-3.5 h-3.5 text-white/35 shrink-0" />
             </button>
 
             {/* Custom country select list */}
@@ -249,15 +249,15 @@ export default function BillingForm({
                         handleChange('country', country);
                         setIsCountryOpen(false);
                       }}
-                      className="w-full px-3.5 py-2.5 text-left text-sm font-sans text-white hover:bg-white/5 flex items-center gap-2.5 border-b border-white/[0.02] last:border-0 transition-colors"
+                      className="w-full px-3 py-2 text-left text-xs font-normal text-white hover:bg-white/5 flex items-center gap-2.5 border-b border-white/[0.02] last:border-0 transition-colors"
                     >
                       {iso === 'globe' ? (
-                        <span className="text-sm shrink-0">🌐</span>
+                        <span className="text-xs shrink-0">🌐</span>
                       ) : (
                         <img 
                           src={`https://flagcdn.com/w40/${iso}.png`}
                           alt={iso}
-                          className="w-5 h-3.5 object-cover rounded-sm border border-white/15" 
+                          className="w-4 h-3 object-cover rounded-sm border border-white/15" 
                         />
                       )}
                       <span>{country}</span>
@@ -269,15 +269,15 @@ export default function BillingForm({
           </div>
 
           {/* Address Line (Input styled like dropdown) */}
-          <div className="relative flex items-center h-11 px-3.5 rounded-b-xl">
+          <div className="relative flex items-center h-10 px-3 rounded-b-xl">
             <input
               type="text"
               placeholder="Ingresar dirección"
               value={data.addressLine1}
               onChange={(e) => handleChange('addressLine1', e.target.value)}
-              className="w-full bg-transparent text-sm font-sans text-white placeholder:text-white/30 focus:outline-none pr-8"
+              className="w-full bg-transparent text-xs font-normal text-white placeholder:text-white/30 focus:outline-none pr-7"
             />
-            <ChevronDown className="w-4 h-4 text-white/35 absolute right-3.5 top-3.5 pointer-events-none" />
+            <ChevronDown className="w-3.5 h-3.5 text-white/35 absolute right-3 top-3 pointer-events-none" />
           </div>
 
         </div>
@@ -289,7 +289,7 @@ export default function BillingForm({
 
 function LabelHeader({ text }: { text: string }) {
   return (
-    <p className="text-xs font-semibold text-white/60 mb-2 tracking-wide">
+    <p className="text-[11px] font-normal text-white/50 mb-1.5 tracking-wide">
       {text}
     </p>
   );

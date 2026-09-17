@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   EntityRouteProvider,
@@ -74,11 +74,15 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
             return;
           }
 
+          const docData = snapshot.docs.find((d) => d.id === resolved.id)?.data();
+          const entityType = docData?.type || (resolved as any).type;
+
           const routeSegment = getEntityRouteSegment(resolved);
           const contextValue: EntityRouteContextValue = {
             firestoreId: resolved.id,
             routeSegment,
             entityName: resolved.name,
+            entityType,
           };
 
           setActiveEntity(resolved.id, routeSegment);
@@ -89,6 +93,29 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
             const rest = currentPath.slice(`/nucleo/${segment}`.length);
             router.replace(`/nucleo/${routeSegment}${rest}`);
             return;
+          }
+
+          // Verify if this entity has an active subscription (Personal is free and exempt)
+          const isPersonal = docData?.type === 'persona';
+
+          if (!isPersonal) {
+            const isEntityUnlocked = typeof window !== 'undefined' && localStorage.getItem('roosevelt_entity_unlocked_' + resolved.id) === 'roosevelt2025';
+            if (!isEntityUnlocked) {
+              try {
+                const subRef = doc(db, `users/${currentUser.uid}/entities/${resolved.id}/subscriptions/current`);
+                const subSnap = await getDoc(subRef);
+                const data = subSnap.exists() ? subSnap.data() : null;
+                const isExpired = data?.expiresAt ? new Date(data.expiresAt) < new Date() : false;
+                const isActive = data?.status === 'active' && !isExpired;
+                if (!isActive) {
+                  const targetRedirect = currentPath || `/nucleo/${routeSegment}`;
+                  router.replace(`/subscriptions?entityId=${resolved.id}&redirect=${encodeURIComponent(targetRedirect)}`);
+                  return;
+                }
+              } catch (subErr) {
+                console.error('[EntityRouteResolver] Error checking subscription:', subErr);
+              }
+            }
           }
 
           setReady(true);

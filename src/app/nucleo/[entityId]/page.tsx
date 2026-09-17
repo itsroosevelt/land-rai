@@ -68,14 +68,18 @@ const informationItems = [
     { href: '#wallets', icon: Wallet, label: 'Wallets' },
     { href: '#ein', icon: Fingerprint, label: 'EIN' },
     { href: '#licenses', icon: FileCheck, label: 'Licenses' },
-    { href: '#activos', icon: Gem, label: 'Activos' },
+    { href: '#activos', icon: Gem, label: 'Assets' },
 ];
 
 export default function SuiteDashboard() {
     const { activeEntity, currentUser } = useAuth();
-    const { t } = useLanguage();
+    const { t, setLanguage } = useLanguage();
     const [entityType, setEntityType] = useState<string | null>(null);
     const [loadingEntity, setLoadingEntity] = useState(true);
+
+    useEffect(() => {
+        setLanguage('en');
+    }, [setLanguage]);
 
     useEffect(() => {
         async function fetchEntityType() {
@@ -102,6 +106,8 @@ export default function SuiteDashboard() {
     if (entityType === 'persona') {
         return <PersonaDashboard />;
     }
+
+    const isEnterprise = entityType === 'empresa' || entityType !== 'persona';
 
     return (
         <ProtectedRoute>
@@ -130,7 +136,7 @@ export default function SuiteDashboard() {
 
                     {/* 2. Carousel Area - Flexible space */}
                     <div className="relative w-full flex-1 flex items-center justify-center min-h-0">
-                        <Carousel />
+                        <Carousel isEnterprise={isEnterprise} />
                     </div>
 
 

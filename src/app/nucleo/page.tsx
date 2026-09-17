@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
@@ -11,13 +11,15 @@ import {
     Trash2, Archive, RotateCcw, AlertTriangle,
     User as UserIcon, Eye, EyeOff, Moon, HelpCircle, 
     BookOpen, Users, Home, Camera,
-    CreditCard
+    CreditCard, Loader2, Sparkles, Building2
 } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { auth, db } from '@/lib/firebase';
-import { signOut } from 'firebase/auth';
-import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
+import { auth, db, storage } from '@/lib/firebase';
+import { signOut, updateProfile } from 'firebase/auth';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { collection, onSnapshot, doc, getDoc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
+import { toast } from 'sonner';
 import { provisionEntityMold } from '@/lib/mold/entityMold';
 import {
     claimEntitySlug,
@@ -30,6 +32,135 @@ import {
     filterRealEntities,
 } from '@/lib/entitySlug';
 
+
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  size: number;
+  seed: number;
+  colorType: number;
+}
+
+const BlueParticles = () => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const particles = useRef<Particle[]>([]);
+  const animationFrame = useRef<number>();
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d', { alpha: true });
+    if (!ctx) return;
+
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    window.addEventListener('resize', resize);
+    resize();
+
+    const particleCount = 380;
+    particles.current = Array.from({ length: particleCount }).map(() => ({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      vx: (Math.random() - 0.5) * 0.35,
+      vy: (Math.random() - 0.5) * 0.35,
+      size: Math.random() * 2.6 + 1.0,
+      seed: Math.random(),
+      colorType: Math.floor(Math.random() * 4)
+    }));
+
+    const animate = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const count = particles.current.length;
+
+      // Draw glowing constellation links between close particles for a vivid network feel
+      for (let i = 0; i < Math.min(count, 130); i++) {
+        const p1 = particles.current[i];
+        for (let j = i + 1; j < Math.min(count, 130); j++) {
+          const p2 = particles.current[j];
+          const dx = p1.x - p2.x;
+          const dy = p1.y - p2.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 85) {
+            const lineAlpha = (1 - dist / 85) * 0.28;
+            ctx.strokeStyle = `rgba(56, 189, 248, ${lineAlpha})`;
+            ctx.lineWidth = 0.85;
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Render vivid particles
+      particles.current.forEach((p) => {
+        p.x += p.vx + Math.sin(Date.now() * 0.0012 + p.seed * 10) * 0.25;
+        p.y += p.vy + Math.cos(Date.now() * 0.0012 + p.seed * 10) * 0.25;
+
+        if (p.x < 0) p.x = canvas.width;
+        if (p.x > canvas.width) p.x = 0;
+        if (p.y < 0) p.y = canvas.height;
+        if (p.y > canvas.height) p.y = 0;
+
+        // Bright, vibrant opacity range (0.65 to 1.0) with zero dark veil
+        const opacity = 0.65 + p.seed * 0.35;
+
+        let color = `rgba(56, 189, 248, ${opacity})`;
+        let shadow = 'rgba(56, 189, 248, 0.9)';
+
+        if (p.colorType === 0) {
+          // Electric Neon Cyan
+          color = `rgba(0, 245, 255, ${opacity})`;
+          shadow = 'rgba(0, 245, 255, 0.95)';
+        } else if (p.colorType === 1) {
+          // Bright Electric Blue
+          color = `rgba(59, 130, 246, ${opacity})`;
+          shadow = 'rgba(59, 130, 246, 0.9)';
+        } else if (p.colorType === 2) {
+          // Deep Luminous Azure / Violet-blue
+          color = `rgba(99, 102, 241, ${opacity})`;
+          shadow = 'rgba(99, 102, 241, 0.85)';
+        } else {
+          // Brilliant Diamond Sky
+          color = `rgba(186, 230, 253, ${opacity})`;
+          shadow = 'rgba(56, 189, 248, 1)';
+        }
+
+        ctx.fillStyle = color;
+        ctx.shadowColor = shadow;
+        ctx.shadowBlur = 8 + p.seed * 10;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      animationFrame.current = requestAnimationFrame(animate);
+    };
+
+    animate();
+
+    return () => {
+      window.removeEventListener('resize', resize);
+      if (animationFrame.current) {
+        cancelAnimationFrame(animationFrame.current);
+      }
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="fixed inset-0 z-[1] pointer-events-none"
+    />
+  );
+};
+
 interface Entity {
     id: string;
     name?: string;
@@ -37,6 +168,8 @@ interface Entity {
     description?: string;
     type?: string;
     status?: 'active' | 'archived';
+    photoURL?: string;
+    logoUrl?: string;
 }
 
 export default function NucleoPage() {
@@ -58,24 +191,16 @@ export default function NucleoPage() {
     const [inputValue, setInputValue] = useState('');
     const [slugValue, setSlugValue] = useState('');
     const [slugError, setSlugError] = useState('');
-    const [creationType, setCreationType] = useState<'persona' | 'empresa'>('empresa');
+    const [creationCategory, setCreationCategory] = useState<'persona' | 'profesional'>('profesional');
+    const [professionalSubtype, setProfessionalSubtype] = useState<'creador' | 'empresa'>('empresa');
     const [creatingProgress, setCreatingProgress] = useState(false);
 
-    // Background Slideshow
-    const backgrounds = [
-        '/assets/bg-1.png',
-        '/assets/bg-2.png',
-        '/assets/bg-3.png',
-        '/assets/bg-4.png'
-    ];
-    const [bgIndex, setBgIndex] = useState(0);
-
-    useEffect(() => {
-        const interval = setInterval(() => {
-            setBgIndex((prev) => (prev + 1) % backgrounds.length);
-        }, 8000); // changes every 8 seconds for a relaxed feel
-        return () => clearInterval(interval);
-    }, []);
+    // Photo Edit State
+    const [editPhotoFile, setEditPhotoFile] = useState<File | null>(null);
+    const [editPhotoPreview, setEditPhotoPreview] = useState<string | null>(null);
+    const [savingEdit, setSavingEdit] = useState(false);
+    const [userDocPhoto, setUserDocPhoto] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         setMounted(true);
@@ -84,6 +209,18 @@ export default function NucleoPage() {
         }
     }, [currentUser, loading, router]);
 
+    // Escuchar documento del usuario en Firestore para fotos actualizadas en tiempo real
+    useEffect(() => {
+        if (!currentUser) return;
+        const unsub = onSnapshot(doc(db, 'users', currentUser.uid), (snap) => {
+            if (snap.exists()) {
+                const data = snap.data();
+                setUserDocPhoto(data.photoURL || data.avatarUrl || null);
+            }
+        });
+        return () => unsub();
+    }, [currentUser]);
+
     useEffect(() => {
         if (currentUser) {
             const q = collection(db, `users/${currentUser.uid}/entities`);
@@ -91,14 +228,24 @@ export default function NucleoPage() {
                 const ents = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Entity));
                 setEntities(ents);
             }, (error) => {
-                console.error("Error cargando entidades:", error);
+                console.error("Error loading entities:", error);
                 setEntities([]);
             });
             return () => unsubscribe();
         }
     }, [currentUser]);
 
-    if (!mounted || loading) return <div className="min-h-screen bg-black flex items-center justify-center text-white/50 tracking-widest text-sm">Cargando...</div>;
+    // Resuelve de forma robusta la foto de la entidad o perfil personal
+    const resolveEntityPhoto = (entity: Entity) => {
+        if (entity.photoURL) return entity.photoURL;
+        if (entity.logoUrl) return entity.logoUrl;
+        if (entity.type === 'persona') {
+            return userDocPhoto || currentUser?.photoURL || '';
+        }
+        return '';
+    };
+
+    if (!mounted || loading) return <div className="min-h-screen bg-black flex items-center justify-center text-white/50 tracking-widest text-sm">Loading...</div>;
     if (!currentUser) return null;
 
     const ghostEntities = findGhostEntities(entities);
@@ -108,10 +255,11 @@ export default function NucleoPage() {
         : filterRealEntities(entities).filter((e) => e.status !== 'archived');
 
     const entityTypeLabel = (entity: Entity) => {
-        if (entity.status === 'archived') return 'ARCHIVADO';
-        if (entity.type === 'persona') return 'PERSONAL';
-        if (entity.type === 'empresa') return 'EMPRESA';
-        return 'UNIDAD DE TRABAJO';
+        if (entity.status === 'archived') return 'Archived';
+        if (entity.type === 'persona') return 'Personal';
+        if (entity.type === 'creador') return 'Creator';
+        if (entity.type === 'empresa') return 'Business';
+        return 'Workspace';
     };
 
     const handleLogout = async () => {
@@ -128,18 +276,50 @@ export default function NucleoPage() {
         localStorage.setItem('roosevelt_active_entity', entity.id);
         localStorage.setItem('roosevelt_active_entity_route', route);
 
+        // El entorno personal es el único gratuito y no requiere suscripción
+        if (entity.type === 'persona') {
+            setTimeout(() => {
+                router.push(`/nucleo/${route}`);
+            }, 400);
+            return;
+        }
+
+        // Para cualquier otro entorno (empresarial), es sí o sí con suscripción activa o código canjeado para este entorno
+        const isEntityUnlocked = typeof window !== 'undefined' && localStorage.getItem(`roosevelt_entity_unlocked_${entity.id}`) === 'roosevelt2025';
+        let hasActiveSub = false;
+
+        if (!isEntityUnlocked && currentUser) {
+            try {
+                const subRef = doc(db, `users/${currentUser.uid}/entities/${entity.id}/subscriptions/current`);
+                const subSnap = await getDoc(subRef);
+                if (subSnap.exists()) {
+                    const data = subSnap.data();
+                    const isExpired = data?.expiresAt ? new Date(data.expiresAt) < new Date() : false;
+                    if (data?.status === 'active' && !isExpired) {
+                        hasActiveSub = true;
+                    }
+                }
+            } catch (err) {
+                console.error("Error checking entity subscription:", err);
+            }
+        }
+
         setTimeout(() => {
-            router.push(`/nucleo/${route}`);
+            if (isEntityUnlocked || hasActiveSub) {
+                router.push(`/nucleo/${route}`);
+            } else {
+                router.push(`/subscriptions?entityId=${entity.id}&redirect=/nucleo/${route}`);
+            }
         }, 400);
     };
 
-    // --- CRUD Handlers (Regla 4 & 5) ---
+    // --- CRUD Handlers ---
 
     const handleCreateEntity = async () => {
         if (!currentUser || !inputValue.trim()) return;
         setCreatingProgress(true);
 
-        // Regla 1: ID agnóstico
+        const finalType = creationCategory === 'persona' ? 'persona' : professionalSubtype;
         const randomId = `bs_${Math.random().toString(36).substring(2, 9)}`;
         const entityRef = doc(db, `users/${currentUser.uid}/entities/${randomId}`);
         const slug = await generateUniqueEntitySlug(currentUser.uid, inputValue, randomId);
@@ -149,13 +329,12 @@ export default function NucleoPage() {
             name: inputValue,
             slug,
             status: 'active',
-            type: creationType,
+            type: finalType,
             createdAt: new Date()
         });
 
         await claimEntitySlug(currentUser.uid, randomId, slug);
 
-        // Regla 5: Estructura de Sub-Bóvedas
         await setDoc(doc(db, `users/${currentUser.uid}/entities/${randomId}/settings/general`), {
             theme: 'dark',
             branding: inputValue
@@ -165,7 +344,29 @@ export default function NucleoPage() {
 
         setIsCreating(false);
         setInputValue('');
+        setCreationCategory('profesional');
+        setProfessionalSubtype('empresa');
         setCreatingProgress(false);
+    };
+
+    const handleCloseEdit = () => {
+        setEditEntity(null);
+        setSlugError('');
+        setInputValue('');
+        setSlugValue('');
+        setEditPhotoFile(null);
+        setEditPhotoPreview(null);
+    };
+
+    const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 5 * 1024 * 1024) {
+            toast.error('Image must not exceed 5MB');
+            return;
+        }
+        setEditPhotoFile(file);
+        setEditPhotoPreview(URL.createObjectURL(file));
     };
 
     const handleUpdateEntity = async () => {
@@ -173,20 +374,52 @@ export default function NucleoPage() {
 
         const validation = validateEntitySlug(slugValue);
         if (!validation.valid) {
-            setSlugError(validation.error || 'Usuario de ruta inválido.');
+            setSlugError(validation.error || 'Invalid route slug.');
             return;
         }
 
+        setSavingEdit(true);
         try {
             const ref = doc(db, `users/${currentUser.uid}/entities/${editEntity.id}`);
             await claimEntitySlug(currentUser.uid, editEntity.id, slugValue, editEntity.slug);
-            await updateDoc(ref, { name: inputValue, slug: slugValue.trim().toLowerCase() });
-            setEditEntity(null);
-            setInputValue('');
-            setSlugValue('');
-            setSlugError('');
+
+            let photoDownloadUrl = editEntity.photoURL || editEntity.logoUrl || '';
+
+            if (editPhotoFile) {
+                const imgRef = storageRef(storage, `users/${currentUser.uid}/entities/${editEntity.id}/avatar_${Date.now()}`);
+                await uploadBytes(imgRef, editPhotoFile);
+                photoDownloadUrl = await getDownloadURL(imgRef);
+
+                // If personal entity, sync auth profile and user doc
+                if (editEntity.type === 'persona') {
+                    try {
+                        await updateProfile(currentUser, { photoURL: photoDownloadUrl });
+                        await updateDoc(doc(db, `users/${currentUser.uid}`), { photoURL: photoDownloadUrl });
+                    } catch (err) {
+                        console.warn("Could not sync auth profile:", err);
+                    }
+                }
+            }
+
+            const updatePayload: Record<string, any> = {
+                name: inputValue.trim(),
+                slug: slugValue.trim().toLowerCase(),
+            };
+
+            if (photoDownloadUrl) {
+                updatePayload.photoURL = photoDownloadUrl;
+                updatePayload.logoUrl = photoDownloadUrl;
+            }
+
+            await updateDoc(ref, updatePayload);
+
+            toast.success('Environment updated successfully');
+            handleCloseEdit();
         } catch (error) {
-            setSlugError(error instanceof Error ? error.message : 'No se pudo guardar.');
+            console.error("Error saving entity changes:", error);
+            setSlugError(error instanceof Error ? error.message : 'Could not save changes.');
+        } finally {
+            setSavingEdit(false);
         }
     };
 
@@ -194,153 +427,66 @@ export default function NucleoPage() {
         if (!currentUser) return;
         const ref = doc(db, `users/${currentUser.uid}/entities/${entity.id}`);
         await updateDoc(ref, { status: entity.status === 'archived' ? 'active' : 'archived' });
+        toast.success(entity.status === 'archived' ? 'Environment restored successfully' : 'Environment archived successfully');
         setArchiveEntity(null);
     };
 
     const handleDeleteEntity = async () => {
-        if (!deleteEntity || !currentUser || inputValue !== deleteEntity.name) return;
-        const ref = doc(db, `users/${currentUser.uid}/entities/${deleteEntity.id}`);
-        await releaseEntitySlug(currentUser.uid, deleteEntity.slug);
-        await deleteDoc(ref);
-        setDeleteEntity(null);
-        setInputValue('');
+        if (!deleteEntity || !currentUser) return;
+
+        // Personal environment protected against deletion
+        if (deleteEntity.type === 'persona') {
+            toast.error('The personal environment cannot be deleted.');
+            setDeleteEntity(null);
+            setInputValue('');
+            return;
+        }
+
+        const targetName = deleteEntity.name?.trim() || deleteEntity.slug?.trim() || 'delete';
+        if (inputValue.trim().toLowerCase() !== targetName.toLowerCase()) return;
+
+        try {
+            const ref = doc(db, `users/${currentUser.uid}/entities/${deleteEntity.id}`);
+            await releaseEntitySlug(currentUser.uid, deleteEntity.slug);
+            await deleteDoc(ref);
+            toast.success('Environment deleted successfully');
+            setDeleteEntity(null);
+            setInputValue('');
+        } catch (error) {
+            console.error("Error deleting environment:", error);
+            toast.error('Could not delete environment');
+        }
     };
 
     return (
-        <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center selection:bg-blue-500/10 relative overflow-hidden">
+        <div className="min-h-screen bg-[#030611] text-white flex flex-col items-center justify-center selection:bg-blue-500/20 relative overflow-hidden">
 
-            {/* Background abstract slideshow rotated horizontally */}
-            <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden select-none flex items-center justify-center bg-black">
-                <AnimatePresence mode="popLayout">
-                    <motion.img
-                        key={backgrounds[bgIndex]}
-                        src={backgrounds[bgIndex]}
-                        alt="Background Pattern"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 0.85 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 2, ease: "easeInOut" }}
-                        className="absolute w-[100vh] h-[100vw] object-cover rotate-90 shrink-0"
-                    />
-                </AnimatePresence>
-                {/* Deep navy blue and black transparent overlay layer */}
-                <div className="absolute inset-0 bg-gradient-to-b from-[#030a1c]/60 via-black/85 to-black z-[1]" />
-            </div>
+            {/* Ambient deep space blue illumination behind particles */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[1000px] bg-[radial-gradient(circle_at_center,rgba(14,165,233,0.16)_0%,rgba(59,130,246,0.08)_40%,transparent_70%)] rounded-full blur-[120px] pointer-events-none z-0" />
 
-            {/* Background glow effects */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-blue-500/5 rounded-full blur-[120px] pointer-events-none" />
+            {/* Blue Particles Dynamic Canvas Background */}
+            <BlueParticles />
 
             {/* Control Bar Top */}
-            <div className="absolute top-8 right-8 flex items-center gap-6 z-[1000]">
+            <div className="absolute top-8 right-8 flex items-center gap-3 z-[1000]">
                 <button
                     onClick={() => setManagementMode(!managementMode)}
-                    className={`flex items-center gap-2 transition-all p-2 rounded-lg ${managementMode ? 'bg-blue-500/20 text-blue-400 border border-blue-500/20 shadow-lg shadow-blue-500/10' : 'text-neutral-500 hover:text-white'}`}
+                    className={`flex items-center gap-2 transition-all px-3.5 py-1.5 rounded-full text-xs font-normal ${managementMode ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30 shadow-lg shadow-blue-500/10' : 'text-neutral-400 hover:text-white border border-white/5 hover:border-white/10 bg-white/[0.02]'}`}
                 >
-                    <Settings className={`w-4 h-4 ${managementMode ? 'animate-spin-slow' : ''}`} />
-                    <span className="text-[10px] uppercase tracking-widest font-bold">
-                        {managementMode ? 'Modo Gestión ON' : 'Gestionar'}
+                    <Settings className={`w-3.5 h-3.5 ${managementMode ? 'animate-spin-slow text-blue-400' : ''}`} />
+                    <span>
+                        {managementMode ? 'Management mode active' : 'Manage'}
                     </span>
                 </button>
 
-                {/* Avatar Dropdown */}
-                <DropdownMenu.Root>
-                    <DropdownMenu.Trigger asChild>
-                        <button className="relative focus:outline-none group">
-                            <div className="absolute inset-[-4px] rounded-full border border-blue-500/0 group-hover:border-blue-500/40 transition-all duration-500" />
-                            <Avatar className="w-10 h-10 border border-white/10 shadow-2xl transition-transform group-hover:scale-110 active:scale-95">
-                                <AvatarImage src={currentUser.photoURL || ''} />
-                                <AvatarFallback className="bg-gradient-to-br from-indigo-600 to-blue-700 text-white font-bold text-xs">
-                                    {currentUser.displayName?.[0] || currentUser.email?.[0].toUpperCase()}
-                                </AvatarFallback>
-                            </Avatar>
-                        </button>
-                    </DropdownMenu.Trigger>
-
-                    <DropdownMenu.Portal>
-                        <DropdownMenu.Content
-                            align="end"
-                            sideOffset={12}
-                            className="w-[calc(100vw-32px)] md:w-[340px] bg-[#1A1C1E] border border-white/5 rounded-[2rem] shadow-[0_24px_48px_-12px_rgba(0,0,0,0.5)] backdrop-blur-3xl animate-in fade-in slide-in-from-top-4 duration-300 z-[2000] overflow-hidden p-0"
-                        >
-                            <div className="flex justify-between items-center px-5 pt-5 mb-1 md:mb-2">
-                                <div className="flex-1 text-center">
-                                    <p className="text-[9px] md:text-[10px] font-bold text-white/40 tracking-wider lowercase">{currentUser.email}</p>
-                                </div>
-                                <DropdownMenu.Item className="focus:outline-none cursor-pointer">
-                                    <X className="w-4 h-4 text-white/40 hover:text-white transition-colors" />
-                                </DropdownMenu.Item>
-                            </div>
-
-                            <div className="flex flex-col items-center px-5 pb-3 md:pb-5 text-center">
-                                <div className="relative mb-3 md:mb-4 group cursor-pointer" onClick={() => router.push('/perfil')}>
-                                    <Avatar className="w-16 h-16 md:w-20 md:h-20 border border-white/10 shadow-2xl">
-                                        <AvatarImage src={currentUser.photoURL || ''} />
-                                        <AvatarFallback className="bg-neutral-800 text-lg md:text-xl font-bold">
-                                            {currentUser.displayName?.[0] || 'U'}
-                                        </AvatarFallback>
-                                    </Avatar>
-                                    <div className="absolute bottom-0 right-0 p-1 bg-[#2D2F31] border border-[#1A1C1E] rounded-full shadow-lg group-hover:scale-110 transition-transform">
-                                        <Camera className="w-3 h-3 text-white/60" />
-                                    </div>
-                                </div>
-
-                                <h3 className="text-lg md:text-xl font-light text-white mb-3 md:mb-4">Hi, {currentUser.displayName?.split(' ')[0] || 'Luxor'}!</h3>
-
-                                <button
-                                    type="button"
-                                    onClick={() => router.push('/configuracion')}
-                                    className="px-5 py-2 md:py-2.5 border border-white/10 rounded-full text-[9px] md:text-[10px] font-bold text-blue-400 hover:bg-blue-500/5 transition-all mb-3 md:mb-6 w-full max-w-[240px]"
-                                >
-                                    Manage your Roosevelt Account
-                                </button>
-                            </div>
-
-                            <div className="bg-black/20 p-3 md:p-4 border-y border-white/5">
-                                <div className="grid grid-cols-3 gap-1 md:gap-2">
-                                    {[
-                                        { label: "Profile", icon: UserIcon, href: "/perfil" },
-                                        { label: "Settings", icon: Settings, href: "/configuracion" },
-                                        { label: "Subscriptions", icon: CreditCard, href: "/configuracion?tab=billing" },
-                                        { label: "Appearance", icon: Moon, href: "#" },
-                                        { label: "Support", icon: HelpCircle, href: "#" },
-                                        { label: "Docs", icon: BookOpen, href: "#" },
-                                        { label: "Home", icon: Home, href: "/nucleo" },
-                                    ].map((item) => (
-                                        <DropdownMenu.Item
-                                            key={item.label}
-                                            onClick={() => router.push(item.href)}
-                                            className="flex flex-col items-center gap-1.5 md:gap-2 p-2 md:p-3 rounded-xl md:rounded-2xl hover:bg-white/5 cursor-pointer outline-none transition-all group"
-                                        >
-                                            <item.icon className="w-4 h-4 md:w-5 md:h-5 text-white/30 group-hover:text-blue-400 transition-colors" />
-                                            <span className="text-[8px] md:text-[9px] font-bold text-white/20 uppercase tracking-widest group-hover:text-white/60">{item.label}</span>
-                                        </DropdownMenu.Item>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div className="p-3 md:p-4 flex gap-2 h-16 md:h-20">
-                                <DropdownMenu.Item className="flex-1 bg-white/[0.03] hover:bg-white/[0.08] rounded-l-2xl md:rounded-l-[1.5rem] rounded-r-md md:rounded-r-lg flex items-center justify-center gap-3 md:gap-4 cursor-pointer outline-none transition-all group">
-                                    <Plus className="w-4 h-4 md:w-5 md:h-5 text-white/40 group-hover:text-white" />
-                                    <span className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] text-white/60 group-hover:text-white">Add account</span>
-                                </DropdownMenu.Item>
-
-                                <DropdownMenu.Item
-                                    onClick={handleLogout}
-                                    className="flex-1 bg-white/[0.03] hover:bg-red-500/10 rounded-r-2xl md:rounded-r-[1.5rem] rounded-l-md md:rounded-l-lg flex items-center justify-center gap-3 md:gap-4 cursor-pointer outline-none transition-all group"
-                                >
-                                    <LogOut className="w-4 h-4 md:w-5 md:h-5 text-white/40 group-hover:text-red-500" />
-                                    <span className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] text-white/60 group-hover:text-red-500">Sign out</span>
-                                </DropdownMenu.Item>
-                            </div>
-
-                            <div className="py-3 md:py-4 text-center">
-                                <p className="text-[8px] md:text-[9px] font-bold text-white/10 uppercase tracking-widest cursor-default">
-                                    Privacy Policy • Terms of Service
-                                </p>
-                            </div>
-                        </DropdownMenu.Content>
-                    </DropdownMenu.Portal>
-                </DropdownMenu.Root>
+                <button
+                    onClick={handleLogout}
+                    title="Sign out"
+                    className="flex items-center gap-1.5 transition-all px-3.5 py-1.5 rounded-full text-xs font-normal text-neutral-400 hover:text-white border border-white/5 hover:border-white/10 bg-white/[0.02]"
+                >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Sign out</span>
+                </button>
             </div>
 
             <motion.div
@@ -349,18 +495,17 @@ export default function NucleoPage() {
                 transition={{ duration: 0.8, ease: "easeOut" }}
                 className="z-10 w-full max-w-6xl px-6 flex flex-col items-center"
             >
-                <h1 className="mt-24 md:mt-0 text-2xl md:text-5xl font-light tracking-wide text-center mb-12 md:mb-20 text-white/90 px-4">
-                    {managementMode ? t('nucleo.titleManagement') : t('nucleo.titleQuestion')}
+                <h1 className="mt-24 md:mt-0 text-2xl md:text-4xl font-light tracking-tight text-center mb-10 md:mb-16 text-white/90 px-4">
+                    {managementMode ? 'Digital Assets Management' : 'Which environment would you like to enter?'}
                 </h1>
 
                 {managementMode && ghostEntities.length > 0 && (
-                    <p className="mb-8 max-w-lg text-center text-amber-400/90 text-xs tracking-wide px-4">
-                        Hay {ghostEntities.length} entorno(s) duplicado(s) por error de migración de ruta.
-                        Elimínalos con el ícono de basura — tu empresa real no se borra.
+                    <p className="mb-8 max-w-lg text-center text-amber-300/80 text-xs tracking-normal font-normal px-4">
+                        There are {ghostEntities.length} duplicate environment(s). You can delete them with the trash icon without affecting your main business.
                     </p>
                 )}
 
-                <div className="flex flex-wrap justify-center gap-12 md:gap-16">
+                <div className="flex flex-wrap justify-center gap-10 md:gap-14">
 
                     <AnimatePresence mode='popLayout'>
                         {/* Dynamic Rendering of Entities */}
@@ -372,54 +517,85 @@ export default function NucleoPage() {
                                 animate={{ opacity: 1, scale: 1 }}
                                 exit={{ opacity: 0, scale: 0.8 }}
                                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                                className={`flex flex-col items-center gap-6 relative group ${transitioning && transitioning !== entity.id ? 'opacity-20 blur-sm scale-95' : ''} ${entity.status === 'archived' ? 'opacity-40 grayscale' : ''} ${ghostIds.has(entity.id) ? 'ring-2 ring-amber-500/40 rounded-3xl p-4' : ''}`}
+                                className={`flex flex-col items-center gap-4 relative group ${transitioning && transitioning !== entity.id ? 'opacity-20 blur-sm scale-95' : ''} ${entity.status === 'archived' ? 'opacity-40 grayscale' : ''}`}
                             >
                                 {/* Floating Actions for Management Mode */}
                                 {managementMode && (
                                     <motion.div
-                                        initial={{ opacity: 0, y: 10 }}
+                                        initial={{ opacity: 0, y: -4 }}
                                         animate={{ opacity: 1, y: 0 }}
-                                        className="absolute -top-6 -right-6 flex flex-col gap-2 z-50 p-2"
+                                        className="flex items-center gap-1 bg-[#141518]/90 backdrop-blur-md border border-white/10 rounded-full px-2 py-1 shadow-lg z-30 mb-1"
                                     >
-                                        <button onClick={() => {
-                                            setEditEntity(entity);
-                                            setInputValue(entity.name || '');
-                                            setSlugValue(entity.slug || slugifyEntityName(entity.name || entity.id));
-                                            setSlugError('');
-                                        }} className="bg-white/10 hover:bg-white text-white hover:text-black p-2.5 rounded-full backdrop-blur-xl transition-all border border-white/20 shadow-[0_0_20px_rgba(255,255,255,0.1)]">
-                                            <Edit2 className="w-4 h-4" />
+                                        <button
+                                            onClick={() => {
+                                                setEditEntity(entity);
+                                                setInputValue(entity.name || '');
+                                                setSlugValue(entity.slug || slugifyEntityName(entity.name || entity.id));
+                                                setSlugError('');
+                                                setEditPhotoFile(null);
+                                                setEditPhotoPreview(resolveEntityPhoto(entity) || null);
+                                            }}
+                                            title="Edit environment"
+                                            className="p-1.5 rounded-full hover:bg-white/10 text-white/70 hover:text-white transition-colors"
+                                        >
+                                            <Edit2 className="w-3.5 h-3.5" />
                                         </button>
-                                        <button onClick={() => setArchiveEntity(entity)} className="bg-white/10 hover:bg-amber-500 text-white p-2.5 rounded-full backdrop-blur-xl transition-all border border-white/20">
-                                            {entity.status === 'archived' ? <RotateCcw className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
+                                        <div className="w-px h-3 bg-white/10" />
+                                        <button
+                                            onClick={() => setArchiveEntity(entity)}
+                                            title={entity.status === 'archived' ? 'Restore' : 'Archive'}
+                                            className="p-1.5 rounded-full hover:bg-white/10 text-white/70 hover:text-amber-400 transition-colors"
+                                        >
+                                            {entity.status === 'archived' ? <RotateCcw className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
                                         </button>
-                                        <button onClick={() => { setDeleteEntity(entity); setInputValue(''); }} className="bg-white/10 hover:bg-red-600 text-white p-2.5 rounded-full backdrop-blur-xl transition-all border border-white/20">
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
+                                        {entity.type !== 'persona' && (
+                                            <>
+                                                <div className="w-px h-3 bg-white/10" />
+                                                <button
+                                                    onClick={() => { setDeleteEntity(entity); setInputValue(''); }}
+                                                    title="Delete environment"
+                                                    className="p-1.5 rounded-full hover:bg-red-500/20 text-white/70 hover:text-red-400 transition-colors"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            </>
+                                        )}
                                     </motion.div>
                                 )}
 
                                 <div
                                     onClick={() => handleSelectEntity(entity)}
-                                    className={`w-36 h-36 md:w-40 md:h-40 rounded-full border-4 border-transparent transition-all p-1 cursor-pointer ${!managementMode ? 'hover:border-white/20 hover:scale-105 active:scale-95 shadow-2xl hover:shadow-blue-500/10' : 'cursor-default'}`}
+                                    className={`w-32 h-32 md:w-36 md:h-36 rounded-full border-2 border-transparent transition-all p-0.5 cursor-pointer ${!managementMode ? 'hover:border-white/20 hover:scale-105 active:scale-95 shadow-xl hover:shadow-blue-500/10' : 'cursor-default'}`}
                                 >
-                                    <Avatar className="w-full h-full shadow-2xl border border-white/5">
-                                        <AvatarFallback className={`text-white text-5xl font-extralight ${entity.type === 'persona' ? 'bg-emerald-800' : 'bg-blue-800'}`}>
+                                    <Avatar className="w-full h-full shadow-2xl border border-white/10">
+                                        <AvatarImage
+                                            src={resolveEntityPhoto(entity)}
+                                            alt={entity.name || ''}
+                                            className="object-cover"
+                                            referrerPolicy="no-referrer"
+                                        />
+                                        <AvatarFallback className={`text-white text-4xl md:text-5xl font-light ${entity.type === 'persona' ? 'bg-gradient-to-tr from-emerald-800 to-teal-700' : 'bg-gradient-to-tr from-blue-800 to-indigo-700'}`}>
                                             {entity.name ? entity.name[0].toUpperCase() : '•'}
                                         </AvatarFallback>
-                                        {entity.type === 'persona' && <AvatarImage src={currentUser?.photoURL || ''} />}
                                     </Avatar>
                                 </div>
 
-                                <div className="text-center group-hover:translate-y-1 transition-transform">
-                                    <span className="text-xl font-light block transition-colors uppercase tracking-[0.2em] text-white/80 group-hover:text-white">
-                                        {entity.name || 'Sin Nombre'}
+                                <div className="text-center group-hover:translate-y-0.5 transition-transform">
+                                    <span className="text-base sm:text-lg font-normal block transition-colors text-white/90 group-hover:text-white tracking-normal">
+                                        {entity.name || 'Untitled'}
                                     </span>
-                                    <span className="text-[10px] text-blue-400/70 tracking-[0.15em] font-mono mt-1.5 block">
+                                    <span className="text-xs text-blue-400/80 font-mono mt-0.5 block tracking-normal">
                                         /nucleo/{getEntityRouteSegment(entity)}
                                     </span>
-                                    <span className="text-[10px] text-white/20 uppercase tracking-[0.3em] font-bold mt-1 block">
-                                        {ghostIds.has(entity.id) ? 'DUPLICADO — ELIMINAR' : entityTypeLabel(entity)}
-                                    </span>
+                                    {ghostIds.has(entity.id) ? (
+                                        <span className="text-[11px] text-amber-400/80 font-normal mt-0.5 block">
+                                            Duplicate (suggested to delete)
+                                        </span>
+                                    ) : (
+                                        <span className="text-[11px] text-white/40 font-normal mt-0.5 block">
+                                            {entityTypeLabel(entity)}
+                                        </span>
+                                    )}
                                 </div>
                             </motion.div>
                         ))}
@@ -430,15 +606,15 @@ export default function NucleoPage() {
                         <motion.div
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
-                            className={`flex flex-col items-center gap-6 cursor-pointer group transition-all duration-500 ${transitioning ? 'opacity-20 scale-95 blur-sm' : ''}`}
+                            className={`flex flex-col items-center gap-4 cursor-pointer group transition-all duration-300 ${transitioning ? 'opacity-20 scale-95 blur-sm' : ''}`}
                             onClick={() => { setIsCreating(true); setInputValue(''); }}
                         >
-                            <div className="w-36 h-36 md:w-40 md:h-40 rounded-full border-4 border-dashed border-white/5 flex items-center justify-center group-hover:border-white/20 transition-all bg-white/[0.02] group-hover:bg-white/[0.05]">
-                                <Plus className="w-12 h-12 text-white/10 group-hover:text-white/40 group-hover:rotate-90 transition-all duration-700" />
+                            <div className="w-32 h-32 md:w-36 md:h-36 rounded-full border-2 border-dashed border-white/15 flex items-center justify-center group-hover:border-white/30 transition-all bg-white/[0.02] group-hover:bg-white/[0.05]">
+                                <Plus className="w-8 h-8 text-white/30 group-hover:text-white/70 group-hover:rotate-90 transition-all duration-500" />
                             </div>
                             <div className="text-center">
-                                <span className="text-[10px] font-bold text-white/20 group-hover:text-white/40 transition-all tracking-[0.5em] uppercase">
-                                    Expand Core
+                                <span className="text-xs font-normal text-white/40 group-hover:text-white transition-colors">
+                                    Create environment
                                 </span>
                             </div>
                         </motion.div>
@@ -450,130 +626,349 @@ export default function NucleoPage() {
             {/* --- CRUD MODALS --- */}
 
             <AnimatePresence>
-                {/* Modal: Editar */}
+                {/* Modal: Edit */}
                 {editEntity && (
-                    <Modal title="Editar Entorno" onClose={() => { setEditEntity(null); setSlugError(''); }}>
+                    <Modal
+                        title="Edit environment"
+                        subtitle="Customize the photo, name, and access route of your environment."
+                        onClose={handleCloseEdit}
+                    >
                         <div className="space-y-6">
-                            <div className="relative group">
-                                <label className="block text-[8px] font-bold text-white/20 mb-4 uppercase tracking-[0.5em] text-center">Nombre de la entidad</label>
+                            {/* Avatar Photo Selector */}
+                            <div className="flex flex-col items-center justify-center py-2">
                                 <input
-                                    type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)}
-                                    className="w-full bg-transparent border-b border-white/10 text-white text-center py-4 focus:outline-none focus:border-white transition-all font-light text-2xl tracking-wide placeholder:text-white/5"
-                                    placeholder="..." autoFocus
+                                    type="file"
+                                    ref={fileInputRef}
+                                    accept="image/*"
+                                    onChange={handlePhotoChange}
+                                    className="hidden"
                                 />
+                                <div
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="relative group cursor-pointer"
+                                    title="Click to change image"
+                                >
+                                    <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full border-2 border-white/25 shadow-2xl overflow-hidden relative group-hover:border-blue-400 group-hover:scale-105 transition-all bg-neutral-900/60 shadow-[0_0_35px_rgba(59,130,246,0.25)]">
+                                        {editPhotoPreview ? (
+                                            <img
+                                                src={editPhotoPreview}
+                                                alt="Preview"
+                                                referrerPolicy="no-referrer"
+                                                className="w-full h-full object-cover"
+                                            />
+                                        ) : (
+                                            <div className={`w-full h-full flex items-center justify-center text-white text-4xl font-light ${editEntity.type === 'persona' ? 'bg-gradient-to-tr from-emerald-700 to-teal-600' : 'bg-gradient-to-tr from-blue-700 via-indigo-700 to-cyan-600'}`}>
+                                                {inputValue ? inputValue[0]?.toUpperCase() : '•'}
+                                            </div>
+                                        )}
+                                        <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center backdrop-blur-sm">
+                                            <Camera className="w-7 h-7 text-white" />
+                                            <span className="text-[10px] text-white/90 uppercase tracking-widest mt-1.5 font-medium">Upload</span>
+                                        </div>
+                                    </div>
+                                    <div className="absolute bottom-1 right-1 p-2.5 bg-gradient-to-tr from-blue-500 to-cyan-500 rounded-full shadow-[0_0_15px_rgba(56,189,248,0.5)] border-2 border-neutral-950 group-hover:scale-110 transition-transform z-10">
+                                        <Camera className="w-4 h-4 text-white" />
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="mt-3.5 text-xs text-cyan-400 hover:text-cyan-300 font-medium transition-colors"
+                                >
+                                    {editPhotoPreview ? 'Change photo or logo' : 'Upload photo or logo'}
+                                </button>
+                                <p className="text-[11px] text-white/50 mt-1 text-center font-normal max-w-xs leading-relaxed">
+                                    {editEntity.type === 'persona'
+                                        ? 'Personalize your profile photo (replaces Google avatar)'
+                                        : 'Personalize the logo representing your environment'}
+                                </p>
                             </div>
-                            <div className="relative group">
-                                <label className="block text-[8px] font-bold text-white/20 mb-3 uppercase tracking-[0.5em] text-center">Usuario en la ruta</label>
-                                <p className="text-center text-neutral-500 text-xs mb-2">byroosevelt.com/nucleo/</p>
+
+                            <div className="space-y-1.5">
+                                <label className="block text-xs font-semibold uppercase tracking-wider text-white/70">Environment Name</label>
                                 <input
                                     type="text"
-                                    value={slugValue}
-                                    onChange={(e) => {
-                                        setSlugValue(slugifyEntityName(e.target.value));
-                                        setSlugError('');
-                                    }}
-                                    className="w-full bg-transparent border-b border-white/10 text-blue-400 text-center py-3 focus:outline-none focus:border-blue-400 transition-all font-mono text-lg tracking-wide placeholder:text-white/5"
-                                    placeholder="mi-empresa"
+                                    value={inputValue}
+                                    onChange={(e) => setInputValue(e.target.value)}
+                                    className="w-full bg-white/[0.05] border border-white/15 rounded-2xl px-4 py-3.5 text-sm text-white placeholder:text-white/30 focus:border-blue-400 focus:bg-white/[0.08] focus:ring-4 focus:ring-blue-500/15 focus:outline-none transition-all"
+                                    placeholder="Environment name..."
+                                    autoFocus
                                 />
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="block text-xs font-semibold uppercase tracking-wider text-white/70">Access Route (Slug)</label>
+                                <div className="flex items-center bg-white/[0.05] border border-white/15 rounded-2xl px-4 py-3.5 text-sm focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/15 transition-all">
+                                    <span className="text-white/40 font-mono text-xs mr-1 select-none">byroosevelt.com/nucleo/</span>
+                                    <input
+                                        type="text"
+                                        value={slugValue}
+                                        onChange={(e) => {
+                                             setSlugValue(slugifyEntityName(e.target.value));
+                                             setSlugError('');
+                                        }}
+                                        className="w-full bg-transparent text-cyan-400 font-mono text-sm font-medium focus:outline-none"
+                                        placeholder="my-company"
+                                    />
+                                </div>
                                 {slugError && (
-                                    <p className="text-red-400 text-[10px] text-center mt-3">{slugError}</p>
+                                    <p className="text-red-400 text-xs mt-1.5">{slugError}</p>
                                 )}
-                                <p className="text-[9px] text-white/30 text-center mt-3 leading-relaxed">
-                                    Al cambiar el usuario, la URL de esta entidad se actualizará en toda la plataforma.
-                                </p>
-                            </div>
-                            <Button onClick={handleUpdateEntity} className="w-full bg-white text-black hover:bg-neutral-200 rounded-none py-8 tracking-[0.4em] uppercase text-[10px] font-bold transition-all shadow-xl">
-                                Guardar cambios
-                            </Button>
-                        </div>
-                    </Modal>
-                )}
-
-                {/* Modal: Safe Delete */}
-                {deleteEntity && (
-                    <Modal title="Eliminar Entorno" onClose={() => setDeleteEntity(null)}>
-                        <div className="space-y-8">
-                            <div className="flex items-center gap-4 text-red-500 bg-red-500/5 p-6 rounded-2xl border border-red-500/10">
-                                <AlertTriangle className="w-6 h-6 shrink-0" />
-                                <p className="text-[11px] leading-relaxed uppercase tracking-wider font-medium opacity-80">
-                                    Esta acción es irreversible. Se borrará la bóveda y todos sus datos vinculados.
+                                <p className="text-[11px] text-white/40 mt-1.5 leading-relaxed font-normal">
+                                    Changing the route will update this environment's link across the platform.
                                 </p>
                             </div>
 
-                            <div className="relative text-center">
-                                <p className="text-[9px] text-white/40 uppercase tracking-[0.4em] mb-4">Escribe <span className="text-white font-bold">"{deleteEntity.name}"</span> para confirmar:</p>
-                                <input
-                                    type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)}
-                                    className="w-full bg-transparent border-b border-red-500/20 text-red-500 text-center py-4 focus:outline-none focus:border-red-500 transition-all font-light text-2xl tracking-wide"
-                                    placeholder="..." autoFocus
-                                />
-                            </div>
-
-                            <Button
-                                onClick={handleDeleteEntity}
-                                disabled={inputValue !== deleteEntity.name}
-                                className="w-full bg-red-600 text-white py-8 rounded-none tracking-[0.4em] uppercase text-[10px] font-bold hover:bg-red-500 disabled:opacity-20 transition-all"
-                            >
-                                ELIMINAR PERMANENTEMENTE
-                            </Button>
-                        </div>
-                    </Modal>
-                )}
-
-                {/* Modal: Archive */}
-                {archiveEntity && (
-                    <Modal title={archiveEntity.status === 'archived' ? "Restaurar Entorno" : "Archivar Entorno"} onClose={() => setArchiveEntity(null)}>
-                        <div className="space-y-12">
-                            <p className="text-sm text-neutral-500 text-center leading-relaxed font-light tracking-wide px-4">
-                                {archiveEntity.status === 'archived'
-                                    ? "¿Deseas reactivar este entorno en el flujo principal del Núcleo?"
-                                    : "El entorno se ocultará del selector principal. Sus datos seguirán existiendo en la bóveda pero no serán accesibles en el Hub."}
-                            </p>
-                            <div className="flex gap-4">
-                                <Button variant="ghost" onClick={() => setArchiveEntity(null)} className="flex-1 py-8 border border-white/5 hover:bg-white/5 text-[9px] tracking-[0.4em] uppercase rounded-none">Cancelar</Button>
-                                <Button onClick={() => handleToggleArchive(archiveEntity)} className={`flex-1 py-8 rounded-none text-black tracking-[0.4em] uppercase text-[9px] font-bold ${archiveEntity.status === 'archived' ? 'bg-emerald-500 hover:bg-emerald-400' : 'bg-amber-500 hover:bg-amber-400'}`}>
-                                    {archiveEntity.status === 'archived' ? 'Restaurar' : 'Confirmar Archivo'}
+                            <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
+                                <button
+                                    type="button"
+                                    disabled={savingEdit}
+                                    onClick={handleCloseEdit}
+                                    className="h-11 px-5 rounded-2xl border border-white/15 bg-white/[0.04] hover:bg-white/[0.1] disabled:opacity-50 text-white/70 hover:text-white text-xs font-medium transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <Button
+                                    onClick={handleUpdateEntity}
+                                    disabled={savingEdit || !inputValue.trim()}
+                                    className="h-11 px-6 bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 disabled:opacity-50 text-white rounded-2xl text-xs font-semibold transition-all shadow-[0_0_25px_rgba(59,130,246,0.4)] flex items-center gap-2"
+                                >
+                                    {savingEdit && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                                    {savingEdit ? 'Saving...' : 'Save changes'}
                                 </Button>
                             </div>
                         </div>
                     </Modal>
                 )}
 
-                {/* Modal: Crear */}
-                {isCreating && (
-                    <Modal title="Setup de Nueva Identidad" onClose={() => { setIsCreating(false); setCreationType('empresa'); }}>
-                        <div className="space-y-8">
-                            
-                            {/* Selector de Tipo */}
-                            <div className="flex gap-4 mb-2">
-                                <button
-                                    onClick={() => setCreationType('persona')}
-                                    className={`flex-1 p-4 rounded-xl border flex flex-col items-center gap-2 transition-all ${creationType === 'persona' ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-400 font-medium' : 'border-white/5 bg-white/[0.02] text-white/40 hover:bg-white/[0.04]'}`}
-                                >
-                                    <UserIcon className="w-5 h-5 mb-1" />
-                                    <span className="text-[10px] tracking-widest uppercase font-bold">Personal</span>
-                                </button>
-                                <button
-                                    onClick={() => setCreationType('empresa')}
-                                    className={`flex-1 p-4 rounded-xl border flex flex-col items-center gap-2 transition-all ${creationType === 'empresa' ? 'border-blue-500/50 bg-blue-500/10 text-blue-400 font-medium' : 'border-white/5 bg-white/[0.02] text-white/40 hover:bg-white/[0.04]'}`}
-                                >
-                                    <Briefcase className="w-5 h-5 mb-1" />
-                                    <span className="text-[10px] tracking-widest uppercase font-bold">Empresa</span>
-                                </button>
+                {/* Modal: Safe Delete */}
+                {deleteEntity && (
+                    <Modal
+                        title="Delete environment"
+                        subtitle="This action is irreversible and will delete data linked to this environment."
+                        onClose={() => { setDeleteEntity(null); setInputValue(''); }}
+                    >
+                        <div className="space-y-4">
+                            <div className="flex items-start gap-3.5 text-red-400 bg-red-500/10 p-4 rounded-2xl border border-red-500/25 backdrop-blur-sm">
+                                <AlertTriangle className="w-6 h-6 shrink-0 mt-0.5 text-red-400" />
+                                <p className="text-xs leading-relaxed font-normal text-red-200">
+                                    All data associated with this environment will be permanently removed.
+                                </p>
                             </div>
 
-                            <div className="relative group text-center mt-6">
-                                <label className="block text-[8px] font-bold text-white/20 mb-4 uppercase tracking-[0.5em]">Nombre de la Identidad</label>
+                            {(() => {
+                                const targetName = deleteEntity.name?.trim() || deleteEntity.slug?.trim() || 'delete';
+                                const isMatch = inputValue.trim().toLowerCase() === targetName.toLowerCase();
+                                return (
+                                    <div className="space-y-3">
+                                        <p className="text-xs text-white/70 font-normal">
+                                            To confirm, type <span className="text-red-400 font-mono font-medium bg-red-500/10 border border-red-500/25 px-2 py-0.5 rounded-lg text-xs select-all">{targetName}</span>:
+                                        </p>
+                                        <input
+                                            type="text"
+                                            value={inputValue}
+                                            onChange={(e) => setInputValue(e.target.value)}
+                                            className="w-full bg-white/[0.05] border border-white/15 rounded-2xl px-4 py-3.5 text-sm text-white placeholder:text-white/30 focus:border-red-500 focus:outline-none transition-all"
+                                            placeholder={`Type "${targetName}"...`}
+                                            autoFocus
+                                        />
+
+                                        <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10 mt-4">
+                                            <button
+                                                type="button"
+                                                onClick={() => { setDeleteEntity(null); setInputValue(''); }}
+                                                className="h-11 px-5 rounded-2xl border border-white/15 bg-white/[0.04] hover:bg-white/[0.1] text-white/70 hover:text-white text-xs font-medium transition-all"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <Button
+                                                onClick={handleDeleteEntity}
+                                                disabled={!isMatch}
+                                                className="h-11 px-6 bg-red-600 hover:bg-red-500 disabled:opacity-30 text-white rounded-2xl text-xs font-semibold transition-all shadow-lg shadow-red-600/30"
+                                            >
+                                                Delete permanently
+                                            </Button>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    </Modal>
+                )}
+
+                {/* Modal: Archive */}
+                {archiveEntity && (
+                    <Modal
+                        title={archiveEntity.status === 'archived' ? "Restore environment" : "Archive environment"}
+                        subtitle={archiveEntity.status === 'archived'
+                            ? "Do you want to reactivate this environment in the main Nucleo list?"
+                            : "The environment will be hidden from the main list, but its data is preserved and can be restored anytime."}
+                        onClose={() => setArchiveEntity(null)}
+                    >
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
+                                <button
+                                    type="button"
+                                    onClick={() => setArchiveEntity(null)}
+                                    className="h-11 px-5 rounded-2xl border border-white/15 bg-white/[0.04] hover:bg-white/[0.1] text-white/70 hover:text-white text-xs font-medium transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <Button
+                                    onClick={() => handleToggleArchive(archiveEntity)}
+                                    className={`h-11 px-6 text-white rounded-2xl text-xs font-semibold transition-all shadow-lg ${archiveEntity.status === 'archived' ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/30' : 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/30'}`}
+                                >
+                                    {archiveEntity.status === 'archived' ? 'Restore environment' : 'Archive environment'}
+                                </Button>
+                            </div>
+                        </div>
+                    </Modal>
+                )}
+
+                {/* Modal: Create */}
+                {isCreating && (
+                    <Modal
+                        title="Create new environment"
+                        subtitle="Choose an identity category and model to get started."
+                        onClose={() => { setIsCreating(false); setCreationCategory('profesional'); setProfessionalSubtype('empresa'); }}
+                    >
+                        <div className="space-y-6">
+                            
+                            {/* Primary Category Selector: Personal vs Professional */}
+                            <div>
+                                <label className="block text-xs font-semibold uppercase tracking-wider text-white/70 mb-3">Category</label>
+                                <div className="grid grid-cols-2 gap-3.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => setCreationCategory('persona')}
+                                        className={`p-4 rounded-2xl border flex flex-col items-center gap-3 transition-all duration-300 ${
+                                            creationCategory === 'persona'
+                                                ? 'border-emerald-400/80 bg-gradient-to-b from-emerald-500/25 to-emerald-500/5 text-white shadow-[0_0_30px_rgba(16,185,129,0.25)] scale-[1.02]'
+                                                : 'border-white/15 bg-white/[0.03] text-white/60 hover:text-white hover:bg-white/[0.07] hover:border-white/25'
+                                        }`}
+                                    >
+                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${
+                                            creationCategory === 'persona' ? 'bg-emerald-500/25 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.4)]' : 'bg-white/5 text-white/50'
+                                        }`}>
+                                            <UserIcon className="w-8 h-8" />
+                                        </div>
+                                        <div className="text-center">
+                                            <span className="text-sm font-semibold block">Personal</span>
+                                            <span className="text-[11px] text-white/45 block mt-0.5 font-normal">Individual & Life OS</span>
+                                        </div>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setCreationCategory('profesional')}
+                                        className={`p-4 rounded-2xl border flex flex-col items-center gap-3 transition-all duration-300 ${
+                                            creationCategory === 'profesional'
+                                                ? 'border-blue-400/80 bg-gradient-to-b from-blue-500/25 to-blue-500/5 text-white shadow-[0_0_30px_rgba(59,130,246,0.25)] scale-[1.02]'
+                                                : 'border-white/15 bg-white/[0.03] text-white/60 hover:text-white hover:bg-white/[0.07] hover:border-white/25'
+                                        }`}
+                                    >
+                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${
+                                            creationCategory === 'profesional' ? 'bg-blue-500/25 text-blue-300 shadow-[0_0_20px_rgba(59,130,246,0.4)]' : 'bg-white/5 text-white/50'
+                                        }`}>
+                                            <Briefcase className="w-8 h-8" />
+                                        </div>
+                                        <div className="text-center">
+                                            <span className="text-sm font-semibold block">Professional</span>
+                                            <span className="text-[11px] text-white/45 block mt-0.5 font-normal">Business & Organization</span>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Sub-options for Professional: Creator vs Company - Sin contenedor pesado */}
+                            {creationCategory === 'profesional' && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -6 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -6 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="space-y-3"
+                                >
+                                    <label className="block text-xs font-semibold uppercase tracking-wider text-white/70">
+                                        Professional Model
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-3.5">
+                                        <button
+                                            type="button"
+                                            onClick={() => setProfessionalSubtype('creador')}
+                                            className={`p-4 rounded-2xl border flex flex-col items-center gap-2.5 transition-all duration-300 ${
+                                                professionalSubtype === 'creador'
+                                                    ? 'border-cyan-400/80 bg-gradient-to-b from-cyan-500/25 to-cyan-500/5 text-white shadow-[0_0_25px_rgba(6,182,212,0.25)] scale-[1.02]'
+                                                    : 'border-white/15 bg-white/[0.03] text-white/60 hover:bg-white/[0.07] hover:border-white/25 hover:text-white'
+                                            }`}
+                                        >
+                                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${
+                                                professionalSubtype === 'creador' ? 'bg-cyan-500/25 text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.4)]' : 'bg-white/5 text-white/50'
+                                            }`}>
+                                                <Sparkles className="w-7 h-7" />
+                                            </div>
+                                            <div className="text-center">
+                                                <span className="text-xs font-semibold block">Creator</span>
+                                                <span className="text-[10px] text-white/50 block mt-0.5 font-normal">Freelance & Solo</span>
+                                            </div>
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => setProfessionalSubtype('empresa')}
+                                            className={`p-4 rounded-2xl border flex flex-col items-center gap-2.5 transition-all duration-300 ${
+                                                professionalSubtype === 'empresa'
+                                                    ? 'border-blue-400/80 bg-gradient-to-b from-blue-500/25 to-blue-500/5 text-white shadow-[0_0_25px_rgba(59,130,246,0.25)] scale-[1.02]'
+                                                    : 'border-white/15 bg-white/[0.03] text-white/60 hover:bg-white/[0.07] hover:border-white/25 hover:text-white'
+                                            }`}
+                                        >
+                                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${
+                                                professionalSubtype === 'empresa' ? 'bg-blue-500/25 text-blue-300 shadow-[0_0_15px_rgba(59,130,246,0.4)]' : 'bg-white/5 text-white/50'
+                                            }`}>
+                                                <Building2 className="w-7 h-7" />
+                                            </div>
+                                            <div className="text-center">
+                                                <span className="text-xs font-semibold block">Company</span>
+                                                <span className="text-[10px] text-white/50 block mt-0.5 font-normal">Business & Teams</span>
+                                            </div>
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            )}
+
+                            <div className="space-y-1.5">
+                                <label className="block text-xs font-semibold uppercase tracking-wider text-white/70">Environment Name</label>
                                 <input
-                                    type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)}
-                                    className="w-full bg-transparent border-b border-white/10 text-white text-center py-4 focus:outline-none focus:border-white transition-all font-light text-2xl tracking-wide placeholder:text-white/5"
-                                    placeholder="..." autoFocus
+                                    type="text"
+                                    value={inputValue}
+                                    onChange={(e) => setInputValue(e.target.value)}
+                                    className="w-full bg-white/[0.05] border border-white/15 rounded-2xl px-4 py-3.5 text-sm text-white placeholder:text-white/30 focus:border-blue-400 focus:bg-white/[0.08] focus:ring-4 focus:ring-blue-500/15 focus:outline-none transition-all"
+                                    placeholder={creationCategory === 'persona' ? "e.g. My Personal Space..." : professionalSubtype === 'creador' ? "e.g. Roosevelt Studio..." : "e.g. Udreamms LLC..."}
+                                    autoFocus
                                 />
                             </div>
                             
-                            <Button onClick={handleCreateEntity} disabled={creatingProgress || !inputValue.trim()} className={`w-full text-black hover:bg-neutral-200 rounded-none py-8 tracking-[0.4em] uppercase text-[10px] font-bold transition-all shadow-2xl ${creationType === 'persona' ? 'bg-emerald-400 hover:bg-emerald-300' : 'bg-white'}`}>
-                                {creatingProgress ? 'Iniciando Motor...' : 'Confirmar Expansión'}
-                            </Button>
+                            <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
+                                <button
+                                    type="button"
+                                    onClick={() => { setIsCreating(false); setCreationCategory('profesional'); setProfessionalSubtype('empresa'); }}
+                                    className="h-11 px-5 rounded-2xl border border-white/15 bg-white/[0.04] hover:bg-white/[0.1] text-white/70 hover:text-white text-xs font-medium transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <Button
+                                    onClick={handleCreateEntity}
+                                    disabled={creatingProgress || !inputValue.trim()}
+                                    className={`h-11 px-6 text-white rounded-2xl text-xs font-semibold transition-all shadow-lg flex items-center gap-2 ${
+                                        creationCategory === 'persona'
+                                            ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/30'
+                                            : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 shadow-blue-600/40'
+                                    }`}
+                                >
+                                    {creatingProgress && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                                    {creatingProgress ? 'Creating...' : 'Create environment'}
+                                </Button>
+                            </div>
                         </div>
                     </Modal>
                 )}
@@ -582,17 +977,57 @@ export default function NucleoPage() {
     );
 }
 
-// Componente Local de Modal Premium (Agnóstico y Reutilizable)
-function Modal({ title, children, onClose }: { title: string, children: React.ReactNode, onClose: () => void }) {
+// Componente Local de Modal Premium (Transparente, Frosted Glass, Fondo Transparente)
+function Modal({
+    title,
+    subtitle,
+    children,
+    onClose
+}: {
+    title: string;
+    subtitle?: string;
+    children: React.ReactNode;
+    onClose: () => void;
+}) {
     return (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/95 backdrop-blur-2xl p-6">
-            <motion.div initial={{ scale: 0.95, y: 30 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 30 }} className="w-full max-w-md relative pt-12">
-                <button onClick={onClose} className="absolute -top-12 right-0 text-white/20 hover:text-white transition-all"><X className="w-8 h-8 font-thin" /></button>
-                <div className="mb-16 text-center">
-                    <h2 className="text-2xl font-extralight text-white mb-4 tracking-[0.3em] uppercase">{title}</h2>
-                    <div className="w-8 h-[1px] bg-blue-500 mx-auto" />
+        <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/20 backdrop-blur-[2px] p-4 sm:p-6"
+            onClick={(e) => {
+                if (e.target === e.currentTarget) onClose();
+            }}
+        >
+            <motion.div
+                initial={{ scale: 0.94, opacity: 0, y: 15 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.94, opacity: 0, y: 15 }}
+                transition={{ type: "spring", damping: 26, stiffness: 320 }}
+                className="w-full max-w-lg bg-neutral-950/45 backdrop-blur-2xl border border-white/20 rounded-[32px] shadow-[0_30px_90px_rgba(0,0,0,0.6),inset_0_1px_1px_rgba(255,255,255,0.25)] p-6 sm:p-8 relative overflow-hidden"
+            >
+                {/* Luminous subtle ambient glows inside the frosted glass card */}
+                <div className="absolute -top-24 -left-12 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute -bottom-24 -right-12 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+
+                <div className="flex items-start justify-between gap-4 mb-6 pb-4 border-b border-white/10 relative z-10">
+                    <div>
+                        <h2 className="text-xl font-semibold text-white tracking-tight">{title}</h2>
+                        {subtitle && (
+                            <p className="text-xs text-white/60 mt-1 font-normal leading-relaxed">{subtitle}</p>
+                        )}
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className="w-9 h-9 rounded-full bg-white/[0.06] hover:bg-white/[0.15] border border-white/15 flex items-center justify-center text-white/60 hover:text-white transition-all shrink-0 active:scale-95"
+                        aria-label="Close modal"
+                    >
+                        <X className="w-4 h-4" />
+                    </button>
                 </div>
-                {children}
+                <div className="relative z-10">
+                    {children}
+                </div>
             </motion.div>
         </motion.div>
     );

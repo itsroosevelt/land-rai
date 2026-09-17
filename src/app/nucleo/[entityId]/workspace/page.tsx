@@ -32,6 +32,7 @@ import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { ensureEntityMoldUpToDate } from '@/lib/mold/entityMold';
 import { MOLD_WORKSPACE_ROUTES } from '@/lib/mold/routes';
 import { toast } from 'sonner';
+import { isEnterpriseSuiteActive } from '../constants';
 
 // --- CONSTANTS ---
 const PIXELS_PER_INCH = 96;
@@ -190,8 +191,8 @@ const AxesNode = ({ data }: NodeProps) => {
                     );
                 })}
             </div>
-            <div className={cn("absolute top-[10%] left-1/2 -translate-x-1/2 text-xl font-mono uppercase tracking-[1em]", isLight ? "text-black/30 font-bold" : "text-white/10")}>Y+ NORTE</div>
-            <div className={cn("absolute bottom-[10%] left-1/2 -translate-x-1/2 text-xl font-mono uppercase tracking-[1em]", isLight ? "text-black/30 font-bold" : "text-white/10")}>Y- SUR</div>
+            <div className={cn("absolute top-[10%] left-1/2 -translate-x-1/2 text-xl font-mono uppercase tracking-[1em]", isLight ? "text-black/30 font-bold" : "text-white/10")}>Y+ NORTH</div>
+            <div className={cn("absolute bottom-[10%] left-1/2 -translate-x-1/2 text-xl font-mono uppercase tracking-[1em]", isLight ? "text-black/30 font-bold" : "text-white/10")}>Y- SOUTH</div>
             <div className={cn("absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full blur-[2px] z-[2]", isLight ? "bg-black/50" : "bg-white/40")} />
         </div>
     );
@@ -258,31 +259,52 @@ const TitleNode = ({ data }: NodeProps) => {
                                 ? "bg-white/95 border-black/10 shadow-slate-300/60" 
                                 : "bg-[#0c0d12]/95 border-white/10"
                         )}>
-                            {data.roles.map((r: any) => (
-                                <button
-                                    key={r.id}
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); data.onSelectRole?.(r.id); setMenuOpen(false); }}
-                                    className={cn(
-                                        "w-full text-left px-5 py-3 text-sm rounded-2xl transition-colors flex items-center gap-4",
-                                        r.id === data.activeRole
-                                            ? (data?.isLight ? "bg-black/10 text-black font-semibold" : "bg-white/10 text-white font-semibold")
-                                            : (data?.isLight ? "text-black/60 hover:text-black hover:bg-black/5" : "text-white/60 hover:text-white hover:bg-white/5")
-                                    )}
-                                >
-                                    <span
+                            {data.roles.map((r: any) => {
+                                const isLocked = r.isComingSoon;
+                                return (
+                                    <button
+                                        key={r.id}
+                                        type="button"
+                                        disabled={isLocked}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (isLocked) {
+                                                toast.info(`${r.title} will be available soon in the enterprise environment.`);
+                                                return;
+                                            }
+                                            data.onSelectRole?.(r.id);
+                                            setMenuOpen(false);
+                                        }}
                                         className={cn(
-                                            "shrink-0 w-14 text-xs font-bold tracking-wider tabular-nums",
-                                            r.id === data.activeRole 
-                                                ? (data?.isLight ? "text-black" : "text-white") 
-                                                : (data?.isLight ? "text-black/40" : "text-white/40")
+                                            "w-full text-left px-5 py-3 text-sm rounded-2xl transition-colors flex items-center justify-between gap-4",
+                                            isLocked
+                                                ? "opacity-40 cursor-not-allowed"
+                                                : r.id === data.activeRole
+                                                    ? (data?.isLight ? "bg-black/10 text-black font-semibold" : "bg-white/10 text-white font-semibold")
+                                                    : (data?.isLight ? "text-black/60 hover:text-black hover:bg-black/5" : "text-white/60 hover:text-white hover:bg-white/5")
                                         )}
                                     >
-                                        {r.acronym}
-                                    </span>
-                                    <span className="whitespace-nowrap">{r.title}</span>
-                                </button>
-                            ))}
+                                        <div className="flex items-center gap-4">
+                                            <span
+                                                className={cn(
+                                                    "shrink-0 w-14 text-xs font-bold tracking-wider tabular-nums",
+                                                    r.id === data.activeRole 
+                                                        ? (data?.isLight ? "text-black" : "text-white") 
+                                                        : (data?.isLight ? "text-black/40" : "text-white/40")
+                                                )}
+                                            >
+                                                {r.acronym}
+                                            </span>
+                                            <span className="whitespace-nowrap">{r.title}</span>
+                                        </div>
+                                        {isLocked && (
+                                            <span className="text-[10px] tracking-widest uppercase text-neutral-500 font-light">
+                                                Coming Soon
+                                            </span>
+                                        )}
+                                    </button>
+                                );
+                            })}
                         </div>
                     )}
                 </div>
@@ -459,19 +481,30 @@ function WorkspaceContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { currentUser } = useAuth();
-    const { entityId: firestoreId, routeSegment } = useEntityRoute();
+    const { entityId: firestoreId, routeSegment, isEnterprise } = useEntityRoute();
     const { zoomIn, zoomOut, fitView, setCenter } = useReactFlow();
     
-    const roleParam = searchParams.get('role') || 'ceo';
-    const [activeRole, setActiveRole] = useState<string>(roleParam);
+    const roleParam = searchParams.get('role');
+    const defaultRole = isEnterprise ? 'coo' : 'ceo';
+    const initialRole = (isEnterprise && roleParam && !isEnterpriseSuiteActive(roleParam)) ? defaultRole : (roleParam || defaultRole);
+    const [activeRole, setActiveRole] = useState<string>(initialRole);
 
     useEffect(() => {
-        if (roleParam !== activeRole) {
-            setActiveRole(roleParam);
+        const currentRoleParam = searchParams.get('role');
+        if (isEnterprise && currentRoleParam && !isEnterpriseSuiteActive(currentRoleParam)) {
+            toast.info(`The ${currentRoleParam.toUpperCase()} suite will be available soon. Redirecting to COO.`);
+            setActiveRole('coo');
+            router.replace(`/nucleo/${routeSegment}/workspace?role=coo`);
+            return;
+        }
+
+        const targetRole = currentRoleParam || (isEnterprise ? 'coo' : 'ceo');
+        if (targetRole !== activeRole) {
+            setActiveRole(targetRole);
             setExpandedDepts([]);
             setOpenWindows([]);
         }
-    }, [roleParam, activeRole]);
+    }, [searchParams, activeRole, isEnterprise, routeSegment, router]);
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -629,7 +662,12 @@ function WorkspaceContent() {
         // Título (con flecha de regreso "<" a la izquierda y selector de oficial "v" a la derecha)
         const titleSaved = savedLayout['dept-title'] || { x: 0, y: -3 };
         const roleOptions = Object.keys(DEPARTMENTS_DATA)
-            .map((id) => ({ id, title: DEPARTMENTS_DATA[id].title, acronym: id === 'board' ? 'BOD' : id.toUpperCase() }))
+            .map((id) => ({ 
+                id, 
+                title: DEPARTMENTS_DATA[id].title, 
+                acronym: id === 'board' ? 'BOD' : id.toUpperCase(),
+                isComingSoon: isEnterprise && !isEnterpriseSuiteActive(id),
+            }))
             .sort((a, b) => a.title.localeCompare(b.title));
         newNodes.push({
             id: 'dept-title', type: 'titleNode', position: toCanvas(titleSaved.x, titleSaved.y),

@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState, useRef, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Check,
   Mail,
@@ -17,10 +17,11 @@ import {
   ShieldCheck,
   CheckCircle,
   Wallet,
+  Key,
 } from 'lucide-react';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -397,36 +398,77 @@ const renderFeatureIcon = (type: FeatureItem['iconType']) => {
   }
 };
 
-export default function SubscriptionsPage() {
+function SubscriptionsContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const paramEntityId = searchParams.get('entityId');
+  const paramRedirect = searchParams.get('redirect');
+
   const { currentUser, activeEntity, loading } = useAuth();
-  const { status: subscriptionStatus, plan: activePlanId, expiresAt, isExpired } = useSubscriptionStatus();
+  const targetEntityId = paramEntityId || activeEntity || null;
+
+  const { status: subscriptionStatus, plan: activePlanId, expiresAt, isExpired } = useSubscriptionStatus(targetEntityId);
   const [selectedPlan, setSelectedPlan] = useState<typeof plans[number] | null>(null);
   const [hasHistory, setHasHistory] = useState(false);
   const [isAnnual, setIsAnnual] = useState(false);
   const [isBypassOpen, setIsBypassOpen] = useState(false);
   const [bypassCode, setBypassCode] = useState('');
+  const [targetEntity, setTargetEntity] = useState<{ id: string; name: string; type?: string } | null>(null);
+
+  useEffect(() => {
+    if (!currentUser || !targetEntityId) {
+      setTargetEntity(null);
+      return;
+    }
+
+    const fetchEntity = async () => {
+      try {
+        const snap = await getDoc(doc(db, `users/${currentUser.uid}/entities/${targetEntityId}`));
+        if (snap.exists()) {
+          const d = snap.data();
+          setTargetEntity({
+            id: snap.id,
+            name: d.name || (d.type === 'persona' ? 'Personal' : snap.id),
+            type: d.type,
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching target entity:', err);
+      }
+    };
+
+    fetchEntity();
+  }, [currentUser, targetEntityId]);
 
   const handleGoToNucleo = () => {
-    const hasActiveSub = subscriptionStatus === 'active' && !isExpired;
-    const hasBypass = typeof window !== 'undefined' && localStorage.getItem('roosevelt_bypass') === 'roosevelt2025';
-
-    if (hasActiveSub || hasBypass) {
-      router.push('/nucleo');
-    } else {
-      setIsBypassOpen(true);
-    }
+    router.push('/nucleo');
   };
 
-  const handleVerifyBypass = (e: React.FormEvent) => {
+  const handleVerifyBypass = async (e: React.FormEvent) => {
     e.preventDefault();
     if (bypassCode.trim() === 'roosevelt2025') {
-      localStorage.setItem('roosevelt_bypass', 'roosevelt2025');
+      if (targetEntityId) {
+        localStorage.setItem(`roosevelt_entity_unlocked_${targetEntityId}`, 'roosevelt2025');
+        if (currentUser) {
+          try {
+            await setDoc(doc(db, `users/${currentUser.uid}/entities/${targetEntityId}/subscriptions/current`), {
+              status: 'active',
+              plan: 'pro',
+              priceUSD: 0,
+              paymentMethod: 'access_code',
+              activatedAt: new Date().toISOString(),
+              expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+            }, { merge: true });
+          } catch (saveErr) {
+            console.error('Error saving subscription in firestore:', saveErr);
+          }
+        }
+      }
       setIsBypassOpen(false);
-      toast.success('Acceso concedido. Redirigiendo...');
-      router.push('/nucleo');
+      toast.success('Access code validated! Access activated for ' + (targetEntity?.name || 'this environment'));
+      router.push(paramRedirect || '/nucleo');
     } else {
-      toast.error('Código incorrecto. Se requiere suscripción activa.');
+      toast.error('Invalid code. An active subscription is required.');
     }
   };
 
@@ -434,16 +476,20 @@ export default function SubscriptionsPage() {
     const checkHistory = async () => {
       if (!currentUser) return;
       try {
-        // 1. Check if current subscription exists (which indicates a previous payment)
-        const subRef = doc(db, `users/${currentUser.uid}/subscriptions/current`);
+        const subPath = targetEntityId 
+          ? `users/${currentUser.uid}/entities/${targetEntityId}/subscriptions/current`
+          : `users/${currentUser.uid}/subscriptions/current`;
+        const subRef = doc(db, subPath);
         const subSnap = await getDoc(subRef);
         if (subSnap.exists()) {
           setHasHistory(true);
           return;
         }
 
-        // 2. Or check if there are any paid payment requests
-        const requestsRef = collection(db, `users/${currentUser.uid}/paymentRequests`);
+        const reqPath = targetEntityId
+          ? `users/${currentUser.uid}/entities/${targetEntityId}/paymentRequests`
+          : `users/${currentUser.uid}/paymentRequests`;
+        const requestsRef = collection(db, reqPath);
         const q = query(requestsRef, where('status', '==', 'paid'));
         const reqSnap = await getDocs(q);
         if (!reqSnap.empty) {
@@ -455,10 +501,10 @@ export default function SubscriptionsPage() {
     };
 
     checkHistory();
-  }, [currentUser, activeEntity]);
+  }, [currentUser, targetEntityId]);
 
-  // Use active entity from context
-  const entityId = activeEntity;
+  // Use target entity ID
+  const entityId = targetEntityId;
 
   const hasActiveSubscription = subscriptionStatus === 'active';
   const currentPlan = plans.find(p => p.id === activePlanId?.toLowerCase());
@@ -497,18 +543,18 @@ export default function SubscriptionsPage() {
                   </div>
                   <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                     <span className="text-[10px] uppercase tracking-widest text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 w-fit">
-                      Active: {activePlanId}
+                      {targetEntity?.name || 'Environment'}: {activePlanId}
                     </span>
                     <p className="text-sm font-normal text-emerald-100/90 tracking-wide">
-                      Your subscription is active and valid until <span className="text-emerald-300 font-semibold">{expiresAt ? new Date(expiresAt).toLocaleDateString() : 'N/A'}</span>
+                      The subscription for <strong className="text-white font-medium">{targetEntity?.name || 'this environment'}</strong> is active until <span className="text-emerald-300 font-semibold">{expiresAt ? new Date(expiresAt).toLocaleDateString() : 'N/A'}</span>
                     </p>
                   </div>
                 </div>
                 <Button
-                  onClick={() => router.push('/nucleo')}
+                  onClick={() => router.push(paramRedirect || '/nucleo')}
                   className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-black font-semibold tracking-wider text-xs rounded-full h-9 px-6 transition-all duration-300 shadow-md shadow-emerald-500/20"
                 >
-                  Go to Dashboard
+                  {paramRedirect ? 'Enter environment' : 'Go to dashboard'}
                 </Button>
               </div>
             </div>
@@ -517,13 +563,34 @@ export default function SubscriptionsPage() {
           <section className="mx-auto flex min-h-screen w-full max-w-[102rem] flex-col justify-center px-4 py-16 sm:px-6 lg:px-8 relative z-[10]">
 
             {/* Main Clean Header */}
-            <div className="mx-auto mb-10 max-w-3xl text-center z-[40] space-y-2">
+            <div className="mx-auto mb-10 max-w-3xl text-center z-[40] space-y-3">
+              {targetEntity && (
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 text-blue-300 text-xs font-normal backdrop-blur-md">
+                  <span className="text-white/60 font-light">Subscription for environment:</span>
+                  <span className="font-semibold text-white">{targetEntity.name}</span>
+                  {targetEntity.type && (
+                    <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/10 text-white/80 font-normal">
+                      {targetEntity.type === 'persona' ? 'Personal' : targetEntity.type === 'creador' ? 'Creator' : 'Business'}
+                    </span>
+                  )}
+                </div>
+              )}
               <h1 className="text-3xl sm:text-4xl md:text-5xl font-normal tracking-tight text-white">
-                Find the right plan for your business.
+                Choose the right plan for {targetEntity ? targetEntity.name : 'your business'}.
               </h1>
               <p className="text-sm sm:text-base text-white/60 font-normal">
-                Choose the Roosevelt edition that best fits your business.
+                Each environment operates with its own independent subscription for isolated and professional management.
               </p>
+              <div className="pt-2 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => setIsBypassOpen(true)}
+                  className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-white/10 hover:border-blue-500/40 bg-white/[0.03] hover:bg-blue-500/10 text-white/60 hover:text-white text-xs font-normal transition-all duration-300 cursor-pointer"
+                >
+                  <Key className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Have an access code? Redeem it here</span>
+                </button>
+              </div>
             </div>
 
             {/* Google Workspace Style Container */}
@@ -574,8 +641,8 @@ export default function SubscriptionsPage() {
                   // Render Action Button inline below pricing
                   const renderButton = () => {
                     if (plan.isEnterprise) {
-                      const emailSubject = encodeURIComponent("Interés en Plan Enterprise");
-                      const emailBody = encodeURIComponent("Hola, estoy interesado en comprar un plan Enterprise para mi empresa.");
+                      const emailSubject = encodeURIComponent("Interest in Enterprise Plan");
+                      const emailBody = encodeURIComponent("Hello, I am interested in an Enterprise plan for my business.");
                       return (
                         <a
                           href={`https://mail.google.com/mail/?view=cm&fs=1&to=sales@byroosevelt.com&su=${emailSubject}&body=${emailBody}`}
@@ -672,21 +739,21 @@ export default function SubscriptionsPage() {
 
                       {/* Features List */}
                       <div className="flex-grow">
-                        <p className="text-xs font-semibold text-white/90 mb-4 tracking-tight">
+                        <p className="text-xs font-normal text-white/70 mb-4 tracking-tight">
                           {plan.featuresHeader}
                         </p>
-                        <div className="space-y-3.5">
+                        <div className="space-y-3">
                           {plan.features.map((feature, idx) => (
                             <div
                               key={idx}
-                              className="flex items-start gap-2.5 text-xs text-white/80 font-normal leading-relaxed"
+                              className="flex items-start gap-2.5 text-xs text-white/75 font-normal leading-relaxed"
                             >
                               {renderFeatureIcon(feature.iconType)}
                               <div>
-                                <span className="font-semibold text-white">{feature.boldText}</span>
+                                <span className="font-normal text-white">{feature.boldText}</span>
                                 {feature.normalText}
                                 {feature.highlightText && (
-                                  <span className="underline underline-offset-2 decoration-blue-400/60 text-white font-medium">
+                                  <span className="underline underline-offset-2 decoration-blue-400/60 text-white font-normal">
                                     {feature.highlightText}
                                   </span>
                                 )}
@@ -724,26 +791,9 @@ export default function SubscriptionsPage() {
               plan={checkoutPlan}
               onClose={() => setSelectedPlan(null)}
               entityId={entityId}
+              redirectUrl={paramRedirect}
             />
           )}
-
-          {/* Log Out - Top Left */}
-          <div className="fixed top-8 left-8 md:top-12 md:left-12 z-[50]">
-            <button
-              onClick={async () => {
-                try {
-                  await signOut(auth);
-                  router.push('/login');
-                } catch (error) {
-                  console.error('Error logging out:', error);
-                  toast.error('Error al cerrar sesión');
-                }
-              }}
-              className="group flex items-center gap-2 text-white/40 hover:text-white transition-all duration-300"
-            >
-              <span className="text-sm font-normal tracking-wide">Log out</span>
-            </button>
-          </div>
 
           {/* Go to Nucleo & Wallet - Top Right */}
           <div className="fixed top-8 right-8 md:top-12 md:right-12 z-[50] flex items-center gap-4">
@@ -770,14 +820,14 @@ export default function SubscriptionsPage() {
       {isBypassOpen && (
         <Dialog open onOpenChange={setIsBypassOpen}>
           <DialogContent className="max-w-sm bg-[#111111] border border-white/10 text-white rounded-2xl p-6 shadow-2xl">
-            <DialogTitle className="text-base font-semibold text-white">Código de Acceso</DialogTitle>
+            <DialogTitle className="text-base font-semibold text-white">Access Code</DialogTitle>
             <form onSubmit={handleVerifyBypass} className="mt-4 space-y-4">
               <p className="text-xs text-white/50 leading-relaxed">
-                Ingresa el código de acceso proporcionado para avanzar al núcleo sin una suscripción activa.
+                Enter the authorized access code to unlock the <strong className="text-white font-medium">{targetEntity?.name || 'business'}</strong> environment and immediately access its services.
               </p>
               <input
-                type="text"
-                placeholder="Code"
+                type="password"
+                placeholder="Access code"
                 value={bypassCode}
                 onChange={(e) => setBypassCode(e.target.value)}
                 className="w-full h-10 px-3.5 bg-white/[0.02] border border-white/10 rounded-xl text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500/50 transition-colors"
@@ -790,13 +840,13 @@ export default function SubscriptionsPage() {
                   onClick={() => setIsBypassOpen(false)}
                   className="h-9 px-4 rounded-full text-white/60 hover:text-white text-xs font-normal"
                 >
-                  Cancelar
+                  Cancel
                 </Button>
                 <Button
                   type="submit"
                   className="h-9 px-5 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium"
                 >
-                  Verificar
+                  Verify
                 </Button>
               </div>
             </form>
@@ -804,5 +854,13 @@ export default function SubscriptionsPage() {
         </Dialog>
       )}
     </ProtectedRoute>
+  );
+}
+
+export default function SubscriptionsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#000000] text-white flex items-center justify-center text-xs tracking-widest uppercase">Loading subscriptions...</div>}>
+      <SubscriptionsContent />
+    </Suspense>
   );
 }

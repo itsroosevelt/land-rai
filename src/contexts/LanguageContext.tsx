@@ -68,10 +68,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (stored && (stored === 'es' || stored === 'en')) {
       setLanguageState(stored);
     } else {
-      const browserLang = navigator.language.split('-')[0];
-      if (browserLang === 'es') {
-        setLanguageState('es');
-      }
+      setLanguageState('en');
     }
     setMounted(true);
   }, []);
