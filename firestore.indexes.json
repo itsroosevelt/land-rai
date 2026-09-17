@@ -51,6 +51,22 @@
   ],
   "fieldOverrides": [
     {
+      "collectionGroup": "accounts",
+      "fieldPath": "email",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "accounts",
+      "fieldPath": "gmailAddress",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
       "collectionGroup": "cards",
       "fieldPath": "contactName",
       "indexes": [
