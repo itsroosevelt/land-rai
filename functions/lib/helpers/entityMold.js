@@ -6,7 +6,7 @@ exports.ensureEntityMoldUpToDateAdmin = ensureEntityMoldUpToDateAdmin;
 const admin = require("firebase-admin");
 const manualKanbanColumns_1 = require("./mold/manualKanbanColumns");
 /** Mantener alineado con src/lib/mold/entityMold.ts */
-exports.ENTITY_MOLD_VERSION = 18;
+exports.ENTITY_MOLD_VERSION = 19;
 const ENTITY_MOLD_FEATURES = {
     workspaceHub: true,
     botKanban: true,
@@ -46,6 +46,8 @@ const ENTITY_MOLD_FEATURES = {
     broadcastSendRecovery: true,
     broadcastSendHeartbeat: true,
     broadcastConversationBackfill: true,
+    omnichannelV2UI: true,
+    botEngineSnippetSync: true,
 };
 const MOLD_INTEGRATIONS_INIT = {
     encrypted: false,

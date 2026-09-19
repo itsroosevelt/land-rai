@@ -11,7 +11,7 @@ export async function GET(req: Request) {
         const { searchParams } = new URL(req.url);
         const userId = searchParams.get('userId');
         const entityId = searchParams.get('entityId');
-        const origin = searchParams.get('origin') || 'https://www.byroosevelt.com';
+        const origin = searchParams.get('origin') || 'https://www.itsroosevelt.com';
 
         if (!userId || !entityId) {
             return NextResponse.json(

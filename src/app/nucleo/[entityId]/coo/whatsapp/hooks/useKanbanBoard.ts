@@ -4,25 +4,33 @@ import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase
 import { toast } from 'sonner';
 import { moveCardBetweenGroups } from '@/lib/kanban/moveCardClient';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEntityRoute } from '@/hooks/useEntityRoute';
 
 export const useKanbanBoard = (filterTerm: string = '') => {
     const { currentUser, activeEntity } = useAuth();
+    const { tenantPath: routeTenantPath, firestoreId } = useEntityRoute();
     const [groups, setGroups] = useState<any[]>([]);
     const [cards, setCards] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
-    // Get multi-tenant root path
+    // Get multi-tenant root path (reactive to route resolver and auth)
     const getTenantPath = () => {
-        if (!currentUser?.uid || !activeEntity) return null;
-        return `users/${currentUser.uid}/entities/${activeEntity}`;
+        if (routeTenantPath) return routeTenantPath;
+        const targetEntity = firestoreId || activeEntity;
+        if (!currentUser?.uid || !targetEntity) return null;
+        return `users/${currentUser.uid}/entities/${targetEntity}`;
     };
+
+    const currentTenantPath = getTenantPath();
 
     // Load Groups
     useEffect(() => {
-        const tenantPath = getTenantPath();
-        if (!tenantPath) return;
+        if (!currentTenantPath) {
+            setGroups([]);
+            return;
+        }
 
-        const q = query(collection(db, `${tenantPath}/kanban-groups`), orderBy('order', 'asc'));
+        const q = query(collection(db, `${currentTenantPath}/kanban-groups`), orderBy('order', 'asc'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const groupsData = snapshot.docs.map(doc => ({
                 id: doc.id,
@@ -31,12 +39,11 @@ export const useKanbanBoard = (filterTerm: string = '') => {
             setGroups(groupsData);
         });
         return () => unsubscribe();
-    }, []);
+    }, [currentTenantPath]);
 
     // Load Cards
     useEffect(() => {
-        const tenantPath = getTenantPath();
-        if (!tenantPath || groups.length === 0) {
+        if (!currentTenantPath || groups.length === 0) {
             setLoading(false);
             return;
         }
@@ -47,7 +54,7 @@ export const useKanbanBoard = (filterTerm: string = '') => {
         const cardRegistry = new Map<string, any>();
 
         groups.forEach(group => {
-            const q = query(collection(db, `${tenantPath}/kanban-groups/${group.id}/cards`));
+            const q = query(collection(db, `${currentTenantPath}/kanban-groups/${group.id}/cards`));
             const unsub = onSnapshot(q, (snapshot) => {
                 snapshot.docs.forEach(doc => {
                     console.log(`[useKanbanBoard] 🎴 Found Card: ${doc.id} at Path: ${doc.ref.path}`);
@@ -74,7 +81,7 @@ export const useKanbanBoard = (filterTerm: string = '') => {
         });
 
         return () => unsubscribes.forEach(u => u());
-    }, [groups, currentUser?.uid, activeEntity]);
+    }, [groups, currentTenantPath]);
 
     const handleDragEnd = async (event: any) => {
         const { active, over } = event;

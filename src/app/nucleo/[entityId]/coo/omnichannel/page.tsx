@@ -51,8 +51,8 @@ export default function OmnichannelInboxPage() {
     const [integrationStatuses, setIntegrationStatuses] = useState<Record<string, string>>({});
     
     React.useEffect(() => {
-        if (!currentUser || !activeEntity) return;
-        const integrationsRef = collection(db, `users/${currentUser.uid}/entities/${activeEntity}/integrations`);
+        if (!currentUser?.uid || !entityIdForApi) return;
+        const integrationsRef = collection(db, `users/${currentUser.uid}/entities/${entityIdForApi}/integrations`);
         const unsubscribe = onSnapshot(integrationsRef, (snapshot) => {
             const statuses: Record<string, string> = {};
             snapshot.docs.forEach(doc => {
@@ -62,7 +62,7 @@ export default function OmnichannelInboxPage() {
             setIntegrationStatuses(statuses);
         });
         return () => unsubscribe();
-    }, [currentUser, activeEntity]);
+    }, [currentUser?.uid, entityIdForApi]);
 
     const offlineChannels = Object.entries(integrationStatuses)
         .filter(([_, status]) => status === 'Error')
@@ -114,6 +114,7 @@ export default function OmnichannelInboxPage() {
                                 groups={groups}
                                 groupName={activeGroupName}
                                 allConversations={cards}
+                                tenantPath={currentUser?.uid && entityIdForApi ? `users/${currentUser.uid}/entities/${entityIdForApi}` : undefined}
                                 onBack={() => setActiveConversationId(null)}
                             />
                         </div>

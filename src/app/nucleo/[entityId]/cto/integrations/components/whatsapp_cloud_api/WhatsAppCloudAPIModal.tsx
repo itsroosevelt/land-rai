@@ -215,10 +215,10 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
 
     const tenantWebhookUrl = webhookMeta?.tenantWebhookUrl
         || (currentUser?.uid && activeEntity
-            ? `${typeof window !== 'undefined' ? window.location.origin : 'https://www.byroosevelt.com'}/api/whatsapp/webhook?u=${currentUser.uid}&e=${activeEntity}`
+            ? `${typeof window !== 'undefined' ? window.location.origin : 'https://www.itsroosevelt.com'}/api/whatsapp/webhook?u=${currentUser.uid}&e=${activeEntity}`
             : null);
     const globalWebhookUrl = webhookMeta?.globalWebhookUrl
-        || `${typeof window !== 'undefined' ? window.location.origin : 'https://www.byroosevelt.com'}/api/whatsapp/webhook`;
+        || `${typeof window !== 'undefined' ? window.location.origin : 'https://www.itsroosevelt.com'}/api/whatsapp/webhook`;
     const displayVerifyToken = waConfig.verifyToken || webhookMeta?.verifyToken || webhookMeta?.recommendedVerifyToken || 'vg37e';
 
     const saveWhatsAppConfig = async () => {
