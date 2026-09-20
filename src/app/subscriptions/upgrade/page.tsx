@@ -249,7 +249,7 @@ export default function SubscriptionUpgradePage() {
                 </div>
               </div>
               <Button
-                onClick={() => router.push('/nucleo')}
+                onClick={() => router.push('/home')}
                 className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-black font-bold tracking-wider text-xs rounded-full h-9 px-6 transition-all duration-300 shadow-md shadow-emerald-500/20"
               >
                 Go to Dashboard
@@ -467,10 +467,10 @@ export default function SubscriptionUpgradePage() {
 
           <div className="fixed bottom-8 right-8 md:bottom-12 md:right-12 z-[50]">
             <button
-              onClick={() => router.push('/nucleo')}
+              onClick={() => router.push('/home')}
               className="group flex items-center gap-2 text-white/40 hover:text-white transition-all duration-300"
             >
-              <span className="text-sm font-medium tracking-wide">Go to Nucleo</span>
+              <span className="text-sm font-medium tracking-wide">Go to Home</span>
               <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" strokeWidth={1.5} />
             </button>
           </div>

@@ -41,6 +41,7 @@ const config = {
         inter: ['"Outfit"', 'var(--font-outfit)', 'sans-serif'],
         montserrat: ['"Outfit"', 'sans-serif'],
         jakarta: ['"Outfit"', 'sans-serif'],
+        mono: ['"Outfit"', 'var(--font-outfit)', 'sans-serif'],
       },
       colors: {
         border: 'hsl(var(--border))',

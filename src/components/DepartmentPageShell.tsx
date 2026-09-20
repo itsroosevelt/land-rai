@@ -53,7 +53,7 @@ export default function DepartmentPageShell({
                 <motion.button
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
-                    onClick={() => router.push(`/nucleo/${entityId}/${department}`)}
+                    onClick={() => router.push(`/home/${entityId}/${department}`)}
                     className="flex items-center gap-2 text-neutral-600 hover:text-white text-[10px] sm:text-xs tracking-wider uppercase transition-colors mb-8 md:mb-12"
                 >
                     <ArrowLeft className="w-3 h-3" /> Back to {department.toUpperCase()}

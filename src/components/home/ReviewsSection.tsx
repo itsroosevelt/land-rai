@@ -21,10 +21,10 @@ export function ReviewsSection() {
             <div className="w-full max-w-[1800px] mx-auto px-6 md:px-12">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-20 md:mb-24 gap-6">
                     <div>
-                        <h2 className="text-2xl lg:text-4xl font-medium font-sans text-white mb-3 tracking-tight">
+                        <h2 className="text-2xl lg:text-4xl font-light font-sans text-white mb-3 tracking-tight">
                             Community Feedback
                         </h2>
-                        <p className="text-zinc-400 text-base leading-relaxed">
+                        <p className="text-zinc-400 text-base font-light leading-relaxed">
                             See what the earliest adopters and partners are saying about the ecosystem.
                         </p>
                     </div>

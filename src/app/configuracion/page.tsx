@@ -438,7 +438,7 @@ function ConfigurationPageContent() {
 
                 <div className="px-4 pb-4">
                     <button
-                        onClick={() => router.push(`/nucleo/${activeEntityRoute || activeEntity || 'gateway'}`)}
+                        onClick={() => router.push(`/home/${activeEntityRoute || activeEntity || 'gateway'}`)}
                         className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-xl transition-all font-medium"
                     >
                         <ArrowLeft className="w-4 h-4" />

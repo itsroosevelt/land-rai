@@ -181,7 +181,7 @@ export default function Footer() {
                 <div className="flex flex-col md:flex-row justify-between items-end gap-12 mb-20 pb-16 border-b border-white/5">
                     {/* Left side: Socials */}
                     <div className="flex items-center gap-8 mb-2 lg:mb-0">
-                        <span className="text-white/30 font-sans text-[10px] tracking-[0.2em] uppercase font-bold">FOLLOW US</span>
+                        <span className="text-white/30 font-sans text-[10px] tracking-[0.2em] uppercase font-medium">FOLLOW US</span>
                         <div className="flex items-center gap-6">
                             {socialLinks.map((social, i) => (
                                 <a
@@ -201,8 +201,8 @@ export default function Footer() {
                     {/* Right side: Newsletter Section */}
                     <div className="flex flex-col gap-5 w-full max-w-[440px]">
                         <div className="space-y-1">
-                            <h3 className="text-white text-lg font-sans font-medium tracking-tight">Newsletter</h3>
-                            <p className="text-white/40 text-xs leading-relaxed">Subscribe to receive the latest Roosevelt ecosystem updates.</p>
+                            <h3 className="text-white text-lg font-sans font-light tracking-tight">Newsletter</h3>
+                            <p className="text-white/40 text-xs leading-relaxed font-light">Subscribe to receive the latest Roosevelt ecosystem updates.</p>
                         </div>
                         <div className="flex gap-2 w-full">
                             <input
@@ -213,7 +213,7 @@ export default function Footer() {
                             />
                             <button
                                 suppressHydrationWarning
-                                className="bg-white text-black rounded-full px-7 py-2.5 text-xs font-bold hover:bg-white/90 active:scale-95 transition-all shrink-0">
+                                className="bg-white text-black rounded-full px-7 py-2.5 text-xs font-medium hover:bg-white/90 active:scale-95 transition-all shrink-0">
                                 Subscribe
                             </button>
                         </div>
@@ -224,7 +224,7 @@ export default function Footer() {
                 <div className="flex flex-col lg:flex-row gap-x-12 gap-y-20 mb-32">
                     {/* Left Side: Slogan */}
                     <div className="lg:w-1/4">
-                        <h2 className="text-2xl md:text-3xl font-sans font-medium tracking-tight leading-tight sticky top-24 text-white">
+                        <h2 className="text-2xl md:text-3xl font-sans font-light tracking-tight leading-tight sticky top-24 text-white">
                             Making <span className="bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">Roosevelt</span> <br />
                             helpful for <br />
                             everyone
@@ -243,7 +243,7 @@ export default function Footer() {
                                 return (
                                     <div key={idx} className="flex flex-col gap-4 pb-6 lg:pb-0">
                                         <div className="flex items-center gap-2">
-                                            <h3 className="text-white text-base font-sans font-medium">{section.title}</h3>
+                                            <h3 className="text-white text-base font-sans font-light">{section.title}</h3>
                                             {hasMore && (
                                                 <button
                                                     onClick={() => toggleColumnExpand(section.title)}
@@ -265,9 +265,9 @@ export default function Footer() {
                                                         href={link.href}
                                                         target={link.target}
                                                         className={`${link.isHighlight
-                                                            ? 'bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent font-bold'
+                                                            ? 'bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent font-medium'
                                                             : 'text-white/60 hover:text-white'
-                                                            } text-sm font-sans transition-colors flex items-center gap-2 group decoration-transparent`}
+                                                            } text-sm font-sans transition-colors flex items-center gap-2 group decoration-transparent font-light`}
                                                     >
                                                         {link.name}
                                                     </Link>
@@ -281,7 +281,7 @@ export default function Footer() {
 
                         {/* Accepted In Ecosystem Section */}
                         <div className="mt-28 pt-16 border-t border-white/5">
-                            <h4 className="text-white/30 text-[10px] tracking-[0.2em] uppercase font-bold mb-10">
+                            <h4 className="text-white/30 text-[10px] tracking-[0.2em] uppercase font-medium mb-10">
                                 Accepted in Ecosystem
                             </h4>
                             <div className="flex flex-wrap items-center gap-x-12 gap-y-8">

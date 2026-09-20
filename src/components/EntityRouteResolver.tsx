@@ -44,7 +44,7 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
       return;
     }
     if (!segment) {
-      router.replace('/nucleo');
+      router.replace('/home');
       return;
     }
 
@@ -70,7 +70,7 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
           if (cancelled) return;
 
           if (!resolved) {
-            router.replace('/nucleo');
+            router.replace('/home');
             return;
           }
 
@@ -89,9 +89,10 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
           setRouteContext(contextValue);
 
           const currentPath = pathnameRef.current;
-          if (segment !== routeSegment && currentPath?.startsWith(`/nucleo/${segment}`)) {
-            const rest = currentPath.slice(`/nucleo/${segment}`.length);
-            router.replace(`/nucleo/${routeSegment}${rest}`);
+          if (segment !== routeSegment && (currentPath?.startsWith(`/home/${segment}`) || currentPath?.startsWith(`/nucleo/${segment}`))) {
+            const prefix = currentPath.startsWith(`/home/${segment}`) ? `/home/${segment}` : `/nucleo/${segment}`;
+            const rest = currentPath.slice(prefix.length);
+            router.replace(`/home/${routeSegment}${rest}`);
             return;
           }
 
@@ -108,7 +109,7 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
                 const isExpired = data?.expiresAt ? new Date(data.expiresAt) < new Date() : false;
                 const isActive = data?.status === 'active' && !isExpired;
                 if (!isActive) {
-                  const targetRedirect = currentPath || `/nucleo/${routeSegment}`;
+                  const targetRedirect = currentPath || `/home/${routeSegment}`;
                   router.replace(`/subscriptions?entityId=${resolved.id}&redirect=${encodeURIComponent(targetRedirect)}`);
                   return;
                 }
@@ -123,7 +124,7 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
       },
       (error) => {
         console.error('[EntityRouteResolver]', error);
-        router.replace('/nucleo');
+        router.replace('/home');
       }
     );
 

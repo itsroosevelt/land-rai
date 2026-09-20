@@ -8,6 +8,7 @@ import { ArrowRight } from 'lucide-react';
 
 
 import { LandingNavbar } from '@/components/landing/LandingNavbar';
+import { HeroAskRooseveltBar } from '@/components/landing/HeroAskRooseveltBar';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 import { InnovationSection } from '@/components/home/InnovationSection';
@@ -125,45 +126,33 @@ export default function LandingPage() {
           className="w-full xl:w-2/3 flex flex-col items-center xl:items-start text-center xl:text-left justify-center mt-4 md:mt-8 relative top-0"
         >
           {/* Eyebrow / Overline */}
-          <span className="text-blue-400 text-xs md:text-sm tracking-[0.2em] uppercase font-semibold mb-3 block">
+          <span className="text-blue-400 text-xs md:text-sm tracking-[0.2em] uppercase font-medium mb-3 block">
             Autonomous Infrastructure
           </span>
 
           {/* Main Title (H1) */}
-          <h1 className="text-3xl md:text-5xl xl:text-6xl font-bold tracking-tight text-white mb-4 leading-[1.08]">
-            Welcome to the <br className="hidden xl:block" />
-            new era of autonomy <br className="hidden xl:block" />
-            with{' '}
-            <span className="bg-gradient-to-r from-blue-400 via-blue-300 to-blue-500 bg-clip-text text-transparent font-bold">
+          <h1 className="text-2xl md:text-4xl xl:text-5xl font-light tracking-tight text-white mb-4 leading-[1.15]">
+            Welcome to the new era <br className="hidden md:block" />
+            of autonomy with{' '}
+            <span className="bg-gradient-to-r from-blue-400 via-blue-300 to-blue-500 bg-clip-text text-transparent font-light">
               Roosevelt
             </span>
           </h1>
 
-          {/* Subtitle */}
-          <p className="text-base md:text-xl font-medium text-white/90 tracking-tight leading-snug mb-2 max-w-xl">
-            Stop configuring processes and start delegating results.
-          </p>
-
-          {/* Body Description */}
-          <p className="text-sm md:text-base text-zinc-400 font-normal leading-relaxed max-w-lg">
-            Roosevelt is the intelligent agent that manages your personal and business infrastructure from end to end.
+          {/* Unified Description */}
+          <p className="text-sm md:text-base text-zinc-300 font-light leading-relaxed max-w-xl">
+            Stop configuring processes and start delegating results. Roosevelt is the intelligent agent that manages your personal and business infrastructure from end to end.
           </p>
         </motion.div>
 
-        {/* Right Column: Styled Call to Action Button */}
+        {/* Right Column: Interactive Roosevelt AI Bar Preview (Sample) */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
-          className="w-full xl:w-1/3 flex xl:justify-end justify-center xl:mr-[37px] xl:mb-[37px] mb-4 shrink-0 animate-in fade-in duration-700"
+          className="w-full xl:w-1/2 flex xl:justify-end justify-center xl:mr-4 xl:mb-2 mb-4 shrink-0"
         >
-          <Link href="/login?register=true">
-            <button 
-              className="px-8 py-2.5 text-base font-normal bg-transparent text-white border border-white/30 rounded-full hover:scale-105 hover:bg-white/5 transition-all shadow-lg"
-            >
-              Connect Personal Assistant
-            </button>
-          </Link>
+          <HeroAskRooseveltBar />
         </motion.div>
 
       </div>

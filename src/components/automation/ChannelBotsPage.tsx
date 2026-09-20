@@ -48,7 +48,7 @@ export function ChannelBotsPage({ channel }: ChannelBotsPageProps) {
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [integrationConnected, setIntegrationConnected] = useState(false);
 
-  const editorBase = `/nucleo/${entityId}/cto/automation/bots/${channel.slug}`;
+  const editorBase = `/home/${entityId}/cto/automation/bots/${channel.slug}`;
   const Icon = channel.Icon;
 
   useEffect(() => {
@@ -252,7 +252,7 @@ export function ChannelBotsPage({ channel }: ChannelBotsPageProps) {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => router.push(`/nucleo/${entityId}/cto/automation`)}
+            onClick={() => router.push(`/home/${entityId}/cto/automation`)}
             className="h-8 w-8"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -291,7 +291,7 @@ export function ChannelBotsPage({ channel }: ChannelBotsPageProps) {
             variant="outline"
             size="sm"
             className="border-amber-500/40 text-amber-200 hover:bg-amber-500/20 shrink-0"
-            onClick={() => router.push(`/nucleo/${entityId}/cto/integrations`)}
+            onClick={() => router.push(`/home/${entityId}/cto/integrations`)}
           >
             <ExternalLink className="mr-1.5 h-3 w-3" /> Ir a Integraciones
           </Button>

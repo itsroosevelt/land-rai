@@ -49,7 +49,7 @@ export default function ProfileViewPage() {
             {/* Nav Superior */}
             <div className="fixed top-0 left-0 right-0 h-16 z-50 px-12 flex items-center justify-between border-b border-white/[0.03] backdrop-blur-3xl bg-black/40">
                 <button 
-                    onClick={() => router.push('/nucleo')}
+                    onClick={() => router.push('/home')}
                     className="flex items-center gap-4 text-neutral-500 hover:text-white transition-all group scale-90 origin-left"
                 >
                     <ArrowLeft className="w-4 h-4" />

@@ -65,15 +65,28 @@ const nextConfig = {
       { source: '/cso/meet-agents', destination: '/suite/cto/meet-agents', permanent: true },
       { source: '/cso/orchestrator', destination: '/suite/cto/orchestrator', permanent: true },
       { source: '/cso/conexion', destination: '/suite/cto/integrations', permanent: true },
+      // Nucleo to Home migration
+      { source: '/nucleo', destination: '/home', permanent: false },
+      { source: '/nucleo/:path*', destination: '/home/:path*', permanent: false },
       // WhatsApp bots route rename
       {
+        source: '/home/:entityId/cto/automation/chatbots',
+        destination: '/home/:entityId/cto/automation/whatsappbots',
+        permanent: true,
+      },
+      {
+        source: '/home/:entityId/cto/automation/chatbots/:id',
+        destination: '/home/:entityId/cto/automation/whatsappbots/:id',
+        permanent: true,
+      },
+      {
         source: '/nucleo/:entityId/cto/automation/chatbots',
-        destination: '/nucleo/:entityId/cto/automation/whatsappbots',
+        destination: '/home/:entityId/cto/automation/whatsappbots',
         permanent: true,
       },
       {
         source: '/nucleo/:entityId/cto/automation/chatbots/:id',
-        destination: '/nucleo/:entityId/cto/automation/whatsappbots/:id',
+        destination: '/home/:entityId/cto/automation/whatsappbots/:id',
         permanent: true,
       },
     ];

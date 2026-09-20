@@ -36,7 +36,7 @@ export const OrbNode = ({ href, onClick, icon: Icon, title, subtitle, color, isC
     const handleBlockedClick = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        toast.info(`${title} (${subtitle})`, {
+        toast.info(title, {
             description: 'This suite will be available soon in the enterprise environment.',
             duration: 3000,
         });
@@ -47,34 +47,29 @@ export const OrbNode = ({ href, onClick, icon: Icon, title, subtitle, color, isC
             <motion.div
                 className="flex items-center justify-center transition-all duration-500 relative"
                 whileHover={!isComingSoon ? {
-                    filter: `drop-shadow(0 0 35px ${shadowColors[color] || 'rgba(255,255,255,0.4)'})`,
+                    filter: `drop-shadow(0 0 28px ${shadowColors[color] || 'rgba(255,255,255,0.4)'})`,
                     scale: 1.12
                 } : undefined}
             >
-                <div className="relative flex items-center justify-center">
-                    <Icon className={`w-10 h-10 transition-colors duration-500 ${
+                <div className="relative flex items-center justify-center p-1">
+                    <Icon className={`w-7 h-7 transition-colors duration-500 ${
                         isComingSoon
-                            ? 'text-white/35 group-hover:text-white/50'
+                            ? 'text-white/30 group-hover:text-white/45'
                             : 'text-white/70 group-hover:text-white'
                     }`} />
 
                     {isComingSoon && (
-                        <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 text-[8px] font-medium tracking-[0.25em] uppercase text-neutral-400 whitespace-nowrap pointer-events-none select-none z-20">
-                            coming soon
-                        </span>
+                        <div className="absolute -top-1 -right-1.5 flex items-center justify-center text-white/40 group-hover:text-white/70 transition-colors pointer-events-none select-none z-20">
+                            <Lock className="w-3 h-3" />
+                        </div>
                     )}
                 </div>
             </motion.div>
             <div className="text-center transition-all duration-500">
-                <p className={`text-sm font-bold uppercase tracking-tight whitespace-nowrap transition-opacity duration-300 ${
-                    isComingSoon ? 'text-white/50' : 'text-white opacity-70 group-hover:opacity-100'
+                <p className={`text-xs font-light uppercase tracking-widest whitespace-nowrap transition-opacity duration-300 ${
+                    isComingSoon ? 'text-white/40' : 'text-white opacity-80 group-hover:opacity-100'
                 }`}>
                     {title}
-                </p>
-                <p className={`text-[9px] uppercase tracking-[0.2em] transition-opacity duration-300 ${
-                    isComingSoon ? 'text-neutral-600' : 'text-neutral-500 opacity-50 group-hover:opacity-100'
-                }`}>
-                    {subtitle}
                 </p>
             </div>
         </>
@@ -86,8 +81,8 @@ export const OrbNode = ({ href, onClick, icon: Icon, title, subtitle, color, isC
                 role="button"
                 tabIndex={0}
                 onClick={handleBlockedClick}
-                className="group flex flex-col items-center gap-2 cursor-not-allowed select-none outline-none"
-                title={`${title}: Coming Soon`}
+                className="group flex flex-col items-center gap-1.5 cursor-not-allowed select-none outline-none"
+                title={`${title}: Próximamente`}
             >
                 {InnerContent}
             </div>
@@ -96,14 +91,14 @@ export const OrbNode = ({ href, onClick, icon: Icon, title, subtitle, color, isC
 
     if (finalHref && finalHref !== '#') {
         return (
-            <Link href={finalHref} className="group flex flex-col items-center gap-2">
+            <Link href={finalHref} className="group flex flex-col items-center gap-1.5">
                 {InnerContent}
             </Link>
         );
     }
 
     return (
-        <button onClick={onClick} className="group flex flex-col items-center gap-2 cursor-pointer outline-none bg-transparent border-none p-0 inline-flex">
+        <button onClick={onClick} className="group flex flex-col items-center gap-1.5 cursor-pointer outline-none bg-transparent border-none p-0 inline-flex">
             {InnerContent}
         </button>
     );

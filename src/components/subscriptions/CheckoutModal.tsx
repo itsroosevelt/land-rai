@@ -69,7 +69,7 @@ export default function CheckoutModal({ plan, onClose, entityId: propEntityId, r
     if (redirectUrl) {
       router.push(redirectUrl);
     } else {
-      router.push('/nucleo');
+      router.push('/home');
     }
   };
 

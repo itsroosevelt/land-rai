@@ -29,7 +29,7 @@ export const WindowNode = ({ data, xPos, yPos }: NodeProps) => {
             const pathParts = window.location.pathname.split('/');
             const entityId = pathParts[2];
             const role = new URLSearchParams(window.location.search).get('role') || 'ceo';
-            const workspaceUrl = `/nucleo/${entityId}/workspace?role=${role}`;
+            const workspaceUrl = `/home/${entityId}/workspace?role=${role}`;
             window.history.replaceState(null, '', workspaceUrl);
         }
     }, [isMaximized, data.url, mounted]);
@@ -40,7 +40,7 @@ export const WindowNode = ({ data, xPos, yPos }: NodeProps) => {
             const pathParts = window.location.pathname.split('/');
             const entityId = pathParts[2];
             const role = new URLSearchParams(window.location.search).get('role') || 'ceo';
-            const workspaceUrl = `/nucleo/${entityId}/workspace?role=${role}`;
+            const workspaceUrl = `/home/${entityId}/workspace?role=${role}`;
             window.history.replaceState(null, '', workspaceUrl);
         }
         setTimeout(() => {
@@ -111,7 +111,7 @@ export const WindowNode = ({ data, xPos, yPos }: NodeProps) => {
 
                 {/* Centro: Título de la lámina */}
                 <div className="flex items-center justify-center flex-1">
-                    <span className="text-white/95 font-medium tracking-wide text-xs whitespace-nowrap uppercase tracking-[0.15em]">
+                    <span className="text-white/90 font-light tracking-[0.2em] text-xs whitespace-nowrap uppercase">
                         {data.label ? data.label.charAt(0).toUpperCase() + data.label.slice(1).toLowerCase() : ''}
                     </span>
                 </div>

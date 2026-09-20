@@ -88,7 +88,7 @@ export function DepartmentSidebar({ items, title, colorClass = "bg-blue-600" }: 
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <Link
-                                    href={`/nucleo/${activeEntityRoute || ''}`}
+                                    href={`/home/${activeEntityRoute || ''}`}
                                     className={`group flex items-center justify-center ${isCollapsed ? 'p-2' : 'px-4 py-2'} mx-auto rounded-full bg-neutral-900 border border-neutral-800 hover:border-neutral-700 hover:bg-neutral-800 text-neutral-400 hover:text-white transition-all duration-200`}
                                 >
                                     <ChevronLeft className={`w-4 h-4 ${isCollapsed ? '' : 'mr-2 group-hover:-translate-x-0.5 transition-transform'}`} />

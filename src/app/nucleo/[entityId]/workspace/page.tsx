@@ -33,6 +33,7 @@ import { ensureEntityMoldUpToDate } from '@/lib/mold/entityMold';
 import { MOLD_WORKSPACE_ROUTES } from '@/lib/mold/routes';
 import { toast } from 'sonner';
 import { isEnterpriseSuiteActive } from '../constants';
+import { WorkspaceRightFloatingBar } from '@/components/nucleo/WorkspaceRightFloatingBar';
 
 // --- CONSTANTS ---
 const PIXELS_PER_INCH = 96;
@@ -186,13 +187,13 @@ const AxesNode = ({ data }: NodeProps) => {
                     return (
                         <div key={`tick-x-${i}`} style={{ left: `calc(50% + ${pos}px)`, top: '50%' }} className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
                             <div className={cn("h-2 w-[1px]", isLight ? "bg-black/40" : "bg-white/40")} />
-                            <span className={cn("mt-2 text-[8px] font-mono", isLight ? "text-black/50 font-semibold" : "text-white/20")}>{i - 50}"</span>
+                            <span className={cn("mt-2 text-[8px] font-light", isLight ? "text-black/50" : "text-white/20")}>{i - 50}"</span>
                         </div>
                     );
                 })}
             </div>
-            <div className={cn("absolute top-[10%] left-1/2 -translate-x-1/2 text-xl font-mono uppercase tracking-[1em]", isLight ? "text-black/30 font-bold" : "text-white/10")}>Y+ NORTH</div>
-            <div className={cn("absolute bottom-[10%] left-1/2 -translate-x-1/2 text-xl font-mono uppercase tracking-[1em]", isLight ? "text-black/30 font-bold" : "text-white/10")}>Y- SOUTH</div>
+            <div className={cn("absolute top-[10%] left-1/2 -translate-x-1/2 text-xl font-light uppercase tracking-[1em]", isLight ? "text-black/30" : "text-white/10")}>Y+ NORTH</div>
+            <div className={cn("absolute bottom-[10%] left-1/2 -translate-x-1/2 text-xl font-light uppercase tracking-[1em]", isLight ? "text-black/30" : "text-white/10")}>Y- SOUTH</div>
             <div className={cn("absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full blur-[2px] z-[2]", isLight ? "bg-black/50" : "bg-white/40")} />
         </div>
     );
@@ -280,14 +281,14 @@ const TitleNode = ({ data }: NodeProps) => {
                                             isLocked
                                                 ? "opacity-40 cursor-not-allowed"
                                                 : r.id === data.activeRole
-                                                    ? (data?.isLight ? "bg-black/10 text-black font-semibold" : "bg-white/10 text-white font-semibold")
+                                                    ? (data?.isLight ? "bg-black/10 text-black font-light" : "bg-white/10 text-white font-light")
                                                     : (data?.isLight ? "text-black/60 hover:text-black hover:bg-black/5" : "text-white/60 hover:text-white hover:bg-white/5")
                                         )}
                                     >
                                         <div className="flex items-center gap-4">
                                             <span
                                                 className={cn(
-                                                    "shrink-0 w-14 text-xs font-bold tracking-wider tabular-nums",
+                                                    "shrink-0 w-14 text-xs font-light tracking-wider tabular-nums",
                                                     r.id === data.activeRole 
                                                         ? (data?.isLight ? "text-black" : "text-white") 
                                                         : (data?.isLight ? "text-black/40" : "text-white/40")
@@ -295,7 +296,7 @@ const TitleNode = ({ data }: NodeProps) => {
                                             >
                                                 {r.acronym}
                                             </span>
-                                            <span className="whitespace-nowrap">{r.title}</span>
+                                            <span className="whitespace-nowrap font-light tracking-tight">{r.title}</span>
                                         </div>
                                         {isLocked && (
                                             <span className="text-[10px] tracking-widest uppercase text-neutral-500 font-light">
@@ -392,7 +393,7 @@ const LayerNode = ({ data }: NodeProps) => {
                             />
                         )}
                         <span className={cn(
-                            "whitespace-nowrap text-left text-2xl sm:text-3xl font-normal tracking-wide transition-all duration-300",
+                            "whitespace-nowrap text-left text-2xl sm:text-3xl font-light tracking-tight transition-all duration-300",
                             data.isLight 
                                 ? (isHovered ? "text-black drop-shadow-[0_0_10px_rgba(0,0,0,0.15)]" : "text-slate-900")
                                 : (isHovered ? "text-white drop-shadow-[0_0_25px_rgba(255,255,255,0.8)]" : "text-white/90 drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]")
@@ -413,7 +414,7 @@ const ActionNode = ({ data }: NodeProps) => (
             whileTap={{ scale: 0.95 }}
             className="transition-all"
         >
-            <span className="text-sm font-normal text-white/70 group-hover:text-white transition-colors">
+            <span className="text-sm font-light tracking-tight text-white/70 group-hover:text-white transition-colors">
                 {data.label}
             </span>
         </motion.div>
@@ -779,70 +780,21 @@ function WorkspaceContent() {
     return (
         <div className={cn("w-full h-screen flex flex-col relative overflow-hidden transition-colors duration-500", canvasTheme === 'light' ? "bg-white" : "bg-black")}>
             
-            {/* Controls area in bottom-right corner */}
-            <div className="fixed bottom-6 right-6 z-[3000] flex items-center gap-3 pointer-events-auto">
-                {/* Main Controls Bar */}
-                <div className={cn(
-                    "flex items-center gap-3 backdrop-blur-3xl border p-2 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] transition-colors duration-300",
-                    canvasTheme === 'light' 
-                        ? "bg-white/90 border-black/10 text-black shadow-slate-300/50" 
-                        : "bg-[#0D0F14]/90 border-white/10 text-white"
-                )}>
-                    {/* Grid Type Controls */}
-                    <div className={cn("flex gap-1 border-r pr-2 mr-1", canvasTheme === 'light' ? "border-black/10" : "border-white/10")}>
-                        <button onClick={() => setGridType('none')} className={cn("p-2 rounded-xl transition-all", gridType === 'none' ? (canvasTheme === 'light' ? "bg-black/10 text-black" : "bg-white/10 text-white") : (canvasTheme === 'light' ? "text-black/40 hover:text-black" : "text-white/40 hover:text-white"))} title="Sin Cuadrícula"><Square className="w-4 h-4" /></button>
-                        <button onClick={() => setGridType('dots')} className={cn("p-2 rounded-xl transition-all", gridType === 'dots' ? (canvasTheme === 'light' ? "bg-black/10 text-black" : "bg-white/10 text-white") : (canvasTheme === 'light' ? "text-black/40 hover:text-black" : "text-white/40 hover:text-white"))} title="Puntos"><div className="w-4 h-4 flex items-center justify-center font-black text-[10px]">.</div></button>
-                        <button onClick={() => setGridType('lines')} className={cn("p-2 rounded-xl transition-all", gridType === 'lines' ? (canvasTheme === 'light' ? "bg-black/10 text-black" : "bg-white/10 text-white") : (canvasTheme === 'light' ? "text-black/40 hover:text-black" : "text-white/40 hover:text-white"))} title="Líneas"><Grid3X3 className="w-4 h-4" /></button>
-                    </div>
-                    {/* Zoom / View Controls */}
-                    <div className={cn("flex gap-1 border-r pr-2 mr-1", canvasTheme === 'light' ? "border-black/10" : "border-white/10")}>
-                        <button onClick={() => zoomIn()} className={cn("p-2 rounded-xl transition-all", canvasTheme === 'light' ? "text-black/40 hover:text-black hover:bg-black/5" : "text-white/40 hover:text-white hover:bg-white/10")} title="Acercar"><ZoomIn className="w-4 h-4" /></button>
-                        <button onClick={() => zoomOut()} className={cn("p-2 rounded-xl transition-all", canvasTheme === 'light' ? "text-black/40 hover:text-black hover:bg-black/5" : "text-white/40 hover:text-white hover:bg-white/10")} title="Alejar"><ZoomOut className="w-4 h-4" /></button>
-                        <button onClick={() => setCenter(0, 0, { zoom: 1, duration: 800 })} className={cn("p-2 rounded-xl transition-all", canvasTheme === 'light' ? "text-black/40 hover:text-black hover:bg-black/5" : "text-white/40 hover:text-white hover:bg-white/10")} title="Ir al Origen (0,0)"><Navigation className="w-4 h-4 -rotate-45" /></button>
-                        <button onClick={() => fitView({ duration: 800 })} className={cn("p-2 rounded-xl transition-all", canvasTheme === 'light' ? "text-black/40 hover:text-black hover:bg-black/5" : "text-white/40 hover:text-white hover:bg-white/10")} title="Ajustar Vista"><Maximize2 className="w-4 h-4" /></button>
-                    </div>
-                    {/* Theme Switcher (Sun / Moon) & Cartesian Plane Toggle */}
-                    <div className="flex gap-1">
-                        <button 
-                            onClick={() => setShowCartesianPlane(prev => !prev)} 
-                            className={cn(
-                                "p-2 rounded-xl transition-all", 
-                                showCartesianPlane
-                                    ? (canvasTheme === 'light' ? "bg-black/10 text-black font-semibold" : "bg-white/10 text-white font-semibold")
-                                    : (canvasTheme === 'light' ? "text-black/40 hover:text-black hover:bg-black/5" : "text-white/40 hover:text-white hover:bg-white/10")
-                            )} 
-                            title={showCartesianPlane ? "Ocultar Plano Cartesiano" : "Mostrar Plano Cartesiano"}
-                        >
-                            <Compass className="w-4 h-4" />
-                        </button>
-                        <button 
-                            onClick={() => setCanvasTheme(prev => prev === 'dark' ? 'light' : 'dark')} 
-                            className={cn(
-                                "p-2 rounded-xl transition-all", 
-                                canvasTheme === 'light' 
-                                    ? "text-black/40 hover:text-black hover:bg-black/5" 
-                                    : "text-white/40 hover:text-white hover:bg-white/10"
-                            )} 
-                            title={canvasTheme === 'dark' ? "Cambiar a modo Claro (Sol)" : "Cambiar a modo Oscuro (Luna)"}
-                        >
-                            {canvasTheme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-                        </button>
-                    </div>
-                </div>
-
-                {/* Botón único: Círculo azul en Gradiente Eléctrico */}
-                <button
-                    onClick={() => {
-                        setIsMicActive(!isMicActive);
-                        toast.info(!isMicActive ? "Modo de voz activado" : "Modo de voz desactivado");
-                    }}
-                    className={cn(
-                        "w-14 h-14 rounded-full shadow-[0_0_25px_rgba(29,78,216,0.6)] transition-all duration-300 bg-[linear-gradient(90deg,#387BFF_0%,#0038FF_50%,#1E3EAF_100%)] hover:scale-105 hover:brightness-110 active:scale-95 shrink-0 border-0 outline-none cursor-pointer",
-                        isMicActive && "animate-pulse scale-105 ring-2 ring-blue-500 shadow-[0_0_30px_rgba(37,99,235,0.8)]"
-                    )}
-                    title={isMicActive ? "Desactivar modo de voz" : "Activar modo de voz"}
-                />
-            </div>
+            {/* Right Edge Floating Dock for Workspace Canvas Controls */}
+            <WorkspaceRightFloatingBar
+                gridType={gridType}
+                setGridType={setGridType}
+                canvasTheme={canvasTheme}
+                setCanvasTheme={setCanvasTheme}
+                showCartesianPlane={showCartesianPlane}
+                setShowCartesianPlane={setShowCartesianPlane}
+                zoomIn={zoomIn}
+                zoomOut={zoomOut}
+                setCenter={setCenter}
+                fitView={fitView}
+                isMicActive={isMicActive}
+                setIsMicActive={setIsMicActive}
+            />
 
             <div className="flex-1 w-full h-full relative z-0">
                 <ReactFlow 

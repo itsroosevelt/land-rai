@@ -78,7 +78,7 @@ export function InfoSection({
                             initial={{ opacity: 0, y: 20 }}
                             whileInView={{ opacity: 1, y: 0 }}
                             viewport={{ once: true }}
-                            className="text-3xl md:text-4xl lg:text-5xl font-bold text-white tracking-tight leading-[1.1]"
+                            className="text-3xl md:text-4xl lg:text-5xl font-light text-white tracking-tight leading-[1.1]"
                         >
                             {title}
                         </motion.h2>
@@ -87,7 +87,7 @@ export function InfoSection({
                             whileInView={{ opacity: 1, y: 0 }}
                             viewport={{ once: true }}
                             transition={{ delay: 0.1 }}
-                            className="text-base md:text-lg text-zinc-300 font-normal leading-relaxed max-w-xl"
+                            className="text-base md:text-lg text-zinc-300 font-light leading-relaxed max-w-xl"
                         >
                             {subtitle}
                         </motion.p>
@@ -97,7 +97,7 @@ export function InfoSection({
                                 whileInView={{ opacity: 1, y: 0 }}
                                 viewport={{ once: true }}
                                 transition={{ delay: 0.15 }}
-                                className="text-sm md:text-base text-zinc-400 font-normal leading-relaxed max-w-lg"
+                                className="text-sm md:text-base text-zinc-400 font-light leading-relaxed max-w-lg"
                             >
                                 {description}
                             </motion.p>
@@ -120,7 +120,7 @@ export function InfoSection({
                                         <div className="w-6 h-6 rounded-md bg-white/5 border border-white/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
                                             <Icon className="w-3.5 h-3.5 text-zinc-200" />
                                         </div>
-                                        <h3 className="text-sm md:text-base font-semibold text-white tracking-tight">{item.title}</h3>
+                                        <h3 className="text-sm md:text-base font-normal text-white tracking-tight">{item.title}</h3>
                                     </div>
                                     <p className="text-zinc-400 leading-relaxed text-xs md:text-sm pr-2 max-w-md">
                                         {item.desc}

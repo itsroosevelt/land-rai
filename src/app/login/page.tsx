@@ -109,7 +109,7 @@ function LoginContent() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        router.push('/nucleo');
+        router.push('/home');
       }
     });
     return () => unsubscribe();
@@ -125,7 +125,7 @@ function LoginContent() {
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
-      router.push('/nucleo');
+      router.push('/home');
     } catch (error: any) {
       toast.error('Error en autenticación: ' + error.message);
     } finally {
@@ -145,7 +145,7 @@ function LoginContent() {
         });
       }
       toast.success(`Iniciaste sesión con ${providerName}`);
-      router.push('/nucleo');
+      router.push('/home');
     } catch (error: any) {
       toast.error(`Error con ${providerName}: ` + error.message);
     } finally {

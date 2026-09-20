@@ -28,10 +28,10 @@ export function PillarsSection() {
                 className="w-full max-w-[1800px] mx-auto"
             >
                 <div className="text-center mb-24 md:mb-32 max-w-3xl mx-auto">
-                    <h2 className="text-3xl lg:text-5xl font-medium font-sans text-white mb-6 tracking-tight">
+                    <h2 className="text-3xl lg:text-5xl font-light font-sans text-white mb-6 tracking-tight">
                         Our Vision for the Americas
                     </h2>
-                    <p className="text-zinc-400 text-lg leading-relaxed">
+                    <p className="text-zinc-400 text-lg font-light leading-relaxed">
                         We are building a future defined by AI, advanced robotics, and decentralized utility. Our mission is to dismantle the barriers that have kept economies fragmented for decades. We are the digital bridge for a hemisphere that creates, innovates, and leads.
                     </p>
                 </div>
@@ -42,8 +42,8 @@ export function PillarsSection() {
                             <div className="w-16 h-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-6">
                                 {i === 0 ? <Globe className="text-blue-400" /> : i === 1 ? <Cpu className="text-emerald-400" /> : <Zap className="text-yellow-400" />}
                             </div>
-                            <h3 className="text-2xl font-medium font-sans text-white mb-4">{col.title}</h3>
-                            <p className="text-zinc-400 leading-relaxed text-sm max-w-xs mx-auto font-sans">
+                            <h3 className="text-2xl font-light font-sans text-white mb-4">{col.title}</h3>
+                            <p className="text-zinc-400 leading-relaxed text-sm max-w-xs mx-auto font-sans font-light">
                                 {col.desc}
                             </p>
                         </div>

@@ -118,21 +118,28 @@
 
   body {
     font-family: 'Outfit', sans-serif;
+    letter-spacing: -0.025em;
+    font-weight: 300;
     @apply bg-background text-foreground;
   }
 
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Outfit', sans-serif;
     letter-spacing: -0.025em;
-    font-weight: 700;
+    font-weight: 300;
   }
 
   b, strong {
-    font-weight: 700;
+    font-weight: 500;
+  }
+
+  code, kbd, samp, pre {
+    font-family: 'Outfit', sans-serif;
   }
 
   button, input, optgroup, select, textarea {
     font-family: inherit;
+    letter-spacing: inherit;
   }
 }
 
