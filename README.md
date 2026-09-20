@@ -4,14 +4,14 @@ Plataforma SaaS Multi-Tenant impulsada por Inteligencia Artificial diseñada com
 
 ---
 
-## 📖 Documentación del Proyecto
+## 📖 Documentación Organizada por Áreas
 
 Toda la documentación técnica y operativa se encuentra organizada en la carpeta **[`docs/`](docs/)**:
 
-- **[Arquitectura del Sistema](docs/ARQUITECTURA.md)**: Estructura de la aplicación, modelo multi-tenant por entidades y roles ejecutivos (CEO, COO, CMO, CTO).
-- **[Variables de Entorno](docs/VARIABLES_ENTORNO.md)**: Lista completa y detallada de variables necesarias para desarrollo local y producción en Vercel.
-- **[Integraciones y APIs](docs/INTEGRACIONES_Y_APIS.md)**: Configuración de WhatsApp Cloud API, Google/Gmail OAuth 2.0, Stripe y Solana Web3.
-- **[Despliegue y Mantenimiento](docs/DESPLIEGUE_Y_MANTENIMIENTO.md)**: Guía paso a paso para desplegar en Vercel y Firebase Cloud Functions.
+* **[🏛️ Arquitectura del Sistema](docs/arquitectura/README.md)**: Estructura general, modelo multi-tenant por entidades y roles ejecutivos (CEO, COO, CMO, CTO).
+* **[⚙️ Configuración y Entorno](docs/configuracion/README.md)**: Diccionario exhaustivo de variables de entorno y dominios autorizados.
+* **[🔌 Centro de Integraciones](docs/integraciones/README.md)**: WhatsApp Cloud API, Google/Gmail OAuth 2.0, Stripe y Solana Web3.
+* **[🚀 Despliegue y DevOps](docs/despliegue/README.md)**: Despliegue en Vercel, Firebase Cloud Functions y mantenimiento.
 
 ---
 
