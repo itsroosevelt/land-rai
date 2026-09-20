@@ -31,6 +31,7 @@ import {
     findGhostEntities,
     filterRealEntities,
 } from '@/lib/entitySlug';
+import { AskRooseveltBar } from '@/components/nucleo/AskRooseveltBar';
 
 
 interface Particle {
@@ -918,6 +919,9 @@ export default function NucleoPage() {
                     </Modal>
                 )}
             </AnimatePresence>
+
+            {/* Roosevelt AI Floating Assistant Bar */}
+            <AskRooseveltBar />
         </div>
     );
 }
