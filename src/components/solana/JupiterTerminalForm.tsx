@@ -3,13 +3,15 @@
 import { useEffect, useRef } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 
+import { SUBSCRIPTION_RPC_URL } from '@/lib/subscriptions/payment-config';
+
 export default function JupiterTerminalForm() {
   const { wallet } = useWallet();
   const jupiterRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const mintDelToken = process.env.NEXT_PUBLIC_CUSTOM_TOKEN_MINT;
-    const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    const rpcUrl = SUBSCRIPTION_RPC_URL;
 
     if (typeof window !== 'undefined' && 'Jupiter' in window && jupiterRef.current && mintDelToken) {
       // @ts-ignore

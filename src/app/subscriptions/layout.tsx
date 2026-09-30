@@ -1,13 +1,10 @@
-import AppWalletProvider from "@/components/solana/AppWalletProvider";
+export const dynamic = 'force-dynamic';
 
 export default function SubscriptionsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <AppWalletProvider>
-      {children}
-    </AppWalletProvider>
-  );
+  return <>{children}</>;
 }
+

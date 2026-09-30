@@ -6,19 +6,15 @@ import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import '@solana/wallet-adapter-react-ui/styles.css';
 import { PhantomWalletAdapter } from '@solana/wallet-adapter-phantom';
-import { clusterApiUrl } from '@solana/web3.js';
+import { SUBSCRIPTION_RPC_URL } from '@/lib/subscriptions/payment-config';
 
 export default function AppWalletProvider({ children }: { children: React.ReactNode }) {
-  const network = WalletAdapterNetwork.Mainnet;
-  const endpoint = useMemo(
-    () => process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network),
-    [network]
-  );
+  const endpoint = useMemo(() => SUBSCRIPTION_RPC_URL, []);
   const wallets = useMemo(
     () => [
       new PhantomWalletAdapter(),
     ],
-    [network]
+    []
   );
 
   return (
