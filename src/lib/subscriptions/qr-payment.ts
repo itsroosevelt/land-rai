@@ -42,7 +42,12 @@ interface VerificationResult {
   signature: string;
 }
 
-const connection = new Connection(SUBSCRIPTION_RPC_URL, 'confirmed');
+function getSolanaConnection() {
+  const rpcUrl = SUBSCRIPTION_RPC_URL && SUBSCRIPTION_RPC_URL.startsWith('http')
+    ? SUBSCRIPTION_RPC_URL
+    : 'https://api.mainnet-beta.solana.com';
+  return new Connection(rpcUrl, 'confirmed');
+}
 
 function getPaymentRequestDocRef(userId: string, entityId: string, requestId: string) {
   return db.doc(`${getSubscriptionPaymentRequestsCollectionPath(userId, entityId)}/${requestId}`);
@@ -137,6 +142,7 @@ function verifySplTransfer(transaction: ParsedTransactionWithMeta, order: Subscr
 }
 
 export async function findMatchingPayment(order: SubscriptionPaymentOrder): Promise<VerificationResult | null> {
+  const connection = getSolanaConnection();
   const signatures = await connection.getSignaturesForAddress(new PublicKey(order.reference), {
     limit: 10,
   });

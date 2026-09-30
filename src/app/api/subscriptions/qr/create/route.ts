@@ -15,6 +15,8 @@ import {
 } from '@/lib/subscriptions/upgrade-pricing-server';
 import { PLAN_CATALOG_USD, PLAN_CATALOG_ANNUAL_USD } from '@/lib/subscriptions/upgrade-pricing';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     const {
