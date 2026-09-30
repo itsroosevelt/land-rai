@@ -45,7 +45,12 @@ interface PaymentRequestState {
   paymentSignature?: string | null;
 }
 
-const connection = new Connection(SUBSCRIPTION_RPC_URL, 'confirmed');
+function getClientSolanaConnection() {
+  const rpcUrl = SUBSCRIPTION_RPC_URL && SUBSCRIPTION_RPC_URL.startsWith('http')
+    ? SUBSCRIPTION_RPC_URL
+    : 'https://api.mainnet-beta.solana.com';
+  return new Connection(rpcUrl, 'confirmed');
+}
 
 function toUiAndRawAmount(value: number, decimals: number) {
   const fixed = value.toFixed(decimals);
@@ -301,7 +306,8 @@ export default function QrTokenPayment({
           return;
         }
 
-        const signatures = await connection.getSignaturesForAddress(new PublicKey(paymentRequest.reference), {
+        const conn = getClientSolanaConnection();
+        const signatures = await conn.getSignaturesForAddress(new PublicKey(paymentRequest.reference), {
           limit: 10,
         });
 
@@ -310,7 +316,7 @@ export default function QrTokenPayment({
             continue;
           }
 
-          const transaction = await connection.getParsedTransaction(signatureInfo.signature, {
+          const transaction = await conn.getParsedTransaction(signatureInfo.signature, {
             commitment: 'confirmed',
             maxSupportedTransactionVersion: 0,
           });
