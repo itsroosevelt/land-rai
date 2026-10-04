@@ -126,13 +126,13 @@ export default function Footer() {
                 { name: "Licenses", href: "#" },
                 { name: "Sitemap", href: "#" },
                 { name: "Cookie Settings", href: "#" },
-                { name: "Your Privacy Choices", href: "#" }
+                { name: "Your Privacy Choices", href: "/data-deletion" }
             ]
         },
         {
             title: "Company",
             links: [
-                { name: "Jobs / Careers", href: "#" },
+                { name: "Jobs / Careers", href: "mailto:careers@itsroosevelt.com" },
                 { name: "Newsroom", href: "#" },
                 { name: "Roosevelt Press Publications", href: "#" },
                 { name: "Contact Sales", href: "mailto:services@byluxor.com" }
@@ -141,7 +141,8 @@ export default function Footer() {
         {
             title: "Support",
             links: [
-                { name: "Get Support", href: "#" },
+                { name: "Get Support", href: "mailto:support@itsroosevelt.com" },
+                { name: "Legal", href: "mailto:legal@itsroosevelt.com" },
                 { name: "Managed Support Plans", href: "#" },
                 { name: "CA Support: +1 888 926 2289", href: "tel:+18889262289" },
                 { name: "Sign In", href: "/login" }
@@ -383,8 +384,9 @@ export default function Footer() {
                     <div className="flex flex-wrap items-center gap-x-8 gap-y-4 text-xs font-sans text-white/40">
                         <Link href="#" className="hover:text-white transition-colors">About</Link>
                         <Link href="#" className="hover:text-white transition-colors">Ecosystem</Link>
-                        <Link href="#" className="hover:text-white transition-colors">Privacy</Link>
-                        <Link href="#" className="hover:text-white transition-colors">Terms</Link>
+                        <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
+                        <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
+                        <Link href="/data-deletion" className="hover:text-white transition-colors">Data Deletion</Link>
                         <span className="md:ml-4 flex items-center gap-1">
                             © 2026 Roosevelt made with love <Heart className="w-3 h-3 text-red-500 fill-current" />
                         </span>
