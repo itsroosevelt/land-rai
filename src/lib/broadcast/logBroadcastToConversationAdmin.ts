@@ -6,7 +6,7 @@ import {
     syncThinCardPreview,
 } from '@/lib/conversations/store';
 import { phoneSearchVariants } from '@/lib/phoneUtils';
-import { isBroadcastTemplatePlaceholder } from '@/app/nucleo/[entityId]/cmo/broadcast/list/lib/resolveBroadcastMessageText';
+import { isBroadcastTemplatePlaceholder } from '@/app/home/[entityId]/cmo/broadcast/list/lib/resolveBroadcastMessageText';
 
 type AdminDb = FirebaseFirestore.Firestore;
 

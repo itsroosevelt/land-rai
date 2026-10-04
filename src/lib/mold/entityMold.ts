@@ -55,7 +55,7 @@ export const ENTITY_MOLD_FEATURES = {
     whatsappBotPhoneBinding: true,
     /** Legacy whatsapp_numbers/primary migrado a general. */
     primarySlotNormalized: true,
-    /** URLs de entidad con slug personalizable (/nucleo/{slug}/...). */
+    /** URLs de entidad con slug personalizable (/home/{slug}/...). */
     entityRouteSlugs: true,
     /** Resolución slug→doc id con índice entity_slugs (Firestore id nunca cambia). */
     entitySlugsIndex: true,
@@ -101,7 +101,7 @@ export const ENTITY_MOLD_FEATURES = {
     nucleoFrostedGlassUI: true,
     /** Tipografía Outfit unificada globalmente en todos los módulos y layouts. */
     globalOutfitFont: true,
-    /** Idioma inglés por defecto automático al acceder a entornos (/nucleo/[entityId]). */
+    /** Idioma inglés por defecto automático al acceder a entornos (/home/[entityId]). */
     environmentEnglishDefault: true,
 } as const;
 

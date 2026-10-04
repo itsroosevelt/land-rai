@@ -1,10 +1,10 @@
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Broadcast, BroadcastRecipient } from "@/app/nucleo/[entityId]/cmo/broadcast/list/lib/types";
+import type { Broadcast, BroadcastRecipient } from "@/app/home/[entityId]/cmo/broadcast/list/lib/types";
 import {
     isBroadcastTemplatePlaceholder,
     resolveBroadcastRecipientText,
-} from "@/app/nucleo/[entityId]/cmo/broadcast/list/lib/resolveBroadcastMessageText";
+} from "@/app/home/[entityId]/cmo/broadcast/list/lib/resolveBroadcastMessageText";
 import { registerTemplateBody } from "@/lib/broadcast/templateDisplayCache";
 
 const broadcastCache = new Map<string, Broadcast>();

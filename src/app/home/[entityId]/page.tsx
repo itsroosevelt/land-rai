@@ -136,7 +136,7 @@ export default function SuiteDashboard() {
 
                     {/* 2. Carousel Area - Flexible space */}
                     <div className="relative w-full flex-1 flex items-center justify-center min-h-0">
-                        <Carousel isEnterprise={isEnterprise} />
+                        <Carousel />
                     </div>
 
 

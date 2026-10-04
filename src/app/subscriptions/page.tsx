@@ -443,7 +443,7 @@ function SubscriptionsContent() {
   }, [currentUser, targetEntityId]);
 
   const handleGoToNucleo = () => {
-    router.push('/nucleo');
+    router.push('/home');
   };
 
   const handleVerifyBypass = async (e: React.FormEvent) => {
@@ -468,7 +468,7 @@ function SubscriptionsContent() {
       }
       setIsBypassOpen(false);
       toast.success('Access code validated! Access activated for ' + (targetEntity?.name || 'this environment'));
-      router.push(paramRedirect || '/nucleo');
+      router.push(paramRedirect || '/home');
     } else {
       toast.error('Invalid code. An active subscription is required.');
     }
@@ -553,7 +553,7 @@ function SubscriptionsContent() {
                   </div>
                 </div>
                 <Button
-                  onClick={() => router.push(paramRedirect || '/nucleo')}
+                  onClick={() => router.push(paramRedirect || '/home')}
                   className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-black font-semibold tracking-wider text-xs rounded-full h-9 px-6 transition-all duration-300 shadow-md shadow-emerald-500/20"
                 >
                   {paramRedirect ? 'Enter environment' : 'Go to dashboard'}

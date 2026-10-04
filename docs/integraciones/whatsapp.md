@@ -19,7 +19,7 @@ Firebase Cloud Function (/whatsappWebhook)
 Firestore (`coo/whatsapp/conversations/{id}`)
        │ (Snapshot listener / Socket.IO)
        ▼
-Bandeja Omnichannel de Roosevelt (`/nucleo/[entityId]/coo/whatsapp`)
+Bandeja Omnichannel de Roosevelt (`/home/[entityId]/coo/whatsapp`)
 ```
 
 ---

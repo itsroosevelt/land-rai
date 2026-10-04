@@ -5,9 +5,9 @@ import { useParams, usePathname } from 'next/navigation';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { EntityRouteResolver } from '@/components/EntityRouteResolver';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { AskRooseveltBar } from '@/components/nucleo/AskRooseveltBar';
-import { EntityLeftFloatingBar } from '@/components/nucleo/EntityLeftFloatingBar';
-import { EntityRightFloatingBar } from '@/components/nucleo/EntityRightFloatingBar';
+import { AskRooseveltBar } from '@/components/floating-bars/AskRooseveltBar';
+import { EntityLeftFloatingBar } from '@/components/floating-bars/EntityLeftFloatingBar';
+import { EntityRightFloatingBar } from '@/components/floating-bars/EntityRightFloatingBar';
 
 export default function SuiteLayout({
     children,

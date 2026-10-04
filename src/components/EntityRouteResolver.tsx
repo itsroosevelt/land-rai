@@ -89,8 +89,8 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
           setRouteContext(contextValue);
 
           const currentPath = pathnameRef.current;
-          if (segment !== routeSegment && (currentPath?.startsWith(`/home/${segment}`) || currentPath?.startsWith(`/nucleo/${segment}`))) {
-            const prefix = currentPath.startsWith(`/home/${segment}`) ? `/home/${segment}` : `/nucleo/${segment}`;
+          if (segment !== routeSegment && (currentPath?.startsWith(`/home/${segment}`))) {
+            const prefix = `/home/${segment}`;
             const rest = currentPath.slice(prefix.length);
             router.replace(`/home/${routeSegment}${rest}`);
             return;

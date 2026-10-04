@@ -15,13 +15,6 @@ import {
     Package
 } from 'lucide-react';
 
-export const ENTERPRISE_ACTIVE_SUITES = ['cto', 'cmo', 'coo'] as const;
-
-export const isEnterpriseSuiteActive = (id?: string | null): boolean => {
-    if (!id) return false;
-    return ENTERPRISE_ACTIVE_SUITES.includes(id.toLowerCase() as any);
-};
-
 export const SUITE_NODES = [
     { id: "board", href: "/home/{entity}/workspace?role=board", icon: Landmark, title: "Board", subtitle: "Directors", color: "slate" },
     { id: "ceo", href: "/home/{entity}/workspace?role=ceo", icon: Briefcase, title: "CEO", subtitle: "Executive", color: "blue" },

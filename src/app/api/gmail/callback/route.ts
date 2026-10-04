@@ -140,7 +140,7 @@ export async function GET(req: Request) {
                             window.opener.postMessage('gmail-auth-success', '*');
                             window.close();
                         } else {
-                            window.location.href = '/nucleo/${entityId}/cto/integrations';
+                            window.location.href = '/home/${entityId}/cto/integrations';
                         }
                     </script>
                     <h2 style="color:#4CAF50;">Conexion Exitosa</h2>

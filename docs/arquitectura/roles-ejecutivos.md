@@ -1,11 +1,11 @@
-# 👔 Roles Ejecutivos del Núcleo (`/nucleo/[entityId]/`)
+# 👔 Roles Ejecutivos del Núcleo (`/home/[entityId]/`)
 
 Para organizar las operaciones de cualquier empresa, Roosevelt divide sus funcionalidades en cuatro roles ejecutivos clave:
 
 ---
 
 ### 1. CEO (Chief Executive Officer)
-* **Ruta:** `/nucleo/[entityId]/ceo`
+* **Ruta:** `/home/[entityId]/ceo`
 * **Propósito:** Tablero de comando estratégico y visión macro.
 * **Funciones:**
   - Métricas globales de rendimiento del negocio.
@@ -15,7 +15,7 @@ Para organizar las operaciones de cualquier empresa, Roosevelt divide sus funcio
 ---
 
 ### 2. COO (Chief Operating Officer)
-* **Ruta:** `/nucleo/[entityId]/coo`
+* **Ruta:** `/home/[entityId]/coo`
 * **Propósito:** Operaciones diarias, atención de prospectos y flujo de trabajo.
 * **Módulos:**
   - **Omnichannel (`/coo/omnichannel`):** Bandeja unificada de conversaciones multicanal.
@@ -25,7 +25,7 @@ Para organizar las operaciones de cualquier empresa, Roosevelt divide sus funcio
 ---
 
 ### 3. CMO (Chief Marketing Officer)
-* **Ruta:** `/nucleo/[entityId]/cmo`
+* **Ruta:** `/home/[entityId]/cmo`
 * **Propósito:** Captación, gestión y fidelización de clientes.
 * **Módulos:**
   - **CRM (`/cmo/crm`):** Directorio centralizado de contactos, historial y etiquetas.
@@ -34,7 +34,7 @@ Para organizar las operaciones de cualquier empresa, Roosevelt divide sus funcio
 ---
 
 ### 4. CTO (Chief Technology Officer)
-* **Ruta:** `/nucleo/[entityId]/cto`
+* **Ruta:** `/home/[entityId]/cto`
 * **Propósito:** Infraestructura, integraciones y lógica de automatización.
 * **Módulos:**
   - **Integraciones (`/cto/integrations`):** Centro de control para conectar WhatsApp Cloud API, Gmail, Stripe y Supabase.

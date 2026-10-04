@@ -165,7 +165,7 @@ export async function runBroadcastSendLoop(
                         components: params.length ? [{ type: "body", parameters: params }] : [],
                     };
                     const { resolveBroadcastRecipientText } = await import(
-                        "@/app/nucleo/[entityId]/cmo/broadcast/list/lib/resolveBroadcastMessageText"
+                        "@/app/home/[entityId]/cmo/broadcast/list/lib/resolveBroadcastMessageText"
                     );
                     text = resolveBroadcastRecipientText(
                         { id: broadcastId, ...broadcast, message } as any,
@@ -202,7 +202,7 @@ export async function runBroadcastSendLoop(
 
                 try {
                     const { isBroadcastTemplatePlaceholder } = await import(
-                        "@/app/nucleo/[entityId]/cmo/broadcast/list/lib/resolveBroadcastMessageText"
+                        "@/app/home/[entityId]/cmo/broadcast/list/lib/resolveBroadcastMessageText"
                     );
                     if (text && !isBroadcastTemplatePlaceholder(text)) {
                         const { logBroadcastMessageToConversation } = await import(

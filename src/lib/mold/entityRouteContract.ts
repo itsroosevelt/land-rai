@@ -2,7 +2,7 @@
  * Multi-tenant route contract (molde v13+).
  *
  * - Firestore doc id → permanent tenant id; always use for DB paths.
- * - slug / routeSegment → visual URL only (/nucleo/{slug}/...).
+ * - slug / routeSegment → visual URL only (/home/{slug}/...).
  * - users/{uid}/entity_slugs/{slug} → { entityId } index for resolution.
  */
 export const ENTITY_ROUTE_CONTRACT_VERSION = 1;

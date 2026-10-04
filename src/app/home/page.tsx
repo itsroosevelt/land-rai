@@ -31,9 +31,9 @@ import {
     findGhostEntities,
     filterRealEntities,
 } from '@/lib/entitySlug';
-import { AskRooseveltBar } from '@/components/nucleo/AskRooseveltBar';
-import { LeftFloatingBar } from '@/components/nucleo/LeftFloatingBar';
-import { RightFloatingBar } from '@/components/nucleo/RightFloatingBar';
+import { AskRooseveltBar } from '@/components/floating-bars/AskRooseveltBar';
+import { LeftFloatingBar } from '@/components/floating-bars/LeftFloatingBar';
+import { RightFloatingBar } from '@/components/floating-bars/RightFloatingBar';
 
 
 interface Particle {

@@ -37,7 +37,7 @@ firestore/
 ## 2. Aislamiento y Seguridad de Datos
 
 1. **Contexto Activo de Entidad:**  
-   Cuando un usuario navega por la plataforma (`/nucleo/[entityId]/...`), todas las llamadas a la base de datos se circunscriben estrictamente a la ruta de esa `entityId`.
+   Cuando un usuario navega por la plataforma (`/home/[entityId]/...`), todas las llamadas a la base de datos se circunscriben estrictamente a la ruta de esa `entityId`.
 2. **Reglas de Seguridad (`firestore.rules`):**  
    Se asegura que solo el `userId` autenticado que posee la entidad pueda leer y escribir sus documentos.
 3. **Molds de Entidad:**  

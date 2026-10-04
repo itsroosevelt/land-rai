@@ -5,7 +5,7 @@ import { syncBroadcastCampaignReplies } from "./syncBroadcastRecipientReplies";
 import {
     resolveBroadcastRecipientText,
     isBroadcastTemplatePlaceholder,
-} from "@/app/nucleo/[entityId]/cmo/broadcast/list/lib/resolveBroadcastMessageText";
+} from "@/app/home/[entityId]/cmo/broadcast/list/lib/resolveBroadcastMessageText";
 
 function resolveRecipientText(
     broadcast: Record<string, unknown>,

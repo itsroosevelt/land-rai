@@ -32,8 +32,7 @@ import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { ensureEntityMoldUpToDate } from '@/lib/mold/entityMold';
 import { MOLD_WORKSPACE_ROUTES } from '@/lib/mold/routes';
 import { toast } from 'sonner';
-import { isEnterpriseSuiteActive } from '../constants';
-import { WorkspaceRightFloatingBar } from '@/components/nucleo/WorkspaceRightFloatingBar';
+import { WorkspaceRightFloatingBar } from '@/components/floating-bars/WorkspaceRightFloatingBar';
 
 // --- CONSTANTS ---
 const PIXELS_PER_INCH = 96;
@@ -54,8 +53,8 @@ const themes: Record<string, any> = {
 
 const DEPARTMENTS_DATA: Record<string, { title: string, layers: any[] }> = {
     board: { title: "BOARD OF DIRECTORS", layers: [
-        { id: 'board-treasury', label: 'MultiSig Treasury', path: 'board-treasury', icon: Landmark, theme: 'slate' },
-        { id: 'legal-audit', label: 'Protocol Compliance', path: 'legal-audit', icon: FileCheck, theme: 'slate' },
+        { id: 'treasury', label: 'MultiSig Treasury', path: 'treasury', icon: Landmark, theme: 'slate' },
+        { id: 'audits', label: 'Audits & Risk', path: 'audits', icon: FileCheck, theme: 'slate' },
         { id: 'governance', label: 'Protocol Governance', path: 'governance', icon: Gavel, theme: 'slate' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
     
@@ -83,7 +82,7 @@ const DEPARTMENTS_DATA: Record<string, { title: string, layers: any[] }> = {
         { id: 'team', label: 'Operations Team', path: 'team', icon: Users, theme: 'cyan' },
         { id: 'quality', label: 'Quality Assurance', path: 'quality', icon: Award, theme: 'cyan' },
         { id: 'supply', label: 'Supply Chain', path: 'supply', icon: Truck, theme: 'cyan' },
-        { id: 'whatsapp', label: 'WhatsApp Flows', path: 'whatsapp', icon: Smartphone, theme: 'cyan' }
+        { id: 'whatsapp', label: 'WhatsApp Flows', fullPath: 'cto/automation/whatsappbots', icon: Smartphone, theme: 'cyan' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
     
     cto: { title: "CHIEF TECHNOLOGY OFFICER", layers: [
@@ -128,7 +127,7 @@ const DEPARTMENTS_DATA: Record<string, { title: string, layers: any[] }> = {
     chro: { title: "CHIEF HUMAN RESOURCES OFFICER", layers: [
         { id: 'hris', label: 'HR Registry', path: 'hris', icon: Users, theme: 'purple' },
         { id: 'payroll', label: 'Payroll Engine', path: 'payroll', icon: DollarSign, theme: 'purple' },
-        { id: 'heart', label: 'Performance', path: 'heart', icon: Heart, theme: 'purple' },
+        { id: 'performance', label: 'Performance', path: 'performance', icon: Heart, theme: 'purple' },
         { id: 'recruitment', label: 'Talent Acquisition', path: 'recruitment', icon: UserPlus, theme: 'purple' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
     
@@ -138,27 +137,27 @@ const DEPARTMENTS_DATA: Record<string, { title: string, layers: any[] }> = {
     ].sort((a, b) => a.label.localeCompare(b.label)) },
 
     ciso: { title: "CHIEF INFORMATION SECURITY OFFICER", layers: [
-        { id: 'threats', label: 'Threat Intelligence', path: 'threats', icon: ShieldAlert, theme: 'blue' },
+        { id: 'map', label: 'Threat Intelligence', path: 'map', icon: ShieldAlert, theme: 'blue' },
         { id: 'compliance', label: 'InfoSec Compliance', path: 'compliance', icon: ShieldCheck, theme: 'blue' },
-        { id: 'sec-ops', label: 'Security Ops', path: 'sec-ops', icon: Lock, theme: 'blue' }
+        { id: 'incident', label: 'Incident Response', path: 'incident', icon: Lock, theme: 'blue' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
 
     clo: { title: "CHIEF LEGAL OFFICER", layers: [
         { id: 'contracts', label: 'Contract Lifecycle', path: 'contracts', icon: FileText, theme: 'slate' },
-        { id: 'litigation', label: 'Litigation Center', path: 'litigation', icon: Gavel, theme: 'slate' },
+        { id: 'disputes', label: 'Litigation Center', path: 'disputes', icon: Gavel, theme: 'slate' },
         { id: 'ip', label: 'Intellectual Property', path: 'ip', icon: Lightbulb, theme: 'slate' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
 
     cpo: { title: "CHIEF PRODUCT OFFICER", layers: [
         { id: 'roadmap', label: 'Product Roadmap', path: 'roadmap', icon: Map, theme: 'indigo' },
-        { id: 'discovery', label: 'User Discovery', path: 'discovery', icon: Search, theme: 'indigo' },
+        { id: 'research', label: 'User Discovery', path: 'research', icon: Search, theme: 'indigo' },
         { id: 'design', label: 'Design System', path: 'design', icon: PenTool, theme: 'indigo' }
     ].sort((a, b) => a.label.localeCompare(b.label)) },
 
     cdo: { title: "CHIEF DATA OFFICER", layers: [
         { id: 'governance', label: 'Data Governance', path: 'governance', icon: Database, theme: 'purple' },
         { id: 'bi', label: 'Business Intelligence', path: 'bi', icon: BarChart, theme: 'purple' },
-        { id: 'ml', label: 'Neural Modeling', path: 'ml', icon: Brain, theme: 'purple' }
+        { id: 'neural', label: 'Neural Modeling', path: 'neural', icon: Brain, theme: 'purple' }
     ].sort((a, b) => a.label.localeCompare(b.label)) }
 };
 
@@ -261,28 +260,20 @@ const TitleNode = ({ data }: NodeProps) => {
                                 : "bg-[#0c0d12]/95 border-white/10"
                         )}>
                             {data.roles.map((r: any) => {
-                                const isLocked = r.isComingSoon;
                                 return (
                                     <button
                                         key={r.id}
                                         type="button"
-                                        disabled={isLocked}
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            if (isLocked) {
-                                                toast.info(`${r.title} will be available soon in the enterprise environment.`);
-                                                return;
-                                            }
                                             data.onSelectRole?.(r.id);
                                             setMenuOpen(false);
                                         }}
                                         className={cn(
                                             "w-full text-left px-5 py-3 text-sm rounded-2xl transition-colors flex items-center justify-between gap-4",
-                                            isLocked
-                                                ? "opacity-40 cursor-not-allowed"
-                                                : r.id === data.activeRole
-                                                    ? (data?.isLight ? "bg-black/10 text-black font-light" : "bg-white/10 text-white font-light")
-                                                    : (data?.isLight ? "text-black/60 hover:text-black hover:bg-black/5" : "text-white/60 hover:text-white hover:bg-white/5")
+                                            r.id === data.activeRole
+                                                ? (data?.isLight ? "bg-black/10 text-black font-light" : "bg-white/10 text-white font-light")
+                                                : (data?.isLight ? "text-black/60 hover:text-black hover:bg-black/5" : "text-white/60 hover:text-white hover:bg-white/5")
                                         )}
                                     >
                                         <div className="flex items-center gap-4">
@@ -298,11 +289,6 @@ const TitleNode = ({ data }: NodeProps) => {
                                             </span>
                                             <span className="whitespace-nowrap font-light tracking-tight">{r.title}</span>
                                         </div>
-                                        {isLocked && (
-                                            <span className="text-[10px] tracking-widest uppercase text-neutral-500 font-light">
-                                                Coming Soon
-                                            </span>
-                                        )}
                                     </button>
                                 );
                             })}
@@ -487,18 +473,11 @@ function WorkspaceContent() {
     
     const roleParam = searchParams.get('role');
     const defaultRole = isEnterprise ? 'coo' : 'ceo';
-    const initialRole = (isEnterprise && roleParam && !isEnterpriseSuiteActive(roleParam)) ? defaultRole : (roleParam || defaultRole);
+    const initialRole = roleParam || defaultRole;
     const [activeRole, setActiveRole] = useState<string>(initialRole);
 
     useEffect(() => {
         const currentRoleParam = searchParams.get('role');
-        if (isEnterprise && currentRoleParam && !isEnterpriseSuiteActive(currentRoleParam)) {
-            toast.info(`The ${currentRoleParam.toUpperCase()} suite will be available soon. Redirecting to COO.`);
-            setActiveRole('coo');
-            router.replace(`/home/${routeSegment}/workspace?role=coo`);
-            return;
-        }
-
         const targetRole = currentRoleParam || (isEnterprise ? 'coo' : 'ceo');
         if (targetRole !== activeRole) {
             setActiveRole(targetRole);
@@ -667,7 +646,6 @@ function WorkspaceContent() {
                 id, 
                 title: DEPARTMENTS_DATA[id].title, 
                 acronym: id === 'board' ? 'BOD' : id.toUpperCase(),
-                isComingSoon: isEnterprise && !isEnterpriseSuiteActive(id),
             }))
             .sort((a, b) => a.title.localeCompare(b.title));
         newNodes.push({

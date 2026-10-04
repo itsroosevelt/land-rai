@@ -1,5 +1,5 @@
 import type { Firestore } from "firebase-admin/firestore";
-import type { BroadcastMessage } from "@/app/nucleo/[entityId]/cmo/broadcast/list/lib/types";
+import type { BroadcastMessage } from "@/app/home/[entityId]/cmo/broadcast/list/lib/types";
 import { fetchMetaTemplateBody } from "./fetchMetaTemplateBody";
 
 /**

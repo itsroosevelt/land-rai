@@ -147,7 +147,7 @@ export function WorkspaceUserMenu() {
             <div className="bg-black/30 p-3 border-y border-white/5">
               <div className="grid grid-cols-3 gap-1.5">
                 {[
-                  { label: "Nucleo", icon: Home, href: "/nucleo" },
+                  { label: "Home", icon: Home, href: "/home" },
                   { label: "Profile", icon: UserIcon, href: "/perfil" },
                   { label: "Settings", icon: Settings, href: "/configuracion" },
                   { 

@@ -1,8 +1,8 @@
 import {
     isBroadcastTemplatePlaceholder,
     resolveTemplateBodyForRecipient,
-} from "@/app/nucleo/[entityId]/cmo/broadcast/list/lib/resolveBroadcastMessageText";
-import type { BroadcastMessage } from "@/app/nucleo/[entityId]/cmo/broadcast/list/lib/types";
+} from "@/app/home/[entityId]/cmo/broadcast/list/lib/resolveBroadcastMessageText";
+import type { BroadcastMessage } from "@/app/home/[entityId]/cmo/broadcast/list/lib/types";
 
 const bodyByName = new Map<string, string>();
 let loadPromise: Promise<void> | null = null;

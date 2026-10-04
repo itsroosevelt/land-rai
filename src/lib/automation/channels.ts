@@ -39,7 +39,7 @@ export interface BotChannelConfig {
     Icon: React.FC<{ className?: string }>;
 }
 
-const e = (entityId: string, slug: string) => `/nucleo/${entityId}/cto/automation/bots/${slug}`;
+const e = (entityId: string, slug: string) => `/home/${entityId}/cto/automation/bots/${slug}`;
 
 export const BOT_CHANNELS: BotChannelConfig[] = [
     {
@@ -56,7 +56,7 @@ export const BOT_CHANNELS: BotChannelConfig[] = [
         iconColor: 'text-[#25D366]',
         activeBg: 'bg-[#25D366]/10',
         activeBorder: 'border-[#25D366]/30',
-        listHref: (entityId) => `/nucleo/${entityId}/cto/automation/whatsappbots`,
+        listHref: (entityId) => `/home/${entityId}/cto/automation/whatsappbots`,
         Icon: ChannelIcons.WhatsApp,
     },
     {

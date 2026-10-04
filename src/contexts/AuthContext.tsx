@@ -45,7 +45,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     useEffect(() => {
         const parts = pathname?.split('/') || [];
         // Entity routes are resolved in EntityRouteResolver (slug → doc id).
-        if (parts.length >= 3 && parts[1] === 'nucleo' && parts[2]) {
+        if (parts.length >= 3 && parts[1] === 'home' && parts[2]) {
             return;
         }
 

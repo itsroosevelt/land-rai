@@ -9,7 +9,7 @@ import {
 } from 'firebase/firestore';
 import { normalizePhoneNumber } from '@/lib/phoneUtils';
 import { getCountryFromPhone } from '@/lib/countryCodes';
-import type { BroadcastRecipient } from '@/app/nucleo/[entityId]/cmo/broadcast/list/lib/types';
+import type { BroadcastRecipient } from '@/app/home/[entityId]/cmo/broadcast/list/lib/types';
 import { filterGroupsForPrincipalBot, groupBelongsToPrincipalBot } from './principalKanban';
 import {
     getBoard,

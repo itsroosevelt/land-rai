@@ -92,7 +92,7 @@ export async function resolveEntityFromSegmentWithIndex(
 }
 
 export function buildEntityPath(routeSegment: string, suffix = ''): string {
-  const base = `/nucleo/${routeSegment}`;
+  const base = `/home/${routeSegment}`;
   if (!suffix) return base;
   return suffix.startsWith('/') ? `${base}${suffix}` : `${base}/${suffix}`;
 }

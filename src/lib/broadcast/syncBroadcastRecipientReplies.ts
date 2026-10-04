@@ -5,12 +5,12 @@ import {
 } from "@/lib/conversations/store";
 import { phoneSearchVariants } from "@/lib/phoneUtils";
 import { messageTimeMs } from "@/lib/conversations/mergeMessages";
-import type { BroadcastRecipient } from "@/app/nucleo/[entityId]/cmo/broadcast/list/lib/types";
+import type { BroadcastRecipient } from "@/app/home/[entityId]/cmo/broadcast/list/lib/types";
 import {
     hasUserMessageAfter,
     recipientSentAtMs,
     userMessagesAfter,
-} from "@/app/nucleo/[entityId]/cmo/broadcast/list/lib/broadcastReplyUtils";
+} from "@/app/home/[entityId]/cmo/broadcast/list/lib/broadcastReplyUtils";
 
 type AdminDb = FirebaseFirestore.Firestore;
 

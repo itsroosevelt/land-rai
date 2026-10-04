@@ -6,7 +6,7 @@ Esta integración permite a los usuarios conectar sus cuentas de correo para que
 
 ## 1. Flujo de Autorización
 
-1. El usuario hace clic en conectar Gmail en `/nucleo/[entityId]/cto/integrations`.
+1. El usuario hace clic en conectar Gmail en `/home/[entityId]/cto/integrations`.
 2. El frontend consulta [`/api/gmail/auth-url`](../../src/app/api/gmail/auth-url/route.ts) para generar la URL de consentimiento con los siguientes ámbitos:
    - `gmail.readonly` (Lectura de emails)
    - `gmail.send` (Envío de emails)

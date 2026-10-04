@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, PanInfo, useAnimationFrame, useMotionValue, useTransform } from 'framer-motion';
 import { OrbNode } from './OrbNode';
-import { SUITE_NODES, isEnterpriseSuiteActive } from '../constants';
+import { SUITE_NODES } from '../constants';
 import { CentralVideo } from './CentralVideo';
 
 const RADIUS_X = 1100;
@@ -13,11 +13,7 @@ const AUTO_ROTATION_SPEED = -0.05;
 const DRAG_SENSITIVITY = 0.15;
 const MOMENTUM_FRICTION = 0.95;
 
-interface CarouselProps {
-    isEnterprise?: boolean;
-}
-
-export const Carousel = ({ isEnterprise = true }: CarouselProps) => {
+export const Carousel = () => {
     const rotation = useMotionValue(0);
     const [mounted, setMounted] = useState(false);
     const [radius, setRadius] = useState({ x: RADIUS_X, z: RADIUS_Z });
@@ -85,8 +81,6 @@ export const Carousel = ({ isEnterprise = true }: CarouselProps) => {
             </div>
 
             {SUITE_NODES.map((node, index) => {
-                const isAllowed = isEnterpriseSuiteActive(node.id);
-                const isComingSoon = isEnterprise && !isAllowed;
                 return (
                     <CarouselItem 
                         key={node.title}
@@ -95,7 +89,6 @@ export const Carousel = ({ isEnterprise = true }: CarouselProps) => {
                         total={SUITE_NODES.length}
                         rotation={rotation}
                         radius={radius}
-                        isComingSoon={isComingSoon}
                     />
                 );
             })}
@@ -103,13 +96,12 @@ export const Carousel = ({ isEnterprise = true }: CarouselProps) => {
     );
 };
 
-function CarouselItem({ node, index, total, rotation, radius, isComingSoon }: {
+function CarouselItem({ node, index, total, rotation, radius }: {
     node: any,
     index: number,
     total: number,
     rotation: any,
-    radius: { x: number, z: number },
-    isComingSoon?: boolean
+    radius: { x: number, z: number }
 }) {
     const angleOffset = (360 / total) * index;
     
@@ -140,7 +132,6 @@ function CarouselItem({ node, index, total, rotation, radius, isComingSoon }: {
                     title={node.title}
                     subtitle={node.subtitle}
                     color={node.color}
-                    isComingSoon={isComingSoon}
                 />
             </div>
         </motion.div>
