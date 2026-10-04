@@ -10,7 +10,7 @@ export function PillarsSection() {
         },
         {
             title: "The Great American Awakening",
-            desc: "From Resources to Innovation. We are shifting the continent's focus from exporting raw materials to becoming the world's leading exporter of software, AI, and high-tech solutions. The entire hemisphere is the new frontier of the digital age."
+            desc: "From Resources to Innovation. We are shifting the continent's focus from exporting raw materials to becoming the world's leading exporter of software, SI, and high-tech solutions. The entire hemisphere is the new frontier of the digital age."
         },
         {
             title: "Exponential Value Creation",
@@ -32,7 +32,7 @@ export function PillarsSection() {
                         Our Vision for the Americas
                     </h2>
                     <p className="text-zinc-400 text-lg font-light leading-relaxed">
-                        We are building a future defined by AI, advanced robotics, and decentralized utility. Our mission is to dismantle the barriers that have kept economies fragmented for decades. We are the digital bridge for a hemisphere that creates, innovates, and leads.
+                        We are building a future defined by SI, advanced robotics, and decentralized utility. Our mission is to dismantle the barriers that have kept economies fragmented for decades. We are the digital bridge for a hemisphere that creates, innovates, and leads.
                     </p>
                 </div>
 

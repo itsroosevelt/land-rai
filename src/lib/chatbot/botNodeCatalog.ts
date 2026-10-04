@@ -429,12 +429,12 @@ export const BOT_NODE_CATEGORIES: BotNodeCategory[] = [
     ],
   },
   {
-    title: 'Inteligencia Artificial',
+    title: 'Super Inteligencia',
     nodes: [
       {
         type: 'generativeAINode',
         label: 'SI Generativa (LLM)',
-        category: 'Inteligencia Artificial',
+        category: 'Super Inteligencia',
         runtimeStatus: 'runtime',
         description: 'Genera respuesta con LLM usando contexto y variables.',
         dataFields: [
@@ -448,7 +448,7 @@ export const BOT_NODE_CATEGORIES: BotNodeCategory[] = [
       {
         type: 'transcriptionNode',
         label: 'Transcripción (Audio)',
-        category: 'Inteligencia Artificial',
+        category: 'Super Inteligencia',
         runtimeStatus: 'runtime',
         description: 'Transcribe audio del usuario a texto.',
         dataFields: [
@@ -461,7 +461,7 @@ export const BOT_NODE_CATEGORIES: BotNodeCategory[] = [
       {
         type: 'sentimentAnalysisNode',
         label: 'Análisis de Sentimiento',
-        category: 'Inteligencia Artificial',
+        category: 'Super Inteligencia',
         runtimeStatus: 'runtime',
         description: 'Clasifica sentimiento del mensaje y ramifica.',
         dataFields: [

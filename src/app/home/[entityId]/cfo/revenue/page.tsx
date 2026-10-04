@@ -24,7 +24,7 @@ const DEMO_TRANSACTIONS: Transaction[] = [
     { id: '2', type: 'income', amount: 890.00, description: 'Enterprise Consultation', category: 'Services', date: '2026-04-28', status: 'completed' },
     { id: '3', type: 'expense', amount: 340.00, description: 'Cloud Infrastructure (Firebase)', category: 'Infrastructure', date: '2026-04-27', status: 'completed' },
     { id: '4', type: 'income', amount: 1200.00, description: 'Token Sales - LXR', category: 'Web3', date: '2026-04-27', status: 'completed' },
-    { id: '5', type: 'expense', amount: 85.00, description: 'API Services (Gemini, ElevenLabs)', category: 'AI', date: '2026-04-26', status: 'completed' },
+    { id: '5', type: 'expense', amount: 85.00, description: 'API Services (Gemini, ElevenLabs)', category: 'SI', date: '2026-04-26', status: 'completed' },
     { id: '6', type: 'income', amount: 560.00, description: 'Referral Bonus Payouts', category: 'Growth', date: '2026-04-25', status: 'pending' },
     { id: '7', type: 'expense', amount: 120.00, description: 'Solana Network Fees', category: 'Web3', date: '2026-04-24', status: 'completed' },
     { id: '8', type: 'income', amount: 3200.00, description: 'Subscription Revenue - Starter Plan', category: 'Subscriptions', date: '2026-04-23', status: 'completed' },

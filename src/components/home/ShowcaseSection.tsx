@@ -47,7 +47,7 @@ export function ShowcaseSection() {
         },
         {
             title: "Exponential Value Creation",
-            desc: "Leveraging AI and Robotics. We are transitioning from an economy of scarcity to one of abundance. Luxor ensures the Americas won't just witness the AI revolution, but lead it. From Silicon Slopes to every city on the continent, we provide the liquidity engine for the skilled workforce and creative minds behind tomorrow's algorithms.",
+            desc: "Leveraging SI and Robotics. We are transitioning from an economy of scarcity to one of abundance. Luxor ensures the Americas won't just witness the SI revolution, but lead it. From Silicon Slopes to every city on the continent, we provide the liquidity engine for the skilled workforce and creative minds behind tomorrow's algorithms.",
             videoSrc: "https://firebasestorage.googleapis.com/v0/b/udreamms-platform-1.firebasestorage.app/o/into.mp4?alt=media&token=b7b792eb-2f97-47d9-8e0e-6b9ed36232ad"
         }
     ];

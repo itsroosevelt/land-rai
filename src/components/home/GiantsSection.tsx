@@ -26,7 +26,7 @@ export function GiantsSection() {
         },
         {
             name: "Jensen Huang",
-            desc: "His goal is to democratize AI so that any human can be as productive as an entire company.",
+            desc: "His goal is to democratize SI so that any human can be as productive as an entire company.",
             videoId: "hoDYYCyxMuE"
         },
         {

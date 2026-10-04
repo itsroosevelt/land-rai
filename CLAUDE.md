@@ -57,13 +57,23 @@ Next.js 16 (App Router, webpack en dev), React 18, TypeScript, Tailwind 3, Radix
 ## Estado de las suites
 Reales: **CTO** (automation/whatsappbots, integrations, web-builder, voice-center, meet-agents, orchestrator como maqueta), **COO** (omnichannel, kamban → workspace/hub), **CMO** (crm, broadcast/list), **CFO** (revenue, con datos demo de respaldo). Comparten información ordenadamente (Kanban ↔ bots ↔ CRM ↔ broadcast): no romper esos flujos. El resto de capas son plantillas `DepartmentPageShell`. Hecho además: login multi-proveedor, Stripe + Solana, landing, perfil personal (`PersonaDashboard`).
 
-## Pendiente (por prioridad)
-1. **Seguridad restante:** (a) HECHO en código (Fase 1 y 2); falta activar `enforce` en Vercel y configurar Pub/Sub con audiencia; (b) el candado de suscripción en cliente (`localStorage roosevelt_entity_unlocked_*`) es evadible: validar el plan en servidor/reglas; (c) cookie `github_token` es por navegador, no por usuario: atarla al uid y borrarla al cerrar sesión (el `state` de GitHub ya va firmado); (d) `storage.rules` no cubre `cards/`, `applications/`, `avatars/` y permite escritura a cualquier autenticado en `chatbot_media/` y `profile-data/`: alinear con rutas por uid; (e) `solana/airdrop` y `referrals/claim` requieren sesión pero conviene limitar por usuario (anti-abuso).
-2. Organigrama por entidad (icono en la órbita): empleados humanos y agentes IA asignados a suites, con permisos por rol. Datos en `users/{uid}/entities/{id}/org/*`.
-3. Orquestador de entidad (servidor, autenticado con `guardApi`) + conectar la barra Ask Roosevelt para informes, leyendo solo datos de la entidad activa.
-4. Rotar la clave `sk_live` de Stripe (estuvo en `.env.example`, queda en el historial git; actualizar en Vercel y `.env.local`). Webhook de Stripe ya hecho y verificado en producción el 2026-10-04: destino `we_1UMtdcGcUkvsBZd6wfI4zFuV` → `https://www.itsroosevelt.com/api/subscriptions/stripe-webhook` (usar `www`: el dominio sin `www` redirige 308 y Stripe no sigue redirects); eventos `payment_intent.succeeded`, `payment_intent.payment_failed`, `charge.refunded`; secret en `STRIPE_WEBHOOK_SECRET` (Vercel).
-5. Implementar las capas plantilla (CEO, CFO resto, Board, CHRO, CSO, CISO, CLO, CPO, CDO).
-6. Unificar las 3 copias de la lógica del molde; agregar `dry-run` a `migrate-mold`.
-7. `next.config.mjs` reescribe `/socket.io` y `/api/internal` a `localhost:4000` (servidor externo, no incluido): documentar o remover.
-8. Tests: existe `npm run test:isolation` (`tests/isolation/`, emulador de Firestore, nunca producción; 63 comprobaciones: reglas, webhooks, firmas, anti-secuestro, reclamos verificados, credenciales por tenant). Correrlo antes de tocar webhooks, reglas o integraciones; ampliar al agregar canales. Faltan tests del resto de la app.
+## Pendiente (por prioridad) — actualizado 2026-10-04
+Leyenda: ✅ hecho · 🟡 parcial · ⏳ pendiente. "Usuario" = requiere acción del dueño (Vercel, Meta, buzones).
+
+1. 🟡 **Seguridad restante.**
+   - a) Firma de webhooks: ✅ código (Meta/WhatsApp/X/Gmail/Telegram) + anti-secuestro + reclamos verificados. ⏳ Usuario: `WEBHOOK_SIGNATURE_MODE=enforce` e `INTEGRATION_CLAIMS_MODE=require` en Vercel tras ver `[webhook-sig] … ok`; Pub/Sub de Gmail con audiencia (`GMAIL_PUBSUB_AUDIENCE`). ⏳ Reclamos verificados para Gmail y X.
+   - b) ⏳ Candado de suscripción en servidor (hoy `localStorage roosevelt_entity_unlocked_*` es evadible): validar el plan en rutas API/reglas.
+   - c) ⏳ Cookie `github_token` por navegador: atarla al uid y borrarla al cerrar sesión (el `state` de GitHub ya va firmado).
+   - d) ⏳ `storage.rules`: cubrir `cards/`, `applications/`, `avatars/`; cerrar escritura abierta en `chatbot_media/` y `profile-data/`.
+   - e) ⏳ Anti-abuso por usuario en `solana/airdrop` y `referrals/claim`.
+   - f) ⏳ Usuario: rotar la clave `sk_live` de Stripe (estuvo en `.env.example`, queda en el historial git) y restablecer el secreto de la app de Meta (pasó por un chat).
+2. ⏳ Organigrama por entidad (icono en la órbita): empleados humanos y agentes SI asignados a suites, con permisos por rol. Datos en `users/{uid}/entities/{id}/org/*`.
+3. ⏳ Orquestador de entidad (servidor, `guardApi`) + conectar la barra Ask Roosevelt para informes, leyendo solo datos de la entidad activa.
+4. ✅ Webhook de Stripe (producción, 2026-10-04): destino `we_1UMtdcGcUkvsBZd6wfI4zFuV` → `https://www.itsroosevelt.com/api/subscriptions/stripe-webhook` (usar `www`; Stripe no sigue redirects); eventos `payment_intent.succeeded`, `payment_intent.payment_failed`, `charge.refunded`; secreto en `STRIPE_WEBHOOK_SECRET` (Vercel). Primer pago real aún sin ver en "Entregas de eventos".
+5. ⏳ Capas plantilla (CEO, CFO resto, Board, CHRO, CSO, CISO, CLO, CPO, CDO).
+6. ⏳ Unificar las 3 copias de la lógica del molde; `dry-run` en `migrate-mold`.
+7. ⏳ `next.config.mjs` reescribe `/socket.io` y `/api/internal` a `localhost:4000` (servidor externo, no incluido): documentar o remover.
+8. 🟡 Tests: ✅ `npm run test:isolation` (`tests/isolation/`, emulador de Firestore, nunca producción; 63 comprobaciones). ⏳ Tests del resto de la app; ampliar al agregar canales.
 9. Typo heredado: `kamban_VERIFY_TOKEN`. No renombrar sin migrar Vercel y Meta.
+10. 🟡 **Meta (app de la plataforma).** Prioridad inmediata: que WhatsApp, Messenger e Instagram funcionen para crear bots, responder y lanzar campañas (clientes con conexión manual/propia; app en Development). Después: Tech Provider, App Review por etapas y modo Live para que clientes ajenos conecten con el login de la plataforma; WhatsApp Embedded Signup; Marketing API/leads; reclamos verificados en Gmail/X.
+11. ⏳ Legal: revisión del abogado (`docs/legal-review.md`); crear buzones `support@`, `legal@`, `business@`, `careers@` en `itsroosevelt.com` y `luxorintelligence.com`; self-service de borrado de cuenta; registro de aceptación de términos; banner de cookies en el sitio de la empresa (Google Analytics).
