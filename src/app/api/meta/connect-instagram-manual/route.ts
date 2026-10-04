@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { db, admin } from '@/lib/firebase-admin';
+import { guardApi } from '@/lib/apiAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +10,8 @@ export const dynamic = 'force-dynamic';
  * Validates a Page Access Token and stores integrations/instagram.
  */
 export async function POST(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const { userId, entityId, pageAccessToken, pageId, instagramId, username } = await req.json();
 

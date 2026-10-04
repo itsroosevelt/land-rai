@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { FirebaseHostingService } from '@/lib/hosting';
+import { guardApi } from '@/lib/apiAuth';
 
 export async function POST(req: NextRequest) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const { siteId, files } = await req.json();
 

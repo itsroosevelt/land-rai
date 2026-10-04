@@ -43,12 +43,14 @@ interface PropertyValueProps {
 import { storage, db } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { useAuth } from '@/contexts/AuthContext';
 
 export const PropertyValue: React.FC<PropertyValueProps> = ({
     fieldKey, value, isEditing, isCustom, customMeta, onValueChange, finishEdit, hasData, getBadgeStyle, getColorForValue,
     phoneSearchTerm, setPhoneSearchTerm, isPhoneOpen, setIsPhoneOpen, editPhoneData, setEditPhoneData, parsePhone,
     cardId, groupId, crmId, onSave
 }) => {
+    const { currentUser, activeEntity } = useAuth();
     const phoneDropdownRef = useRef<HTMLDivElement>(null);
     const [isUploading, setIsUploading] = useState(false);
     const isEmpty = value === '' || value === null || value === undefined || value === 'Vacío' || (Array.isArray(value) && value.length === 0);
@@ -84,8 +86,12 @@ export const PropertyValue: React.FC<PropertyValueProps> = ({
             onValueChange(updatedUrls);
 
             // 2. Guardar DIRECTAMENTE en Firestore para evitar race conditions
+            // Todo dato de cliente vive bajo users/{uid}/entities/{entityId} (aislamiento multi-tenant).
+            const tenantPath = currentUser?.uid && activeEntity ? `users/${currentUser.uid}/entities/${activeEntity}` : null;
+            if (!tenantPath) throw new Error('Sin entidad activa');
+
             if (cardId && groupId && !cardId.startsWith('temp-')) {
-                const cardRef = doc(db, 'kanban-groups', groupId, 'cards', cardId);
+                const cardRef = doc(db, tenantPath, 'kanban-groups', groupId, 'cards', cardId);
                 const updateData = isCustom
                     ? { [`extraData.${fieldKey}.value`]: updatedUrls }
                     : { [fieldKey]: updatedUrls };
@@ -94,7 +100,7 @@ export const PropertyValue: React.FC<PropertyValueProps> = ({
             }
 
             if (crmId) {
-                const crmRef = doc(db, 'contacts', crmId);
+                const crmRef = doc(db, tenantPath, 'contacts', crmId);
                 const updateData = isCustom
                     ? { [`extraData.${fieldKey}.value`]: updatedUrls }
                     : { [fieldKey]: updatedUrls };

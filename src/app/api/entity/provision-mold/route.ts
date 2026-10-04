@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { ensureEntityMoldUpToDateAdmin } from '@/lib/mold/entityMoldAdmin';
+import { guardApi } from '@/lib/apiAuth';
 
 /** Aplica / actualiza el molde multitenant CRM en una empresa. */
 export async function POST(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const body = await req.json();
         const { userId, entityId } = body || {};

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPaymentOrder, resolvePaymentOrderStatus } from '@/lib/subscriptions/qr-payment';
+import { guardApi } from '@/lib/apiAuth';
 
 export async function GET(request: NextRequest) {
+    const denied = await guardApi(request);
+    if (denied) return denied;
   try {
     const userId = request.nextUrl.searchParams.get('userId');
     const entityId = request.nextUrl.searchParams.get('entityId');

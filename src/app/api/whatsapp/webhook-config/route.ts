@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
+import { guardApi } from '@/lib/apiAuth';
 
 const DEFAULT_VERIFY_TOKEN = process.env.kamban_VERIFY_TOKEN || 'vg37e';
 
@@ -7,6 +8,8 @@ const DEFAULT_VERIFY_TOKEN = process.env.kamban_VERIFY_TOKEN || 'vg37e';
  * Returns the exact Callback URL and Verify Token to paste in Meta Developer Console.
  */
 export async function GET(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const { searchParams } = new URL(req.url);
         const userId = searchParams.get('userId');
@@ -69,6 +72,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const { userId, entityId, verifyToken } = await req.json();
         if (!userId || !entityId || !verifyToken) {

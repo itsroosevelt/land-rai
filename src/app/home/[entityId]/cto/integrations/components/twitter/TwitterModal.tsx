@@ -6,6 +6,7 @@ import { X, CheckCircle2, Lock, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase';
 import { doc, setDoc, deleteDoc, onSnapshot, collectionGroup, query, where, getDocs } from 'firebase/firestore';
+import { isIntegrationTakenByAnotherTenant } from '@/lib/integrations/checkIntegrationTaken';
 
 interface TwitterModalProps {
     isOpen: boolean;
@@ -52,10 +53,7 @@ export default function TwitterModal({ isOpen, onClose, activeEntity, currentUse
         const toastId = toast.loading("Verificando credenciales de X...");
 
         try {
-            const queryRef = query(collectionGroup(db, 'integrations'), where('twitterHandle', '==', cleanHandle));
-            const snap = await getDocs(queryRef);
-            
-            const isUsedByAnotherTenant = !snap.empty && !snap.docs.every((d: any) => d.ref.path.includes(activeEntity));
+            const isUsedByAnotherTenant = await isIntegrationTakenByAnotherTenant('twitterHandle', cleanHandle, currentUser!.uid, activeEntity);
                                     
             if (isUsedByAnotherTenant) {
                 toast.error("Esta cuenta de X ya está administrada por otro cliente de Roosevelt.", { id: toastId });

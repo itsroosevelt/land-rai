@@ -857,7 +857,7 @@ function WebBuilderContent() {
                 handleClearCache={handleClearCache}
                 onOpenGitHubSettings={() => {
                     const baseUrl = window.location.origin;
-                    window.location.href = `${baseUrl}/api/auth/github?projectId=${activeProjectId}`;
+                    window.location.href = `${baseUrl}/api/auth/github?projectId=${activeProjectId}&entityId=${encodeURIComponent(activeEntityRoute || activeEntity || '')}`;
                 }}
                 onSaveRepoUrl={async (url: string, name?: string) => {
                     if (activeProjectId) {

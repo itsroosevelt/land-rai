@@ -6,6 +6,7 @@ import { Send, CheckCircle2, X, Lock, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase';
 import { doc, setDoc, deleteDoc, onSnapshot, collectionGroup, query, where, getDocs } from 'firebase/firestore';
+import { isIntegrationTakenByAnotherTenant } from '@/lib/integrations/checkIntegrationTaken';
 
 interface TelegramModalProps {
     isOpen: boolean;
@@ -61,13 +62,7 @@ export default function TelegramModal({ isOpen, onClose, activeEntity, currentUs
         try {
             // 1. Validar que el bot no esté en uso (Agnosticismo Total - Rule 1 & 7)
             // Usamos collectionGroup para buscar en todas las bóvedas sin usar una tabla raíz
-            const queryRef = query(
-                collectionGroup(db, 'integrations'), 
-                where('botToken', '==', botToken)
-            );
-            const snap = await getDocs(queryRef);
-            
-            const isUsedByAnotherTenant = !snap.empty && !snap.docs.every((d: any) => d.ref.path.includes(activeEntity));
+            const isUsedByAnotherTenant = await isIntegrationTakenByAnotherTenant('botToken', botToken, currentUser!.uid, activeEntity);
                                     
             if (isUsedByAnotherTenant) {
                 toast.error("Este Bot ya está siendo utilizado por otra entidad.", { id: toastId });

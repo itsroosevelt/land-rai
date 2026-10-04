@@ -4,8 +4,11 @@ import {
     relocateAllCardsToBotNodesAdmin,
     syncKanbanGroupsFromBotAdmin,
 } from '@/lib/kanban/kanbanBotSyncAdmin';
+import { guardApi } from '@/lib/apiAuth';
 
 export async function POST(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const body = await req.json();
         const { userId, entityId, botId, relocateCards = true } = body || {};

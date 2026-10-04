@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
+import { guardApi } from '@/lib/apiAuth';
 
 export async function POST(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const body = await req.json();
         const { botToken, userId, entityId, domain } = body;

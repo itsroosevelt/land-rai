@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { doc, setDoc, deleteDoc, onSnapshot, serverTimestamp, collectionGroup, getDocs, query, where } from 'firebase/firestore';
+import { isIntegrationTakenByAnotherTenant } from '@/lib/integrations/checkIntegrationTaken';
 import { toast } from 'sonner';
 
 interface InstagramModalProps {
@@ -170,19 +171,7 @@ const InstagramModal: React.FC<InstagramModalProps> = ({ isOpen, onClose, active
             }
 
             const instagramIdToCheck = page.instagram_business_account.id;
-            const integrationsQuery = query(
-                collectionGroup(db, 'integrations'),
-                where('instagramId', '==', instagramIdToCheck)
-            );
-            const integrationsSnap = await getDocs(integrationsQuery);
-            
-            let isAlreadyConnected = false;
-            integrationsSnap.forEach(docSnap => {
-                // Check if connected to another tenant entirely
-                if (!docSnap.ref.path.includes(`users/${userId}/entities/${entityId}`)) {
-                    isAlreadyConnected = true;
-                }
-            });
+            const isAlreadyConnected = await isIntegrationTakenByAnotherTenant('instagramId', instagramIdToCheck, userId, entityId);
 
             if (isAlreadyConnected) {
                 toast.error(`Esta cuenta de Instagram (@${page.instagram_business_account.username}) ya está vinculada a otro usuario.`, { id: toastId });

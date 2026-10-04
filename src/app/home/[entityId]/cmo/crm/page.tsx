@@ -242,18 +242,34 @@ export default function ContactsPage() {
         const tenantPath = getTenantPath();
         if (!tenantPath) return;
 
-        const cardsQuery = query(collectionGroup(db, 'cards'));
-        const unsubscribe = onSnapshot(cardsQuery, (snapshot) => {
-            const allCardsFromDb = snapshot.docs
-                .filter(doc => doc.ref.path.includes(tenantPath))
-                .map(doc => {
-                    const match = doc.ref.path.match(/kanban-groups\/([^\/]+)\/cards/);
-                    const groupId = match ? match[1] : undefined;
-                    return { ...doc.data(), id: doc.id, groupId: groupId };
+        // Aislamiento multi-tenant: solo se escuchan las tarjetas de los grupos de ESTE tenant
+        // (antes: collectionGroup('cards') sin filtro descargaba las tarjetas de todos los clientes).
+        const cardsByGroup: Record<string, any[]> = {};
+        const cardUnsubs: Record<string, () => void> = {};
+        const flush = () => setAllCards(Object.values(cardsByGroup).flat());
+
+        const unsubscribeGroups = onSnapshot(collection(db, `${tenantPath}/kanban-groups`), (groupsSnap) => {
+            const liveIds = new Set(groupsSnap.docs.map(g => g.id));
+            for (const id of Object.keys(cardUnsubs)) {
+                if (!liveIds.has(id)) {
+                    cardUnsubs[id]();
+                    delete cardUnsubs[id];
+                    delete cardsByGroup[id];
+                }
+            }
+            for (const id of liveIds) {
+                if (cardUnsubs[id]) continue;
+                cardUnsubs[id] = onSnapshot(collection(db, `${tenantPath}/kanban-groups/${id}/cards`), (cardsSnap) => {
+                    cardsByGroup[id] = cardsSnap.docs.map(d => ({ ...d.data(), id: d.id, groupId: id }));
+                    flush();
                 });
-            setAllCards(allCardsFromDb);
+            }
+            flush();
         });
-        return () => unsubscribe();
+        return () => {
+            unsubscribeGroups();
+            Object.values(cardUnsubs).forEach(u => u());
+        };
     }, [currentUser?.uid, activeEntity]);
 
     useEffect(() => {

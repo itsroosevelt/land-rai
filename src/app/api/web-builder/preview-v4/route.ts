@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generatePreviewHTML } from './engine';
+import { guardApi } from '@/lib/apiAuth';
 
 /**
  * Preview Endpoint - Server-Side Transpilation
@@ -11,6 +12,8 @@ import { generatePreviewHTML } from './engine';
  */
 
 export async function POST(req: NextRequest) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const { files } = await req.json();
 

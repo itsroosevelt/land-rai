@@ -1,61 +1,31 @@
 rules_version = '2';
+
+// Aislamiento multi-tenant.
+//
+// Todo dato de cliente vive bajo users/{uid}/... y SOLO su dueño puede leerlo o
+// escribirlo desde el SDK web. Cualquier otra ruta queda denegada para clientes;
+// las rutas API, webhooks y Cloud Functions usan el Admin SDK (que ignora estas
+// reglas) y verifican la identidad por su cuenta (ver src/lib/apiAuth.ts).
+//
+// NO agregar reglas globales (`/{document=**}`) ni `allow ...: if true`: anulan
+// el aislamiento entre clientes. Las consultas collectionGroup desde el navegador
+// quedan denegadas a propósito: hacerlas por el servidor.
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Counters — readable/writable by authenticated users (sequential ID generation)
-    match /counters/{counterId} {
-      allow read, write: if request.auth != null;
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
     }
 
-    // Kanban groups and their cards
-    match /kanban-groups/{groupId} {
-      allow read, write: if request.auth != null;
-
-      match /cards/{cardId} {
-        allow read, write: if request.auth != null;
-      }
-    }
-
-    match /cards/{cardId} {
-      allow read, write: if true;
-    }
-
-    match /chatbots/{chatbotId} {
-      allow read, write: if true;
-
-      match /pages/{pageId} {
-        allow read, write: if true;
-      }
-    }
-
-    // Web projects: allow read for anyone to enable public previews
-    match /web-projects/{projectId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-
-    // CRM Contacts — authenticated users can read/write; public can read (for application form)
-    match /contacts/{contactId} {
-      allow read, write: if request.auth != null;
-      allow read: if true;
-    }
-
-    // Specific rules for isolated tenant data
     match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if isOwner(uid);
 
-      match /entities/{entityId}/{document=**} {
-         allow read, write: if request.auth != null && request.auth.uid == uid;
-      }
-
-      match /entity_slugs/{slug} {
-         allow read, write: if request.auth != null && request.auth.uid == uid;
+      // entities/*, entity_slugs/*, subscriptions/*, paymentRequests/*, referrals/* ...
+      match /{document=**} {
+        allow read, write: if isOwner(uid);
       }
     }
 
-    // Catch-all for authenticated users
-    match /{document=**} {
-      allow read, write: if request.auth != null;
-    }
+    // Todo lo demás (system_mappings, webhook_diagnostics, ...): solo servidor.
   }
 }

@@ -6,15 +6,23 @@ export async function GET(req: Request) {
     const stateRaw = searchParams.get('state') || '';
 
     let projectId = '';
+    let entityRoute = '';
     try {
         const parsed = JSON.parse(Buffer.from(stateRaw, 'base64').toString('utf-8'));
         projectId = parsed.projectId || '';
+        // Solo segmentos de ruta seguros (evita redirecciones arbitrarias).
+        if (typeof parsed.entityRoute === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(parsed.entityRoute)) {
+            entityRoute = parsed.entityRoute;
+        }
     } catch {
         // state might not be parseable, that's ok
     }
 
+    // Vuelve a la entidad del cliente que inició el flujo (nunca a una entidad fija).
+    const webBuilderPath = entityRoute ? `/home/${entityRoute}/cto/web-builder` : '/home';
+
     if (!code) {
-        return NextResponse.redirect(`${origin}/home/roosevelt/cto/web-builder?github_error=no_code`);
+        return NextResponse.redirect(`${origin}${webBuilderPath}?github_error=no_code`);
     }
 
     try {
@@ -37,7 +45,7 @@ export async function GET(req: Request) {
 
         if (!accessToken) {
             console.error('[GitHub OAuth] Token exchange failed:', tokenData);
-            return NextResponse.redirect(`${origin}/home/roosevelt/cto/web-builder?github_error=token_failed`);
+            return NextResponse.redirect(`${origin}${webBuilderPath}?github_error=token_failed`);
         }
 
         // Get GitHub user info
@@ -50,7 +58,7 @@ export async function GET(req: Request) {
         const userData = await userRes.json();
 
         // Build redirect back to the web builder with success
-        const redirectUrl = new URL(`${origin}/home/roosevelt/cto/web-builder`);
+        const redirectUrl = new URL(`${origin}${webBuilderPath}`);
         if (projectId) redirectUrl.searchParams.set('projectId', projectId);
         redirectUrl.searchParams.set('github_connected', '1');
         redirectUrl.searchParams.set('github_user', userData.login || '');
@@ -68,7 +76,7 @@ export async function GET(req: Request) {
         return response;
     } catch (error: any) {
         console.error('[GitHub OAuth] Error:', error);
-        return NextResponse.redirect(`${origin}/home/roosevelt/cto/web-builder?github_error=${encodeURIComponent(error.message)}`);
+        return NextResponse.redirect(`${origin}${webBuilderPath}?github_error=${encodeURIComponent(error.message)}`);
     }
 }
 

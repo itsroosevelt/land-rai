@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { doc, setDoc, deleteDoc, onSnapshot, serverTimestamp, collectionGroup, getDocs, query, where } from 'firebase/firestore';
+import { isIntegrationTakenByAnotherTenant } from '@/lib/integrations/checkIntegrationTaken';
 import { toast } from 'sonner';
 
 interface MessengerModalProps {
@@ -99,19 +100,7 @@ const MessengerModal: React.FC<MessengerModalProps> = ({ isOpen, onClose, active
             }
 
             const pageIdToCheck = page.id;
-            const integrationsQuery = query(
-                collectionGroup(db, 'integrations'),
-                where('pageId', '==', pageIdToCheck)
-            );
-            const integrationsSnap = await getDocs(integrationsQuery);
-            
-            let isAlreadyConnected = false;
-            integrationsSnap.forEach(docSnap => {
-                // Check if connected to another tenant entirely
-                if (!docSnap.ref.path.includes(`users/${userId}/entities/${entityId}`)) {
-                    isAlreadyConnected = true;
-                }
-            });
+            const isAlreadyConnected = await isIntegrationTakenByAnotherTenant('pageId', pageIdToCheck, userId, entityId);
 
             if (isAlreadyConnected) {
                 toast.error(`Esta Fanpage (${page.name}) ya está vinculada a otro usuario.`, { id: toastId });

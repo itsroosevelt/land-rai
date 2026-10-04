@@ -6,6 +6,7 @@ import * as path from 'path';
 import * as dotenv from 'dotenv';
 import { SYSTEM_PROMPT } from '../prompt';
 import { db, admin } from '@/lib/firebase-admin';
+import { guardApi } from '@/lib/apiAuth';
 
 // Force load environment variables
 dotenv.config();
@@ -631,6 +632,8 @@ async function agenticFlow(messages: any[], fileContext: string, currentFiles: R
 }
 
 export async function POST(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
   console.log("--- 🤖 AI REQUEST RECEIVED 🤖 ---");
   
   // Support for multiple keys (rotation)

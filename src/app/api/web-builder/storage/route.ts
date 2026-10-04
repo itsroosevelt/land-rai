@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
+import { guardApi } from '@/lib/apiAuth';
 
 const UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads');
 
@@ -16,6 +17,8 @@ async function ensureUploadsDir(projectId: string) {
 }
 
 export async function POST(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const formData = await req.formData();
         const file = formData.get('file') as File;

@@ -8,6 +8,10 @@ import { provisionEntityMold, ensureEntityMoldUpToDate } from '@/lib/mold/entity
 import { claimEntitySlug, filterRealEntities, generateUniqueEntitySlug } from '@/lib/entitySlug';
 
 import { usePathname } from 'next/navigation';
+import { installApiAuthFetch } from '@/lib/installApiAuthFetch';
+
+// Debe instalarse a nivel de módulo: los hijos hacen fetch en sus efectos antes que este provider.
+installApiAuthFetch();
 
 interface AuthContextType {
     currentUser: User | null;
@@ -63,6 +67,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     useEffect(() => {
         try {
             const unsubscribe = onAuthStateChanged(auth, async (user) => {
+                // Aislamiento en navegadores compartidos: la entidad activa guardada pertenece a un solo usuario.
+                try {
+                    const lastUid = localStorage.getItem('roosevelt_last_uid');
+                    if (!user || (lastUid && lastUid !== user.uid)) {
+                        localStorage.removeItem('roosevelt_active_entity');
+                        localStorage.removeItem('roosevelt_active_entity_route');
+                        if (user) {
+                            setActiveEntityState('life');
+                            setActiveEntityRoute('life');
+                        }
+                    }
+                    if (user) localStorage.setItem('roosevelt_last_uid', user.uid);
+                    else localStorage.removeItem('roosevelt_last_uid');
+                } catch { /* localStorage no disponible */ }
+
                 if (user) {
                     try {
                         const userDocRef = doc(db, 'users', user.uid);

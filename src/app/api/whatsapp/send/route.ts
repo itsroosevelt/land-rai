@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { db, admin } from '@/lib/firebase-admin';
+import { guardApi } from '@/lib/apiAuth';
 
 export async function POST(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const bodyValue = await req.json();
         const { message, toNumber, cardId, groupId, type, template, url, filename, platform = 'kamban', userId, entityId } = bodyValue;

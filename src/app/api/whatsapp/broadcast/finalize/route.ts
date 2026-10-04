@@ -2,12 +2,15 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/firebase-admin";
 import { finalizeBroadcastIfDone } from "@/lib/broadcast/finalizeBroadcastSend";
 import { backfillBroadcastConversations } from "@/lib/broadcast/backfillBroadcastConversations";
+import { guardApi } from '@/lib/apiAuth';
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 /** Close a stuck campaign when all recipients are already sent/failed. */
 export async function POST(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const { userId, entityId, broadcastId } = await req.json();
         if (!userId || !entityId || !broadcastId) {

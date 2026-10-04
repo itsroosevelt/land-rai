@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db, admin } from '@/lib/firebase-admin';
 import { processChatbotFlow } from '@/lib/chatbotEngine';
+import { guardApi } from '@/lib/apiAuth';
 
 /**
  * POST /api/telegram/trigger
@@ -12,6 +13,8 @@ import { processChatbotFlow } from '@/lib/chatbotEngine';
  *   -> will auto-find the Telegram card with pending messages
  */
 export async function POST(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('u');
     const entityId = searchParams.get('e');
@@ -135,6 +138,8 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     return NextResponse.json({ 
         info: 'POST to this endpoint to manually trigger the chatbot engine',
         usage: 'POST /api/telegram/trigger?u=userId&e=entityId',

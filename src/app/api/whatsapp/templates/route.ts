@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { db } from '@/lib/firebase-admin';
+import { guardApi } from '@/lib/apiAuth';
 
 export async function GET(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const { searchParams } = new URL(req.url);
         const userId = searchParams.get('userId');

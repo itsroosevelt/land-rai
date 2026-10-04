@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { uploadWhatsAppMediaToMeta } from '@/lib/whatsapp/mediaUpload';
 import { detectWhatsAppMediaType } from '@/lib/whatsapp/mediaUtils';
+import { guardApi } from '@/lib/apiAuth';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -10,6 +11,8 @@ export const maxDuration = 120;
  * Used by the bot editor to pre-upload voice notes / large files for reliable delivery.
  */
 export async function POST(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const body = await req.json();
         const { userId, entityId, fileUrl, mediaType, filename, mimeType } = body || {};

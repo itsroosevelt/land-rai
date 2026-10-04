@@ -2,8 +2,11 @@ import { Connection, PublicKey, Transaction, Keypair } from '@solana/web3.js';
 import { getAssociatedTokenAddress, createAssociatedTokenAccountInstruction, createTransferCheckedInstruction } from '@solana/spl-token';
 import bs58 from 'bs58';
 import { NextResponse } from 'next/server';
+import { guardApi } from '@/lib/apiAuth';
 
 export async function POST(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
   try {
     const { userPublicKeyStr, environment } = await req.json();
 

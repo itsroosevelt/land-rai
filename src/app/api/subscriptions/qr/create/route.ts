@@ -14,10 +14,13 @@ import {
   resolveUpgradeChargeForUser,
 } from '@/lib/subscriptions/upgrade-pricing-server';
 import { PLAN_CATALOG_USD, PLAN_CATALOG_ANNUAL_USD } from '@/lib/subscriptions/upgrade-pricing';
+import { guardApi } from '@/lib/apiAuth';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
+    const denied = await guardApi(request);
+    if (denied) return denied;
   try {
     const {
       userId,

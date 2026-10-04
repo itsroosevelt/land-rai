@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { VertexAI } from '@google-cloud/vertexai';
+import { guardApi } from '@/lib/apiAuth';
 
 export async function POST(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const { prompt, prefix, suffix, filePath } = await req.json();
 

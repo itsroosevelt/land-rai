@@ -8,11 +8,33 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
+/** Solo CDNs de librerías usadas por la vista previa (evita SSRF / proxy abierto). */
+const ALLOWED_CDN_HOSTS = new Set([
+    'cdnjs.cloudflare.com',
+    'unpkg.com',
+    'cdn.tailwindcss.com',
+    'cdn.jsdelivr.net',
+    'esm.sh',
+]);
+
+function isAllowedCdnUrl(raw: string): boolean {
+    try {
+        const u = new URL(raw);
+        return u.protocol === 'https:' && !u.username && !u.password && ALLOWED_CDN_HOSTS.has(u.hostname);
+    } catch {
+        return false;
+    }
+}
+
 export async function GET(req: NextRequest) {
     const url = req.nextUrl.searchParams.get('url');
 
     if (!url) {
         return new NextResponse('Missing URL parameter', { status: 400 });
+    }
+
+    if (!isAllowedCdnUrl(url)) {
+        return new NextResponse('URL no permitida', { status: 403 });
     }
 
     try {

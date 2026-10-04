@@ -4,8 +4,11 @@ import { db } from '@/lib/firebase-admin';
 import { resolveTenantGeminiKey } from '@/lib/chatbot/resolveTenantGeminiKey';
 import { generateFlowFromText } from '@/lib/chatbot/generateFlowFromText';
 import type { FlowEditMode } from '@/lib/chatbot/flowGraphOps';
+import { guardApi } from '@/lib/apiAuth';
 
 export async function POST(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const body = await req.json();
         const {

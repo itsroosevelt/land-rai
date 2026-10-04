@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const projectId = searchParams.get('projectId') || '';
+    const entityRoute = searchParams.get('entityId') || '';
 
     const clientId = process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID;
     if (!clientId) {
@@ -10,7 +11,7 @@ export async function GET(req: Request) {
     }
 
     const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin}/api/auth/github/callback`;
-    const state = Buffer.from(JSON.stringify({ projectId })).toString('base64');
+    const state = Buffer.from(JSON.stringify({ projectId, entityRoute })).toString('base64');
 
     const params = new URLSearchParams({
         client_id: clientId,

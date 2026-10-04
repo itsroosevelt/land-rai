@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
+import { guardApi } from '@/lib/apiAuth';
 
 // Called when a new user signs up with a referral code
 export async function POST(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const { newUserId, referralCode } = await req.json();
 

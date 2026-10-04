@@ -3,8 +3,11 @@ import { db } from '@/lib/firebase-admin';
 import { getSubscriptionCurrentDocPath } from '@/lib/subscriptions/payment-config';
 import { PLAN_CATALOG_USD } from '@/lib/subscriptions/upgrade-pricing';
 import { resolveUpgradeChargeForUser } from '@/lib/subscriptions/upgrade-pricing-server';
+import { guardApi } from '@/lib/apiAuth';
 
 export async function POST(request: NextRequest) {
+    const denied = await guardApi(request);
+    if (denied) return denied;
   try {
     const { userId, entityId, plan } = await request.json();
 

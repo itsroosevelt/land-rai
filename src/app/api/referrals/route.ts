@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
+import { guardApi } from '@/lib/apiAuth';
 
 export async function POST(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const { userId, referralCode } = await req.json();
 
@@ -33,6 +36,8 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const { searchParams } = new URL(req.url);
         const userId = searchParams.get('userId');

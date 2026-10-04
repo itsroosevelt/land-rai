@@ -8,6 +8,7 @@ import { promises as fsPromises } from 'fs';
 import util from 'util';
 import os from 'os';
 import { db } from '@/lib/firebase-admin';
+import { guardApi } from '@/lib/apiAuth';
 
 const execAsync = util.promisify(exec);
 
@@ -55,6 +56,8 @@ async function syncFirestoreToDisk(userId: string, entityId: string, projectId: 
 }
 
 export async function POST(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     let tmpPath = '';
     try {
         const { projectId, action, repoUrl, message, files, autoCreate, projectName, userId, entityId } = await req.json();

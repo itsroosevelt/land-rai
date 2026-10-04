@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
+import { guardApi } from '@/lib/apiAuth';
 
 // Update project metadata
 export async function PATCH(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const { projectId, userId, entityId, ...updates } = await req.json();
 
@@ -31,6 +34,8 @@ export async function PATCH(req: Request) {
 
 // Delete project and all its subcollections (files, conversations)
 export async function DELETE(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const { searchParams } = new URL(req.url);
         const projectId = searchParams.get('projectId');

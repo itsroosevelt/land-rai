@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { registerWhatsAppTenantMapping } from '@/lib/whatsappTenant';
+import { guardApi } from '@/lib/apiAuth';
 
 export async function POST(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const { phoneNumberId, userId, entityId } = await req.json();
 

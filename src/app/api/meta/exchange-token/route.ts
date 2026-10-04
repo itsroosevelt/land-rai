@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
+import { guardApi } from '@/lib/apiAuth';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const { shortLivedToken, pageId, instagramId } = await req.json();
 

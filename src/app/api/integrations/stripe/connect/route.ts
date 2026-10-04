@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import { guardApi } from '@/lib/apiAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +24,8 @@ async function validateStripeSecretKey(secretKey: string) {
 }
 
 export async function POST(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const body = await req.json();
         const publishableKey = String(body.publishableKey || '').trim();

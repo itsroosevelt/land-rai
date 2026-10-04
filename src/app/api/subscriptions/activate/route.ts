@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { db } from '@/lib/firebase-admin';
 import { getSubscriptionCurrentDocPath } from '@/lib/subscriptions/payment-config';
+import { guardApi } from '@/lib/apiAuth';
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 
 export async function POST(request: NextRequest) {
+    const denied = await guardApi(request);
+    if (denied) return denied;
   try {
     if (!stripeSecretKey) {
       return NextResponse.json(

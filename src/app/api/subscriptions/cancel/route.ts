@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { getSubscriptionCurrentDocPath } from '@/lib/subscriptions/payment-config';
+import { guardApi } from '@/lib/apiAuth';
 
 export async function POST(request: NextRequest) {
+    const denied = await guardApi(request);
+    if (denied) return denied;
   try {
     const { userId } = await request.json();
 

@@ -1,10 +1,13 @@
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
+import { guardApi } from '@/lib/apiAuth';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
+    const denied = await guardApi(req);
+    if (denied) return denied;
     try {
         const { projectId, region, userId, entityId } = await req.json();
 

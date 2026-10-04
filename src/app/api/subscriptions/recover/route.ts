@@ -9,8 +9,11 @@ import {
 import { getSubscriptionCurrentDocPath } from '@/lib/subscriptions/payment-config';
 import { verifySubscriptionTransaction } from '@/lib/subscriptions/verify-payment';
 import type { SubscriptionPaymentMethod } from '@/lib/subscriptions/payment-config';
+import { guardApi } from '@/lib/apiAuth';
 
 export async function POST(request: NextRequest) {
+    const denied = await guardApi(request);
+    if (denied) return denied;
   try {
     const { userId, entityId, requestId, signature, plan, paymentMethod, planPrice } = await request.json();
 
