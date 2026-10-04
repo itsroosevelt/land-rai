@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/firebase-admin";
 import { runBroadcastSendLoop } from "@/lib/broadcast/runBroadcastSendLoop";
 import { guardApi } from '@/lib/apiAuth';
+import { requireSuite } from '@/lib/subscriptions/entitlements.server';
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -11,6 +12,8 @@ export async function POST(req: Request) {
     if (denied) return denied;
     try {
         const { userId, entityId, broadcastId, resume } = await req.json();
+        const suiteDenied = await requireSuite(userId, entityId, 'cmo');
+        if (suiteDenied) return suiteDenied;
         if (!userId || !entityId || !broadcastId) {
             return NextResponse.json(
                 { error: "Missing userId, entityId or broadcastId" },

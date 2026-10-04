@@ -62,7 +62,7 @@ Implemented and tested (`npm run test:isolation`, Firestore emulator, 63 checks)
 - Verified ownership claims for Messenger/Instagram/WhatsApp IDs (server-written registry); ambiguity guard if two users claim the same ID; no fallback to platform-owner credentials.
 
 Known gaps (do not appear in public text, but counsel should know):
-- Subscription "lock" is enforced client-side (bypassable); server-side plan validation pending.
+- Subscription plans: as of 2026-10-04 the plan is decided only on the server (client can no longer write subscription documents; payment amounts and plans are fixed server-side; the public access code was removed). Server-side blocking of paid suites is implemented but ships in `log` mode until `SUBSCRIPTION_ENFORCEMENT=enforce` is set.
 - `storage.rules` do not cover several paths used by the app and are too permissive on two paths.
 - The `github_token` cookie is per browser, not bound to the user.
 - Integration tokens are stored in Firestore under the tenant's own documents (readable by that tenant's authenticated browser session).

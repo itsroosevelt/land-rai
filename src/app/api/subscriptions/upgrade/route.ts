@@ -15,9 +15,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing userId, entityId, or plan' }, { status: 400 });
     }
 
+    // Solo planes del catálogo (con precio). Sin esto, un plan sin precio (p. ej. enterprise) calculaba
+    // un cobro de $0 y se "mejoraba" gratis.
+    const planKey = String(plan).toLowerCase();
+    if (!PLAN_CATALOG_USD[planKey]) {
+      return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });
+    }
+
     const resolved = await resolveUpgradeChargeForUser({
       userId,
-      targetPlanId: String(plan),
+      entityId,
+      targetPlanId: planKey,
     });
 
     if (!resolved.hasActive) {
@@ -33,7 +41,7 @@ export async function POST(request: NextRequest) {
 
     const catalogPrice = PLAN_CATALOG_USD[String(plan).toLowerCase()] ?? resolved.fullTargetPriceUSD;
     const now = new Date();
-    const subSnap = await db.doc(getSubscriptionCurrentDocPath(userId)).get();
+    const subSnap = await db.doc(getSubscriptionCurrentDocPath(userId, entityId)).get();
     const existing = subSnap.exists ? subSnap.data()! : null;
     const expiresAtIso =
       existing?.expiresAt && new Date(existing.expiresAt).getTime() > now.getTime()
@@ -43,10 +51,10 @@ export async function POST(request: NextRequest) {
       ? String(existing.activatedAt)
       : now.toISOString();
 
-    await db.doc(getSubscriptionCurrentDocPath(userId)).set(
+    await db.doc(getSubscriptionCurrentDocPath(userId, entityId)).set(
       {
         status: 'active',
-        plan,
+        plan: planKey,
         priceUSD: catalogPrice,
         paymentMethod: 'upgrade_credit',
         upgradedAt: now.toISOString(),
@@ -60,7 +68,7 @@ export async function POST(request: NextRequest) {
       { merge: true }
     );
 
-    return NextResponse.json({ success: true, plan, expiresAt: expiresAtIso });
+    return NextResponse.json({ success: true, plan: planKey, expiresAt: expiresAtIso });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Upgrade failed';
     console.error('[API] subscriptions/upgrade error:', error);

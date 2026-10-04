@@ -116,119 +116,6 @@ export default function QrTokenPayment({
 
   const catalogUsd = catalogPriceUSD ?? priceUSD;
 
-  const activateSubscription = async (signature: string, paidAtIso: string) => {
-    const subRef = doc(db, getSubscriptionCurrentDocPath(userId, entityId));
-    const existingSnap = isUpgrade ? await getDoc(subRef) : null;
-    const existing = existingSnap?.exists() ? existingSnap.data() : null;
-
-    let expiresAtIso: string;
-    let activatedAtIso: string;
-
-    if (isUpgrade && existing?.expiresAt) {
-      expiresAtIso = String(existing.expiresAt);
-      activatedAtIso = String(existing.activatedAt || paidAtIso);
-    } else {
-      const expiresAt = new Date(new Date(paidAtIso).getTime());
-      expiresAt.setDate(expiresAt.getDate() + 30);
-      expiresAtIso = expiresAt.toISOString();
-      activatedAtIso = paidAtIso;
-    }
-
-    await setDoc(
-      subRef,
-      {
-        status: 'active',
-        plan,
-        priceUSD: catalogUsd,
-        paymentMethod,
-        paymentSignature: signature,
-        activatedAt: activatedAtIso,
-        expiresAt: expiresAtIso,
-        updatedAt: paidAtIso,
-        cancelAtPeriodEnd: false,
-        cancelledAt: null,
-        billing: billingData || null,
-      },
-      { merge: true }
-    );
-  };
-
-  const getAllInstructions = (transaction: any) => {
-    const list: any[] = [];
-    if (!transaction) return list;
-    
-    // Add outer instructions
-    const outer = transaction?.transaction?.message?.instructions || [];
-    outer.forEach((inst: any) => {
-      list.push(inst);
-    });
-
-    // Add inner instructions
-    const innerGroups = transaction?.meta?.innerInstructions || [];
-    innerGroups.forEach((group: any) => {
-      (group.instructions || []).forEach((inst: any) => {
-        list.push(inst);
-      });
-    });
-
-    return list;
-  };
-
-  const verifySolTransfer = (transaction: any) => {
-    const instructions = getAllInstructions(transaction);
-
-    return instructions.some((instruction: any) => {
-      if (instruction.program !== 'system') {
-        return false;
-      }
-
-      const parsed = instruction.parsed;
-      return (
-        parsed?.type === 'transfer' &&
-        String(parsed?.info?.destination || '') === SUBSCRIPTION_TREASURY_WALLET &&
-        String(parsed?.info?.lamports || '') === preciseAmount?.rawAmount
-      );
-    });
-  };
-
-  const verifySplTransfer = (transaction: any) => {
-    if (!config.mint || !preciseAmount) {
-      return false;
-    }
-
-    const recipientAta = getAssociatedTokenAddressSync(
-      new PublicKey(config.mint),
-      new PublicKey(SUBSCRIPTION_TREASURY_WALLET),
-      true
-    ).toBase58();
-
-    const instructions = getAllInstructions(transaction);
-
-    return instructions.some((instruction: any) => {
-      if (instruction.program !== 'spl-token' && instruction.program !== 'spl-token-2022') {
-        return false;
-      }
-
-      const parsed = instruction.parsed;
-      if (!parsed || (parsed.type !== 'transfer' && parsed.type !== 'transferChecked')) {
-        return false;
-      }
-
-      const rawAmount =
-        parsed.info?.tokenAmount?.amount ||
-        parsed.info?.amount ||
-        parsed.info?.tokenAmount?.uiAmountString;
-
-      const mint = parsed.info?.mint ? String(parsed.info.mint) : config.mint;
-
-      return (
-        String(parsed.info?.destination || '') === recipientAta &&
-        mint === config.mint &&
-        String(rawAmount || '') === preciseAmount.rawAmount
-      );
-    });
-  };
-
   useEffect(() => {
     if (!paymentRequest?.requestId || paymentRequest.status !== 'pending') {
       return;
@@ -283,14 +170,8 @@ export default function QrTokenPayment({
             }
           }
 
-          await setDoc(
-            getPaymentRequestDocRef(paymentRequest.requestId),
-            {
-              status: 'expired',
-              updatedAt: new Date().toISOString(),
-            },
-            { merge: true }
-          );
+          // El servidor marca la orden como expirada al consultar su estado (el navegador ya no escribe en Firestore).
+          await pollServerStatus();
 
           if (!cancelled) {
             setPaymentRequest((current) =>
@@ -306,78 +187,7 @@ export default function QrTokenPayment({
           return;
         }
 
-        const conn = getClientSolanaConnection();
-        const signatures = await conn.getSignaturesForAddress(new PublicKey(paymentRequest.reference), {
-          limit: 10,
-        });
-
-        for (const signatureInfo of signatures) {
-          if (signatureInfo.err) {
-            continue;
-          }
-
-          const transaction = await conn.getParsedTransaction(signatureInfo.signature, {
-            commitment: 'confirmed',
-            maxSupportedTransactionVersion: 0,
-          });
-
-          if (!transaction || transaction.meta?.err) {
-            continue;
-          }
-
-          const accountKeys = (transaction.transaction.message.accountKeys || []).map((entry: any) => {
-            if (entry?.pubkey?.toBase58) {
-              return entry.pubkey.toBase58();
-            }
-            if (entry?.toBase58) {
-              return entry.toBase58();
-            }
-            return String(entry);
-          });
-
-          if (!accountKeys.includes(paymentRequest.reference)) {
-            continue;
-          }
-
-          const matches =
-            paymentMethod === 'sol' ? verifySolTransfer(transaction) : verifySplTransfer(transaction);
-
-          if (!matches) {
-            continue;
-          }
-
-          const paidAtIso = new Date().toISOString();
-          await setDoc(
-            getPaymentRequestDocRef(paymentRequest.requestId),
-            {
-              status: 'paid',
-              paymentSignature: signatureInfo.signature,
-              paidAt: paidAtIso,
-              updatedAt: paidAtIso,
-            },
-            { merge: true }
-          );
-
-          await activateSubscription(signatureInfo.signature, paidAtIso);
-
-          if (cancelled) {
-            return;
-          }
-
-          setPaymentRequest((current) =>
-            current
-              ? {
-                  ...current,
-                  status: 'paid',
-                  paymentSignature: signatureInfo.signature,
-                }
-              : current
-          );
-
-          toast.success('Payment confirmed on Solana. Activating subscription...');
-          onSuccess();
-          return;
-        }
+        // La verificación en cadena y la activación las hace el servidor (/api/subscriptions/qr/status).
       } catch (error) {
         console.error('QR payment status polling failed:', error);
       }

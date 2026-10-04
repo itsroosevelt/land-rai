@@ -8,10 +8,11 @@ import {
 
 export async function resolveUpgradeChargeForUser(params: {
   userId: string;
+  entityId?: string;
   targetPlanId: string;
   useLxr?: boolean;
 }) {
-  const subSnap = await db.doc(getSubscriptionCurrentDocPath(params.userId)).get();
+  const subSnap = await db.doc(getSubscriptionCurrentDocPath(params.userId, params.entityId)).get();
   if (!subSnap.exists) {
     return { hasActive: false as const, chargeUSD: PLAN_CATALOG_USD[params.targetPlanId.toLowerCase()] ?? 0 };
   }

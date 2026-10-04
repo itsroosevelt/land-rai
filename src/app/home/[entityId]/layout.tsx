@@ -4,6 +4,7 @@ import React, { useEffect } from 'react';
 import { useParams, usePathname } from 'next/navigation';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { EntityRouteResolver } from '@/components/EntityRouteResolver';
+import { SuiteGate } from '@/components/SuiteGate';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { AskRooseveltBar } from '@/components/floating-bars/AskRooseveltBar';
 import { EntityLeftFloatingBar } from '@/components/floating-bars/EntityLeftFloatingBar';
@@ -35,7 +36,7 @@ export default function SuiteLayout({
                             <EntityRightFloatingBar />
                         </>
                     )}
-                    {children}
+                    <SuiteGate entitySegment={segment}>{children}</SuiteGate>
                     <AskRooseveltBar />
                 </EntityRouteResolver>
             </ProtectedRoute>

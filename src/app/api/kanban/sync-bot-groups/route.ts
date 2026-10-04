@@ -5,6 +5,7 @@ import {
     syncKanbanGroupsFromBotAdmin,
 } from '@/lib/kanban/kanbanBotSyncAdmin';
 import { guardApi } from '@/lib/apiAuth';
+import { requireSuite } from '@/lib/subscriptions/entitlements.server';
 
 export async function POST(req: Request) {
     const denied = await guardApi(req);
@@ -12,6 +13,8 @@ export async function POST(req: Request) {
     try {
         const body = await req.json();
         const { userId, entityId, botId, relocateCards = true } = body || {};
+        const suiteDenied = await requireSuite(userId, entityId, 'coo');
+        if (suiteDenied) return suiteDenied;
 
         if (!userId || !entityId) {
             return NextResponse.json(

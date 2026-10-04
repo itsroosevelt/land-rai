@@ -1,69 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/firebase-admin';
-import { getSubscriptionCurrentDocPath } from '@/lib/subscriptions/payment-config';
-import { verifySubscriptionTransaction } from '@/lib/subscriptions/verify-payment';
-import type { SubscriptionPaymentMethod } from '@/lib/subscriptions/payment-config';
-import { guardApi } from '@/lib/apiAuth';
+import { NextResponse } from 'next/server';
 
-export async function POST(request: NextRequest) {
-    const denied = await guardApi(request);
-    if (denied) return denied;
-  try {
-    const { signature, plan, paymentMethod, userId, entityId, planPrice, billingData } = await request.json();
-
-    if (!signature || !plan || !paymentMethod || !userId || !entityId || !planPrice) {
-      return NextResponse.json(
-        { error: 'Missing required fields (signature, plan, paymentMethod, userId, entityId, planPrice)' },
-        { status: 400 }
-      );
-    }
-
-    const verification = await verifySubscriptionTransaction(
-      signature,
-      paymentMethod as SubscriptionPaymentMethod
-    );
-
-    if (!verification.ok) {
-      return NextResponse.json({ error: verification.error }, { status: 400 });
-    }
-
-    // Calculate expiration date (30 days from now)
-    const activatedAt = new Date().toISOString();
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
-
-    // Save subscription to Firestore (respecting global user-level structure)
-    await db.doc(getSubscriptionCurrentDocPath(userId, entityId)).set(
-      {
-        status: 'active',
-        plan: plan,
-        priceUSD: planPrice,
-        paymentMethod: paymentMethod,
-        paymentSignature: signature,
-        activatedAt: activatedAt,
-        expiresAt: expiresAt.toISOString(),
-        updatedAt: activatedAt,
-        cancelAtPeriodEnd: false,
-        cancelledAt: null,
-        ...(billingData && { billing: billingData }),
-      },
-      { merge: true }
-    );
-
-    return NextResponse.json({
-      success: true,
-      message: 'Subscription activated successfully',
-      subscription: {
-        status: 'active',
-        plan: plan,
-        expiresAt: expiresAt.toISOString(),
-      },
-    });
-  } catch (error: any) {
-    console.error('[API] subscriptions/verify error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Error verifying subscription' },
-      { status: 500 }
-    );
-  }
+/**
+ * Ruta heredada de pagos directos con wallet. Aceptaba el plan y el precio que decía el navegador y solo comprobaba
+ * que la tesorería apareciera en la transacción (sin monto ni anti-repetición), por lo que cualquiera podía activar
+ * cualquier plan con una transacción pública. Se cerró: los pagos con Solana usan /api/subscriptions/qr/*, donde el
+ * servidor fija el monto, genera una referencia única y valida la transferencia.
+ */
+export async function POST() {
+  return NextResponse.json(
+    { error: 'Este método de verificación fue retirado. Usa el pago por QR de Solana o tarjeta.' },
+    { status: 410 }
+  );
 }

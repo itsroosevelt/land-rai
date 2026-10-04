@@ -5,6 +5,7 @@ import { resolveTenantGeminiKey } from '@/lib/chatbot/resolveTenantGeminiKey';
 import { generateFlowFromText } from '@/lib/chatbot/generateFlowFromText';
 import type { FlowEditMode } from '@/lib/chatbot/flowGraphOps';
 import { guardApi } from '@/lib/apiAuth';
+import { requireSuite } from '@/lib/subscriptions/entitlements.server';
 
 export async function POST(req: Request) {
     const denied = await guardApi(req);
@@ -21,6 +22,8 @@ export async function POST(req: Request) {
             selectedNodeId,
             selectedSourceHandle,
         } = body || {};
+        const suiteDenied = await requireSuite(userId, entityId, 'cto');
+        if (suiteDenied) return suiteDenied;
 
         if (!userId || !entityId) {
             return NextResponse.json(

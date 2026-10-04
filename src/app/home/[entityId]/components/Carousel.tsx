@@ -3,6 +3,11 @@ import { motion, PanInfo, useAnimationFrame, useMotionValue, useTransform } from
 import { OrbNode } from './OrbNode';
 import { SUITE_NODES } from '../constants';
 import { CentralVideo } from './CentralVideo';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
+import { useEntitlements } from '@/hooks/useEntitlements';
+import { PLAN_LABELS, minimumPlanForSuite } from '@/lib/subscriptions/plans';
 
 const RADIUS_X = 1100;
 const RADIUS_Z = 700;
@@ -14,6 +19,25 @@ const DRAG_SENSITIVITY = 0.15;
 const MOMENTUM_FRICTION = 0.95;
 
 export const Carousel = () => {
+    const router = useRouter();
+    const { activeEntity } = useAuth();
+    const { entitlements } = useEntitlements(activeEntity);
+
+    // Candado visual: solo cuando se conoce el plan real de la entidad (o ya se aplica el bloqueo en servidor).
+    const showLocks = !!entitlements && (entitlements.enforced || entitlements.active);
+    const isLocked = (id: string) => {
+        if (!showLocks || !entitlements || entitlements.free) return false;
+        if (id === 'organigrama') return !entitlements.orgChart;
+        return !(entitlements.suites as string[]).includes(id);
+    };
+    const handleLockedClick = (id: string, title: string) => {
+        const need = id === 'organigrama' ? 'enterprise' : minimumPlanForSuite(id);
+        toast.info(`${title} no está incluido en tu plan`, {
+            description: need ? `Requiere el plan ${PLAN_LABELS[need as keyof typeof PLAN_LABELS]} o superior.` : undefined,
+        });
+        router.push(`/subscriptions/upgrade?entityId=${encodeURIComponent(activeEntity || '')}`);
+    };
+
     const rotation = useMotionValue(0);
     const [mounted, setMounted] = useState(false);
     const [radius, setRadius] = useState({ x: RADIUS_X, z: RADIUS_Z });
@@ -89,6 +113,8 @@ export const Carousel = () => {
                         total={SUITE_NODES.length}
                         rotation={rotation}
                         radius={radius}
+                        locked={isLocked(node.id)}
+                        onLockedClick={() => handleLockedClick(node.id, node.title)}
                     />
                 );
             })}
@@ -96,7 +122,9 @@ export const Carousel = () => {
     );
 };
 
-function CarouselItem({ node, index, total, rotation, radius }: {
+function CarouselItem({ node, index, total, rotation, radius, locked, onLockedClick }: {
+    locked?: boolean,
+    onLockedClick?: () => void,
     node: any,
     index: number,
     total: number,
@@ -132,6 +160,8 @@ function CarouselItem({ node, index, total, rotation, radius }: {
                     title={node.title}
                     subtitle={node.subtitle}
                     color={node.color}
+                    locked={locked}
+                    onLockedClick={onLockedClick}
                 />
             </div>
         </motion.div>

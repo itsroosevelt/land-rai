@@ -28,4 +28,6 @@ export const SUITE_NODES = [
     { id: "ciso", href: "/home/{entity}/workspace?role=ciso", icon: ShieldCheck, title: "CISO", subtitle: "InfoSec", color: "blue" },
     { id: "cpo", href: "/home/{entity}/workspace?role=cpo", icon: Package, title: "CPO", subtitle: "Product", color: "indigo" },
     { id: "clo", href: "/home/{entity}/workspace?role=clo", icon: Scale, title: "CLO", subtitle: "Legal", color: "slate" },
+    // Exclusivo del plan Enterprise: personas y agentes SI de la entidad
+    { id: "organigrama", href: "/home/{entity}/organigrama", icon: Network, title: "Org Chart", subtitle: "People & SI", color: "indigo" },
 ];

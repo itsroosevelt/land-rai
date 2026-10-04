@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { guardApi } from '@/lib/apiAuth';
+import { requireSuite } from '@/lib/subscriptions/entitlements.server';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,6 +11,8 @@ export async function POST(req: Request) {
     if (denied) return denied;
     try {
         const { projectId, region, userId, entityId } = await req.json();
+        const suiteDenied = await requireSuite(userId, entityId, 'cto');
+        if (suiteDenied) return suiteDenied;
 
         if (!projectId || !userId || !entityId) {
             return NextResponse.json({ error: 'Missing projectId, userId or entityId' }, { status: 400 });

@@ -100,22 +100,27 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
           const isPersonal = docData?.type === 'persona';
 
           if (!isPersonal) {
-            const isEntityUnlocked = typeof window !== 'undefined' && localStorage.getItem('roosevelt_entity_unlocked_' + resolved.id) === 'roosevelt2025';
-            if (!isEntityUnlocked) {
-              try {
-                const subRef = doc(db, `users/${currentUser.uid}/entities/${resolved.id}/subscriptions/current`);
-                const subSnap = await getDoc(subRef);
-                const data = subSnap.exists() ? subSnap.data() : null;
-                const isExpired = data?.expiresAt ? new Date(data.expiresAt) < new Date() : false;
-                const isActive = data?.status === 'active' && !isExpired;
-                if (!isActive) {
-                  const targetRedirect = currentPath || `/home/${routeSegment}`;
-                  router.replace(`/subscriptions?entityId=${resolved.id}&redirect=${encodeURIComponent(targetRedirect)}`);
-                  return;
-                }
-              } catch (subErr) {
-                console.error('[EntityRouteResolver] Error checking subscription:', subErr);
-              }
+            // El plan lo decide el servidor (/api/subscriptions/entitlements). Mientras SUBSCRIPTION_ENFORCEMENT
+            // no esté en 'enforce' se respeta el desbloqueo heredado del navegador para no dejar fuera a nadie.
+            let allowed = false;
+            try {
+              const res = await fetch(
+                `/api/subscriptions/entitlements?userId=${encodeURIComponent(currentUser.uid)}&entityId=${encodeURIComponent(resolved.id)}`
+              );
+              if (!res.ok) throw new Error(String(res.status));
+              const ent = await res.json();
+              const legacyUnlock =
+                typeof window !== 'undefined' &&
+                localStorage.getItem('roosevelt_entity_unlocked_' + resolved.id) === 'roosevelt2025';
+              allowed = !!ent.active || (!ent.enforced && legacyUnlock);
+            } catch (subErr) {
+              console.error('[EntityRouteResolver] Error checking subscription:', subErr);
+              allowed = true; // fallo de red: no se bloquea en el navegador; el servidor sigue protegiendo sus rutas
+            }
+            if (!allowed) {
+              const targetRedirect = currentPath || `/home/${routeSegment}`;
+              router.replace(`/subscriptions?entityId=${resolved.id}&redirect=${encodeURIComponent(targetRedirect)}`);
+              return;
             }
           }
 

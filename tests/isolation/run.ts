@@ -300,6 +300,125 @@ async function main() {
     delete process.env.INTEGRATION_CLAIMS_MODE;
 
     // =====================================================================
+    console.log('\n10) Suscripciones: el plan no se puede falsificar');
+    const subEnv = await initializeTestEnvironment({
+        projectId: 'demo-roosevelt-test',
+        firestore: { rules: readFileSync((process.env.ROOT_DIR || '.') + '/firestore.rules', 'utf8'), host: process.env.FIRESTORE_EMULATOR_HOST!.split(':')[0], port: Number(process.env.FIRESTORE_EMULATOR_HOST!.split(':')[1]) },
+    });
+    await subEnv.withSecurityRulesDisabled(async (ctx) => {
+        await ctx.firestore().doc(`${path(A)}/subscriptions/current`).set({ status: 'active', plan: 'starter' });
+        await ctx.firestore().doc(`${path(A)}/contacts/c1`).set({ name: 'x' });
+    });
+    const sA = subEnv.authenticatedContext(A.uid).firestore();
+    await assertSucceeds(sA.doc(`${path(A)}/subscriptions/current`).get());
+    check('El dueño LEE su suscripción', true);
+    check('El dueño NO puede escribir su suscripción (plan enterprise falso)', await assertFails(sA.doc(`${path(A)}/subscriptions/current`).set({ status: 'active', plan: 'enterprise' })).then(() => true, () => false));
+    check('El dueño NO puede escribir la suscripción a nivel de usuario', await assertFails(sA.doc(`users/${A.uid}/subscriptions/current`).set({ status: 'active', plan: 'enterprise' })).then(() => true, () => false));
+    check('El dueño NO puede crear órdenes de pago "pagadas"', await assertFails(sA.doc(`${path(A)}/paymentRequests/r1`).set({ status: 'paid' })).then(() => true, () => false));
+    check('El dueño NO puede borrar su suscripción para esquivar límites', await assertFails(sA.doc(`${path(A)}/subscriptions/current`).delete()).then(() => true, () => false));
+    await assertSucceeds(sA.doc(`${path(A)}/contacts/c2`).set({ name: 'ok' }));
+    check('El dueño SÍ sigue escribiendo el resto de su entidad', true);
+    await assertSucceeds(sA.doc(`users/${A.uid}/entities/entNueva`).set({ name: 'n', type: 'empresa' }));
+    check('El dueño SÍ crea entidades', true);
+    check('A NO lee la suscripción de B', await assertFails(sA.doc(`${path(B)}/subscriptions/current`).get()).then(() => true, () => false));
+    await subEnv.cleanup();
+
+    const { getEntityEntitlements, requireSuite, requireOrgChart } = await import('../../src/lib/subscriptions/entitlements.server');
+    const iso = (days: number) => new Date(Date.now() + days * 864e5).toISOString();
+    const mk = async (ent: string, type: string, sub?: any) => {
+        const t = { uid: 'uidPLAN' + ent, ent };
+        await db.doc(path(t)).set({ name: ent, type });
+        if (sub) await db.doc(`${path(t)}/subscriptions/current`).set(sub);
+        return t;
+    };
+    const tStarter = await mk('pStarter', 'empresa', { status: 'active', plan: 'starter', expiresAt: iso(10) });
+    const tStandard = await mk('pStandard', 'empresa', { status: 'active', plan: 'standard', expiresAt: iso(10) });
+    const tPro = await mk('pPro', 'empresa', { status: 'active', plan: 'pro', expiresAt: iso(10) });
+    const tPlus = await mk('pPlus', 'empresa', { status: 'active', plan: 'plus', expiresAt: iso(10) });
+    const tEnt = await mk('pEnt', 'empresa', { status: 'active', plan: 'enterprise', expiresAt: iso(10) });
+    const tExpired = await mk('pExpired', 'empresa', { status: 'active', plan: 'pro', expiresAt: iso(-1) });
+    const tNone = await mk('pNone', 'empresa');
+    const tPersona = await mk('pPersona', 'persona');
+    const tBogus = await mk('pBogus', 'empresa', { status: 'active', plan: 'galactico', expiresAt: iso(10) });
+    const suitesOf = async (t: any) => (await getEntityEntitlements(t.uid, t.ent)).suites.slice().sort().join(',');
+    check('Starter → solo CTO y COO', (await suitesOf(tStarter)) === 'coo,cto');
+    check('Standard → CTO, COO, CMO y CHRO', (await suitesOf(tStandard)) === 'chro,cmo,coo,cto');
+    check('Pro → las 12 suites', (await getEntityEntitlements(tPro.uid, tPro.ent)).suites.length === 12);
+    check('Plan heredado "plus" se trata como Pro', (await getEntityEntitlements(tPlus.uid, tPlus.ent)).plan === 'pro');
+    check('Solo Enterprise desbloquea el organigrama', (await getEntityEntitlements(tEnt.uid, tEnt.ent)).orgChart === true && (await getEntityEntitlements(tPro.uid, tPro.ent)).orgChart === false && (await getEntityEntitlements(tStarter.uid, tStarter.ent)).orgChart === false);
+    check('Suscripción vencida → sin acceso', (await getEntityEntitlements(tExpired.uid, tExpired.ent)).active === false);
+    check('Sin suscripción → sin acceso', (await getEntityEntitlements(tNone.uid, tNone.ent)).active === false);
+    check('Plan desconocido → sin acceso', (await getEntityEntitlements(tBogus.uid, tBogus.ent)).active === false);
+    check('Perfil personal → gratuito', (await getEntityEntitlements(tPersona.uid, tPersona.ent)).free === true);
+
+    process.env.SUBSCRIPTION_ENFORCEMENT = 'enforce';
+    check('enforce: Starter no entra a CMO (402)', (await requireSuite(tStarter.uid, tStarter.ent, 'cmo'))?.status === 402);
+    check('enforce: Starter sí entra a CTO', (await requireSuite(tStarter.uid, tStarter.ent, 'cto')) === null);
+    check('enforce: Standard sí entra a CMO', (await requireSuite(tStandard.uid, tStandard.ent, 'cmo')) === null);
+    check('enforce: Standard no entra a CFO', (await requireSuite(tStandard.uid, tStandard.ent, 'cfo'))?.status === 402);
+    check('enforce: sin suscripción no entra a nada', (await requireSuite(tNone.uid, tNone.ent, 'cto'))?.status === 402);
+    check('enforce: Pro no accede al organigrama', (await requireOrgChart(tPro.uid, tPro.ent))?.status === 402);
+    check('enforce: Enterprise sí accede al organigrama', (await requireOrgChart(tEnt.uid, tEnt.ent)) === null);
+    process.env.SUBSCRIPTION_ENFORCEMENT = 'log';
+    check('log: no bloquea (solo registra)', (await requireSuite(tNone.uid, tNone.ent, 'cto')) === null);
+    delete process.env.SUBSCRIPTION_ENFORCEMENT;
+
+    // --- Canje de códigos (servidor) ---
+    const redeemRoute = await import('../../src/app/api/subscriptions/redeem/route');
+    const redeem = (t: any, code: string) => redeemRoute.POST(new Request('http://localhost/api/subscriptions/redeem', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: t.uid, entityId: t.ent, code }) }));
+    delete process.env.SUBSCRIPTION_ACCESS_CODES;
+    check('Sin SUBSCRIPTION_ACCESS_CODES el canje está deshabilitado (503)', (await redeem(tNone, 'roosevelt2025')).status === 503);
+    process.env.SUBSCRIPTION_ACCESS_CODES = 'CODE_PRO:pro,CODE_ENT:enterprise';
+    check('El código público antiguo "roosevelt2025" ya NO funciona', (await redeem(tNone, 'roosevelt2025')).status === 400);
+    const tRedeem = await mk('pRedeem', 'empresa');
+    check('Código válido → 200', (await redeem(tRedeem, 'CODE_ENT')).status === 200);
+    check('El código otorgó el plan Enterprise en el servidor', (await getEntityEntitlements(tRedeem.uid, tRedeem.ent)).orgChart === true);
+    const tBrute = await mk('pBrute', 'empresa');
+    let last = 0;
+    for (let i = 0; i < 6; i++) last = (await redeem(tBrute, 'adivinando' + i)).status;
+    check('Fuerza bruta: tras 5 fallos → 429', last === 429);
+    check('Con el bloqueo activo ni el código correcto pasa', (await redeem(tBrute, 'CODE_PRO')).status === 429);
+
+    // --- Intentos de falsificar el plan o el monto ---
+    const upgradeRoute = await import('../../src/app/api/subscriptions/upgrade/route');
+    const upgrade = (t: any, plan: string) => upgradeRoute.POST(new Request('http://localhost/api/subscriptions/upgrade', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: t.uid, entityId: t.ent, plan }) }) as any);
+    check('Mejora gratis a "enterprise" (sin precio) → rechazada', (await upgrade(tStarter, 'enterprise')).status === 400);
+    check('Mejora de Starter a Pro sin pagar la diferencia → rechazada', (await upgrade(tStarter, 'pro')).status === 400);
+    check('El plan de Starter no cambió', (await getEntityEntitlements(tStarter.uid, tStarter.ent)).plan === 'starter');
+
+    const verifyRoute = await import('../../src/app/api/subscriptions/verify/route');
+    check('Ruta heredada /verify cerrada (410)', (await verifyRoute.POST()).status === 410);
+
+    const qrRoute = await import('../../src/app/api/subscriptions/qr/create/route');
+    const tQr = await mk('pQr', 'empresa');
+    const qrCreate = (body: any) => qrRoute.POST(new Request('http://localhost/api/subscriptions/qr/create', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: tQr.uid, entityId: tQr.ent, ...body }) }) as any);
+    let r = await qrCreate({ plan: 'pro', paymentMethod: 'usdc', chargeUSD: 1, expectedAmountUi: '0.000001', expectedAmountRaw: '1' });
+    check('QR: cobro de $1 por el plan Pro → rechazado (400)', r.status === 400, `status=${r.status}`);
+    r = await qrCreate({ plan: 'enterprise', paymentMethod: 'usdc', chargeUSD: 1, expectedAmountUi: '1', expectedAmountRaw: '1000000' });
+    check('QR: plan sin precio (enterprise) → rechazado (400)', r.status === 400, `status=${r.status}`);
+    r = await qrCreate({ plan: 'pro', paymentMethod: 'usdc', chargeUSD: 199.99, expectedAmountUi: '0.000001', expectedAmountRaw: '1' });
+    const qrJson: any = await r.json();
+    check('QR: precio correcto pero monto de tokens falso → se crea la orden', r.status === 200, `status=${r.status} ${JSON.stringify(qrJson)}`);
+    const order = (await db.doc(`${path(tQr)}/paymentRequests/${qrJson.requestId}`).get()).data();
+    check('QR: el servidor ignoró el monto falso y fijó 199.99 USDC', order?.expectedAmountRaw === '199990000', `raw=${order?.expectedAmountRaw}`);
+
+
+    // --- Bloqueo real en rutas API por suite ---
+    const bcRoute = await import('../../src/app/api/whatsapp/broadcast/send/route');
+    const bcSend = (t: any) => bcRoute.POST(new Request('http://localhost/api/whatsapp/broadcast/send', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: t.uid, entityId: t.ent, broadcastId: 'b1' }) }) as any);
+    process.env.SUBSCRIPTION_ENFORCEMENT = 'enforce';
+    let rb = await bcSend(tStarter);
+    check('enforce: difusión (CMO) con plan Starter → 402', rb.status === 402, `status=${rb.status}`);
+    rb = await bcSend(tNone);
+    check('enforce: difusión sin suscripción → 402', rb.status === 402, `status=${rb.status}`);
+    rb = await bcSend(tStandard);
+    check('enforce: difusión con plan Standard no se bloquea por plan', rb.status !== 402, `status=${rb.status}`);
+    process.env.SUBSCRIPTION_ENFORCEMENT = 'log';
+    rb = await bcSend(tStarter);
+    check('log: difusión con Starter no se bloquea (solo se registra)', rb.status !== 402, `status=${rb.status}`);
+    delete process.env.SUBSCRIPTION_ENFORCEMENT;
+
+    // =====================================================================
     console.log(`\nResultado: ${passed} OK, ${failures.length} fallos`);
     if (failures.length) { console.log('Fallos:\n - ' + failures.join('\n - ')); process.exit(1); }
     process.exit(0);

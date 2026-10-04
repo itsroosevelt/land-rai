@@ -22,7 +22,7 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.about': 'About',
     'nav.signIn': 'Sign In',
     'nav.signUp': 'Sign Up',
-    'nav.nucleo': 'Nucleo',
+    'nav.nucleo': 'Home',
     'hero.tag': 'Autonomous Infrastructure',
     'hero.titleLine1': 'Welcome to the',
     'hero.titleLine2': 'new era of autonomy',
@@ -44,7 +44,7 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.about': 'Nosotros',
     'nav.signIn': 'Sign In', // Iniciar Sesión - user wants them transparent but requested specifically to keep the sign in / sign up wording or translated. Let's provide Sign In/Sign Up or Iniciar Sesión/Registrarse depending on language, but let's keep them as "Sign In" and "Sign Up" if requested, or translate:
     'nav.signUp': 'Sign Up',
-    'nav.nucleo': 'Núcleo',
+    'nav.nucleo': 'Inicio',
     'hero.tag': 'Infraestructura Autónoma',
     'hero.titleLine1': 'Bienvenido a la',
     'hero.titleLine2': 'nueva era de la autonomía',

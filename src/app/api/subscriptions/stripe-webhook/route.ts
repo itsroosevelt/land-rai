@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { db } from '@/lib/firebase-admin';
 import { getSubscriptionCurrentDocPath } from '@/lib/subscriptions/payment-config';
+import { PLAN_CATALOG_USD } from '@/lib/subscriptions/upgrade-pricing';
 
 // Ruta pública por diseño: la autenticidad se valida con la firma de Stripe.
 export const runtime = 'nodejs';
@@ -14,6 +15,8 @@ async function activateFromPaymentIntent(pi: Stripe.PaymentIntent) {
   const { userId, entityId, plan, netAmount } = pi.metadata || {};
   // Solo procesamos los cobros creados por /subscriptions/stripe-intent
   if (!userId || !plan) return;
+  // Solo planes con precio de catálogo (un plan arbitrario en la metadata no activa nada).
+  if (!PLAN_CATALOG_USD[String(plan).toLowerCase()]) return;
 
   const ref = db.doc(getSubscriptionCurrentDocPath(userId, entityId || 'default'));
   const snap = await ref.get();

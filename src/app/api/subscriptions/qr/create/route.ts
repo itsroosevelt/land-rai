@@ -15,6 +15,7 @@ import {
 } from '@/lib/subscriptions/upgrade-pricing-server';
 import { PLAN_CATALOG_USD, PLAN_CATALOG_ANNUAL_USD } from '@/lib/subscriptions/upgrade-pricing';
 import { guardApi } from '@/lib/apiAuth';
+import { quoteTokenAmount } from '@/lib/subscriptions/server-pricing';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,9 +35,9 @@ export async function POST(request: NextRequest) {
       billingData,
     } = await request.json();
 
-    if (!userId || !entityId || !plan || !paymentMethod || !expectedAmountUi || !expectedAmountRaw) {
+    if (!userId || !entityId || !plan || !paymentMethod) {
       return NextResponse.json(
-        { error: 'Missing required fields (userId, entityId, plan, paymentMethod, expectedAmountUi, expectedAmountRaw)' },
+        { error: 'Missing required fields (userId, entityId, plan, paymentMethod)' },
         { status: 400 }
       );
     }
@@ -50,6 +51,7 @@ export async function POST(request: NextRequest) {
     const useLxr = paymentMethod === 'lxr';
     const resolved = await resolveUpgradeChargeForUser({
       userId,
+      entityId,
       targetPlanId: planKey,
       useLxr,
     });
@@ -84,10 +86,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // El monto de tokens lo calcula el servidor; lo que mande el navegador se ignora.
+    const quote = await quoteTokenAmount(serverChargeUSD, paymentMethod as SubscriptionPaymentMethod);
+    if (!quote.ok) {
+      return NextResponse.json({ error: quote.error }, { status: 503 });
+    }
+    const serverAmountUi = quote.ui;
+    const serverAmountRaw = quote.raw;
+
     const config = validatePaymentOrderPayload({
       paymentMethod: paymentMethod as SubscriptionPaymentMethod,
-      expectedAmountRaw: String(expectedAmountRaw),
-      expectedAmountUi: String(expectedAmountUi),
+      expectedAmountRaw: serverAmountRaw,
+      expectedAmountUi: serverAmountUi,
     });
 
     const collectionPath = getSubscriptionPaymentRequestsCollectionPath(userId, entityId);
@@ -98,7 +108,7 @@ export async function POST(request: NextRequest) {
 
     const qrUrl = encodeSolanaPayUrl({
       recipient: SUBSCRIPTION_TREASURY_WALLET,
-      amount: String(expectedAmountUi),
+      amount: serverAmountUi,
       splToken: config.mint,
       reference,
       label: `Roosevelt ${String(plan).toUpperCase()} Subscription`,
@@ -122,8 +132,8 @@ export async function POST(request: NextRequest) {
         resolved.hasActive && resolved.quote ? resolved.quote.unusedCreditUSD : 0,
       isUpgrade: resolved.hasActive,
       priorPlan: resolved.hasActive ? resolved.currentPlan : null,
-      expectedAmountUi: String(expectedAmountUi),
-      expectedAmountRaw: String(expectedAmountRaw),
+      expectedAmountUi: serverAmountUi,
+      expectedAmountRaw: serverAmountRaw,
       tokenDecimals: config.decimals,
       tokenMint: config.mint,
       billingData: billingData || null,
@@ -139,6 +149,7 @@ export async function POST(request: NextRequest) {
       recipientWallet: SUBSCRIPTION_TREASURY_WALLET,
       expiresAt: expiresAt.toISOString(),
       status: 'pending',
+      expectedAmountUi: serverAmountUi,
     });
   } catch (error: any) {
     console.error('[API] subscriptions/qr/create error:', error);

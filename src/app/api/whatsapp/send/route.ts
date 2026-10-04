@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { db, admin } from '@/lib/firebase-admin';
 import { guardApi } from '@/lib/apiAuth';
+import { requireSuite } from '@/lib/subscriptions/entitlements.server';
 
 export async function POST(req: Request) {
     const denied = await guardApi(req);
@@ -9,6 +10,8 @@ export async function POST(req: Request) {
     try {
         const bodyValue = await req.json();
         const { message, toNumber, cardId, groupId, type, template, url, filename, platform = 'kamban', userId, entityId } = bodyValue;
+        const suiteDenied = await requireSuite(userId, entityId, 'coo');
+        if (suiteDenied) return suiteDenied;
 
         if ((!message && !url) || !toNumber) {
             return NextResponse.json(

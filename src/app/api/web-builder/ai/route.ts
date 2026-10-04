@@ -7,6 +7,7 @@ import * as dotenv from 'dotenv';
 import { SYSTEM_PROMPT } from './prompt';
 import { db, admin } from '@/lib/firebase-admin';
 import { guardApi } from '@/lib/apiAuth';
+import { requireSuite } from '@/lib/subscriptions/entitlements.server';
 
 // Force load environment variables
 dotenv.config();
@@ -691,6 +692,8 @@ export async function POST(req: Request) {
   
   try {
     const { messages, currentFiles, model, supabaseConfig, projectId, userId, entityId } = await req.json();
+    const suiteDenied = await requireSuite(userId, entityId, 'cto');
+    if (suiteDenied) return suiteDenied;
     logToFile(`[POST] Request started. User: ${userId}, Model: ${model}`);
 
     // --- CREDITS SYSTEM (Lovable Style) ---

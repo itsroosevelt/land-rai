@@ -15,6 +15,10 @@ interface OrbNodeProps {
     subtitle: string;
     color: string;
     isComingSoon?: boolean;
+    /** Fuera del plan de la entidad: muestra candado y lleva a mejorar el plan. */
+    locked?: boolean;
+    lockedHint?: string;
+    onLockedClick?: () => void;
 }
 
 const shadowColors: Record<string, string> = {
@@ -29,7 +33,7 @@ const shadowColors: Record<string, string> = {
     orange: 'rgba(249, 115, 22, 0.5)',
 };
 
-export const OrbNode = ({ href, onClick, icon: Icon, title, subtitle, color, isComingSoon = false }: OrbNodeProps) => {
+export const OrbNode = ({ href, onClick, icon: Icon, title, subtitle, color, isComingSoon = false, locked = false, lockedHint, onLockedClick }: OrbNodeProps) => {
     const { activeEntityRoute } = useAuth();
     const finalHref = href?.replace('{entity}', activeEntityRoute || '');
 
@@ -55,8 +59,16 @@ export const OrbNode = ({ href, onClick, icon: Icon, title, subtitle, color, isC
                     <Icon className={`w-7 h-7 transition-colors duration-500 ${
                         isComingSoon
                             ? 'text-white/30 group-hover:text-white/45'
-                            : 'text-white/70 group-hover:text-white'
+                            : locked
+                                ? 'text-white/40 group-hover:text-white/70'
+                                : 'text-white/70 group-hover:text-white'
                     }`} />
+
+                    {locked && !isComingSoon && (
+                        <div className="absolute -top-1 -right-1.5 flex items-center justify-center text-white/60 group-hover:text-white transition-colors pointer-events-none select-none z-20">
+                            <Lock className="w-3 h-3" />
+                        </div>
+                    )}
 
                     {isComingSoon && (
                         <div className="absolute -top-1 -right-1.5 flex items-center justify-center text-white/40 group-hover:text-white/70 transition-colors pointer-events-none select-none z-20">
@@ -74,6 +86,19 @@ export const OrbNode = ({ href, onClick, icon: Icon, title, subtitle, color, isC
             </div>
         </>
     );
+
+    if (locked && !isComingSoon) {
+        return (
+            <button
+                type="button"
+                onClick={onLockedClick}
+                className="group flex flex-col items-center gap-1.5 cursor-pointer outline-none bg-transparent border-none p-0 inline-flex"
+                title={lockedHint || `${title}: no incluido en tu plan`}
+            >
+                {InnerContent}
+            </button>
+        );
+    }
 
     if (isComingSoon) {
         return (

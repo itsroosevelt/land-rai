@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { guardApi } from '@/lib/apiAuth';
+import { PLAN_CATALOG_USD, PLAN_CATALOG_ANNUAL_USD } from '@/lib/subscriptions/upgrade-pricing';
+import { assertClientChargeMatchesServer, resolveUpgradeChargeForUser } from '@/lib/subscriptions/upgrade-pricing-server';
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 
@@ -26,9 +28,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // El plan y el precio los decide el servidor (catálogo + crédito por mejora). Lo que mande el navegador
+    // solo se acepta si coincide; antes se podía pedir el plan Pro y pagar un dólar.
+    const planKey = String(plan).toLowerCase();
+    const catalogPrice = PLAN_CATALOG_USD[planKey];
+    if (!catalogPrice) {
+      return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });
+    }
+    const resolved = await resolveUpgradeChargeForUser({ userId: String(userId), entityId: entityId ? String(entityId) : undefined, targetPlanId: planKey });
+    const serverMonthly = resolved.hasActive ? resolved.chargeUSD : catalogPrice;
+    const serverAnnual = PLAN_CATALOG_ANNUAL_USD[planKey] ?? serverMonthly;
+    const clientCharge = Number(priceUSD);
+    let netAmount: number;
+    if (assertClientChargeMatchesServer(clientCharge, serverMonthly)) netAmount = serverMonthly;
+    else if (assertClientChargeMatchesServer(clientCharge, serverAnnual)) netAmount = serverAnnual;
+    else {
+      return NextResponse.json(
+        { error: 'Charge amount mismatch. Refresh checkout and try again.', expectedChargeUSD: serverMonthly },
+        { status: 400 }
+      );
+    }
+    if (netAmount <= 0) {
+      return NextResponse.json({ error: 'No payment required. Use upgrade endpoint.' }, { status: 400 });
+    }
     // Calcular monto total cobrado al cliente incluyendo la comisión de Stripe (2.9% + $0.30)
-    // Para que la plataforma reciba exactamente priceUSD neto: gross = (net + 0.30) / (1 - 0.029)
-    const netAmount = Number(priceUSD);
+    // Para que la plataforma reciba exactamente netAmount: gross = (net + 0.30) / (1 - 0.029)
     const grossAmount = Math.round(((netAmount + 0.30) / (1 - 0.029)) * 100) / 100;
     const stripeFee = Math.round((grossAmount - netAmount) * 100) / 100;
     const amountInCents = Math.round(grossAmount * 100);
@@ -60,7 +84,7 @@ export async function POST(request: NextRequest) {
       metadata: {
         userId: String(userId),
         entityId: String(entityId || 'default'),
-        plan: String(plan),
+        plan: planKey,
         planName: String(planName || plan),
         netAmount: String(netAmount),
         stripeFee: String(stripeFee),

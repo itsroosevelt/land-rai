@@ -448,29 +448,24 @@ function SubscriptionsContent() {
 
   const handleVerifyBypass = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (bypassCode.trim() === 'roosevelt2025') {
-      if (targetEntityId) {
-        localStorage.setItem(`roosevelt_entity_unlocked_${targetEntityId}`, 'roosevelt2025');
-        if (currentUser) {
-          try {
-            await setDoc(doc(db, `users/${currentUser.uid}/entities/${targetEntityId}/subscriptions/current`), {
-              status: 'active',
-              plan: 'pro',
-              priceUSD: 0,
-              paymentMethod: 'access_code',
-              activatedAt: new Date().toISOString(),
-              expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-            }, { merge: true });
-          } catch (saveErr) {
-            console.error('Error saving subscription in firestore:', saveErr);
-          }
-        }
+    if (!targetEntityId || !currentUser) return;
+    try {
+      // El código se valida en el servidor (nunca viaja al navegador) y el servidor registra la suscripción.
+      const res = await fetch('/api/subscriptions/redeem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: currentUser.uid, entityId: targetEntityId, code: bypassCode.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        toast.error(data.message || 'Invalid code. An active subscription is required.');
+        return;
       }
       setIsBypassOpen(false);
       toast.success('Access code validated! Access activated for ' + (targetEntity?.name || 'this environment'));
       router.push(paramRedirect || '/home');
-    } else {
-      toast.error('Invalid code. An active subscription is required.');
+    } catch {
+      toast.error('Could not validate the code. Try again.');
     }
   };
 
@@ -797,7 +792,7 @@ function SubscriptionsContent() {
             />
           )}
 
-          {/* Go to Nucleo & Wallet - Top Right */}
+          {/* Home & Wallet - Top Right */}
           <div className="fixed top-8 right-8 md:top-12 md:right-12 z-[50] flex items-center gap-4">
             {hasHistory && (
               <Button
@@ -813,7 +808,7 @@ function SubscriptionsContent() {
               onClick={handleGoToNucleo}
               className="group flex items-center gap-2 text-white/40 hover:text-white transition-all duration-300"
             >
-              <span className="text-sm font-normal tracking-wide">Go to Nucleo</span>
+              <span className="text-sm font-normal tracking-wide">Home</span>
             </button>
           </div>
         </div>
