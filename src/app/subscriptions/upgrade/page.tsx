@@ -385,7 +385,7 @@ export default function SubscriptionUpgradePage() {
 
                       {plan.isEnterprise ? (
                         <a
-                          href={`mailto:info@rooseveltcorp.com?subject=${encodeURIComponent(
+                          href={`mailto:business@itsroosevelt.com?subject=${encodeURIComponent(
                             `Enterprise upgrade inquiry — ${currentUser?.email || 'Roosevelt user'}`
                           )}`}
                           className="mt-auto"

@@ -135,7 +135,7 @@ export default function Footer() {
                 { name: "Jobs / Careers", href: "mailto:careers@itsroosevelt.com" },
                 { name: "Newsroom", href: "#" },
                 { name: "Roosevelt Press Publications", href: "#" },
-                { name: "Contact Sales", href: "mailto:services@byluxor.com" }
+                { name: "Business Contact", href: "mailto:business@itsroosevelt.com" }
             ]
         },
         {

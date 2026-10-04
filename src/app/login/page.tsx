@@ -486,6 +486,13 @@ function LoginContent() {
                 </button>
               </div>
 
+              <p className="text-center text-[11px] leading-relaxed text-white/40 pt-3 max-w-xs">
+                By continuing, you agree to our{' '}
+                <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-white/70 transition-colors">Terms of Service</a>
+                {' '}and{' '}
+                <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-white/70 transition-colors">Privacy Policy</a>.
+              </p>
+
               {/* Go Back */}
               <button
                 type="button"
