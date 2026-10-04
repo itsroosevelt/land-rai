@@ -18,6 +18,7 @@ Meta (Facebook/Instagram/WhatsApp) app review requires: privacy policy URL, term
 
 - Operator: **Luxor Intelligence LLC**, 470 W 200 N, Salt Lake City, UT 84103 (address taken from the company website footer). Footer also shows phone +1 (385) 865-3535.
 - Products listed on the company site: Roosevelt (itsroosevelt.com), Royalty (itsroyalty.us), Sterling (itssterling.com); tokens $LXR, $XLS, $USDX (separate sites: luxorstandard.com, excelsiorstandard.com, occidentstandard.com).
+- The company website's careers text (`land-luxor-intelligence/lib/jobs-data.ts`) states Luxor is "incorporated in Salt Lake City, Utah". The Terms were still left generic on governing law pending counsel's decision; Utah is the likely candidate.
 - **Unknown to the drafter:** state/country of organization, registered agent, whether Stripe/other accounts are held by a different legal entity (the Stripe account observed is named "Udreamms LLC"), EU/UK establishment.
 
 ## 3. What Roosevelt does (from the code)
@@ -88,6 +89,7 @@ Known gaps (do not appear in public text, but counsel should know):
 14. **Digital assets:** Terms include general "not investment advice / irreversible" language. Token-related offerings (LXR/XLS/USDX, "RWA", stablecoin, presale pages on the company site) raise securities, money-transmitter/AML/KYC and consumer-protection questions that are **outside** these drafts.
 15. **Scope of the company-site policy:** states it covers luxorintelligence.com and Roosevelt; Royalty and Sterling data practices were not described because they are unknown to the drafter.
 16. **Taxes:** prices exclude taxes; sales-tax/VAT registration and collection (US states, EU OSS) not addressed.
+17a. **Branding vs. disclosure:** the product is now marketed as "Roosevelt Super Intelligence (SI)" and the public texts avoid the term "AI" for branding. The documents still state that SI output is generated automatically by a non-human system and that features are powered by third-party machine-learning models. Counsel should confirm this satisfies chatbot/automated-communication disclosure laws (e.g., California B.O.T. Act, Utah AI disclosure rules, EU AI Act transparency duties) and that marketing claims about "super intelligence" are not misleading (FTC).
 17. **Language:** English only; the app UI is Spanish/English. Consider Spanish versions for consumer-facing markets.
 18. Address, phone and email addresses are taken from the public site; confirm that the four mailboxes exist and are monitored (legal requests, privacy requests, DMCA, careers).
 

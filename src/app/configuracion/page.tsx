@@ -72,7 +72,7 @@ const ActiveSubCard = ({
 
     const displayPrice = typeof details.priceUSD === 'number' ? details.priceUSD : isPro ? 99.99 : 19.99;
     const features = isPro
-        ? ['Acceso ilimitado a Bóvedas', 'Soporte prioritario 24/7', 'Módulos IA Avanzados (CTO, COO)', 'Multisig y Conexiones ilimitadas']
+        ? ['Acceso ilimitado a Bóvedas', 'Soporte prioritario 24/7', 'Módulos SI Avanzados (CTO, COO)', 'Multisig y Conexiones ilimitadas']
         : ['1 Bóveda activa', 'Acceso a herramientas esenciales', 'Soporte base', 'Módulo financiero básico'];
 
     const handleCopySignature = () => {

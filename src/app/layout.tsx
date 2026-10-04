@@ -18,8 +18,8 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: "Roosevelt",
-  description: `A Next-Generation Artificial Intelligence infrastructure designed to act as a unified command center. It's a proactive manager integrating business strategy with personal optimization.
+  title: "Roosevelt Super Intelligence",
+  description: `A Next-Generation Super Intelligence (SI) infrastructure designed to act as a unified command center. It's a proactive manager integrating business strategy with personal optimization.
 
 How it works:
 • Total Interconnectivity: Links digital assets, blockchains (like Solana), and admin tools for a real-time 360° view.

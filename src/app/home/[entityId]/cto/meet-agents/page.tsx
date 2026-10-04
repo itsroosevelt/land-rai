@@ -105,7 +105,7 @@ function CreateAgentModal({ isOpen, onClose, onSave }: { isOpen: boolean; onClos
                     </div>
 
                     <div>
-                        <label className="text-[10px] text-neutral-600 uppercase font-bold tracking-wider block mb-2">AI Personality</label>
+                        <label className="text-[10px] text-neutral-600 uppercase font-bold tracking-wider block mb-2">SI Personality</label>
                         <textarea
                             value={form.personality}
                             onChange={e => setForm({ ...form, personality: e.target.value })}
@@ -250,7 +250,7 @@ export default function MeetAgentsPage() {
                     <div>
                         <div className="flex items-center gap-2 text-teal-400 text-xs font-bold tracking-[0.2em] uppercase mb-3">
                             <Sparkles className="w-3 h-3 fill-current" />
-                            <span>AI Meeting Agents</span>
+                            <span>SI Meeting Agents</span>
                             {!isLive && (
                                 <span className="ml-2 px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-full text-[9px]">
                                     DEMO
@@ -259,7 +259,7 @@ export default function MeetAgentsPage() {
                         </div>
                         <h1 className="text-3xl md:text-4xl font-medium tracking-tight">Virtual Meet Agents</h1>
                         <p className="text-neutral-500 mt-2 text-sm max-w-lg">
-                            AI-powered bots with avatars that join your meetings to close sales, provide support, and onboard users 24/7.
+                            SI-powered bots with avatars that join your meetings to close sales, provide support, and onboard users 24/7.
                         </p>
                     </div>
                     <button
@@ -403,7 +403,7 @@ export default function MeetAgentsPage() {
                                 {/* Personality */}
                                 {selectedAgent.personality && (
                                     <div className="p-5 rounded-2xl bg-teal-500/5 border border-teal-500/20 mb-6">
-                                        <p className="text-[10px] text-teal-400 uppercase font-bold tracking-wider mb-2">AI Personality</p>
+                                        <p className="text-[10px] text-teal-400 uppercase font-bold tracking-wider mb-2">SI Personality</p>
                                         <p className="text-sm text-neutral-300 leading-relaxed">{selectedAgent.personality}</p>
                                     </div>
                                 )}
@@ -430,7 +430,7 @@ export default function MeetAgentsPage() {
                                         <Bot className="w-8 h-8 text-white/10" />
                                     </div>
                                     <p className="text-neutral-500 text-sm">Select an agent to view details</p>
-                                    <p className="text-neutral-700 text-xs">Or create a new AI agent to get started</p>
+                                    <p className="text-neutral-700 text-xs">Or create a new SI agent to get started</p>
                                 </div>
                             </div>
                         )}

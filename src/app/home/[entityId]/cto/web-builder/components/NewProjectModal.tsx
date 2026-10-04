@@ -46,7 +46,7 @@ export const NewProjectModal = ({ show, setShow, onCreate }: NewProjectModalProp
 
                     <h2 className="text-2xl font-black text-white mb-2 tracking-tight">Nuevo Proyecto</h2>
                     <p className="text-gray-400 text-sm mb-8">
-                        Dale un nombre a tu idea. La IA se encargar├í del resto.
+                        Dale un nombre a tu idea. La SI se encargar├í del resto.
                     </p>
 
                     <form onSubmit={handleSubmit}>

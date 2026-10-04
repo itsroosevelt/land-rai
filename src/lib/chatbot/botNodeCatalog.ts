@@ -1,6 +1,6 @@
 /**
  * Catálogo de nodos y reglas del motor de chatbots.
- * Usado para exportar JSON de referencia al enriquecer flujos con IA externa.
+ * Usado para exportar JSON de referencia al enriquecer flujos con SI externa.
  */
 
 export type NodeRuntimeStatus = 'runtime' | 'editor_only' | 'disabled';
@@ -433,7 +433,7 @@ export const BOT_NODE_CATEGORIES: BotNodeCategory[] = [
     nodes: [
       {
         type: 'generativeAINode',
-        label: 'IA Generativa (LLM)',
+        label: 'SI Generativa (LLM)',
         category: 'Inteligencia Artificial',
         runtimeStatus: 'runtime',
         description: 'Genera respuesta con LLM usando contexto y variables.',
@@ -528,7 +528,7 @@ export function buildBotRulesExport() {
   return {
     exportedAt: new Date().toISOString(),
     schemaVersion: 1,
-    purpose: 'Catálogo de nodos (herramientas) y reglas del motor para crear o enriquecer flujos con IA',
+    purpose: 'Catálogo de nodos (herramientas) y reglas del motor para crear o enriquecer flujos con SI',
     platform: 'roosevelt-chatbot',
     flowRules: BOT_FLOW_RULES,
     conditionOperators: BOT_CONDITION_OPERATORS,

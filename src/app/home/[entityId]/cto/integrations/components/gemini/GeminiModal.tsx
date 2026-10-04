@@ -72,7 +72,7 @@ export default function GeminiModal({ isOpen, onClose, activeEntity, currentUser
                 { merge: true }
             );
 
-            toast.success('Gemini conectado. Humanizar y nodos IA usarán esta key.', {
+            toast.success('Gemini conectado. Humanizar y nodos SI usarán esta key.', {
                 id: toastId,
             });
             setStep(3);
@@ -135,7 +135,7 @@ export default function GeminiModal({ isOpen, onClose, activeEntity, currentUser
                                 </h1>
                                 <p className="text-[14px] text-white/40 font-light leading-relaxed max-w-[280px]">
                                     Conecta tu API key de Google AI Studio por entidad. Se usa para
-                                    Humanizar flujos y otras capacidades de IA del tenant — sin
+                                    Humanizar flujos y otras capacidades de SI del tenant — sin
                                     mezclar keys entre clientes.
                                 </p>
                             </div>

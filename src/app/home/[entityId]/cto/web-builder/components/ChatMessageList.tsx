@@ -33,7 +33,7 @@ export const ChatMessageList = ({ messages, isGenerating, statusMessage }: ChatM
                     <div className="w-16 h-16 bg-[#111] rounded-[2rem] flex items-center justify-center mb-6 border border-[#222]">
                         <Sparkles className="w-8 h-8 text-white" />
                     </div>
-                    <h3 className="text-sm font-bold text-white mb-2 uppercase tracking-widest">Web Builder AI</h3>
+                    <h3 className="text-sm font-bold text-white mb-2 uppercase tracking-widest">Web Builder SI</h3>
                     <p className="text-[11px] text-gray-400 leading-relaxed max-w-[200px]">Empieza una conversación para generar el código de tu sitio web.</p>
                 </div>
             ) : (
@@ -144,7 +144,7 @@ export const ChatMessageList = ({ messages, isGenerating, statusMessage }: ChatM
 
                         <div className="flex items-center gap-1.5 mt-1 mx-1 opacity-40 select-none">
                             <span className="text-[9px] text-gray-400 font-mono uppercase tracking-tighter">
-                                {msg.role === 'user' ? 'Tú' : 'AI Assistant'}
+                                {msg.role === 'user' ? 'Tú' : 'SI Assistant'}
                             </span>
                             <span className="text-[8px] text-gray-500 font-mono">
                                 • {new Date(msg.timestamp || Date.now()).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false })}

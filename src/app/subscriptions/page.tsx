@@ -150,7 +150,7 @@ const plans: PlanConfig[] = [
       {
         iconType: 'email',
         boldText: 'Custom business email',
-        normalText: ', you@your-company.com + Roosevelt AI assistant in Mail',
+        normalText: ', you@your-company.com + Roosevelt SI assistant in Mail',
       },
       {
         iconType: 'suite',
@@ -159,13 +159,13 @@ const plans: PlanConfig[] = [
       },
       {
         iconType: 'ai',
-        boldText: 'Chat with AI in the Roosevelt app',
+        boldText: 'Chat with SI in the Roosevelt app',
         normalText: 'with enterprise-grade security & privacy, your company data is ',
         highlightText: 'not used to train models',
       },
       {
         iconType: 'workflow',
-        boldText: 'Create AI-powered workflows',
+        boldText: 'Create SI-powered workflows',
         normalText: 'across Roosevelt apps to automate everyday work',
       },
       {
@@ -180,7 +180,7 @@ const plans: PlanConfig[] = [
       },
       {
         iconType: 'check',
-        boldText: 'Generate and edit content with AI',
+        boldText: 'Generate and edit content with SI',
         normalText: 'in Roosevelt Creator & Vids',
       },
       {
@@ -217,12 +217,12 @@ const plans: PlanConfig[] = [
       },
       {
         iconType: 'suite',
-        boldText: 'Unlock premium AI built-in',
+        boldText: 'Unlock premium SI built-in',
         normalText: 'across Mail, Docs, Drive, Sheets, and more',
       },
       {
         iconType: 'ai',
-        boldText: 'Chat with AI in the Roosevelt app',
+        boldText: 'Chat with SI in the Roosevelt app',
         normalText: 'with additional access to advanced reasoning models',
       },
       {
@@ -233,7 +233,7 @@ const plans: PlanConfig[] = [
       {
         iconType: 'video',
         boldText: 'Better video meetings',
-        normalText: 'with AI note taking, real-time speech translation, and recordings',
+        normalText: 'with SI note taking, real-time speech translation, and recordings',
       },
       {
         iconType: 'booking',
@@ -242,7 +242,7 @@ const plans: PlanConfig[] = [
       },
       {
         iconType: 'notebook',
-        boldText: 'Roosevelt Notebook AI',
+        boldText: 'Roosevelt Notebook SI',
         normalText: 'research and thinking partner with expanded access',
       },
       {
@@ -350,7 +350,7 @@ const plans: PlanConfig[] = [
       },
       {
         iconType: 'check',
-        boldText: 'AI Classification for Roosevelt Drive',
+        boldText: 'SI Classification for Roosevelt Drive',
         normalText: 'and sensitive document labeling',
       },
       {
@@ -647,7 +647,7 @@ function SubscriptionsContent() {
                       const emailBody = encodeURIComponent("Hello, I am interested in an Enterprise plan for my business.");
                       return (
                         <a
-                          href={`https://mail.google.com/mail/?view=cm&fs=1&to=sales@byroosevelt.com&su=${emailSubject}&body=${emailBody}`}
+                          href={`https://mail.google.com/mail/?view=cm&fs=1&to=business@itsroosevelt.com&su=${emailSubject}&body=${emailBody}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="w-full block"

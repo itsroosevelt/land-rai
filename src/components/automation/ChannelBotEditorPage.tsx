@@ -231,7 +231,7 @@ export function ChannelBotEditorPage({ channel, botId }: ChannelBotEditorPagePro
             className={`flex items-center gap-2.5 px-3 py-1.5 rounded-full border ${
               humanizeTone ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-white/5 border-white/5'
             }`}
-            title="La IA solo reformula el tono. El flujo decide el camino."
+            title="La SI solo reformula el tono. El flujo decide el camino."
           >
             <Sparkles className={`w-3.5 h-3.5 ${humanizeTone ? 'text-emerald-400' : 'text-neutral-500'}`} />
             <span className={`text-[10px] uppercase tracking-tight ${humanizeTone ? 'text-emerald-300' : 'text-neutral-500'}`}>

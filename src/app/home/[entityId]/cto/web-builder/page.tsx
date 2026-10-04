@@ -891,7 +891,7 @@ function WebBuilderContent() {
                         await updateProject(activeProjectId, {
                             geminiApiKey: config.geminiApiKey
                         });
-                        showToast("Configuración de IA actualizada", "success");
+                        showToast("Configuración de SI actualizada", "success");
                     }
                 }}
             />

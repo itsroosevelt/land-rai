@@ -201,7 +201,7 @@ export const ChatInput = ({
                                 <div className="absolute bottom-full left-0 mb-3 w-64 bg-[#18181b] border border-[#27272a] rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] py-1 z-[100] animate-in fade-in slide-in-from-bottom-2">
                                     <div className="px-3 py-2 text-[10px] font-semibold text-gray-500 uppercase tracking-wider border-b border-[#27272a]">Modelos Disponibles</div>
                                     {[
-                                        { id: 'Multi-AI (Consensus)', label: 'Multi-AI (Consensus)', disabled: true },
+                                        { id: 'Multi-AI (Consensus)', label: 'Multi-SI (Consensus)', disabled: true },
                                         { id: 'Gemini 3.0 (Preview)', label: 'Gemini 3.0 (Preview) 🚀' },
                                         { id: 'Gemini 2.0 Flash', label: 'Gemini 2.0 Flash' },
                                         { id: 'Gemini 2.0 Pro', label: 'Gemini 2.0 Pro' },

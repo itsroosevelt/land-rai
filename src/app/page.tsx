@@ -105,7 +105,7 @@ export default function LandingPage() {
       <div className="absolute top-0 left-0 w-full h-screen pointer-events-none z-0 opacity-100 overflow-hidden">
         <img
           src="/assets/Roosevelt Ai.gif"
-          alt="Roosevelt AI"
+          alt="Roosevelt Super Intelligence"
           className="absolute top-[32%] md:top-[38%] xl:top-[47%] left-[53%] -translate-x-1/2 -translate-y-1/2 w-full max-w-[110vw] md:max-w-[90vw] xl:max-w-6xl h-auto scale-[1.95] md:scale-[1.35] xl:scale-[1.35] object-cover"
           loading="lazy"
           decoding="async"
@@ -168,7 +168,7 @@ export default function LandingPage() {
           <div className="absolute inset-0 pointer-events-none z-0 opacity-80 overflow-hidden flex items-center justify-center">
             <img
               src="/assets/Roosevelt Ai.gif"
-              alt="Roosevelt AI Background"
+              alt="Roosevelt Super Intelligence Background"
               className="w-full max-w-[110vw] md:max-w-[90vw] xl:max-w-6xl h-auto scale-[1.55] md:scale-[1.35] xl:scale-[1.35] object-cover opacity-80"
               loading="lazy"
               decoding="async"

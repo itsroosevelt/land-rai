@@ -86,16 +86,16 @@ const DEPARTMENTS_DATA: Record<string, { title: string, layers: any[] }> = {
     ].sort((a, b) => a.label.localeCompare(b.label)) },
     
     cto: { title: "CHIEF TECHNOLOGY OFFICER", layers: [
-        { id: 'orchestrator', label: 'AI Orchestrator', path: 'orchestrator', icon: Cpu, theme: 'cyan' },
-        { id: 'voice-center', label: 'AI Voice Center', path: 'voice-center', icon: Phone, theme: 'cyan' },
-        { id: 'web-builder', label: 'AI Web Builder', path: 'web-builder', icon: Globe, theme: 'cyan' },
+        { id: 'orchestrator', label: 'SI Orchestrator', path: 'orchestrator', icon: Cpu, theme: 'cyan' },
+        { id: 'voice-center', label: 'SI Voice Center', path: 'voice-center', icon: Phone, theme: 'cyan' },
+        { id: 'web-builder', label: 'SI Web Builder', path: 'web-builder', icon: Globe, theme: 'cyan' },
         { id: 'api', label: 'API Gateway', path: 'api', icon: Code2, theme: 'cyan' },
         { id: 'cloud', label: 'Cloud Infrastructure', path: 'cloud', icon: Server, theme: 'cyan' },
         { id: 'integrations', label: 'Cloud Integrations', path: 'integrations', icon: Network, theme: 'cyan' },
         { id: 'security', label: 'Cyber Security', path: 'security', icon: Shield, theme: 'cyan' },
         { id: 'data', label: 'Data Warehouse', path: 'data', icon: Database, theme: 'cyan' },
         { id: 'devops', label: 'DevOps Pipeline', path: 'devops', icon: Terminal, theme: 'cyan' },
-        { id: 'meet-agents', label: 'Meet AI Agents', path: 'meet-agents', icon: Bot, theme: 'cyan' },
+        { id: 'meet-agents', label: 'Meet SI Agents', path: 'meet-agents', icon: Bot, theme: 'cyan' },
         { id: 'automation', label: 'Neural Automation', path: 'automation', icon: Workflow, theme: 'cyan' },
         { id: 'quantum', label: 'Quantum Protocols', path: 'quantum', icon: Zap, theme: 'cyan' },
         { id: 'smart-contracts', label: 'Smart Contracts', path: 'smart-contracts', icon: FileText, theme: 'cyan' }

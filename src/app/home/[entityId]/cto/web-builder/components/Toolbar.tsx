@@ -132,7 +132,7 @@ export const Toolbar = ({
                     className={`flex sm:hidden items-center gap-1.5 px-2 py-1 rounded-lg transition-all ${showChat ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'bg-white/5 text-gray-400 border border-white/10'}`}
                 >
                     <MessageSquare className="w-3.5 h-3.5" />
-                    <span className="text-[10px] font-bold uppercase tracking-tight">{showChat ? 'Ver Web' : 'Chat AI'}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-tight">{showChat ? 'Ver Web' : 'Chat SI'}</span>
                 </button>
             </div>
 
@@ -310,7 +310,7 @@ export const Toolbar = ({
                     <button
                         onClick={() => setIsAutoFixEnabled?.(!isAutoFixEnabled)}
                         className={`p-1.5 rounded-lg transition-all ${isAutoFixEnabled ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}
-                        title={isAutoFixEnabled ? "Auto-Fix AI Habilitado" : "Habilitar Auto-Fix AI"}
+                        title={isAutoFixEnabled ? "Auto-Fix SI Habilitado" : "Habilitar Auto-Fix SI"}
                     >
                         <Sparkles className={`w-3.5 h-3.5 ${isAutoFixEnabled ? 'animate-pulse' : ''}`} />
                     </button>
@@ -458,13 +458,13 @@ export const Toolbar = ({
 
                         {/* Tools Section */}
                         <div className="flex flex-col gap-2">
-                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest px-2">Herramientas AI</span>
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest px-2">Herramientas SI</span>
                             <button
                                 onClick={() => { setIsAutoFixEnabled?.(!isAutoFixEnabled); setShowMobileMenu(false); }}
                                 className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${isAutoFixEnabled ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' : 'bg-white/5 text-gray-400'}`}
                             >
                                 <Sparkles className={`w-5 h-5 ${isAutoFixEnabled ? 'animate-pulse' : ''}`} />
-                                <span className="text-sm font-bold">Auto-Fix AI {isAutoFixEnabled ? 'Activado' : 'Desactivado'}</span>
+                                <span className="text-sm font-bold">Auto-Fix SI {isAutoFixEnabled ? 'Activado' : 'Desactivado'}</span>
                             </button>
                             <button
                                 onClick={() => { setShowTerminal?.(!showTerminal); setShowMobileMenu(false); }}

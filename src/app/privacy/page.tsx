@@ -9,7 +9,7 @@ const sections: LegalSection[] = [
     {
         heading: "Who we are and scope",
         body: [
-            "Roosevelt (itsroosevelt.com) is an AI-powered assistant that helps people and businesses manage their communications, customers, marketing, finances and operations. It is operated by Luxor Intelligence LLC, a limited liability company with offices at 470 W 200 N, Salt Lake City, UT 84103, USA (\"Luxor Intelligence\", \"we\", \"us\", \"our\"). Luxor Intelligence also operates other products listed on luxorintelligence.com.",
+            "Roosevelt (itsroosevelt.com) is a Super Intelligence (\"SI\") assistant that helps people and businesses manage their communications, customers, marketing, finances and operations. It is operated by Luxor Intelligence LLC, a limited liability company with offices at 470 W 200 N, Salt Lake City, UT 84103, USA (\"Luxor Intelligence\", \"we\", \"us\", \"our\"). Luxor Intelligence also operates other products listed on luxorintelligence.com.",
             "This Privacy Policy explains how we collect, use, disclose and protect personal data when you use Roosevelt, our websites and related services (together, the \"Service\"). Other products in our ecosystem may publish their own notices on their own websites.",
             "Contact for privacy matters: legal@itsroosevelt.com.",
         ],
@@ -33,7 +33,7 @@ const sections: LegalSection[] = [
                 "Workspace content: contacts, customer and lead records, notes, tasks, boards and cards, flows and automations, templates, files and other content you create or import.",
                 "Connected-channel data: when you connect a channel (WhatsApp, Messenger, Instagram, Telegram, X, Gmail), we receive and store the messages, comments, reactions, media, sender and recipient identifiers (such as phone numbers, usernames, page-scoped IDs and email addresses), names and profile information that the channel provides, as well as the page, account or phone-number identifiers and access tokens needed to operate that channel for you.",
                 "Billing data: plan, subscription status, payment identifiers and, for card payments, limited details returned by Stripe (such as card brand, last four digits and billing country). We do not store full card numbers. For on-chain payments we process public wallet addresses and transaction signatures, which are public on the blockchain.",
-                "AI interaction data: prompts, instructions and content you submit to AI features and the outputs generated.",
+                "SI interaction data: prompts, instructions and content you submit to SI features and the outputs generated.",
                 "Technical and usage data: IP address, device, browser and operating-system information, log and diagnostic data, timestamps, referring pages and security events.",
                 "Communications with us: messages you send to support, legal or careers mailboxes, and information in job applications.",
                 "Cookies and local storage: described below.",
@@ -53,7 +53,7 @@ const sections: LegalSection[] = [
         heading: "Data we receive from Google (including Gmail)",
         body: [
             "If you connect a Google account, we request only the scopes needed for the features you enable (for example reading and sending email for the Gmail integration, and your basic profile and email address). We store the access and refresh tokens needed to operate the integration.",
-            "Our use and transfer to any other app of information received from Google APIs will adhere to the Google API Services User Data Policy, including the Limited Use requirements. In particular: we use Google user data only to provide or improve user-facing features that are visible in the Service; we do not transfer it to others except as needed to provide those features, to comply with law, or as part of a merger or sale with notice to you; we do not use it for serving advertisements; and we do not allow humans to read it unless you give consent for specific messages, it is necessary for security or abuse investigation, or it is required by law. We do not use Google user data to develop, improve or train generalized artificial-intelligence or machine-learning models.",
+            "Our use and transfer to any other app of information received from Google APIs will adhere to the Google API Services User Data Policy, including the Limited Use requirements. In particular: we use Google user data only to provide or improve user-facing features that are visible in the Service; we do not transfer it to others except as needed to provide those features, to comply with law, or as part of a merger or sale with notice to you; we do not use it for serving advertisements; and we do not allow humans to read it unless you give consent for specific messages, it is necessary for security or abuse investigation, or it is required by law. We do not use Google user data to develop, improve or train generalized machine-learning models.",
         ],
     },
     {
@@ -63,7 +63,7 @@ const sections: LegalSection[] = [
             [
                 "To provide, operate, maintain and secure the Service, authenticate you and process your instructions [performance of a contract].",
                 "To process payments, manage subscriptions and prevent fraud [performance of a contract; legitimate interests].",
-                "To provide AI-assisted features, automations, summaries and reports you request [performance of a contract].",
+                "To provide SI-assisted features, automations, summaries and reports you request [performance of a contract].",
                 "To provide customer support and communicate with you about your account, security and changes to the Service [performance of a contract; legitimate interests].",
                 "To monitor, debug and improve the Service, develop new features and keep the Service safe, including detecting abuse and enforcing our terms [legitimate interests].",
                 "To comply with legal obligations, respond to lawful requests and establish or defend legal claims [legal obligation; legitimate interests].",
@@ -73,10 +73,10 @@ const sections: LegalSection[] = [
         ],
     },
     {
-        heading: "Artificial intelligence and automated decisions",
+        heading: "Super Intelligence (SI) and automated decisions",
         body: [
-            "Roosevelt includes AI-assisted features. When you use them, the content you submit (and the context needed to answer, such as relevant conversation or record content you choose to include) is sent to our AI model providers (for example Google Gemini) to generate a response. We do not ourselves use Customer Data to train generalized AI models. Our AI providers process submitted content under their own terms and privacy policies.",
-            "AI output can be inaccurate, incomplete or inappropriate and should be reviewed before you rely on it or send it to others. We do not use the Service to make decisions that produce legal or similarly significant effects about individuals based solely on automated processing; automations you configure (such as auto-replies, routing or tagging) are controlled by you and are your responsibility. Where applicable law gives you rights regarding automated decision-making, you can contact us to exercise them.",
+            "Roosevelt includes SI-assisted features, which are powered by machine-learning models operated by third-party providers. When you use them, the content you submit (and the context needed to answer, such as relevant conversation or record content you choose to include) is sent to our third-party model providers (for example Google Gemini) to generate a response. We do not ourselves use Customer Data to train generalized models. Our model providers process submitted content under their own terms and privacy policies.",
+            "SI output is generated automatically by a non-human system; it can be inaccurate, incomplete or inappropriate and should be reviewed before you rely on it or send it to others. We do not use the Service to make decisions that produce legal or similarly significant effects about individuals based solely on automated processing; automations you configure (such as auto-replies, routing or tagging) are controlled by you and are your responsibility. Where applicable law gives you rights regarding automated decision-making, you can contact us to exercise them.",
         ],
     },
     {
@@ -110,7 +110,7 @@ const sections: LegalSection[] = [
                 "Vercel: application hosting and delivery (United States and global edge network).",
                 "Stripe: card payment processing and subscription billing (United States and other countries where Stripe operates).",
                 "Solana network participants and RPC providers: on-chain payments and wallet interactions (public blockchain).",
-                "Google (Gemini / Vertex AI) and other AI model providers we enable: processing of content submitted to AI features.",
+                "Google (Gemini / Vertex AI) and other model providers we enable: processing of content submitted to SI features.",
                 "Meta Platforms, Google, Telegram and X: when you connect their services (these providers act under their own terms and privacy policies).",
                 "Email and communication tools we use to respond to support, legal and careers requests.",
             ],
@@ -155,7 +155,7 @@ const sections: LegalSection[] = [
         body: [
             "Under the California Consumer Privacy Act as amended (CCPA/CPRA) and similar laws in other US states (for example Colorado, Connecticut, Virginia, Utah and Texas), residents may have the right to know what personal information we collect, use and disclose; to access and obtain a portable copy; to correct inaccurate information; to delete personal information; to opt out of the sale or sharing of personal information and of targeted advertising and certain profiling; to limit the use of sensitive personal information; and not to be discriminated against for exercising these rights.",
             [
-                "Categories collected in the last 12 months: identifiers (name, email, phone number, usernames, IP address); customer records and commercial information (plan and billing status); internet and device activity; communications content you send through the Service; professional or employment information in job applications; and inferences you ask AI features to generate. See \"Information we collect\" for details and sources.",
+                "Categories collected in the last 12 months: identifiers (name, email, phone number, usernames, IP address); customer records and commercial information (plan and billing status); internet and device activity; communications content you send through the Service; professional or employment information in job applications; and inferences you ask SI features to generate. See \"Information we collect\" for details and sources.",
                 "Purposes and disclosures: as described in \"How we use information\" and \"Who we share data with\". We disclose these categories to the service providers listed above for business purposes.",
                 "Sale and sharing: we do not sell personal information and do not share it for cross-context behavioral advertising, and we have no actual knowledge of selling or sharing the personal information of anyone under 16.",
                 "Sensitive personal information: we do not use or disclose sensitive personal information for purposes other than those permitted by law.",

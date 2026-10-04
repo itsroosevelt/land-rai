@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type Category = 'All' | 'Business Messaging' | 'Social Media' | 'Live Chat' | 'Payments' | 'SMS' | 'Email' | 'AI';
+export type Category = 'All' | 'Business Messaging' | 'Social Media' | 'Live Chat' | 'Payments' | 'SMS' | 'Email' | 'SI';
 
 export interface Integration {
     id: string;
@@ -141,12 +141,12 @@ export const INTEGRATIONS: Integration[] = [
     {
         id: 'gemini',
         name: 'Google Gemini',
-        description: 'API key de Google AI Studio por entidad. Potencia Humanizar en flujos de chatbots y otras capacidades de IA del tenant.',
+        description: 'API key de Google AI Studio por entidad. Potencia Humanizar en flujos de chatbots y otras capacidades de SI del tenant.',
         icon: <GeminiIcon />,
-        category: 'AI',
+        category: 'SI',
         popular: true,
         color: '#4285F4'
     }
 ];
 
-export const CATEGORIES: Category[] = ['All', 'Business Messaging', 'Social Media', 'Email', 'Payments', 'AI'];
+export const CATEGORIES: Category[] = ['All', 'Business Messaging', 'Social Media', 'Email', 'Payments', 'SI'];

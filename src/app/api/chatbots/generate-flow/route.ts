@@ -61,7 +61,7 @@ export async function POST(req: Request) {
         // Cap payload size for safety
         if (nodes.length > 250) {
             return NextResponse.json(
-                { error: 'El flujo actual es demasiado grande para editar con IA.' },
+                { error: 'El flujo actual es demasiado grande para editar con SI.' },
                 { status: 400 }
             );
         }

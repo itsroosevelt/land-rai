@@ -581,7 +581,7 @@ function FlowPage() {
                 </label>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-[220px]">
-                Humanizar: la IA reformula el tono sin cambiar el flujo
+                Humanizar: la SI reformula el tono sin cambiar el flujo
               </TooltipContent>
             </Tooltip>
 

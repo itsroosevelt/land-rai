@@ -110,7 +110,7 @@ const plans = [
     lxrPrice: '$74.99',
     lxrPriceUSD: 74.99,
     description: 'Expanded workflow for high-paced teams and operations.',
-    features: ['3 active workspaces', 'Priority dashboard & support', 'AI research assistant'],
+    features: ['3 active workspaces', 'Priority dashboard & support', 'SI research assistant'],
     accent: 'border-white/10 bg-white/[0.03]',
     highlighted: false,
     isEnterprise: false,

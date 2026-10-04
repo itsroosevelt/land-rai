@@ -21,7 +21,7 @@ interface SettingsModalProps {
     supabaseUrl?: string;
     supabaseAnonKey?: string;
     onSaveDatabaseConfig?: (config: { url: string; key: string }) => Promise<void>;
-    // AI Configuration
+    // SI Configuration
     geminiApiKey?: string;
     onSaveAIConfig?: (config: { geminiApiKey: string }) => Promise<void>;
 }
@@ -43,7 +43,7 @@ export const SettingsModal = ({
     const [dbKey, setDbKey] = useState(initialKey || "");
     const [isSavingDb, setIsSavingDb] = useState(false);
 
-    // AI State
+    // SI State
     const [aiKey, setAiKey] = useState(initialApiKey || "");
     const [isSavingAi, setIsSavingAi] = useState(false);
     const [showAiKey, setShowAiKey] = useState(false);
@@ -345,11 +345,11 @@ export const SettingsModal = ({
                         </div>
                     </section>
 
-                    {/* AI Configuration Section */}
+                    {/* SI Configuration Section */}
                     <section className="space-y-3 pt-4 border-t border-[#1a1a1a]">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-widest">
-                                <Search className="w-3.5 h-3.5" /> AI Engine (Gemini / Vertex AI)
+                                <Search className="w-3.5 h-3.5" /> SI Engine (Gemini / Vertex AI)
                             </div>
                             {initialApiKey && (
                                 <span className="flex items-center gap-1.5 text-[10px] font-bold text-green-400 bg-green-400/5 px-2 py-0.5 rounded-full border border-green-500/10">
@@ -392,7 +392,7 @@ export const SettingsModal = ({
                                 className="w-full py-2.5 bg-green-600 hover:bg-green-500 disabled:bg-[#1a1a1a] disabled:text-gray-600 text-white text-[11px] font-bold rounded-lg transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-500/10"
                             >
                                 {isSavingAi ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PlusCircle className="w-3.5 h-3.5" />}
-                                Actualizar Configuración AI
+                                Actualizar Configuración SI
                             </button>
                         </div>
                     </section>

@@ -276,7 +276,7 @@ export const CodeEditor = ({
                                             onClick={() => window.parent.postMessage({ type: 'ask-ai-fix', error: runtimeErrors[activeFile], file: activeFile }, '*')}
                                             className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-200 text-[11px] font-bold rounded-lg transition-all border border-red-500/20"
                                         >
-                                            Solicitar Corrección a IA
+                                            Solicitar Corrección a SI
                                         </button>
                                     </div>
                                 </div>

@@ -12,6 +12,7 @@ import { db } from '@/lib/firebase';
 import { doc, setDoc, deleteDoc, onSnapshot, serverTimestamp, collectionGroup, getDocs, query, where } from 'firebase/firestore';
 import { isIntegrationTakenByAnotherTenant } from '@/lib/integrations/checkIntegrationTaken';
 import { claimIntegration } from '@/lib/integrations/claimClient';
+import { metaLoginOptions } from '@/lib/integrations/metaLogin';
 import { toast } from 'sonner';
 
 interface InstagramModalProps {
@@ -64,7 +65,7 @@ const InstagramModal: React.FC<InstagramModalProps> = ({ isOpen, onClose, active
     const handleConnectInstagram = async () => {
         if (isLocalHttp) {
             toast.error(
-                'Facebook Login requiere HTTPS. Usa https://www.byroosevelt.com/.../integrations o la conexión manual abajo.',
+                'Facebook Login requiere HTTPS. Usa https://www.itsroosevelt.com/.../integrations o la conexión manual abajo.',
                 { duration: 8000 }
             );
             setShowManualConnect(true);
@@ -93,7 +94,7 @@ const InstagramModal: React.FC<InstagramModalProps> = ({ isOpen, onClose, active
                 } else {
                     toast.error("Conexión cancelada.", { id: toastId });
                 }
-            }, { scope: 'instagram_basic,instagram_manage_messages,instagram_manage_comments,pages_show_list,pages_read_engagement,pages_manage_metadata' });
+            }, metaLoginOptions('instagram'));
 
         } catch (error) {
             console.error("Instagram Login Error:", error);
@@ -257,7 +258,7 @@ const InstagramModal: React.FC<InstagramModalProps> = ({ isOpen, onClose, active
                                     <Instagram className="w-8 h-8 text-white" />
                                 </div>
                                 <h2 className="text-3xl font-extralight text-white/90 tracking-tight mb-3">Instagram</h2>
-                                <p className="text-sm text-white/40 leading-relaxed">Gestiona tus mensajes y comentarios de Instagram Business de forma automatizada con IA.</p>
+                                <p className="text-sm text-white/40 leading-relaxed">Gestiona tus mensajes y comentarios de Instagram Business de forma automatizada con SI.</p>
                             </div>
 
                             <div className="relative z-10 p-6 bg-white/5 border border-white/10 rounded-3xl backdrop-blur-md">
@@ -320,12 +321,12 @@ const InstagramModal: React.FC<InstagramModalProps> = ({ isOpen, onClose, active
                                                             <strong>Estás en localhost (HTTP).</strong> Meta no permite FB.login sin HTTPS.
                                                             Opciones: conectar en{' '}
                                                             <a
-                                                                href={`https://www.byroosevelt.com/home/${entityId}/cto/integrations`}
+                                                                href={`https://www.itsroosevelt.com/home/${entityId}/cto/integrations`}
                                                                 className="underline text-amber-200"
                                                                 target="_blank"
                                                                 rel="noopener noreferrer"
                                                             >
-                                                                producción (byroosevelt.com)
+                                                                producción (itsroosevelt.com)
                                                             </a>{' '}
                                                             o usar conexión manual abajo.
                                                         </p>

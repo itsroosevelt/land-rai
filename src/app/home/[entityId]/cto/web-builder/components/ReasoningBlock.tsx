@@ -49,7 +49,7 @@ export const ReasoningBlock = ({ content, steps = [], thinkingTime, isGenerating
                     )}
                     <span className="text-[10px] font-bold tracking-widest uppercase opacity-70">
                         {isGenerating 
-                            ? "Arquitecto AI Pensando..." 
+                            ? "Arquitecto SI Pensando..." 
                             : isError 
                                 ? "Fallo en el Proceso de Análisis" 
                                 : `Análisis Completado (${thinkingTime || 0}s)`}

@@ -16,9 +16,9 @@ const UTILITY_FEATURES = [
   },
   {
     icon: <Zap className="w-8 h-8 text-amber-400" />,
-    title: "Sugerencias de IA",
-    description: "Activa sugerencias de respuesta impulsadas por IA basadas en los mensajes del cliente.",
-    action: "Configurar IA",
+    title: "Sugerencias de SI",
+    description: "Activa sugerencias de respuesta impulsadas por SI basadas en los mensajes del cliente.",
+    action: "Configurar SI",
     href: "#"
   },
   {

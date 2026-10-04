@@ -31,7 +31,7 @@ const TYPE_LABELS: Record<string, string> = {
     conditionNode: 'Condición',
     delayNode: 'Espera',
     humanHandoffNode: 'Agente humano',
-    generativeAINode: 'IA',
+    generativeAINode: 'SI',
     setVariableNode: 'Variable',
     webhookNode: 'Webhook',
     locationNode: 'Ubicación',

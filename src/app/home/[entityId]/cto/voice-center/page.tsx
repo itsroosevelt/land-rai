@@ -167,13 +167,13 @@ export default function VoiceCenterPage() {
         setIsProcessing(true);
 
         try {
-            // Use the existing web-builder AI endpoint as a fallback, or provide a simulated response
+            // Use the existing web-builder SI endpoint as a fallback, or provide a simulated response
             const response = await fetch('/api/web-builder/ai', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     messages: [
-                        { role: 'system', content: 'You are Roosevelt AI, a professional business assistant. Respond concisely in the same language as the user. Keep responses under 3 sentences for voice output.' },
+                        { role: 'system', content: 'You are Roosevelt SI, a professional business assistant. Respond concisely in the same language as the user. Keep responses under 3 sentences for voice output.' },
                         ...history.map(h => ({ role: h.role, content: h.text })),
                         { role: 'user', content: text.trim() }
                     ],
@@ -181,7 +181,7 @@ export default function VoiceCenterPage() {
                 }),
             });
 
-            if (!response.ok) throw new Error('AI request failed');
+            if (!response.ok) throw new Error('SI request failed');
 
             const data = await response.json();
             const aiText = data?.result || data?.response || data?.text || 'I received your message but couldn\'t generate a response.';
@@ -198,7 +198,7 @@ export default function VoiceCenterPage() {
             speak(aiText);
         } catch (error) {
             // Provide an offline-friendly fallback response
-            const fallbackText = 'Voice AI is currently operating in offline mode. Please configure your AI API keys to enable real-time responses.';
+            const fallbackText = 'Voice SI is currently operating in offline mode. Please configure your SI API keys to enable real-time responses.';
             const aiEntry: TranscriptEntry = {
                 id: (Date.now() + 1).toString(),
                 role: 'assistant',
@@ -247,9 +247,9 @@ export default function VoiceCenterPage() {
                             <Sparkles className="w-3 h-3 fill-current" />
                             <span>Voice Intelligence</span>
                         </div>
-                        <h1 className="text-3xl md:text-4xl font-medium tracking-tight">Voice AI Center</h1>
+                        <h1 className="text-3xl md:text-4xl font-medium tracking-tight">Voice SI Center</h1>
                         <p className="text-neutral-500 mt-2 text-sm max-w-lg">
-                            Real-time voice interaction with Roosevelt AI. Speak naturally and receive intelligent responses.
+                            Real-time voice interaction with Roosevelt SI. Speak naturally and receive intelligent responses.
                         </p>
                     </div>
                     <div className="flex gap-2">
@@ -330,7 +330,7 @@ export default function VoiceCenterPage() {
                                     disabled={isProcessing}
                                     className="mt-4 px-6 py-2.5 bg-white text-black rounded-xl text-sm font-medium hover:bg-white/90 transition-all disabled:opacity-50"
                                 >
-                                    {isProcessing ? 'Processing...' : 'Send to AI'}
+                                    {isProcessing ? 'Processing...' : 'Send to SI'}
                                 </button>
                             )}
                         </div>
@@ -359,7 +359,7 @@ export default function VoiceCenterPage() {
                             {isProcessing && (
                                 <div className="flex items-center gap-2 text-xs text-blue-400">
                                     <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
-                                    AI is thinking...
+                                    SI is thinking...
                                 </div>
                             )}
                         </div>
@@ -371,7 +371,7 @@ export default function VoiceCenterPage() {
                                         <Mic className="w-8 h-8 text-white/10" />
                                     </div>
                                     <p className="text-sm">Start speaking to begin a conversation</p>
-                                    <p className="text-xs text-neutral-700 max-w-sm">Your voice input will be transcribed and sent to Roosevelt AI for intelligent responses.</p>
+                                    <p className="text-xs text-neutral-700 max-w-sm">Your voice input will be transcribed and sent to Roosevelt SI for intelligent responses.</p>
                                 </div>
                             ) : (
                                 history.map((entry) => (

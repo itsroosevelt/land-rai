@@ -12,6 +12,7 @@ import { db } from '@/lib/firebase';
 import { doc, setDoc, deleteDoc, onSnapshot, serverTimestamp, collectionGroup, getDocs, query, where } from 'firebase/firestore';
 import { isIntegrationTakenByAnotherTenant } from '@/lib/integrations/checkIntegrationTaken';
 import { claimIntegration } from '@/lib/integrations/claimClient';
+import { metaLoginOptions } from '@/lib/integrations/metaLogin';
 import { toast } from 'sonner';
 
 interface MessengerModalProps {
@@ -67,7 +68,7 @@ const MessengerModal: React.FC<MessengerModalProps> = ({ isOpen, onClose, active
                 } else {
                     toast.error("Conexión cancelada.", { id: toastId });
                 }
-            }, { scope: 'pages_messaging,pages_show_list,pages_read_engagement' });
+            }, metaLoginOptions('messenger'));
 
         } catch (error) {
             console.error("Messenger Login Error:", error);
@@ -238,7 +239,7 @@ const MessengerModal: React.FC<MessengerModalProps> = ({ isOpen, onClose, active
                                                     </div>
                                                     <div className="flex items-start gap-4 md:gap-6">
                                                         <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white/5 flex items-center justify-center text-xs md:text-sm font-bold text-white/40 shrink-0">2</div>
-                                                        <p className="text-[13px] md:text-[15px] text-white/70 font-normal mt-1 md:mt-2 leading-relaxed">Selecciona la Fanpage que deseas automatizar con IA.</p>
+                                                        <p className="text-[13px] md:text-[15px] text-white/70 font-normal mt-1 md:mt-2 leading-relaxed">Selecciona la Fanpage que deseas automatizar con SI.</p>
                                                     </div>
                                                 </div>
         

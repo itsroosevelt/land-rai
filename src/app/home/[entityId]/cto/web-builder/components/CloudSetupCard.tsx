@@ -40,7 +40,7 @@ export const CloudSetupCard = ({ onApprove, onCancel }: CloudSetupCardProps) => 
                         <ChevronRight className="w-4 h-4 rotate-90" />
                     </button>
                 </div>
-                <p className="text-[11px] text-gray-500 font-medium">Modelos de IA y backend completos listos para usar.</p>
+                <p className="text-[11px] text-gray-500 font-medium">Modelos de SI y backend completos listos para usar.</p>
             </div>
 
             {/* Features List */}
@@ -58,7 +58,7 @@ export const CloudSetupCard = ({ onApprove, onCancel }: CloudSetupCardProps) => 
                     </div>
                 </div>
 
-                {/* Feature: AI LLM */}
+                {/* Feature: SI LLM */}
                 <div className="group flex items-start gap-4 p-4 rounded-2xl hover:bg-white/[0.03] transition-all cursor-default border border-transparent hover:border-white/5">
                     <div className="mt-1 w-10 h-10 rounded-xl bg-[#1a1a1c] border border-white/5 flex items-center justify-center shrink-0 group-hover:bg-purple-500/10 group-hover:border-purple-500/20 transition-all">
                         <Cpu className="w-5 h-5 text-gray-400 group-hover:text-purple-400" />

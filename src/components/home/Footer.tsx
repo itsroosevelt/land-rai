@@ -76,7 +76,7 @@ export default function Footer() {
             links: [
                 { name: "Enterprises", href: "#" },
                 { name: "Startups", href: "#" },
-                { name: "Agentic Commerce (AI)", href: "#" },
+                { name: "Agentic Commerce (SI)", href: "#" },
                 { name: "Crypto Platforms", href: "#" },
                 { name: "Ecommerce", href: "#" },
                 { name: "Embedded Finance", href: "#" },
@@ -86,7 +86,7 @@ export default function Footer() {
                 { name: "Marketplaces", href: "#" },
                 { name: "Platforms", href: "#" },
                 { name: "SaaS", href: "#" },
-                { name: "AI Companies", href: "#" },
+                { name: "SI Companies", href: "#" },
                 { name: "Creator Economy", href: "#" },
                 { name: "Gaming", href: "#" },
                 { name: "Hospitality, Travel & Leisure", href: "#" },
@@ -157,7 +157,7 @@ export default function Footer() {
                 { name: "Intelligent Glasses", href: "#" },
                 { name: "LUXOR UTILITY ASSET | $LXR", href: "#" },
                 { name: "USDX STABLECOIN ASSET | $USDX", href: "#" },
-                { name: "ROOSEVELT | ARTIFICIAL INTELLIGENCE", href: "https://www.byroosevelt.com/", target: "_blank" },
+                { name: "ROOSEVELT | SUPER INTELLIGENCE", href: "https://www.itsroosevelt.com/", target: "_blank" },
                 { name: "EXCELSIOR REAL WORLD ASSET | $XLS", href: "#" }
             ]
         },

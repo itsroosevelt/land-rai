@@ -75,7 +75,7 @@ const sidebarNodeGroups = [
     {
         title: 'Inteligencia Artificial',
         nodes: [
-            { type: 'generativeAINode', label: 'IA Generativa (LLM)', icon: <Bot className="text-sky-400" /> },
+            { type: 'generativeAINode', label: 'SI Generativa (LLM)', icon: <Bot className="text-sky-400" /> },
             { type: 'transcriptionNode', label: 'Transcripción (Audio)', icon: <Mic className="text-sky-400" /> },
             { type: 'sentimentAnalysisNode', label: 'Análisis de Sentimiento', icon: <Smile className="text-sky-400" /> },
         ]

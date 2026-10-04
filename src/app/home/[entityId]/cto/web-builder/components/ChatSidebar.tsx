@@ -81,7 +81,7 @@ export const ChatSidebar = ({
                 <div className="flex items-center gap-2.5">
                     <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
                     <span className="text-[10px] font-black text-white/90 uppercase tracking-[0.2em] flex items-center gap-2">
-                        AI Architect
+                        SI Architect
                     </span>
                     {(credits !== null || isAdmin) && (
                         <div className={`px-2 py-0.5 rounded-full flex items-center gap-1 animate-in fade-in zoom-in duration-500 ${isAdmin ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-cyan-500/10 border border-cyan-500/20'}`}>

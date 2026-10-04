@@ -406,7 +406,7 @@ export const CheckoutNode = ({ data = {} }: NodeProps) => (
 );
 
 export const GenerativeAINode = ({ data = {} }: NodeProps) => (
-    <NodeWrapper header="IA Generativa (LLM)" icon={<Bot size={16} className="text-sky-400" />} label={data.label} color="border-sky-500">
+    <NodeWrapper header="SI Generativa (LLM)" icon={<Bot size={16} className="text-sky-400" />} label={data.label} color="border-sky-500">
         <p className="text-xs text-neutral-400">Conecta con un modelo de lenguaje.</p>
         <HandleStyled type="target" position={Position.Left} />
         <HandleStyled type="source" position={Position.Right} />

@@ -22,7 +22,7 @@ const sections: LegalSection[] = [
     {
         heading: "The Service",
         body: [
-            "Roosevelt lets you create personal and business profiles and manage communications, customers, marketing, finance and operations, including by connecting third-party channels and using AI-assisted features. We may add, modify, suspend or discontinue features at any time. Some modules are provided as previews, templates or mock-ups and may be incomplete or change without notice.",
+            "Roosevelt lets you create personal and business profiles and manage communications, customers, marketing, finance and operations, including by connecting third-party channels and using SI-assisted features. We may add, modify, suspend or discontinue features at any time. Some modules are provided as previews, templates or mock-ups and may be incomplete or change without notice.",
         ],
     },
     {
@@ -40,9 +40,9 @@ const sections: LegalSection[] = [
         ],
     },
     {
-        heading: "AI-assisted features",
+        heading: "SI-assisted features",
         body: [
-            "AI outputs are generated automatically and may be inaccurate, incomplete, biased, outdated or similar to outputs given to others. You are responsible for reviewing outputs and for any decision, communication or action taken using them, including messages sent to your customers. Do not rely on the Service for legal, medical, tax, financial, investment or other professional advice. You must not use AI features in violation of law or of the usage policies of our AI providers, or to generate content that is deceptive, harassing, infringing or harmful.",
+            "SI outputs are generated automatically by a non-human system and may be inaccurate, incomplete, biased, outdated or similar to outputs given to others. You are responsible for reviewing outputs and for any decision, communication or action taken using them, including messages sent to your customers. Where we or you use SI-generated content in messages to others, you are responsible for any disclosure that applicable law requires about automated or non-human communication. Do not rely on the Service for legal, medical, tax, financial, investment or other professional advice. You must not use SI features in violation of law or of the usage policies of our model providers, or to generate content that is deceptive, harassing, infringing or harmful.",
         ],
     },
     {
@@ -57,7 +57,7 @@ const sections: LegalSection[] = [
                 "upload malware or use the Service to attack, scrape or overload systems or third-party platforms;",
                 "reverse engineer, decompile or attempt to extract source code or models, except where law permits despite this restriction;",
                 "resell, sublicense or provide the Service to third parties as a competing service without our written permission;",
-                "use the Service to develop or train competing AI models, or for high-risk activities where failure could lead to death, injury or serious harm;",
+                "use the Service to develop or train competing models, or for high-risk activities where failure could lead to death, injury or serious harm;",
                 "use the Service in violation of sanctions or export-control laws, or for illegal gambling, illegal drugs, weapons trafficking or other prohibited business types.",
             ],
             "We may investigate violations, remove content, and suspend or terminate access without notice where we reasonably believe these rules have been broken or the Service or others are at risk.",

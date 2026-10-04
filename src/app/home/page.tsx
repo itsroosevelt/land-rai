@@ -637,7 +637,7 @@ export default function NucleoPage() {
                             <div className="space-y-1.5">
                                 <label className="block text-xs font-light uppercase tracking-wider text-white/60">Access Route (Slug)</label>
                                 <div className="flex items-center bg-white/[0.05] border border-white/15 rounded-2xl px-4 py-3.5 text-sm focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/15 transition-all">
-                                    <span className="text-white/40 font-light tracking-tight text-xs mr-1 select-none">byroosevelt.com/home/</span>
+                                    <span className="text-white/40 font-light tracking-tight text-xs mr-1 select-none">itsroosevelt.com/home/</span>
                                     <input
                                         type="text"
                                         value={slugValue}

@@ -8,6 +8,7 @@ import { useEntityRoute } from '@/hooks/useEntityRoute';
 import { db } from '@/lib/firebase';
 import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
 import { claimIntegration } from '@/lib/integrations/claimClient';
+import { metaLoginOptions } from '@/lib/integrations/metaLogin';
 import { getWhatsAppIntegrationHealth } from '@/lib/omnichannel/whatsappIntegrationStatus';
 import { WhatsAppReadinessPanel } from './WhatsAppReadinessPanel';
 import {
@@ -407,10 +408,7 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
             };
 
             processAuth();
-        }, {
-            scope: 'whatsapp_business_management,whatsapp_business_messaging,business_management',
-            return_scopes: true
-        });
+        }, metaLoginOptions('whatsapp'));
     };
 
     const handleDeleteConfig = async () => {

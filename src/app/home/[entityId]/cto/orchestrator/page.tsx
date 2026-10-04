@@ -14,7 +14,7 @@ export default function OrchestratorPage() {
                     <div>
                         <h1 className="text-2xl md:text-4xl font-medium tracking-tight">Master Flow Editor</h1>
                         <p className="text-neutral-400 mt-2 md:mt-3 text-sm md:text-lg">
-                            Orquesta todos tus módulos de IA y servicios externos.
+                            Orquesta todos tus módulos de SI y servicios externos.
                         </p>
                     </div>
                     <div className="flex gap-2 md:gap-3 w-full md:w-auto">
@@ -48,7 +48,7 @@ export default function OrchestratorPage() {
                                 </div>
                             </div>
 
-                            {/* AI Action Node */}
+                            {/* SI Action Node */}
                             <div className="w-56 md:w-64 bg-white/10 border border-red-500/30 p-4 rounded-2xl backdrop-blur-xl shadow-2xl relative z-20 overflow-y-auto group">
                                 <div className="absolute inset-0 bg-red-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                 <div className="flex items-center gap-3 mb-3 border-b border-white/10 pb-2">

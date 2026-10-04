@@ -796,7 +796,7 @@ export default function ChatList({ selectedFolder, setSelectedFolder, activeConv
                         )}
                     </div>
 
-                    {/* 4. Human Agent vs Bot AI Attention Filter */}
+                    {/* 4. Human Agent vs Bot SI Attention Filter */}
                     <div className="relative flex-1 basis-0 min-w-[105px]" ref={takeoverMenuRef}>
                         <button
                             type="button"
@@ -806,12 +806,12 @@ export default function ChatList({ selectedFolder, setSelectedFolder, activeConv
                                     ? 'bg-neutral-800 border-neutral-700 text-white font-semibold shadow-sm' 
                                     : 'bg-neutral-900/90 border-neutral-800 text-neutral-300 hover:text-white hover:border-neutral-700'
                             }`}
-                            title="Filtrar por Atención Humana vs Bot AI"
+                            title="Filtrar por Atención Humana vs Bot SI"
                         >
                             <div className="flex items-center gap-1.5 min-w-0 truncate">
                                 {selectedTakeover === 'human' ? <UserCheck size={11} className="text-white shrink-0" /> : <Bot size={11} className={selectedTakeover ? "text-white shrink-0" : "text-neutral-400 shrink-0"} />}
                                 <span className="truncate">
-                                    {selectedTakeover === 'human' ? 'Atención Agente' : selectedTakeover === 'bot' ? 'Atención Bot AI' : 'Atención AI/Humana'}
+                                    {selectedTakeover === 'human' ? 'Atención Agente' : selectedTakeover === 'bot' ? 'Atención Bot SI' : 'Atención SI/Humana'}
                                 </span>
                             </div>
                             <ChevronDown size={11} className="text-neutral-500 shrink-0" />
@@ -851,7 +851,7 @@ export default function ChatList({ selectedFolder, setSelectedFolder, activeConv
                                 >
                                     <span className="flex items-center gap-2">
                                         <Bot size={12} className="text-neutral-300" />
-                                        Bot AI Atendiendo
+                                        Bot SI Atendiendo
                                     </span>
                                     <span className="text-[10px] bg-neutral-800 px-1.5 py-0.5 rounded text-neutral-400 font-mono">
                                         {takeoverStats.bot}
