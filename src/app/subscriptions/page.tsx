@@ -820,7 +820,7 @@ function SubscriptionsContent() {
             <DialogTitle className="text-base font-semibold text-white">Access Code</DialogTitle>
             <form onSubmit={handleVerifyBypass} className="mt-4 space-y-4">
               <p className="text-xs text-white/50 leading-relaxed">
-                Enter the authorized access code to unlock the <strong className="text-white font-medium">{targetEntity?.name || 'business'}</strong> environment and immediately access its services.
+                Enter your access code to start a free 30-day trial of the <strong className="text-white font-medium">{targetEntity?.name || 'business'}</strong> environment. After 30 days it locks again (your data is kept) until you activate a subscription.
               </p>
               <input
                 type="password"

@@ -48,5 +48,9 @@ export function useEntitlements(entityId: string | null | undefined) {
         void load();
     }, [load]);
 
-    return { entitlements: state, loading, refresh: () => load(true) };
+    // Desbloqueo heredado del navegador: solo cuenta mientras el servidor no aplique el bloqueo (modo 'log').
+    const legacyUnlocked =
+        typeof window !== 'undefined' && !!entityId && localStorage.getItem('roosevelt_entity_unlocked_' + entityId) === 'roosevelt2025';
+
+    return { entitlements: state, loading, legacyUnlocked, refresh: () => load(true) };
 }

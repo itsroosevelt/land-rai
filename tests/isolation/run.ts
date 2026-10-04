@@ -363,21 +363,68 @@ async function main() {
     check('log: no bloquea (solo registra)', (await requireSuite(tNone.uid, tNone.ent, 'cto')) === null);
     delete process.env.SUBSCRIPTION_ENFORCEMENT;
 
-    // --- Canje de códigos (servidor) ---
+    // --- Canje de códigos de prueba gratuita (servidor) ---
     const redeemRoute = await import('../../src/app/api/subscriptions/redeem/route');
-    const redeem = (t: any, code: string) => redeemRoute.POST(new Request('http://localhost/api/subscriptions/redeem', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: t.uid, entityId: t.ent, code }) }));
-    delete process.env.SUBSCRIPTION_ACCESS_CODES;
-    check('Sin SUBSCRIPTION_ACCESS_CODES el canje está deshabilitado (503)', (await redeem(tNone, 'roosevelt2025')).status === 503);
-    process.env.SUBSCRIPTION_ACCESS_CODES = 'CODE_PRO:pro,CODE_ENT:enterprise';
-    check('El código público antiguo "roosevelt2025" ya NO funciona', (await redeem(tNone, 'roosevelt2025')).status === 400);
-    const tRedeem = await mk('pRedeem', 'empresa');
-    check('Código válido → 200', (await redeem(tRedeem, 'CODE_ENT')).status === 200);
-    check('El código otorgó el plan Enterprise en el servidor', (await getEntityEntitlements(tRedeem.uid, tRedeem.ent)).orgChart === true);
-    const tBrute = await mk('pBrute', 'empresa');
+    const redeemAs = (uid: string, ent: string, code: string) => redeemRoute.POST(new Request('http://localhost/api/subscriptions/redeem', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: uid, entityId: ent, code }) }));
+    const mkEntity = async (uid: string, ent: string) => { await db.doc(`users/${uid}/entities/${ent}`).set({ name: ent, type: 'empresa' }); return { uid, ent }; };
+    delete process.env.SUBSCRIPTION_ACCESS_CODES; delete process.env.SUBSCRIPTION_CODE_EXEMPT_UIDS; delete process.env.SUBSCRIPTION_ACCESS_CODE_MAX_PER_ACCOUNT;
+
+    check('El código público antiguo "roosevelt2025" ya NO funciona', (await redeemAs('uidRX0', 'e0', 'roosevelt2025')).status === 400);
+    const trialCases: Array<[string, string, string]> = [['Itsroosevelt', 'starter', 'coo,cto'], ['LUXORINTELLIGENCE', 'standard', 'chro,cmo,coo,cto'], ['excelsiorstandard', 'pro', ''], ['  Occidentstandard ', 'enterprise', '']];
+    for (const [i, [code, plan]] of trialCases.entries()) {
+        const t = await mkEntity('uidTRIAL' + i, 'eT' + i);
+        const r = await redeemAs(t.uid, t.ent, code);
+        const ent = await getEntityEntitlements(t.uid, t.ent);
+        check(`Código "${code.trim()}" → plan ${plan}`, r.status === 200 && ent.plan === plan, `status=${r.status} plan=${ent.plan}`);
+    }
+    const tE = { uid: 'uidTRIAL3', ent: 'eT3' };
+    check('Occidentstandard desbloquea el organigrama', (await getEntityEntitlements(tE.uid, tE.ent)).orgChart === true);
+    const tS = { uid: 'uidTRIAL0', ent: 'eT0' };
+    const subDoc = (await db.doc(`${path(tS)}/subscriptions/current`).get()).data()!;
+    const days = (new Date(subDoc.expiresAt).getTime() - Date.now()) / 864e5;
+    check('La prueba dura 30 días (no 365)', days > 29.9 && days < 30.1, `días=${days.toFixed(2)}`);
+    check('La prueba queda marcada como gratuita (precio 0)', subDoc.priceUSD === 0 && subDoc.trial === true);
+
+    check('Segundo canje en el mismo entorno → 409', (await redeemAs(tS.uid, tS.ent, 'Itsroosevelt')).status === 409);
+    await mkEntity(tS.uid, 'eOtro');
+    check('Otra entidad de la misma cuenta → 409 (una prueba por cuenta)', (await redeemAs(tS.uid, 'eOtro', 'Itsroosevelt')).status === 409);
+    process.env.SUBSCRIPTION_CODE_EXEMPT_UIDS = 'uidTRIAL0,uidOtro';
+    check('Cuenta exenta (dueño de la plataforma) sí puede canjear en otra entidad', (await redeemAs(tS.uid, 'eOtro', 'Itsroosevelt')).status === 200);
+    delete process.env.SUBSCRIPTION_CODE_EXEMPT_UIDS;
+
+    // Vence a los 30 días: se vuelve a bloquear y no se puede repetir
+    await db.doc(`${path(tS)}/subscriptions/current`).set({ expiresAt: new Date(Date.now() - 1000).toISOString() }, { merge: true });
+    check('Prueba vencida → vuelve a bloquearse', (await getEntityEntitlements(tS.uid, tS.ent)).active === false);
+    check('Los datos siguen ahí tras el vencimiento', (await db.doc(`${path(tS)}/contacts/dato`).set({ ok: 1 }).then(() => true)) && (await db.doc(`${path(tS)}/contacts/dato`).get()).exists);
+    check('Prueba vencida: no se puede volver a canjear (hay que pagar)', (await redeemAs(tS.uid, tS.ent, 'Occidentstandard')).status === 409);
+
+    // La prueba no cuenta como suscripción pagada al cobrar
+    const { resolveUpgradeChargeForUser } = await import('../../src/lib/subscriptions/upgrade-pricing-server');
+    const tT = { uid: 'uidTRIAL1', ent: 'eT1' };
+    const q = await resolveUpgradeChargeForUser({ userId: tT.uid, entityId: tT.ent, targetPlanId: 'pro' });
+    check('Pagar tras la prueba cobra el precio completo (sin crédito ni herencia del vencimiento)', q.hasActive === false && q.chargeUSD === 199.99);
+
+    // No se pisa una suscripción de pago vigente
+    const tPaid = await mkEntity('uidPAID', 'ePaid');
+    await db.doc(`${path(tPaid)}/subscriptions/current`).set({ status: 'active', plan: 'pro', priceUSD: 199.99, paymentMethod: 'card_stripe', expiresAt: iso(20) });
+    check('Con suscripción de pago vigente el código no la reemplaza (409)', (await redeemAs(tPaid.uid, tPaid.ent, 'Itsroosevelt')).status === 409);
+
+    // Fuerza bruta: el contador es por cuenta (crear entidades no lo reinicia)
+    const tBrute = await mkEntity('uidBRUTE', 'eB1');
+    await mkEntity('uidBRUTE', 'eB2');
     let last = 0;
-    for (let i = 0; i < 6; i++) last = (await redeem(tBrute, 'adivinando' + i)).status;
+    for (let i = 0; i < 6; i++) last = (await redeemAs(tBrute.uid, 'eB1', 'adivinando' + i)).status;
     check('Fuerza bruta: tras 5 fallos → 429', last === 429);
-    check('Con el bloqueo activo ni el código correcto pasa', (await redeem(tBrute, 'CODE_PRO')).status === 429);
+    check('El bloqueo es por cuenta: otra entidad de la misma cuenta también', (await redeemAs('uidBRUTE', 'eB2', 'Itsroosevelt')).status === 429);
+
+    // Cambiar los códigos sin tocar el código fuente
+    process.env.SUBSCRIPTION_ACCESS_CODES = 'MiCodigoNuevo:starter:7';
+    const tNew = await mkEntity('uidNEWCODE', 'eN');
+    check('Con SUBSCRIPTION_ACCESS_CODES los códigos por defecto dejan de valer', (await redeemAs(tNew.uid, tNew.ent, 'Itsroosevelt')).status === 400);
+    check('El código definido por entorno funciona (7 días)', (await redeemAs(tNew.uid, tNew.ent, 'micodigonuevo')).status === 200);
+    const nd = (await db.doc(`${path(tNew)}/subscriptions/current`).get()).data()!;
+    check('y dura los días configurados', Math.round((new Date(nd.expiresAt).getTime() - Date.now()) / 864e5) === 7);
+    delete process.env.SUBSCRIPTION_ACCESS_CODES;
 
     // --- Intentos de falsificar el plan o el monto ---
     const upgradeRoute = await import('../../src/app/api/subscriptions/upgrade/route');

@@ -221,6 +221,7 @@ export async function activateSubscriptionFromOrder(order: SubscriptionPaymentOr
   await subRef.set(
     {
       status: 'active',
+      trial: false,
       plan: order.plan,
       priceUSD: order.planPriceUSD,
       paymentMethod: order.paymentMethod,

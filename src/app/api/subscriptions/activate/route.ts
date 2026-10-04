@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
     await db.doc(getSubscriptionCurrentDocPath(userId, entityId || 'default')).set(
       {
         status: 'active',
+        trial: false,
         plan: verifiedPlan,
         priceUSD: priceUSD,
         paymentMethod: 'card_stripe',

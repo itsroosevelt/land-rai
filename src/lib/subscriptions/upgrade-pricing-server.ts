@@ -29,6 +29,12 @@ export async function resolveUpgradeChargeForUser(params: {
       ? data.priceUSD
       : PLAN_CATALOG_USD[String(data.plan).toLowerCase()] ?? 0;
 
+  // Una prueba gratuita (código de acceso, precio 0) no es una suscripción de pago: al pagar se empieza un
+  // período nuevo completo y no se hereda el vencimiento de la prueba.
+  if (currentPriceUSD <= 0 || data.paymentMethod === 'access_code') {
+    return { hasActive: false as const, chargeUSD: PLAN_CATALOG_USD[params.targetPlanId.toLowerCase()] ?? 0 };
+  }
+
   const pricing = buildCheckoutPricing({
     hasActiveSubscription: true,
     currentPriceUSD,

@@ -30,6 +30,7 @@ async function activateFromPaymentIntent(pi: Stripe.PaymentIntent) {
   await ref.set(
     {
       status: 'active',
+      trial: false,
       plan,
       priceUSD: Number(netAmount) || pi.amount / 100,
       paymentMethod: 'card_stripe',

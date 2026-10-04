@@ -235,32 +235,10 @@ export default function NucleoPage() {
             return;
         }
 
-        // Para cualquier otro entorno (empresarial), es sí o sí con suscripción activa o código canjeado para este entorno
-        const isEntityUnlocked = typeof window !== 'undefined' && localStorage.getItem(`roosevelt_entity_unlocked_${entity.id}`) === 'roosevelt2025';
-        let hasActiveSub = false;
-
-        if (!isEntityUnlocked && currentUser) {
-            try {
-                const subRef = doc(db, `users/${currentUser.uid}/entities/${entity.id}/subscriptions/current`);
-                const subSnap = await getDoc(subRef);
-                if (subSnap.exists()) {
-                    const data = subSnap.data();
-                    const isExpired = data?.expiresAt ? new Date(data.expiresAt) < new Date() : false;
-                    if (data?.status === 'active' && !isExpired) {
-                        hasActiveSub = true;
-                    }
-                }
-            } catch (err) {
-                console.error("Error checking entity subscription:", err);
-            }
-        }
-
+        // Entornos empresariales: se entra siempre a su órbita. Sin plan vigente (suscripción o código de acceso)
+        // todas las suites aparecen con candado y llevan a canjear un código o pagar.
         setTimeout(() => {
-            if (isEntityUnlocked || hasActiveSub) {
-                router.push(`/home/${route}`);
-            } else {
-                router.push(`/subscriptions?entityId=${entity.id}&redirect=/home/${route}`);
-            }
+            router.push(`/home/${route}`);
         }, 400);
     };
 

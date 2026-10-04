@@ -117,7 +117,9 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
               console.error('[EntityRouteResolver] Error checking subscription:', subErr);
               allowed = true; // fallo de red: no se bloquea en el navegador; el servidor sigue protegiendo sus rutas
             }
-            if (!allowed) {
+            // La órbita de la entidad (/home/<entidad>) se muestra con todas las suites con candado; el resto exige plan.
+            const isEntityHome = currentPath === `/home/${routeSegment}` || currentPath === `/home/${segment}`;
+            if (!allowed && !isEntityHome) {
               const targetRedirect = currentPath || `/home/${routeSegment}`;
               router.replace(`/subscriptions?entityId=${resolved.id}&redirect=${encodeURIComponent(targetRedirect)}`);
               return;

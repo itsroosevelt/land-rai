@@ -20,17 +20,26 @@ const MOMENTUM_FRICTION = 0.95;
 
 export const Carousel = () => {
     const router = useRouter();
-    const { activeEntity } = useAuth();
-    const { entitlements } = useEntitlements(activeEntity);
+    const { activeEntity, activeEntityRoute } = useAuth();
+    const { entitlements, legacyUnlocked } = useEntitlements(activeEntity);
 
-    // Candado visual: solo cuando se conoce el plan real de la entidad (o ya se aplica el bloqueo en servidor).
-    const showLocks = !!entitlements && (entitlements.enforced || entitlements.active);
+    // Entidad sin plan vigente (sin suscripción, prueba vencida o sin código): TODAS las suites con candado.
+    // Entidad con plan: candado solo en lo que su plan no incluye. Los candados desaparecen al canjear un código o pagar.
+    // Mientras el servidor no aplique el bloqueo (modo 'log') se respeta el desbloqueo heredado del navegador.
+    const noPlan = !!entitlements && !entitlements.free && !entitlements.active && !(legacyUnlocked && !entitlements.enforced);
     const isLocked = (id: string) => {
-        if (!showLocks || !entitlements || entitlements.free) return false;
+        if (!entitlements || entitlements.free) return false;
+        if (noPlan) return true;
+        if (!entitlements.active) return false; // desbloqueo heredado
         if (id === 'organigrama') return !entitlements.orgChart;
         return !(entitlements.suites as string[]).includes(id);
     };
     const handleLockedClick = (id: string, title: string) => {
+        if (noPlan) {
+            toast.info('Este entorno está bloqueado', { description: 'Canjea un código de acceso o activa una suscripción para desbloquearlo.' });
+            router.push(`/subscriptions?entityId=${encodeURIComponent(activeEntity || '')}&redirect=${encodeURIComponent(`/home/${activeEntityRoute || activeEntity || ''}`)}`);
+            return;
+        }
         const need = id === 'organigrama' ? 'enterprise' : minimumPlanForSuite(id);
         toast.info(`${title} no está incluido en tu plan`, {
             description: need ? `Requiere el plan ${PLAN_LABELS[need as keyof typeof PLAN_LABELS]} o superior.` : undefined,
