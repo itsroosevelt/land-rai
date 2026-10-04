@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useEntityRoute } from '@/hooks/useEntityRoute';
 import { db } from '@/lib/firebase';
 import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
+import { claimIntegration } from '@/lib/integrations/claimClient';
 import { getWhatsAppIntegrationHealth } from '@/lib/omnichannel/whatsappIntegrationStatus';
 import { WhatsAppReadinessPanel } from './WhatsAppReadinessPanel';
 import {
@@ -281,6 +282,13 @@ export function WhatsAppCloudAPIModal({ isOpen, onClose, activeIntegration }: Pr
                     entityId: activeEntity,
                 }),
             });
+
+            const claim = await claimIntegration('whatsapp', currentUser.uid, activeEntity);
+            if (!claim.ok) {
+                await updateDoc(configRef, { status: 'Disconnected' });
+                toast.error(claim.message, { id: "wa-config" });
+                return;
+            }
 
             toast.success("¡WhatsApp conectado!", { id: "wa-config" });
             setIsEditing(false);

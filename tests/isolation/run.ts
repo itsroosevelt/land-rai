@@ -18,6 +18,7 @@ process.env.META_APP_SECRET = 'test_meta_secret';
 process.env.TWITTER_CONSUMER_SECRET = 'test_x_secret';
 process.env.GMAIL_CLIENT_SECRET = 'test_gmail_secret';
 process.env.WEBHOOK_SIGNATURE_MODE = 'enforce';
+process.env.API_AUTH_MODE = 'log'; // las rutas privadas se prueban sin token de Firebase (la verificación de token tiene su propio guard)
 process.env.WHATSAPP_ACCESS_TOKEN = 'EAA_PLATFORM_OWNER_TOKEN'; // el dueño de la plataforma: NUNCA debe usarse para un cliente
 process.env.WHATSAPP_PHONE_NUMBER_ID = 'PHONE_PLATFORM_OWNER';
 
@@ -29,6 +30,14 @@ const outbound: { url: string; auth: string }[] = [];
 };
 axios.defaults.adapter = async (config: any) => {
     outbound.push({ url: String(config.url), auth: JSON.stringify(config.headers || {}) + JSON.stringify(config.params || {}) + String(config.url) });
+    // Simula Graph: GET /{id}?access_token=... confirma el id salvo con tokens "FAKE" (no controlan nada)
+    const m = /graph\.facebook\.com\/v[\d.]+\/([^/?]+)$/.exec(String(config.url));
+    if (String(config.method || 'get').toLowerCase() === 'get' && m && config.params?.access_token) {
+        if (String(config.params.access_token).includes('FAKE')) {
+            const err: any = new Error('Request failed with status code 400'); err.response = { status: 400, data: { error: { message: 'Invalid OAuth access token' } } }; throw err;
+        }
+        return { data: { id: decodeURIComponent(m[1]), username: 'u', name: 'n' }, status: 200, statusText: 'OK', headers: {}, config } as any;
+    }
     return { data: { messages: [{ id: 'wamid.TEST' }], data: [] }, status: 200, statusText: 'OK', headers: {}, config } as any;
 };
 
@@ -105,6 +114,8 @@ async function main() {
     check('A NO consulta collectionGroup(cards) de todos', await assertFails(asA.collectionGroup('cards').get()).then(() => true, () => false));
     check('A NO crea colecciones raíz', await assertFails(asA.doc('mi_coleccion/doc1').set({ a: 1 })).then(() => true, () => false));
     check('A NO lee system_mappings', await assertFails(asA.doc('system_mappings/whatsapp_numbers/numbers/PHONE_B').get()).then(() => true, () => false));
+    check('A NO escribe en integration_claims (solo el servidor)', await assertFails(asA.doc('integration_claims/messenger__PAGE_B').set({ userId: A.uid, entityId: A.ent })).then(() => true, () => false));
+    check('A NO lee integration_claims', await assertFails(asA.doc('integration_claims/messenger__PAGE_B').get()).then(() => true, () => false));
     check('Sin sesión NO lee nada', await assertFails(anon.doc(`${path(A)}/integrations/messenger`).get()).then(() => true, () => false));
     await env.cleanup();
 
@@ -230,6 +241,63 @@ async function main() {
     check('Gmail: correo reclamado por D y E → ignorado', ((await res.json()) as any).ignored === 'ambiguous_tenant');
     process.env.WEBHOOK_SIGNATURE_MODE = 'enforce';
     check('Ni D ni E recibieron nada', (await listTree(db, path(D))).size + (await listTree(db, path(E))).size === beforeDE);
+
+    // =====================================================================
+    console.log('\n9) Reclamos verificados (integration_claims)');
+    const claimRoute = await import('../../src/app/api/integrations/claim/route');
+    const claimPost = (provider: string, t: { uid: string; ent: string }) => claimRoute.POST(new Request('http://localhost/api/integrations/claim', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ provider, userId: t.uid, entityId: t.ent }) }));
+    const F = { uid: 'uidFFFFFFFFFFFF', ent: 'entF' }, G = { uid: 'uidGGGGGGGGGGGG', ent: 'entG' };
+    for (const t of [F, G]) await db.doc(path(t)).set({ name: t.ent, type: 'empresa' });
+    // (la sección 1 sobrescribió el doc de A con datos de prueba de reglas: se restaura el estado real)
+    await seed(A, 'messenger', { provider: 'messenger', pageId: 'PAGE_A', accessToken: 'EAA_TOKEN_A', pageAccessToken: 'EAA_TOKEN_A' });
+    await seed(B, 'messenger', { provider: 'messenger', pageId: 'PAGE_B', accessToken: 'EAA_TOKEN_B', pageAccessToken: 'EAA_TOKEN_B' });
+    await seed(F, 'messenger', { provider: 'messenger', pageId: 'PAGE_F', accessToken: 'EAA_F_OK' });
+    await seed(G, 'messenger', { provider: 'messenger', pageId: 'PAGE_F', accessToken: 'EAA_FAKE_G' }); // atacante: escribió el id de F con un token que no controla nada
+
+    res = await claimPost('messenger', G);
+    check('Atacante con token falso NO puede reclamar la página (403)', res.status === 403, `status=${res.status}`);
+    res = await claimPost('messenger', F);
+    check('El dueño real reclama su página (200)', res.status === 200, `status=${res.status}`);
+    await db.doc(`${path(G)}/integrations/messenger`).set({ accessToken: 'EAA_G_OK' }, { merge: true }); // atacante consigue un token válido de otra página
+    res = await claimPost('messenger', G);
+    check('Segundo reclamante del mismo id → 409 conflicto', res.status === 409, `status=${res.status}`);
+
+    const beforeF = (await listTree(db, path(F))).size, beforeG = (await listTree(db, path(G))).size;
+    raw = metaBody('PAGE_F', 'mensaje para F');
+    res = await postMeta(raw, sign(raw));
+    check('PAGE_F con reclamo → 200', res.status === 200, `status=${res.status}`);
+    check('El mensaje llegó al dueño reclamado (F)', (await listTree(db, path(F))).size > beforeF);
+    check('El atacante G NO lo recibió aunque escribió el id', (await listTree(db, path(G))).size === beforeG);
+
+    // La víctima A (bloqueada por el conflicto con D en la sección 2) recupera su página al reclamarla
+    res = await claimPost('messenger', A);
+    check('A reclama PAGE_A (token válido)', res.status === 200, `status=${res.status}`);
+    res = await claimPost('messenger', D);
+    check('D (que falsificó PAGE_A) recibe 409 al intentar reclamarla', res.status === 409, `status=${res.status}`);
+    const beforeA9 = (await listTree(db, path(A))).size, beforeD9 = (await listTree(db, path(D))).size;
+    raw = metaBody('PAGE_A', 'mensaje real para A');
+    res = await postMeta(raw, sign(raw));
+    check('PAGE_A ahora se entrega a A', (await listTree(db, path(A))).size > beforeA9);
+    check('y NO a D', (await listTree(db, path(D))).size === beforeD9);
+
+    res = await claimPost('whatsapp', B);
+    check('B reclama su número de WhatsApp (200)', res.status === 200, `status=${res.status}`);
+    check('El reclamo de WhatsApp quedó registrado para B', (await db.doc('integration_claims/whatsapp__PHONE_B').get()).data()?.entityId === B.ent);
+
+    // Modo require: ids sin reclamo verificado no se entregan
+    await seed(C, 'messenger', { provider: 'messenger', pageId: 'PAGE_SIN_RECLAMO', accessToken: 'EAA_C' });
+    await seed(C, 'whatsapp', { phoneNumberId: 'PHONE_SIN_RECLAMO', accessToken: 'EAA_C' });
+    process.env.INTEGRATION_CLAIMS_MODE = 'require';
+    raw = metaBody('PAGE_SIN_RECLAMO', 'x');
+    res = await postMeta(raw, sign(raw));
+    check('require: página sin reclamo → ignorada', ((await res.json()) as any).ignored === 'unclaimed');
+    raw = waBody('PHONE_SIN_RECLAMO', 'x');
+    res = await postWa(raw, sign(raw));
+    check('require: número sin reclamo → ignorado', ((await res.json()) as any).ignored === 'tenant_not_mapped');
+    raw = waBody('PHONE_B', 'con reclamo');
+    res = await postWa(raw, sign(raw));
+    check('require: número con reclamo sigue funcionando', res.status === 200 && ((await res.json()) as any).ignored === undefined);
+    delete process.env.INTEGRATION_CLAIMS_MODE;
 
     // =====================================================================
     console.log(`\nResultado: ${passed} OK, ${failures.length} fallos`);

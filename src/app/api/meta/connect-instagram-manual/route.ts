@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { db, admin } from '@/lib/firebase-admin';
 import { guardApi } from '@/lib/apiAuth';
+import { claimFromStoredIntegration } from '@/lib/integrationClaims';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,6 +53,12 @@ export async function POST(req: Request) {
             };
 
             await db.doc(`${entityPath}/integrations/instagram`).set(instagramConfig, { merge: true });
+
+            const claim = await claimFromStoredIntegration('instagram', { userId, entityId });
+            if (!claim.ok) {
+                await db.doc(`${entityPath}/integrations/instagram`).set({ status: 'Disconnected' }, { merge: true });
+                return NextResponse.json({ error: claim.message }, { status: claim.reason === 'conflict' ? 409 : 403 });
+            }
 
             const resolvedPageId = pageId ? String(pageId).trim() : '';
             if (resolvedPageId) {
@@ -184,6 +191,12 @@ export async function POST(req: Request) {
         };
 
         await db.doc(`${entityPathPage}/integrations/instagram`).set(instagramConfig, { merge: true });
+
+        const claim = await claimFromStoredIntegration('instagram', { userId, entityId });
+        if (!claim.ok) {
+            await db.doc(`${entityPathPage}/integrations/instagram`).set({ status: 'Disconnected' }, { merge: true });
+            return NextResponse.json({ error: claim.message }, { status: claim.reason === 'conflict' ? 409 : 403 });
+        }
 
         return NextResponse.json({
             success: true,

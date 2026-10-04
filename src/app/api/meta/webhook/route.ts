@@ -7,6 +7,7 @@ import { isMetaCommentChange, parseMetaChange } from '@/lib/automation/metaWebho
 
 import fs from 'fs';
 import { checkMetaSignature } from '@/lib/webhookSignature';
+import { getClaim, claimInBackground, claimsRequired } from '@/lib/integrationClaims';
 
 function debugLog(msg: string) {
     const logStr = `\n[${new Date().toISOString()}] [Meta Webhook Debug] ${msg}`;
@@ -142,15 +143,35 @@ export async function POST(req: Request) {
 
         // Consulta filtrada por id (índices collection-group de pageId/instagramId). Antes se leían
         // TODAS las integraciones de TODOS los clientes en cada mensaje.
+        // 1) Reclamo verificado (lo escribe solo el servidor tras confirmar con Meta que el token controla el id).
+        //    Si existe, manda: lo que otro cliente haya escrito en su propia integración ya no importa.
+        let claimed: { provider: 'messenger' | 'instagram'; userId: string; entityId: string } | null = null;
+        for (const p of ['instagram', 'messenger'] as const) {
+            const c = await getClaim(p, targetId);
+            if (c) { claimed = { provider: p, ...c }; break; }
+        }
+        if (!claimed && claimsRequired()) {
+            console.warn('[Meta Webhook] id sin reclamo verificado (INTEGRATION_CLAIMS_MODE=require)', { objectType, targetId });
+            return NextResponse.json({ success: true, ignored: 'unclaimed', objectType, targetId });
+        }
+
         const idVariants: Array<string | number> = [targetId];
         if (!Number.isNaN(numericId)) idVariants.push(numericId);
-        const lookups = await Promise.all(
+        // 2) Sin reclamo: búsqueda heredada por campos de la integración (con guarda de ambigüedad).
+        const lookups = claimed ? [] : await Promise.all(
             (['pageId', 'instagramId'] as const).flatMap((field) =>
                 idVariants.map((value) => db.collectionGroup('integrations').where(field, '==', value).get())
             )
         );
         const seenPaths = new Set<string>();
         let matchedIntegrations: any[] = [];
+
+        if (claimed) {
+            const claimedDoc = await db.doc(`users/${claimed.userId}/entities/${claimed.entityId}/integrations/${claimed.provider}`).get();
+            if (claimedDoc.exists) {
+                matchedIntegrations.push({ doc: claimedDoc, data: claimedDoc.data(), provider: claimed.provider, updatedAt: 0 });
+            }
+        }
 
         for (const doc of lookups.flatMap((snap) => snap.docs)) {
             if (seenPaths.has(doc.ref.path)) continue;
@@ -179,6 +200,11 @@ export async function POST(req: Request) {
             tenantRef = selectedMatch.doc.ref;
             tenantData = selectedMatch.data;
             provider = selectedMatch.provider as 'instagram' | 'messenger';
+            if (!claimed) {
+                // Verificación diferida: si Meta confirma que el token controla el id, queda reclamado.
+                const parts = selectedMatch.doc.ref.path.split('/');
+                claimInBackground(provider, { userId: parts[1], entityId: parts[3] });
+            }
         }
 
         if (!tenantRef) {

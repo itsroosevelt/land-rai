@@ -11,6 +11,7 @@ import {
 import { db } from '@/lib/firebase';
 import { doc, setDoc, deleteDoc, onSnapshot, serverTimestamp, collectionGroup, getDocs, query, where } from 'firebase/firestore';
 import { isIntegrationTakenByAnotherTenant } from '@/lib/integrations/checkIntegrationTaken';
+import { claimIntegration } from '@/lib/integrations/claimClient';
 import { toast } from 'sonner';
 
 interface InstagramModalProps {
@@ -206,6 +207,13 @@ const InstagramModal: React.FC<InstagramModalProps> = ({ isOpen, onClose, active
             };
 
             await setDoc(doc(db, `users/${userId}/entities/${entityId}/integrations/instagram`), instagramConfig);
+
+            const claim = await claimIntegration('instagram', userId, entityId);
+            if (!claim.ok) {
+                await deleteDoc(doc(db, `users/${userId}/entities/${entityId}/integrations/instagram`));
+                toast.error(claim.message, { id: toastId });
+                return;
+            }
 
 
             setConfig(instagramConfig);

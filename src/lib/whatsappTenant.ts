@@ -1,4 +1,5 @@
 import { db, admin } from '@/lib/firebase-admin';
+import { getClaim, claimInBackground, claimsRequired } from '@/lib/integrationClaims';
 
 export interface WhatsAppTenantContext {
     userId: string;
@@ -107,8 +108,17 @@ export async function resolveWhatsAppTenant(
 
     if (!recipientPhoneNumberId) return null;
 
+    // Reclamo verificado por el servidor (ver integrationClaims.ts): manda sobre cualquier campo escrito por clientes.
+    const claimed = await getClaim('whatsapp', recipientPhoneNumberId);
+    if (claimed) return claimed;
+    if (claimsRequired()) {
+        console.warn(`[WhatsApp Tenant] ${recipientPhoneNumberId} sin reclamo verificado (INTEGRATION_CLAIMS_MODE=require)`);
+        return null;
+    }
+
     const fromIntegrations = await queryIntegrationsByPhoneId(recipientPhoneNumberId);
     if (fromIntegrations) {
+        claimInBackground('whatsapp', fromIntegrations);
         // Self-heal: cache the mapping so future lookups are fast and index-independent.
         registerWhatsAppTenantMapping(
             recipientPhoneNumberId,

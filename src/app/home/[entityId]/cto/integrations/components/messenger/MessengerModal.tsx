@@ -11,6 +11,7 @@ import {
 import { db } from '@/lib/firebase';
 import { doc, setDoc, deleteDoc, onSnapshot, serverTimestamp, collectionGroup, getDocs, query, where } from 'firebase/firestore';
 import { isIntegrationTakenByAnotherTenant } from '@/lib/integrations/checkIntegrationTaken';
+import { claimIntegration } from '@/lib/integrations/claimClient';
 import { toast } from 'sonner';
 
 interface MessengerModalProps {
@@ -134,6 +135,13 @@ const MessengerModal: React.FC<MessengerModalProps> = ({ isOpen, onClose, active
             };
 
             await setDoc(doc(db, `users/${userId}/entities/${entityId}/integrations/messenger`), messengerConfig);
+
+            const claim = await claimIntegration('messenger', userId, entityId);
+            if (!claim.ok) {
+                await deleteDoc(doc(db, `users/${userId}/entities/${entityId}/integrations/messenger`));
+                toast.error(claim.message, { id: toastId });
+                return;
+            }
 
 
             setConfig(messengerConfig);
