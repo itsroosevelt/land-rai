@@ -46,7 +46,7 @@ Reales: **CTO** (automation/whatsappbots, integrations, web-builder, voice-cente
 1. **Seguridad restante:** (a) los webhooks no validan firma del proveedor (Meta `X-Hub-Signature-256`, Telegram `secret_token`, Pub/Sub de Gmail): cualquiera que conozca la URL puede inyectar mensajes; (b) el candado de suscripción en cliente (`localStorage roosevelt_entity_unlocked_*`) es evadible: validar el plan en servidor/reglas; (c) cookie `github_token` es por navegador, no por usuario: atarla al uid y borrarla al cerrar sesión; (d) `storage.rules` no cubre las rutas que usa la app (`cards/`, `applications/`, `avatars/`) y permite escritura a cualquier autenticado en `chatbot_media/` y `profile-data/`: alinear con rutas por uid; (e) `solana/airdrop` y `referrals/claim` requieren sesión pero conviene limitar por usuario (anti-abuso).
 2. Organigrama por entidad (icono en la órbita): empleados humanos y agentes IA asignados a suites, con permisos por rol. Datos en `users/{uid}/entities/{id}/org/*`.
 3. Orquestador de entidad (servidor, autenticado con `guardApi`) + conectar la barra Ask Roosevelt para informes, leyendo solo datos de la entidad activa.
-4. Webhook de Stripe: `api/subscriptions/stripe-webhook` devuelve 503 (TODO).
+4. Webhook de Stripe: implementado (firma verificada; eventos `payment_intent.succeeded/payment_failed`, `charge.refunded`). Falta validar en producción y rotar la clave `sk_live` que estuvo en `.env.example` (historial git).
 5. Implementar las capas plantilla (CEO, CFO resto, Board, CHRO, CSO, CISO, CLO, CPO, CDO).
 6. Unificar las 3 copias de la lógica del molde; agregar `dry-run` a `migrate-mold`.
 7. `next.config.mjs` reescribe `/socket.io` y `/api/internal` a `localhost:4000` (servidor externo, no incluido): documentar o remover.
