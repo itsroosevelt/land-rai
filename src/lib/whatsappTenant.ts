@@ -28,54 +28,46 @@ function parseTenantFromIntegrationPath(path: string): WhatsAppTenantContext | n
     return { userId, entityId };
 }
 
+/**
+ * Busca el tenant dueño de un phone_number_id. Anti-secuestro: un cliente puede escribir cualquier id
+ * en su propia integración, así que si el mismo número lo reclaman usuarios DISTINTOS el resultado es
+ * ambiguo y no se entrega a nadie (nunca "el primero que aparezca").
+ */
 async function queryIntegrationsByPhoneId(phoneId: string | number): Promise<WhatsAppTenantContext | null> {
     const candidates: Array<string | number> = [String(phoneId)];
     const numeric = Number(phoneId);
     if (!Number.isNaN(numeric)) candidates.push(numeric);
 
+    const lookups: Array<Promise<FirebaseFirestore.QuerySnapshot | null>> = [];
     for (const id of candidates) {
-        try {
-            const snap = await db.collectionGroup('integrations')
-                .where('phoneNumberId', '==', id)
-                .limit(1)
-                .get();
-            if (!snap.empty) {
-                const parsed = parseTenantFromIntegrationPath(snap.docs[0].ref.path);
-                if (parsed) return parsed;
-            }
-        } catch (e) {
-            console.warn('[WhatsApp Tenant] phoneNumberId lookup failed:', e);
-        }
-
-        try {
-            const snap = await db.collectionGroup('integrations')
-                .where('phone_number_id', '==', id)
-                .limit(1)
-                .get();
-            if (!snap.empty) {
-                const parsed = parseTenantFromIntegrationPath(snap.docs[0].ref.path);
-                if (parsed) return parsed;
-            }
-        } catch (e) {
-            console.warn('[WhatsApp Tenant] phone_number_id lookup failed:', e);
-        }
-
-        // MULTI-NUMBER: connected slot numbers live in `whatsapp_numbers/{slot}`.
-        try {
-            const snap = await db.collectionGroup('whatsapp_numbers')
-                .where('phoneNumberId', '==', id)
-                .limit(1)
-                .get();
-            if (!snap.empty) {
-                const parsed = parseTenantFromIntegrationPath(snap.docs[0].ref.path);
-                if (parsed) return parsed;
-            }
-        } catch (e) {
-            console.warn('[WhatsApp Tenant] whatsapp_numbers lookup failed:', e);
+        for (const [group, field] of [
+            ['integrations', 'phoneNumberId'],
+            ['integrations', 'phone_number_id'],
+            ['whatsapp_numbers', 'phoneNumberId'],
+        ] as const) {
+            lookups.push(
+                db.collectionGroup(group).where(field, '==', id).limit(5).get().catch((e) => {
+                    console.warn(`[WhatsApp Tenant] ${group}.${field} lookup failed:`, e);
+                    return null;
+                })
+            );
         }
     }
 
-    return null;
+    const tenants = new Map<string, WhatsAppTenantContext>();
+    for (const snap of await Promise.all(lookups)) {
+        for (const doc of snap?.docs || []) {
+            const parsed = parseTenantFromIntegrationPath(doc.ref.path);
+            if (parsed && !tenants.has(`${parsed.userId}/${parsed.entityId}`)) tenants.set(`${parsed.userId}/${parsed.entityId}`, parsed);
+        }
+    }
+
+    const found = Array.from(tenants.values());
+    if (new Set(found.map((t) => t.userId)).size > 1) {
+        console.error(`[WhatsApp Tenant] CONFLICTO: phone_number_id ${phoneId} reclamado por varios usuarios; no se entrega.`);
+        return null;
+    }
+    return found[0] || null;
 }
 
 /** Persists a global fallback map used when collectionGroup lookup is unavailable. */

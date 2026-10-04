@@ -69,21 +69,19 @@ export async function POST(req: Request) {
         console.log(`[Gmail Webhook] Notification for ${emailAddress}`);
 
         // 2. Identify Tenant
-        let tenantSnap = await db.collectionGroup('accounts').where('gmailAddress', '==', emailAddress).limit(1).get();
-
-        if (tenantSnap.empty) {
-            tenantSnap = await db.collectionGroup('accounts').where('email', '==', emailAddress).limit(1).get();
-        }
-
-        if (tenantSnap.empty) {
-            tenantSnap = await db.collectionGroup('integrations').where('gmailAddress', '==', emailAddress).limit(1).get();
-        }
-
-        if (tenantSnap.empty) {
-            tenantSnap = await db.collectionGroup('integrations').where('email', '==', emailAddress).limit(1).get();
-        }
+        // Anti-secuestro: si el mismo correo está registrado por usuarios DISTINTOS, no se entrega a nadie.
+        let tenantSnap = await db.collectionGroup('accounts').where('gmailAddress', '==', emailAddress).limit(5).get();
+        if (tenantSnap.empty) tenantSnap = await db.collectionGroup('accounts').where('email', '==', emailAddress).limit(5).get();
+        if (tenantSnap.empty) tenantSnap = await db.collectionGroup('integrations').where('gmailAddress', '==', emailAddress).limit(5).get();
+        if (tenantSnap.empty) tenantSnap = await db.collectionGroup('integrations').where('email', '==', emailAddress).limit(5).get();
 
         if (tenantSnap.empty) return NextResponse.json({ success: false, error: 'Tenant not found' });
+
+        const claimingUsers = new Set(tenantSnap.docs.map((d) => d.ref.path.split('/')[1]));
+        if (claimingUsers.size > 1) {
+            console.error(`[Gmail Webhook] CONFLICTO: ${emailAddress} reclamado por varios usuarios; no se entrega.`);
+            return NextResponse.json({ success: true, ignored: 'ambiguous_tenant' });
+        }
 
         const tenantDoc = tenantSnap.docs[0];
         const tenantData = tenantDoc.data() || {};

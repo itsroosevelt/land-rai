@@ -16,19 +16,23 @@ export async function resolveTwitterTenant(body: Record<string, any>): Promise<T
         .where('provider', '==', 'x_twitter')
         .get();
 
-    let tenantRef: admin.firestore.DocumentReference | null = null;
+    const matches: admin.firestore.DocumentReference[] = [];
+    const screenName = body.user?.screen_name ? String(body.user.screen_name) : '';
 
     for (const doc of integrationSnap.docs) {
         const data = doc.data();
-        const screenName = body.user?.screen_name ? String(body.user.screen_name) : '';
         // Exigir valores reales: `undefined === undefined` haría coincidir con cualquier tenant.
         const matchesId = !!data.twitterUserId && String(data.twitterUserId) === ourUserId;
         const matchesHandle = !!screenName && !!data.twitterHandle && String(data.twitterHandle) === screenName;
-        if (matchesId || matchesHandle) {
-            tenantRef = doc.ref;
-            break;
-        }
+        if (matchesId || matchesHandle) matches.push(doc.ref);
     }
+
+    // Anti-secuestro: varios usuarios reclamando la misma cuenta de X → ambiguo, no se entrega a nadie.
+    if (new Set(matches.map((r) => r.path.split('/')[1])).size > 1) {
+        console.error(`[X Tenant] CONFLICTO: cuenta ${ourUserId} reclamada por varios usuarios; no se entrega.`);
+        return null;
+    }
+    const tenantRef = matches[0] || null;
 
     if (!tenantRef) return null;
 
