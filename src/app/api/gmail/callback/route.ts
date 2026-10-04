@@ -3,6 +3,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { db } from '@/lib/firebase-admin';
 import { saveGmailAccount } from '@/lib/gmail/accounts.server';
 import * as admin from 'firebase-admin';
+import { verifyOAuthState } from '@/lib/oauthState';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +16,11 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: 'Missing code or state' }, { status: 400 });
     }
 
-    const statePayload = JSON.parse(Buffer.from(state, 'base64').toString());
+    // El state lo firma /api/gmail/auth-url (ruta autenticada). Sin firma válida, se rechaza.
+    const statePayload = verifyOAuthState(state);
+    if (!statePayload || !statePayload.userId || !statePayload.entityId) {
+        return NextResponse.json({ error: 'State inválido o expirado. Vuelve a iniciar la conexión.' }, { status: 400 });
+    }
     const { entityId, userId } = statePayload;
     const entityIds: string[] =
         Array.isArray(statePayload.entityIds) && statePayload.entityIds.length > 0

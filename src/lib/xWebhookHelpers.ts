@@ -20,15 +20,14 @@ export async function resolveTwitterTenant(body: Record<string, any>): Promise<T
 
     for (const doc of integrationSnap.docs) {
         const data = doc.data();
-        if (data.twitterUserId === ourUserId || data.twitterHandle === body.user?.screen_name) {
+        const screenName = body.user?.screen_name ? String(body.user.screen_name) : '';
+        // Exigir valores reales: `undefined === undefined` haría coincidir con cualquier tenant.
+        const matchesId = !!data.twitterUserId && String(data.twitterUserId) === ourUserId;
+        const matchesHandle = !!screenName && !!data.twitterHandle && String(data.twitterHandle) === screenName;
+        if (matchesId || matchesHandle) {
             tenantRef = doc.ref;
             break;
         }
-    }
-
-    if (!tenantRef) {
-        const emergencySnap = integrationSnap.docs.find((d) => d.data().status === 'Connected');
-        if (emergencySnap) tenantRef = emergencySnap.ref;
     }
 
     if (!tenantRef) return null;

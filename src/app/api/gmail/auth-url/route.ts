@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { guardApi } from '@/lib/apiAuth';
+import { signOAuthState } from '@/lib/oauthState';
 
 const CLIENT_ID = process.env.GMAIL_CLIENT_ID?.replace(/\"/g, '').trim();
 const REDIRECT_URI = process.env.GMAIL_REDIRECT_URI?.replace(/\"/g, '').trim();
@@ -44,16 +45,14 @@ export async function GET(req: Request) {
     
     const prompt = mode === 'add' ? 'select_account consent' : 'consent';
 
-    const state = Buffer.from(
-        JSON.stringify({
-            userId,
-            entityId,
-            entityIds: entityIds.length > 0 ? entityIds : [entityId],
-            loginHint: loginHint || null,
-            source: mode === 'add' ? 'add_account' : 'google_login',
-            mode,
-        })
-    ).toString('base64');
+    const state = signOAuthState({
+        userId,
+        entityId,
+        entityIds: entityIds.length > 0 ? entityIds : [entityId],
+        loginHint: loginHint || null,
+        source: mode === 'add' ? 'add_account' : 'google_login',
+        mode,
+    });
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
         `client_id=${CLIENT_ID}&` +
         `redirect_uri=${encodeURIComponent(dynamicRedirect!)}&` +
@@ -62,7 +61,7 @@ export async function GET(req: Request) {
         `access_type=offline&` +
         `prompt=${encodeURIComponent(prompt)}&` +
         (loginHint && mode !== 'add' ? `login_hint=${encodeURIComponent(loginHint)}&` : '') +
-        `state=${state}`;
+        `state=${encodeURIComponent(state)}`;
 
     console.log(`[Gmail Auth] Agnostic URL Generated for ${entityId}. Host: ${host} | Using: ${dynamicRedirect}`);
     

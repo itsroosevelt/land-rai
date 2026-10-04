@@ -25,7 +25,8 @@ export async function fetchMetaTemplateBody(
 ): Promise<string | null> {
     if (!templateName) return null;
 
-    let token = process.env.WHATSAPP_ACCESS_TOKEN;
+    // Solo credenciales de la entidad (sin fallback a variables de entorno de la plataforma)
+    let token: string | undefined;
     let wabaId = "";
 
     const applyCredentials = (source: Record<string, unknown> | undefined) => {

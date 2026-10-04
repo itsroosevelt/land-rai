@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { db } from './firebase-admin';
+import { signOAuthState } from './oauthState';
 import {
     getDefaultGmailAccountId,
     gmailAccountSecretPath,
@@ -18,7 +19,7 @@ export async function getGoogleAuthUrl(userId: string, entityId: string) {
         'https://www.googleapis.com/auth/userinfo.profile',
     ];
 
-    const state = Buffer.from(JSON.stringify({ userId, entityId })).toString('base64');
+    const state = encodeURIComponent(signOAuthState({ userId, entityId }));
     const url =
         `https://accounts.google.com/o/oauth2/v2/auth?` +
         `client_id=${CLIENT_ID}&` +

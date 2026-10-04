@@ -337,8 +337,10 @@ export async function sendWhatsAppMessage(
     message: string,
     options: WhatsAppSendOptions = {}
 ): Promise<any> {
-    let token = process.env.WHATSAPP_ACCESS_TOKEN;
-    let phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    // Aislamiento multi-tenant: las credenciales salen SOLO de la entidad. Nunca de variables de
+    // entorno de la plataforma (un cliente sin credenciales enviaría desde el número del dueño).
+    let token: string | undefined;
+    let phoneNumberId: string | undefined;
 
     const applyWhatsAppCredentials = (source: Record<string, any> | undefined) => {
         if (!source) return;

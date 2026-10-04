@@ -137,10 +137,21 @@ export async function POST(req: Request) {
         let tenantData: any = null;
         const numericId = parseInt(targetId);
 
-        const integrationSnap = await db.collectionGroup('integrations').get();
+        // Consulta filtrada por id (índices collection-group de pageId/instagramId). Antes se leían
+        // TODAS las integraciones de TODOS los clientes en cada mensaje.
+        const idVariants: Array<string | number> = [targetId];
+        if (!Number.isNaN(numericId)) idVariants.push(numericId);
+        const lookups = await Promise.all(
+            (['pageId', 'instagramId'] as const).flatMap((field) =>
+                idVariants.map((value) => db.collectionGroup('integrations').where(field, '==', value).get())
+            )
+        );
+        const seenPaths = new Set<string>();
         let matchedIntegrations: any[] = [];
 
-        for (const doc of integrationSnap.docs) {
+        for (const doc of lookups.flatMap((snap) => snap.docs)) {
+            if (seenPaths.has(doc.ref.path)) continue;
+            seenPaths.add(doc.ref.path);
             if (!doc.ref.path.includes('users/') || !doc.ref.path.includes('/entities/')) continue;
             const data = doc.data();
             const matchesPage = data.pageId === targetId || String(data.pageId) === String(targetId) || data.pageId === numericId;

@@ -16,7 +16,8 @@ export async function GET(req: Request) {
         }
 
         // Resolve credentials
-        let token = process.env.WHATSAPP_ACCESS_TOKEN;
+        // Solo credenciales de la entidad (sin fallback a variables de entorno de la plataforma)
+        let token: string | undefined;
         let wabaId = '';
 
         const applyCredentials = (source: any) => {
