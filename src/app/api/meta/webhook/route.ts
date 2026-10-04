@@ -6,6 +6,7 @@ import { resolveMetaBotRouting } from '@/lib/automation/metaBotRouting';
 import { isMetaCommentChange, parseMetaChange } from '@/lib/automation/metaWebhookHelpers';
 
 import fs from 'fs';
+import { checkMetaSignature } from '@/lib/webhookSignature';
 
 function debugLog(msg: string) {
     const logStr = `\n[${new Date().toISOString()}] [Meta Webhook Debug] ${msg}`;
@@ -62,6 +63,8 @@ export async function POST(req: Request) {
     let entityPathForError = '';
     try {
         const rawBody = await req.text();
+        const sigDenied = checkMetaSignature(req, rawBody, 'meta');
+        if (sigDenied) return sigDenied;
         let body;
         try {
             body = JSON.parse(rawBody);
@@ -159,6 +162,15 @@ export async function POST(req: Request) {
             if (matchesPage || matchesInsta) {
                 matchedIntegrations.push({ doc, data, provider: matchesInsta ? 'instagram' : 'messenger', updatedAt: data.updatedAt?.toMillis?.() || data.updatedAt?.seconds * 1000 || 0 });
             }
+        }
+
+        // Anti-secuestro: el mismo pageId/instagramId reclamado por usuarios DISTINTOS es ambiguo.
+        // Un cliente puede escribir cualquier id en su propia integración; sin esta guarda, los mensajes
+        // de la víctima caerían en la cuenta del atacante ("la más reciente gana"). Ante conflicto no se entrega a nadie.
+        const claimingUsers = new Set(matchedIntegrations.map((m) => m.doc.ref.path.split('/')[1]));
+        if (claimingUsers.size > 1) {
+            console.error('[Meta Webhook] CONFLICTO: id reclamado por varios usuarios, no se entrega', { objectType, targetId, claims: claimingUsers.size });
+            return NextResponse.json({ success: true, ignored: 'ambiguous_tenant', objectType, targetId });
         }
 
         if (matchedIntegrations.length > 0) {

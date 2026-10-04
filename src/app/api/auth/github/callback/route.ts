@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { verifyOAuthState } from '@/lib/oauthState';
 
 export async function GET(req: Request) {
     const { searchParams, origin } = new URL(req.url);
@@ -8,7 +9,8 @@ export async function GET(req: Request) {
     let projectId = '';
     let entityRoute = '';
     try {
-        const parsed = JSON.parse(Buffer.from(stateRaw, 'base64').toString('utf-8'));
+        const parsed = verifyOAuthState(stateRaw);
+        if (!parsed) throw new Error('state inválido o expirado');
         projectId = parsed.projectId || '';
         // Solo segmentos de ruta seguros (evita redirecciones arbitrarias).
         if (typeof parsed.entityRoute === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(parsed.entityRoute)) {

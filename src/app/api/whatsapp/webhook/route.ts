@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { checkMetaSignature } from '@/lib/webhookSignature';
 import { db, admin } from '@/lib/firebase-admin';
 import fs from 'fs';
 import path from 'path';
@@ -98,6 +99,8 @@ export async function POST(req: Request) {
         let body;
         try {
             const rawBody = await req.text();
+            const sigDenied = checkMetaSignature(req, rawBody, 'whatsapp');
+            if (sigDenied) return sigDenied;
             debugLog(`[POST] Raw Body Length: ${rawBody.length}`);
             body = JSON.parse(rawBody);
         } catch (parseError: any) {

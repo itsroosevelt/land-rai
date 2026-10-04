@@ -5,6 +5,7 @@ import { buildBotQueueItem, createQueuedBotState, isDuplicateQueueMessage } from
 import { isXCommentInteraction, resolveXBotRouting } from '@/lib/automation/xBotRouting';
 import { resolveTwitterTenant } from '@/lib/xWebhookHelpers';
 import crypto from 'crypto';
+import { checkTwitterSignature } from '@/lib/webhookSignature';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -171,7 +172,10 @@ export async function POST(req: Request) {
     console.log('[Twitter Webhook] INCOMING EVENT');
 
     try {
-        const body = await req.json();
+        const rawBody = await req.text();
+        const sigDenied = checkTwitterSignature(req, rawBody);
+        if (sigDenied) return sigDenied;
+        const body = JSON.parse(rawBody);
         const tenant = await resolveTwitterTenant(body);
 
         if (!tenant) {

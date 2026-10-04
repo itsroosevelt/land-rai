@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { signOAuthState } from '@/lib/oauthState';
 
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
@@ -11,7 +12,7 @@ export async function GET(req: Request) {
     }
 
     const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin}/api/auth/github/callback`;
-    const state = Buffer.from(JSON.stringify({ projectId, entityRoute })).toString('base64');
+    const state = signOAuthState({ projectId, entityRoute });
 
     const params = new URLSearchParams({
         client_id: clientId,

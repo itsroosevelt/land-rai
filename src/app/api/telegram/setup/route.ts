@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { guardApi } from '@/lib/apiAuth';
+import { db } from '@/lib/firebase-admin';
+import { newTelegramSecret } from '@/lib/webhookSignature';
 
 export async function POST(req: Request) {
     const denied = await guardApi(req);
@@ -17,10 +19,20 @@ export async function POST(req: Request) {
 
         console.log(`[Telegram Setup] Registering webhook: ${webhookUrl}`);
 
-        const response = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook?url=${encodeURIComponent(webhookUrl)}`);
+        // secret_token por entidad: Telegram lo reenvía en la cabecera X-Telegram-Bot-Api-Secret-Token
+        // y el webhook lo exige, de modo que conocer la URL (u/e) ya no basta para inyectar mensajes.
+        const webhookSecret = newTelegramSecret();
+        const response = await fetch(
+            `https://api.telegram.org/bot${botToken}/setWebhook?url=${encodeURIComponent(webhookUrl)}&secret_token=${webhookSecret}`
+        );
         const data = await response.json();
 
         if (data.ok) {
+            await db.doc(`users/${userId}/entities/${entityId}/integrations/telegram_internal`).set(
+                { webhookSecret, webhookSecretUpdatedAt: new Date().toISOString() },
+                { merge: true }
+            );
+
             // Fetch Bot Info to get the username (Rule: Agnostic Brand)
             const meRes = await fetch(`https://api.telegram.org/bot${botToken}/getMe`);
             const meData = await meRes.json();

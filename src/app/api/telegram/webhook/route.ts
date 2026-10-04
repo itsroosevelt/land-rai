@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db, admin } from '@/lib/firebase-admin';
 import { processChatbotFlow } from '@/lib/chatbotEngine';
+import { telegramSecretMatches } from '@/lib/webhookSignature';
 import { buildBotQueueItem, createQueuedBotState, isDuplicateQueueMessage } from '@/lib/botQueue';
 
 export const dynamic = 'force-dynamic';
@@ -43,6 +44,19 @@ export async function POST(req: Request) {
         const integrationData = integrationSnap.data();
         if (integrationData?.status !== 'Connected') {
             return NextResponse.json({ ok: true });
+        }
+
+        // Autenticidad: si la entidad tiene secret_token (bots registrados desde la Fase 2), es obligatorio.
+        // Bots antiguos sin secret: se permiten con aviso hasta que el cliente reconecte el bot.
+        const secretSnap = await db.doc(`${entityPath}/integrations/telegram_internal`).get();
+        const expectedSecret = secretSnap.data()?.webhookSecret as string | undefined;
+        if (expectedSecret) {
+            if (!telegramSecretMatches(req, expectedSecret)) {
+                console.warn(`[Telegram] secret_token inválido para ${entityPath}`);
+                return NextResponse.json({ error: 'Invalid secret' }, { status: 401 });
+            }
+        } else {
+            console.warn(`[Telegram] bot legacy sin secret_token en ${entityPath}: reconectar para activar la verificación`);
         }
 
         // 2. Find or Create Contact/Card

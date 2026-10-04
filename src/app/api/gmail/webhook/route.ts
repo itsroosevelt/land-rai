@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db, admin } from '@/lib/firebase-admin';
 import axios from 'axios';
+import { checkPubSubPush } from '@/lib/webhookSignature';
 import { getGmailAccessTokenForEmail } from '@/lib/googleAuth';
 import { processChatbotFlow } from '@/lib/chatbotEngine';
 import { buildBotQueueItem, createQueuedBotState, isDuplicateQueueMessage } from '@/lib/botQueue';
@@ -51,6 +52,8 @@ function getMessageText(msgData: any) {
 
 export async function POST(req: Request) {
     try {
+        const sigDenied = await checkPubSubPush(req);
+        if (sigDenied) return sigDenied;
         const body = await req.json();
         const message = body.message;
 
