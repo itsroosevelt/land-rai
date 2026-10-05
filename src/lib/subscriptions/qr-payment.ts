@@ -25,6 +25,7 @@ export interface SubscriptionPaymentOrder {
   chargeUSD?: number;
   priorCreditUSD?: number;
   isUpgrade?: boolean;
+  billingCycle?: 'monthly' | 'annual';
   priorPlan?: string | null;
   expectedAmountUi: string;
   expectedAmountRaw: string;
@@ -203,7 +204,7 @@ export async function activateSubscriptionFromOrder(order: SubscriptionPaymentOr
     activatedAtIso = String(existing.activatedAt || existing.updatedAt || now.toISOString());
   } else {
     const expiresAt = new Date(now);
-    expiresAt.setDate(expiresAt.getDate() + 30);
+    expiresAt.setDate(expiresAt.getDate() + (order.billingCycle === 'annual' ? 365 : 30));
     expiresAtIso = expiresAt.toISOString();
     activatedAtIso = now.toISOString();
   }
@@ -222,6 +223,7 @@ export async function activateSubscriptionFromOrder(order: SubscriptionPaymentOr
     {
       status: 'active',
       trial: false,
+      billingCycle: order.billingCycle ?? 'monthly',
       plan: order.plan,
       priceUSD: order.planPriceUSD,
       paymentMethod: order.paymentMethod,

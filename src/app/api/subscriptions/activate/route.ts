@@ -3,7 +3,7 @@ import Stripe from 'stripe';
 import { db } from '@/lib/firebase-admin';
 import { getSubscriptionCurrentDocPath } from '@/lib/subscriptions/payment-config';
 import { guardApi } from '@/lib/apiAuth';
-import { PLAN_CATALOG_USD } from '@/lib/subscriptions/upgrade-pricing';
+import { PLAN_CATALOG_USD, PERIOD_DAYS } from '@/lib/subscriptions/upgrade-pricing';
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 
@@ -52,13 +52,15 @@ export async function POST(request: NextRequest) {
     const priceUSD = Number(meta.netAmount) || (paymentIntent.amount / 100);
     const activatedAt = new Date().toISOString();
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
+    const billingCycle = meta.billingCycle === 'annual' ? 'annual' : 'monthly';
+    expiresAt.setDate(expiresAt.getDate() + PERIOD_DAYS[billingCycle]);
 
     // Guardar suscripción activa en Firestore
     await db.doc(getSubscriptionCurrentDocPath(userId, entityId || 'default')).set(
       {
         status: 'active',
         trial: false,
+        billingCycle,
         plan: verifiedPlan,
         priceUSD: priceUSD,
         paymentMethod: 'card_stripe',

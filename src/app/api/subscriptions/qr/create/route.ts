@@ -131,6 +131,7 @@ export async function POST(request: NextRequest) {
       priorCreditUSD:
         resolved.hasActive && resolved.quote ? resolved.quote.unusedCreditUSD : 0,
       isUpgrade: resolved.hasActive,
+      billingCycle: matchesAnnual ? 'annual' : 'monthly',
       priorPlan: resolved.hasActive ? resolved.currentPlan : null,
       expectedAmountUi: serverAmountUi,
       expectedAmountRaw: serverAmountRaw,

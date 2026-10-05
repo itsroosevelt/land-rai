@@ -40,8 +40,9 @@ export async function POST(request: NextRequest) {
     const serverAnnual = PLAN_CATALOG_ANNUAL_USD[planKey] ?? serverMonthly;
     const clientCharge = Number(priceUSD);
     let netAmount: number;
+    let billingCycle: 'monthly' | 'annual' = 'monthly';
     if (assertClientChargeMatchesServer(clientCharge, serverMonthly)) netAmount = serverMonthly;
-    else if (assertClientChargeMatchesServer(clientCharge, serverAnnual)) netAmount = serverAnnual;
+    else if (assertClientChargeMatchesServer(clientCharge, serverAnnual)) { netAmount = serverAnnual; billingCycle = 'annual'; }
     else {
       return NextResponse.json(
         { error: 'Charge amount mismatch. Refresh checkout and try again.', expectedChargeUSD: serverMonthly },
@@ -85,6 +86,7 @@ export async function POST(request: NextRequest) {
         userId: String(userId),
         entityId: String(entityId || 'default'),
         plan: planKey,
+        billingCycle,
         planName: String(planName || plan),
         netAmount: String(netAmount),
         stripeFee: String(stripeFee),

@@ -15,6 +15,10 @@ export const PLAN_CATALOG_ANNUAL_USD: Record<string, number> = {
 };
 
 // Pago con LXR: 25% menos que el precio en USD (los mismos precios que muestra la pantalla de planes).
+/** Días de acceso que compra cada ciclo de facturación. */
+export const PERIOD_DAYS = { monthly: 30, annual: 365 } as const;
+export type BillingCycle = keyof typeof PERIOD_DAYS;
+
 export const PLAN_CATALOG_LXR_USD: Record<string, number> = {
   starter: 37.49,
   standard: 74.99,

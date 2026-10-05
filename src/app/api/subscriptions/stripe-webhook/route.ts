@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { db } from '@/lib/firebase-admin';
 import { getSubscriptionCurrentDocPath } from '@/lib/subscriptions/payment-config';
-import { PLAN_CATALOG_USD } from '@/lib/subscriptions/upgrade-pricing';
+import { PLAN_CATALOG_USD, PERIOD_DAYS } from '@/lib/subscriptions/upgrade-pricing';
 
 // Ruta pública por diseño: la autenticidad se valida con la firma de Stripe.
 export const runtime = 'nodejs';
@@ -25,12 +25,14 @@ async function activateFromPaymentIntent(pi: Stripe.PaymentIntent) {
 
   const now = new Date();
   const expiresAt = new Date(now);
-  expiresAt.setDate(expiresAt.getDate() + 30);
+  const billingCycle = pi.metadata?.billingCycle === 'annual' ? 'annual' : 'monthly';
+  expiresAt.setDate(expiresAt.getDate() + PERIOD_DAYS[billingCycle]);
 
   await ref.set(
     {
       status: 'active',
       trial: false,
+      billingCycle,
       plan,
       priceUSD: Number(netAmount) || pi.amount / 100,
       paymentMethod: 'card_stripe',
