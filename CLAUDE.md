@@ -17,6 +17,37 @@ Next.js 16 (App Router, webpack en dev), React 18, TypeScript, Tailwind 3, Radix
 - **En curso (el usuario configura la app de Meta):** productos Messenger, Instagram, WhatsApp, Página y Marketing API; webhooks `…/api/meta/webhook` (Página e Instagram) y `…/api/whatsapp/webhook` (WhatsApp) con verify token `kamban_VERIFY_TOKEN`; configuraciones de login; luego modo Live, verificación y App Review por etapas (primero mensajería y login, después anuncios).
 - **Siguiente:** (1) activar las variables de la app nueva y pasar `WEBHOOK_SIGNATURE_MODE=enforce` e `INTEGRATION_CLAIMS_MODE=require` tras ver `[webhook-sig] … ok` y reclamos en `integration_claims`; (2) WhatsApp Embedded Signup (servidor: intercambio de `code`, WABA y número); (3) publicar, comentarios, insights y Marketing API por entidad; (4) reclamos verificados para Gmail y X; (5) pendientes de seguridad 1b–1e.
 
+## Para retomar (corte: 2026-10-05)
+**Qué pasa con una entidad bloqueada (sin plan vigente o prueba vencida):**
+- La interfaz queda bloqueada: la órbita muestra todas las suites con candado y cualquier ruta interna redirige a `/subscriptions`.
+- **Los bots siguen funcionando**: los webhooks (`whatsapp|meta|telegram|twitter|gmail`) y el motor de chatbots (`chatbotEngine` → `sendProviders`) NO están protegidos por plan, así que siguen recibiendo mensajes y respondiendo solos. Verificado en código y en `npm run test:isolation` (los webhooks procesan mensajes de entidades sin suscripción). Esto es una decisión de producto pendiente: hoy un cliente que no paga conserva bots activos; si se quiere cortar, aplicar `requireSuite` en el motor/webhooks.
+- Devuelven 402 mientras la entidad esté bloqueada: respuestas manuales desde la bandeja (`whatsapp/send`, COO), difusiones (CMO), generación de flujos y constructor web con IA (CTO). Los datos del cliente se conservan siempre.
+- Perfiles `persona` siempre libres.
+
+**Checklist de Vercel (variables):**
+| Variable | Estado |
+|---|---|
+| `STRIPE_WEBHOOK_SECRET`, `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | ✅ puestas (⏳ rotar la `sk_live`) |
+| `NEXT_PUBLIC_TREASURY_WALLET` = `Ao8RqGikw3joMDo25nb3s3c7WcP6ouazJJnA1twirDAT` | ✅ confirmada por el dueño |
+| `NEXT_PUBLIC_SOLANA_RPC_URL` | ✅ RPC público (se satura; usar uno propio si fallan verificaciones) |
+| `SUBSCRIPTION_CODE_EXEMPT_EMAILS` (correo del dueño) | ⏳ confirmar que está puesta |
+| `CRON_SECRET` (cadena larga aleatoria) | ⏳ SIN ELLA NO CORRE LA RENOVACIÓN AUTOMÁTICA |
+| `WEBHOOK_SIGNATURE_MODE` | `log` (pasar a `enforce` tras ver `[webhook-sig] … ok`) |
+| `INTEGRATION_CLAIMS_MODE` | `allow` (pasar a `require` cuando `integration_claims` tenga las conexiones) |
+| `SUBSCRIPTION_ENFORCEMENT` | NO definirla (por defecto `enforce`; `log` solo emergencia) |
+| `SUBSCRIPTION_GRACE_DAYS`, `SUBSCRIPTION_ACCESS_CODES`, `SUBSCRIPTION_ACCESS_CODE_MAX_PER_ACCOUNT` | opcionales (defectos: 3 días, 4 códigos por defecto, 1 prueba por cuenta) |
+| `NEXT_PUBLIC_META_APP_ID`, `META_APP_SECRET`, `META_APP_SECRETS`, `NEXT_PUBLIC_META_CONFIG_ID_*` | ⏳ activar la app nueva de Meta cuando esté configurada |
+
+**Siguientes pasos, en orden:**
+1. Probar compras reales (tarjeta y Phantom) y reembolsarlas; poner `CRON_SECRET`; rotar `sk_live`.
+2. Avisos por correo (cobro fallido, vencimiento próximo) y banner en la app para `past_due`.
+3. Seguridad: `storage.rules` (1d), anti-abuso `solana/airdrop` y `referrals/claim` (1e), cookie `github_token` (1c).
+4. Meta: terminar la configuración de la app (productos, webhooks, configuraciones de login), luego App Review/Tech Provider y WhatsApp Embedded Signup.
+5. Organigrama Enterprise (datos en `users/{uid}/entities/{id}/org/*`), orquestador y barra Ask Roosevelt, capas plantilla, molde.
+6. Legal: revisión del abogado (`docs/legal-review.md`), buzones `support|legal|business|careers@` en ambos dominios.
+
+**Comandos útiles:** `npm run test:isolation` (157 comprobaciones, emulador, nunca producción) · `npx tsc --noEmit` · `npm run build` · publicar reglas: `firebase deploy --only firestore:rules --project roosevelt-491004` (reglas anteriores: `git show 3b961cf:firestore.rules`).
+
 ## Entorno de desarrollo (leer antes de iniciar el servidor)
 - El código corre en una VM de Google Cloud (`luxor-the-intelligence-of-vale`, zona `us-west3-a`, proyecto `excelsior1`). El navegador del usuario está en su PC: `localhost:3000` solo funciona con un túnel/reenvío de puerto.
 - **No reiniciar `npm run dev` repetidas veces:** cada reinicio puede soltar el reenvío automático de la app. Hacer cambios con hot reload; reiniciar solo si es imprescindible, y avisar al usuario. Para detenerlo no usar `pkill -f` ni `pgrep -f "next..."` (matan la propia shell); usar el PID exacto.
