@@ -502,6 +502,112 @@ async function main() {
     delete process.env.SUBSCRIPTION_ENFORCEMENT;
 
     // =====================================================================
+    console.log('\n11) Renovación automática de tarjeta');
+    const { runRenewals, scheduleRenewal } = await import('../../src/lib/subscriptions/renewals.server');
+    const { applyStripePayment } = await import('../../src/lib/subscriptions/stripe-activation');
+    const { grossFromNet } = await import('../../src/lib/subscriptions/stripe-pricing');
+    const DAYMS = 864e5;
+    const calls: any[] = [];
+    let chargeResult: any = { ok: true, paymentIntentId: 'pi_renew_1' };
+    const fakeCharger = async (req: any) => { calls.push(req); return typeof chargeResult === 'function' ? chargeResult(req) : chargeResult; };
+    const mkCard = async (ent: string, over: any, expiresInMs: number) => {
+        const t = await mk(ent, 'empresa', {
+            status: 'active', plan: 'standard', billingCycle: 'monthly', paymentMethod: 'card_stripe', recurring: true,
+            stripeCustomerId: 'cus_' + ent, stripePaymentMethodId: 'pm_' + ent, priceUSD: 99.99, activatedAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + expiresInMs).toISOString(), ...over,
+        });
+        const sub = (await db.doc(`${path(t)}/subscriptions/current`).get()).data()!;
+        await scheduleRenewal(t.uid, t.ent, sub.expiresAt);
+        return { t, sub };
+    };
+    const readSub = async (t: any) => (await db.doc(`${path(t)}/subscriptions/current`).get()).data()!;
+    const queued = async (t: any) => (await db.doc(`subscription_renewals/${t.uid}__${t.ent}`).get()).exists;
+
+    // Cobro mensual a punto de vencer
+    const R1 = await mkCard('rMensual', {}, 12 * 3600e3);
+    let sum = await runRenewals({ charger: fakeCharger });
+    check('Renueva la tarjeta que vence en menos de un día', sum.renewed >= 1 && calls.some((c) => c.customerId === 'cus_rMensual'));
+    const c1 = calls.find((c) => c.customerId === 'cus_rMensual');
+    check('Cobra el precio del catálogo + comisión ($99.99 → ' + grossFromNet(99.99).amountInCents + ' centavos)', c1?.amountInCents === grossFromNet(99.99).amountInCents, `cents=${c1?.amountInCents}`);
+    check('El cobro lleva metadatos de renovación y clave de idempotencia', c1?.metadata?.renewal === 'true' && c1?.metadata?.plan === 'standard' && String(c1?.idempotencyKey).includes(R1.sub.expiresAt));
+    const after1 = await readSub(R1.t);
+    const ext = (new Date(after1.expiresAt).getTime() - new Date(R1.sub.expiresAt).getTime()) / DAYMS;
+    check('Extiende desde el vencimiento (no pierde los días ya pagados): +30 días', ext > 29.9 && ext < 30.1, `ext=${ext.toFixed(2)}`);
+    check('Queda al día (renewalStatus ok) y reagendada para el próximo ciclo', after1.renewalStatus === 'ok' && (await queued(R1.t)));
+    const callsBefore = calls.length;
+    await runRenewals({ charger: fakeCharger });
+    check('Una segunda ejecución del cron no vuelve a cobrar', calls.length === callsBefore);
+
+    // Anual
+    const R2 = await mkCard('rAnual', { plan: 'enterprise', billingCycle: 'annual', priceUSD: 799.99 * 12 }, 6 * 3600e3);
+    await runRenewals({ charger: fakeCharger });
+    const c2 = calls.find((c) => c.customerId === 'cus_rAnual');
+    check('Anual: cobra $799.99 x 12', c2?.amountInCents === grossFromNet(799.99 * 12).amountInCents, `cents=${c2?.amountInCents}`);
+    const ext2 = (new Date((await readSub(R2.t)).expiresAt).getTime() - new Date(R2.sub.expiresAt).getTime()) / DAYMS;
+    check('Anual: +365 días', ext2 > 364.9 && ext2 < 365.1, `ext=${ext2.toFixed(1)}`);
+
+    // Aún no toca
+    const R5 = await mkCard('rLejos', {}, 20 * DAYMS);
+    const n0 = calls.length;
+    await runRenewals({ charger: fakeCharger });
+    check('Si faltan 20 días no cobra todavía', calls.length === n0 && !calls.some((c) => c.customerId === 'cus_rLejos'));
+
+    // Cobro fallido: gracia y bloqueo
+    chargeResult = { ok: false, code: 'card_declined', message: 'declined' };
+    const R3 = await mkCard('rFalla', {}, -1 * DAYMS); // venció hace 1 día
+    sum = await runRenewals({ charger: fakeCharger });
+    const failed = await readSub(R3.t);
+    check('Cobro fallido → past_due y se reintentará', failed.renewalStatus === 'past_due' && failed.renewalError === 'card_declined' && (await queued(R3.t)));
+    check('Dentro de los días de gracia conserva el acceso', (await getEntityEntitlements(R3.t.uid, R3.t.ent)).active === true);
+    const R4 = await mkCard('rGraciaFin', { renewalStatus: 'past_due' }, -5 * DAYMS); // venció hace 5 días (> 3 de gracia)
+    await db.doc(`${path(R4.t)}/contacts/dato`).set({ ok: 1 });
+    await runRenewals({ charger: fakeCharger });
+    check('Pasada la gracia sin poder cobrar → se bloquea', (await getEntityEntitlements(R4.t.uid, R4.t.ent)).active === false && (await readSub(R4.t)).status === 'expired');
+    check('Y deja de reintentarse', !(await queued(R4.t)));
+    check('Los datos del cliente se conservan', (await db.doc(`${path(R4.t)}/contacts/dato`).get()).exists);
+    chargeResult = { ok: true, paymentIntentId: 'pi_renew_2' };
+
+    // Renovación cancelada por el cliente
+    const R6 = await mkCard('rCancelada', { cancelAtPeriodEnd: true }, 12 * 3600e3);
+    const n1 = calls.length;
+    await runRenewals({ charger: fakeCharger });
+    check('Cancelada: no se cobra', calls.length === n1 && !calls.some((c) => c.customerId === 'cus_rCancelada'));
+    await db.doc(`${path(R6.t)}/subscriptions/current`).set({ expiresAt: new Date(Date.now() - 1000).toISOString() }, { merge: true });
+    await db.doc(`subscription_renewals/${R6.t.uid}__${R6.t.ent}`).set({ userId: R6.t.uid, entityId: R6.t.ent, renewAt: new Date(Date.now() - 1000).toISOString(), expiresAt: '' });
+    await runRenewals({ charger: fakeCharger });
+    check('Cancelada: vence al final del período pagado y se bloquea', (await getEntityEntitlements(R6.t.uid, R6.t.ent)).active === false && !(await queued(R6.t)));
+
+    // Solana no se renueva sola
+    const R7 = await mkCard('rSolana', { paymentMethod: 'usdc', recurring: false }, 12 * 3600e3);
+    const n2 = calls.length;
+    await runRenewals({ charger: fakeCharger });
+    check('Pagos con Solana no se cobran automáticamente', calls.length === n2 && !(await queued(R7.t)));
+
+    // Idempotencia del registro de pagos
+    const tIdem = await mk('pIdem', 'empresa');
+    const idem = { userId: tIdem.uid, entityId: tIdem.ent, plan: 'pro', billingCycle: 'monthly' as const, netAmountUSD: 199.99, paymentIntentId: 'pi_x', customerId: 'c', paymentMethodId: 'p' };
+    await applyStripePayment(idem);
+    const e1 = (await readSub(tIdem)).expiresAt;
+    await applyStripePayment(idem);
+    check('El mismo cobro notificado dos veces (webhook + activate) no suma días dos veces', (await readSub(tIdem)).expiresAt === e1);
+
+    // Cancelación por entidad y cron protegido
+    const cancelRoute = await import('../../src/app/api/subscriptions/cancel/route');
+    await cancelRoute.POST(new Request('http://localhost/api/subscriptions/cancel', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: tIdem.uid, entityId: tIdem.ent }) }) as any);
+    check('Cancelar renovación marca la suscripción DE LA ENTIDAD', (await readSub(tIdem)).cancelAtPeriodEnd === true);
+
+    for (const d of await db.collection('subscription_renewals').listDocuments()) await d.delete();
+    const renewRoute = await import('../../src/app/api/subscriptions/renew/route');
+    const cron = (auth?: string) => renewRoute.GET(new Request('http://localhost/api/subscriptions/renew', { headers: auth ? { authorization: auth } : {} }));
+    delete process.env.CRON_SECRET;
+    check('Cron sin CRON_SECRET → 503', (await cron('Bearer x')).status === 503);
+    process.env.CRON_SECRET = 'secreto-cron';
+    check('Cron sin credencial → 401', (await cron()).status === 401);
+    check('Cron con credencial incorrecta → 401', (await cron('Bearer otro-secreto')).status === 401);
+    check('Cron con la credencial correcta → 200', (await cron('Bearer secreto-cron')).status === 200);
+    delete process.env.CRON_SECRET;
+
+    // =====================================================================
     console.log(`\nResultado: ${passed} OK, ${failures.length} fallos`);
     if (failures.length) { console.log('Fallos:\n - ' + failures.join('\n - ')); process.exit(1); }
     process.exit(0);

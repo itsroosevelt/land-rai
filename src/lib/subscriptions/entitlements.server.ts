@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { getSubscriptionCurrentDocPath } from './payment-config';
+import { graceDays } from './renewals.server';
 import { NO_ENTITLEMENTS, entitlementsForPlan, minimumPlanForSuite, normalizePlan, PLAN_LABELS, type Entitlements } from './plans';
 
 /**
@@ -25,7 +26,11 @@ export async function getEntityEntitlements(userId: string, entityId: string): P
     if (!sub || sub.status !== 'active') return NO_ENTITLEMENTS;
 
     const expiresAt: string | null = sub.expiresAt ? String(sub.expiresAt) : null;
-    if (expiresAt && new Date(expiresAt).getTime() <= Date.now()) return NO_ENTITLEMENTS;
+    if (expiresAt && new Date(expiresAt).getTime() <= Date.now()) {
+        // Renovación de tarjeta fallida: se mantiene el acceso durante los días de gracia mientras se reintenta el cobro
+        const inGrace = sub.renewalStatus === 'past_due' && new Date(expiresAt).getTime() + graceDays() * 24 * 60 * 60 * 1000 > Date.now();
+        if (!inGrace) return NO_ENTITLEMENTS;
+    }
 
     const plan = normalizePlan(sub.plan);
     if (!plan) return NO_ENTITLEMENTS;

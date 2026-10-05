@@ -76,7 +76,7 @@ Known gaps (do not appear in public text, but counsel should know):
 1. **Governing law/venue:** written generically ("jurisdiction in which Luxor Intelligence LLC is organized"); informal 30-day resolution first. Consider choosing a state, arbitration, class-action waiver, small-claims carve-out.
 2. **Operational promises in the policy:** deletion "generally within 30 days"; confirmation of receipt "within a few business days"; CCPA response within 45 days; GDPR breach notice "within 72 hours where feasible"; backups overwritten "in the ordinary course". Confirm these are achievable and process-backed.
 3. **Liability cap:** greater of 12 months' fees or US$100; confirm.
-4. **Auto-renewal and refunds:** monthly auto-renew, no refunds except where required. Check US state automatic-renewal laws (e.g., California ARL: clear disclosure, express consent, easy online cancellation, reminders) and EU/UK consumer rules (withdrawal rights for consumers).
+4. **Auto-renewal and refunds:** card subscriptions auto-renew (monthly or annual; charged ~1 day before expiry; up to 3 days of retries/grace; cancellation stops renewal at period end); on-chain (Solana) payments do NOT auto-renew; no refunds except where required. Check US state automatic-renewal laws (e.g., California ARL: clear disclosure, express consent, easy online cancellation, reminders) and EU/UK consumer rules (withdrawal rights for consumers).
 5. **Age:** 18+.
 6. **No sale/sharing of personal data**; no knowledge of under-16 data.
 7. **AI:** states Luxor does not itself train generalized models on Customer Data; providers process under their own terms. Verify the actual provider tier/terms (e.g., paid Gemini API terms regarding training) and whether Customer Data is retained by providers.

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { db } from '@/lib/firebase-admin';
 import { getSubscriptionCurrentDocPath } from '@/lib/subscriptions/payment-config';
-import { PLAN_CATALOG_USD, PERIOD_DAYS } from '@/lib/subscriptions/upgrade-pricing';
+import { applicationFromPaymentIntent, applyStripePayment } from '@/lib/subscriptions/stripe-activation';
 
 // Ruta pública por diseño: la autenticidad se valida con la firma de Stripe.
 export const runtime = 'nodejs';
@@ -12,47 +12,16 @@ const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
 async function activateFromPaymentIntent(pi: Stripe.PaymentIntent) {
-  const { userId, entityId, plan, netAmount } = pi.metadata || {};
-  // Solo procesamos los cobros creados por /subscriptions/stripe-intent
-  if (!userId || !plan) return;
-  // Solo planes con precio de catálogo (un plan arbitrario en la metadata no activa nada).
-  if (!PLAN_CATALOG_USD[String(plan).toLowerCase()]) return;
-
-  const ref = db.doc(getSubscriptionCurrentDocPath(userId, entityId || 'default'));
-  const snap = await ref.get();
-  // Idempotencia: si /activate (o un reintento del webhook) ya lo registró, no duplicar.
-  if (snap.exists && snap.data()?.stripePaymentIntentId === pi.id && snap.data()?.status === 'active') return;
-
-  const now = new Date();
-  const expiresAt = new Date(now);
-  const billingCycle = pi.metadata?.billingCycle === 'annual' ? 'annual' : 'monthly';
-  expiresAt.setDate(expiresAt.getDate() + PERIOD_DAYS[billingCycle]);
-
-  await ref.set(
-    {
-      status: 'active',
-      trial: false,
-      billingCycle,
-      plan,
-      priceUSD: Number(netAmount) || pi.amount / 100,
-      paymentMethod: 'card_stripe',
-      stripePaymentIntentId: pi.id,
-      stripeCustomerId: typeof pi.customer === 'string' ? pi.customer : pi.customer?.id ?? null,
-      stripePaymentMethodId: typeof pi.payment_method === 'string' ? pi.payment_method : pi.payment_method?.id ?? null,
-      recurring: true,
-      activatedAt: now.toISOString(),
-      expiresAt: expiresAt.toISOString(),
-      updatedAt: now.toISOString(),
-      cancelAtPeriodEnd: false,
-      cancelledAt: null,
-    },
-    { merge: true }
-  );
+  const application = applicationFromPaymentIntent(pi);
+  if (!application) return; // solo cobros creados por /subscriptions/stripe-intent o por la renovación automática
+  await applyStripePayment(application);
 }
 
 async function markPaymentIssue(pi: Stripe.PaymentIntent, status: 'past_due' | 'refunded') {
   const { userId, entityId } = pi.metadata || {};
   if (!userId) return;
+  // Los cobros fallidos de una renovación automática los gestiona el cron (reintentos y días de gracia)
+  if (status === 'past_due' && pi.metadata?.renewal === 'true') return;
   const ref = db.doc(getSubscriptionCurrentDocPath(userId, entityId || 'default'));
   const snap = await ref.get();
   // Solo tocar la suscripción si corresponde a este mismo cobro

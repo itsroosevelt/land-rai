@@ -7,13 +7,14 @@ export async function POST(request: NextRequest) {
     const denied = await guardApi(request);
     if (denied) return denied;
   try {
-    const { userId } = await request.json();
+    const { userId, entityId } = await request.json();
 
     if (!userId) {
       return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
     }
 
-    const ref = db.doc(getSubscriptionCurrentDocPath(userId));
+    // Con entityId se cancela la suscripción de ESA entidad (la renovación automática respeta este indicador)
+    const ref = db.doc(getSubscriptionCurrentDocPath(userId, entityId));
     const snap = await ref.get();
 
     if (!snap.exists) {

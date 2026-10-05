@@ -17,6 +17,7 @@ const CONFIRM_WORD = 'CANCELAR';
 
 interface CancelRenewalButtonProps {
   userId: string;
+  entityId?: string | null;
   expiresAt?: string | null;
   onSuccess?: () => void;
   className?: string;
@@ -24,6 +25,7 @@ interface CancelRenewalButtonProps {
 
 export default function CancelRenewalButton({
   userId,
+  entityId,
   expiresAt,
   onSuccess,
   className,
@@ -57,7 +59,7 @@ export default function CancelRenewalButton({
       const response = await fetch('/api/subscriptions/cancel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId }),
+        body: JSON.stringify({ userId, entityId: entityId || undefined }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {

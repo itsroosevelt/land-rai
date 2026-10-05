@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import { db } from '@/lib/firebase-admin';
 import { getSubscriptionCurrentDocPath } from '@/lib/subscriptions/payment-config';
 import { guardApi } from '@/lib/apiAuth';
+import { scheduleRenewal } from '@/lib/subscriptions/renewals.server';
 import { PLAN_CATALOG_USD, PERIOD_DAYS } from '@/lib/subscriptions/upgrade-pricing';
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
@@ -77,6 +78,9 @@ export async function POST(request: NextRequest) {
       },
       { merge: true }
     );
+
+    // Renovación automática de la tarjeta guardada (cron diario)
+    await scheduleRenewal(String(userId), String(entityId || 'default'), expiresAt.toISOString());
 
     return NextResponse.json({
       success: true,

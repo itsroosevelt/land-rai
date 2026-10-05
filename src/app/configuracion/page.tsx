@@ -47,10 +47,12 @@ const normalizePlanName = (plan: string | null, priceUSD: number | null) => {
 const ActiveSubCard = ({
     details,
     userId,
+    entityId,
     onSubscriptionChange,
 }: {
     details: any;
     userId: string;
+    entityId?: string | null;
     onSubscriptionChange: () => void;
 }) => {
     const router = useRouter();
@@ -234,6 +236,7 @@ const ActiveSubCard = ({
                     {!cancelAtPeriodEnd && (
                         <CancelRenewalButton
                             userId={userId}
+                            entityId={entityId}
                             expiresAt={details.expiresAt}
                             onSuccess={onSubscriptionChange}
                         />
@@ -691,6 +694,7 @@ function ConfigurationPageContent() {
                                                                 <ActiveSubCard
                                                                     details={subDetails}
                                                                     userId={userId}
+                                                                    entityId={activeEntity}
                                                                     onSubscriptionChange={fetchSubDetails}
                                                                 />
                                                             ) : (

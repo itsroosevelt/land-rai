@@ -423,6 +423,7 @@ export default function SubscriptionUpgradePage() {
                   {currentUser && (
                     <CancelRenewalButton
                       userId={currentUser.uid}
+                      entityId={entityId}
                       expiresAt={expiresAt}
                       onSuccess={() => window.location.reload()}
                     />
