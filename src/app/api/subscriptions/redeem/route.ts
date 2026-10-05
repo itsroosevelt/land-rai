@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/firebase-admin';
+import { db, auth } from '@/lib/firebase-admin';
 import { guardApi } from '@/lib/apiAuth';
 import { getSubscriptionCurrentDocPath } from '@/lib/subscriptions/payment-config';
 import { findAccessCode } from '@/lib/subscriptions/accessCodes';
@@ -12,7 +12,8 @@ export const dynamic = 'force-dynamic';
  *   - máx. 5 intentos fallidos por hora POR CUENTA (no por entidad: crear entidades no reinicia el contador);
  *   - una sola prueba por entidad (aunque ya haya vencido): después hay que pagar;
  *   - máx. SUBSCRIPTION_ACCESS_CODE_MAX_PER_ACCOUNT pruebas por cuenta (por defecto 1);
- *   - cuentas exentas (el dueño): SUBSCRIPTION_CODE_EXEMPT_UIDS="uid1,uid2";
+ *   - cuentas exentas (el dueño): SUBSCRIPTION_CODE_EXEMPT_EMAILS="correo@dominio.com" (correo verificado)
+ *     o SUBSCRIPTION_CODE_EXEMPT_UIDS="uid1,uid2";
  *   - no se canjea sobre una suscripción de pago vigente.
  * Todos los documentos auxiliares viven en `subscriptions/*`, que solo escribe el servidor.
  */
@@ -23,7 +24,20 @@ const maxPerAccount = () => {
     const n = Number(process.env.SUBSCRIPTION_ACCESS_CODE_MAX_PER_ACCOUNT);
     return Number.isFinite(n) && n > 0 ? n : 1;
 };
-const exemptUids = () => (process.env.SUBSCRIPTION_CODE_EXEMPT_UIDS || '').split(',').map((s) => s.trim()).filter(Boolean);
+const list = (v: string | undefined) => (v || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+
+/** Cuentas que pueden canjear códigos sin el límite de una prueba (el dueño de la plataforma). */
+async function isExemptAccount(userId: string): Promise<boolean> {
+    if (list(process.env.SUBSCRIPTION_CODE_EXEMPT_UIDS).includes(userId.toLowerCase())) return true;
+    const emails = list(process.env.SUBSCRIPTION_CODE_EXEMPT_EMAILS);
+    if (emails.length === 0) return false;
+    try {
+        const user = await auth.getUser(userId);
+        return !!user.email && user.emailVerified && emails.includes(user.email.toLowerCase());
+    } catch {
+        return false;
+    }
+}
 
 export async function POST(req: Request) {
     const denied = await guardApi(req);
@@ -52,7 +66,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ ok: false, message: 'Código inválido.' }, { status: 400 });
         }
 
-        const exempt = exemptUids().includes(userId);
+        const exempt = await isExemptAccount(userId);
 
         // Una sola prueba por entorno
         if (!exempt && (await entityRef.get()).exists) {

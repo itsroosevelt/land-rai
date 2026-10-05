@@ -3,6 +3,7 @@ export const PLAN_CATALOG_USD: Record<string, number> = {
   standard: 99.99,
   pro: 199.99,
   plus: 199.99,
+  enterprise: 999.99,
 };
 
 export const PLAN_CATALOG_ANNUAL_USD: Record<string, number> = {
@@ -10,11 +11,15 @@ export const PLAN_CATALOG_ANNUAL_USD: Record<string, number> = {
   standard: 79.99 * 12,
   pro: 159.99 * 12,
   plus: 159.99 * 12,
+  enterprise: 799.99 * 12,
 };
 
+// Pago con LXR: 25% menos que el precio en USD (los mismos precios que muestra la pantalla de planes).
 export const PLAN_CATALOG_LXR_USD: Record<string, number> = {
-  starter: 14.99,
-  pro: 74.99,
+  starter: 37.49,
+  standard: 74.99,
+  pro: 149.99,
+  enterprise: 749.99,
 };
 
 export interface UpgradeChargeQuote {

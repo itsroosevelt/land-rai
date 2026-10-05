@@ -38,7 +38,7 @@ const PLAN_RATES = {
   standard: { monthly: 99.99, annual: 79.99 },
   pro: { monthly: 199.99, annual: 159.99 },
   plus: { monthly: 199.99, annual: 159.99 },
-  enterprise: { monthly: 0, annual: 0 }
+  enterprise: { monthly: 999.99, annual: 799.99 }
 } as const;
 
 export default function CheckoutModal({ plan, onClose, entityId: propEntityId, redirectUrl }: CheckoutModalProps) {

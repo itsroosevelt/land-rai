@@ -429,7 +429,7 @@ async function main() {
     // --- Intentos de falsificar el plan o el monto ---
     const upgradeRoute = await import('../../src/app/api/subscriptions/upgrade/route');
     const upgrade = (t: any, plan: string) => upgradeRoute.POST(new Request('http://localhost/api/subscriptions/upgrade', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: t.uid, entityId: t.ent, plan }) }) as any);
-    check('Mejora gratis a "enterprise" (sin precio) → rechazada', (await upgrade(tStarter, 'enterprise')).status === 400);
+    check('Mejora a Enterprise sin pagar la diferencia → rechazada', (await upgrade(tStarter, 'enterprise')).status === 400);
     check('Mejora de Starter a Pro sin pagar la diferencia → rechazada', (await upgrade(tStarter, 'pro')).status === 400);
     check('El plan de Starter no cambió', (await getEntityEntitlements(tStarter.uid, tStarter.ent)).plan === 'starter');
 
@@ -442,12 +442,35 @@ async function main() {
     let r = await qrCreate({ plan: 'pro', paymentMethod: 'usdc', chargeUSD: 1, expectedAmountUi: '0.000001', expectedAmountRaw: '1' });
     check('QR: cobro de $1 por el plan Pro → rechazado (400)', r.status === 400, `status=${r.status}`);
     r = await qrCreate({ plan: 'enterprise', paymentMethod: 'usdc', chargeUSD: 1, expectedAmountUi: '1', expectedAmountRaw: '1000000' });
-    check('QR: plan sin precio (enterprise) → rechazado (400)', r.status === 400, `status=${r.status}`);
+    check('QR: cobro de $1 por Enterprise → rechazado (400)', r.status === 400, `status=${r.status}`);
+    r = await qrCreate({ plan: 'galactico', paymentMethod: 'usdc', chargeUSD: 1, expectedAmountUi: '1', expectedAmountRaw: '1000000' });
+    check('QR: plan inexistente → rechazado (400)', r.status === 400, `status=${r.status}`);
     r = await qrCreate({ plan: 'pro', paymentMethod: 'usdc', chargeUSD: 199.99, expectedAmountUi: '0.000001', expectedAmountRaw: '1' });
     const qrJson: any = await r.json();
     check('QR: precio correcto pero monto de tokens falso → se crea la orden', r.status === 200, `status=${r.status} ${JSON.stringify(qrJson)}`);
     const order = (await db.doc(`${path(tQr)}/paymentRequests/${qrJson.requestId}`).get()).data();
     check('QR: el servidor ignoró el monto falso y fijó 199.99 USDC', order?.expectedAmountRaw === '199990000', `raw=${order?.expectedAmountRaw}`);
+
+    // --- Enterprise se compra como los demás planes ---
+    const tQrE = await mk('pQrE', 'empresa');
+    const qrCreateE = (body: any) => qrRoute.POST(new Request('http://localhost/api/subscriptions/qr/create', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: tQrE.uid, entityId: tQrE.ent, ...body }) }) as any);
+    r = await qrCreateE({ plan: 'enterprise', paymentMethod: 'usdc', chargeUSD: 999.99 });
+    const qrE: any = await r.json();
+    check('Enterprise: pago con Solana (USDC) a $999.99/mes → orden creada', r.status === 200, `status=${r.status} ${JSON.stringify(qrE)}`);
+    const orderE = (await db.doc(`${path(tQrE)}/paymentRequests/${qrE.requestId}`).get()).data();
+    check('Enterprise: el servidor fijó 999.99 USDC', orderE?.expectedAmountRaw === '999990000' && orderE?.plan === 'enterprise', `raw=${orderE?.expectedAmountRaw}`);
+    r = await qrCreateE({ plan: 'enterprise', paymentMethod: 'usdt', chargeUSD: 799.99 * 12 });
+    check('Enterprise: ciclo anual ($799.99 x 12) aceptado', r.status === 200, `status=${r.status}`);
+    const { resolveUpgradeChargeForUser: ruc } = await import('../../src/lib/subscriptions/upgrade-pricing-server');
+    const upPro = await ruc({ userId: tPro.uid, entityId: tPro.ent, targetPlanId: 'enterprise' });
+    check('Pro → Enterprise cobra solo la diferencia ($800.00)', upPro.hasActive === true && Math.abs((upPro as any).chargeUSD - 800) < 0.01, `charge=${(upPro as any).chargeUSD}`);
+    const { subscriptionsEnforced } = await import('../../src/lib/subscriptions/entitlements.server');
+    delete process.env.SUBSCRIPTION_ENFORCEMENT;
+    check('El bloqueo está ACTIVO por defecto', subscriptionsEnforced() === true);
+    check('Perfil de empresa sin plan queda bloqueado por defecto', (await requireSuite(tNone.uid, tNone.ent, 'cto'))?.status === 402);
+    check('Perfil personal sigue siendo gratuito por defecto', (await requireSuite(tPersona.uid, tPersona.ent, 'cto')) === null);
+    const tCreator = await mk('pCreador', 'creador');
+    check('Perfil profesional (creador) también requiere plan', (await getEntityEntitlements(tCreator.uid, tCreator.ent)).active === false);
 
 
     // --- Bloqueo real en rutas API por suite ---

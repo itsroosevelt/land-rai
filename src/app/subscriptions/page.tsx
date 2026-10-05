@@ -301,11 +301,11 @@ const plans: PlanConfig[] = [
   {
     id: 'enterprise',
     name: 'Enterprise',
-    monthlyPrice: 'Contact',
-    monthlyPriceUSD: 0,
-    annualPrice: 'Contact',
-    annualPriceUSD: 0,
-    isEnterprise: true,
+    monthlyPrice: '$999.99',
+    monthlyPriceUSD: 999.99,
+    annualPrice: '$799.99',
+    annualPriceUSD: 799.99,
+    isEnterprise: false,
     featuresHeader: 'All features mentioned, and:',
     features: [
       {

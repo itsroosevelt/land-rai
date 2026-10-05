@@ -109,10 +109,8 @@ export function EntityRouteResolver({ segment, children }: EntityRouteResolverPr
               );
               if (!res.ok) throw new Error(String(res.status));
               const ent = await res.json();
-              const legacyUnlock =
-                typeof window !== 'undefined' &&
-                localStorage.getItem('roosevelt_entity_unlocked_' + resolved.id) === 'roosevelt2025';
-              allowed = !!ent.active || (!ent.enforced && legacyUnlock);
+              // Sin desbloqueo local: el navegador ya no puede "abrirse" una entidad. Solo 'log' (emergencia) no bloquea.
+              allowed = !!ent.active || !ent.enforced;
             } catch (subErr) {
               console.error('[EntityRouteResolver] Error checking subscription:', subErr);
               allowed = true; // fallo de red: no se bloquea en el navegador; el servidor sigue protegiendo sus rutas

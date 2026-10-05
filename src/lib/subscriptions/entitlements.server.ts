@@ -5,12 +5,13 @@ import { NO_ENTITLEMENTS, entitlementsForPlan, minimumPlanForSuite, normalizePla
 
 /**
  * SUBSCRIPTION_ENFORCEMENT:
- *   'log'     (por defecto) → calcula permisos y registra lo que se habría bloqueado, pero NO bloquea.
- *   'enforce' → las rutas protegidas responden 402 si el plan no incluye la suite/función.
- * Pasar a 'enforce' cuando las entidades existentes ya tengan su suscripción registrada en el servidor.
+ *   'enforce' (por defecto) → las rutas protegidas responden 402 si el plan no incluye la suite/función, y toda
+ *                             entidad sin plan vigente (suscripción o prueba por código) queda bloqueada.
+ *   'log'                   → interruptor de emergencia: solo registra lo que bloquearía, sin bloquear.
+ * Solo los perfiles personales (`persona`) son gratuitos; los profesionales y empresariales requieren plan.
  */
 export function subscriptionsEnforced(): boolean {
-    return (process.env.SUBSCRIPTION_ENFORCEMENT || 'log').trim().toLowerCase() === 'enforce';
+    return (process.env.SUBSCRIPTION_ENFORCEMENT || 'enforce').trim().toLowerCase() !== 'log';
 }
 
 /** Permisos reales de una entidad, leídos con Admin SDK (el cliente no puede falsificar este documento). */

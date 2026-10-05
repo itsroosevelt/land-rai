@@ -131,15 +131,15 @@ const plans = [
   {
     id: 'enterprise',
     name: 'Enterprise',
-    price: 'Contact',
-    priceUSD: 0,
-    lxrPrice: 'Contact',
-    lxrPriceUSD: 0,
+    price: '$999.99',
+    priceUSD: 999.99,
+    lxrPrice: '$749.99',
+    lxrPriceUSD: 749.99,
     description: 'Dedicated resources for complex corporate requirements.',
     features: ['Unlimited workspaces', 'Dedicated manager & Custom SLA', 'Enterprise security'],
     accent: 'border-white/10 bg-white/[0.03]',
     highlighted: false,
-    isEnterprise: true,
+    isEnterprise: false,
   } as const,
 ] as const;
 
@@ -155,8 +155,10 @@ type CheckoutPlan = Omit<PlanDef, 'features'> & {
 
 const PLAN_TIER: Record<string, number> = {
   starter: 1,
-  pro: 2,
-  enterprise: 3,
+  standard: 2,
+  pro: 3,
+  plus: 3,
+  enterprise: 4,
 };
 
 export default function SubscriptionUpgradePage() {

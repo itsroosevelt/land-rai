@@ -21,16 +21,15 @@ const MOMENTUM_FRICTION = 0.95;
 export const Carousel = () => {
     const router = useRouter();
     const { activeEntity, activeEntityRoute } = useAuth();
-    const { entitlements, legacyUnlocked } = useEntitlements(activeEntity);
+    const { entitlements } = useEntitlements(activeEntity);
 
     // Entidad sin plan vigente (sin suscripción, prueba vencida o sin código): TODAS las suites con candado.
     // Entidad con plan: candado solo en lo que su plan no incluye. Los candados desaparecen al canjear un código o pagar.
-    // Mientras el servidor no aplique el bloqueo (modo 'log') se respeta el desbloqueo heredado del navegador.
-    const noPlan = !!entitlements && !entitlements.free && !entitlements.active && !(legacyUnlocked && !entitlements.enforced);
+    const noPlan = !!entitlements && entitlements.enforced && !entitlements.free && !entitlements.active;
     const isLocked = (id: string) => {
         if (!entitlements || entitlements.free) return false;
         if (noPlan) return true;
-        if (!entitlements.active) return false; // desbloqueo heredado
+        if (!entitlements.active) return false; // modo 'log' (emergencia): no se bloquea
         if (id === 'organigrama') return !entitlements.orgChart;
         return !(entitlements.suites as string[]).includes(id);
     };
