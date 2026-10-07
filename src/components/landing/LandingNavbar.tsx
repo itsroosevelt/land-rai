@@ -1,12 +1,17 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { Menu, X, ChevronRight, ChevronDown, Globe } from 'lucide-react';
+import { Menu, X, ChevronDown, Globe, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { MENU_TEXT } from './navMenuText';
+import { MENU_IDS, ECOSYSTEM_ASSETS, OWN_MENU_TEXT, getMegaMenus, isOwnMenu, type MenuId } from './navMenus';
+import { SocialIcons } from './SocialIcons';
+
+const VIEW_MORE_HREF = 'https://www.luxorintelligence.com/coming-soon';
 
 export const LandingNavbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -21,77 +26,76 @@ export const LandingNavbar = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const navLinks = [
-    { name: t('nav.infrastructure'), href: '#features', hasDropdown: true },
-    { name: t('nav.product'), href: '#brain', hasDropdown: true },
-    { name: t('nav.build'), href: '#responsibility', hasDropdown: true },
-    { name: t('nav.about'), href: '#about', hasDropdown: false },
-  ];
+  const [activeMega, setActiveMega] = useState<MenuId | null>(null);
+  // Acordeón del menú móvil: estado propio, para que el cierre al tocar fuera del panel de escritorio no lo afecte.
+  const [mobileExpanded, setMobileExpanded] = useState<MenuId | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const menuText = MENU_TEXT[language];
+  const megaMenus = getMegaMenus(language);
+
+  const handleMouseEnter = (id: MenuId | null) => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    setActiveMega(id);
+  };
+  const navRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    // Tabletas grandes con pantalla táctil usan los menús de escritorio: cerrar el panel al tocar fuera.
+    const onOutside = (e: PointerEvent) => {
+      if (navRef.current && !navRef.current.contains(e.target as Node)) setActiveMega(null);
+    };
+    document.addEventListener('pointerdown', onOutside);
+    return () => document.removeEventListener('pointerdown', onOutside);
+  }, []);
+
+  const handleMouseLeave = () => {
+    timeoutRef.current = setTimeout(() => setActiveMega(null), 300);
+  };
+  const own = OWN_MENU_TEXT[language];
+  const menuLabel = (id: MenuId) => (isOwnMenu(id) ? own[id as keyof typeof own].label : menuText[id as keyof typeof menuText] as string);
+  const menuIntro = (id: MenuId) => (isOwnMenu(id) ? own[id as keyof typeof own].intro : menuText.mega.intro_desc);
+  const megaTitle: Record<MenuId, string> = {
+    product: own.product.title,
+    infrastructure: own.infrastructure.title,
+    build: own.build.title,
+    project: menuText.mega.title_project,
+    ecosystem: menuText.mega.title_ecosystem,
+    utility: menuText.mega.title_utility,
+    security: menuText.mega.title_security,
+    onchain: menuText.mega.title_onchain,
+  };
 
   return (
     <>
       <motion.nav
+        ref={navRef}
         initial={{ y: -100 }}
         animate={{ y: 0 }}
+        onMouseLeave={handleMouseLeave}
         className="fixed top-0 left-0 w-full z-[100] transition-all duration-300 px-8 py-3 bg-transparent"
       >
         <div className="w-full flex items-center justify-between relative">
           
           {/* Logo and Left-aligned Menu Container */}
           <div className="flex items-center gap-12">
-            <Link href="/" className="font-normal flex items-center gap-3 hover:opacity-90 transition-opacity shrink-0">
-              <img src="/assets/rai-logo.png" alt="Roosevelt Logo" className="h-[56px] w-[56px] md:h-[64px] md:w-[64px] object-contain transition-transform duration-300" />
-              <span className="text-[22px] tracking-tight leading-none text-white">Roosevelt</span>
+            <Link href="/" className="font-normal flex items-center gap-1 hover:opacity-90 transition-opacity shrink-0">
+              <img src="/assets/rai-logo.png" alt="Roosevelt Logo" className="h-[64px] w-[64px] md:h-[76px] md:w-[76px] object-contain transition-transform duration-300" />
+              <span className="text-[30px] tracking-tight leading-none text-white">Roosevelt</span>
             </Link>
 
-            {/* Desktop Links (Left-Aligned next to Logo) */}
-            <div className="hidden xl:flex items-center gap-6">
-              {navLinks.map((link) => (
-                <div key={link.name} className="relative group/menu py-2">
-                  <Link 
-                    href={link.href}
-                    className="text-sm font-normal text-gray-400 hover:text-white transition-colors flex items-center gap-1 relative"
-                  >
-                    {link.name}
-                    {link.hasDropdown && (
-                      <ChevronDown size={14} className="opacity-70 group-hover/menu:opacity-100 transition-opacity" />
+            {/* Desktop Links (Left-Aligned next to Logo) — menús copiados del sitio de la empresa */}
+            <div className="hidden xl:flex items-center space-x-1">
+
+              {MENU_IDS.map((id) => (
+                <div key={id} className="relative" onMouseEnter={() => handleMouseEnter(id)}>
+                  <button
+                    onClick={() => handleMouseEnter(id)}
+                    className={cn(
+                      'flex items-center gap-1.5 text-[14px] px-3 py-2 rounded-full transition-all',
+                      activeMega === id ? 'bg-white/10 text-white' : 'text-white hover:bg-white/5'
                     )}
-                  </Link>
-                  {/* Dropdown Menu */}
-                  {link.hasDropdown && (
-                    <div className="absolute top-full left-0 mt-1 w-48 rounded-xl bg-black/95 border border-white/10 p-2 shadow-2xl backdrop-blur-xl opacity-0 translate-y-2 pointer-events-none group-hover/menu:opacity-100 group-hover/menu:translate-y-0 group-hover/menu:pointer-events-auto transition-all duration-300 z-50">
-                      {link.name === t('nav.infrastructure') && (
-                        <>
-                          <Link href="#features" className="block px-3 py-2 text-xs text-white/70 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
-                            {language === 'es' ? 'Funciones' : 'Features'}
-                          </Link>
-                          <Link href="#brain" className="block px-3 py-2 text-xs text-white/70 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
-                            {language === 'es' ? 'Cerebro' : 'Brain'}
-                          </Link>
-                        </>
-                      )}
-                      {link.name === t('nav.product') && (
-                        <>
-                          <Link href="#responsibility" className="block px-3 py-2 text-xs text-white/70 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
-                            {language === 'es' ? 'Responsabilidad' : 'Responsibility'}
-                          </Link>
-                          <Link href="#impact" className="block px-3 py-2 text-xs text-white/70 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
-                            {language === 'es' ? 'Impacto Social' : 'Social Impact'}
-                          </Link>
-                        </>
-                      )}
-                      {link.name === t('nav.build') && (
-                        <>
-                          <Link href="/login?register=true" className="block px-3 py-2 text-xs text-white/70 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
-                            {language === 'es' ? 'Comenzar Proyecto' : 'Start Project'}
-                          </Link>
-                          <Link href="#docs" className="block px-3 py-2 text-xs text-white/70 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
-                            {language === 'es' ? 'Documentación' : 'Documentation'}
-                          </Link>
-                        </>
-                      )}
-                    </div>
-                  )}
+                  >
+                    {menuLabel(id)}
+                  </button>
                 </div>
               ))}
             </div>
@@ -99,6 +103,10 @@ export const LandingNavbar = () => {
 
           {/* Actions */}
           <div className="hidden xl:flex items-center gap-4">
+            {/* Redes y enlaces (copiados del sitio de la empresa) */}
+            <SocialIcons className="hidden 2xl:flex" />
+            <div className="hidden 2xl:block h-6 w-[1px] bg-white/10" />
+
             {/* Language Switcher (Globe Icon) */}
             <button
               onClick={() => setLanguage(language === 'es' ? 'en' : 'es')}
@@ -110,14 +118,14 @@ export const LandingNavbar = () => {
 
             <Link href="/login?mode=login">
               <button 
-                className="px-9 py-1 text-sm font-normal text-white bg-transparent border border-white/20 rounded-full hover:bg-white/5 transition-colors h-auto min-h-0"
+                className="px-11 py-2 text-sm font-semibold text-white bg-transparent border border-white/20 rounded-full hover:bg-white/5 transition-colors h-auto min-h-0"
               >
                 {t('nav.signIn')}
               </button>
             </Link>
             <Link href="/login?register=true">
               <button 
-                className="px-9 py-1 text-sm font-normal bg-[#2563EB] hover:bg-[#1d4ed8] text-white rounded-full transition-colors shadow-lg shadow-blue-500/20 h-auto min-h-0"
+                className="px-11 py-2 text-sm font-semibold bg-[#2563EB] hover:bg-[#1d4ed8] text-white rounded-full transition-colors shadow-lg shadow-blue-500/20 h-auto min-h-0"
               >
                 {t('nav.signUp')}
               </button>
@@ -126,12 +134,88 @@ export const LandingNavbar = () => {
 
           {/* Mobile Menu Toggle */}
           <button 
-            className="xl:hidden p-2 text-white/70 hover:text-white transition-colors"
-            onClick={() => setIsMobileMenuOpen(true)}
+            className="xl:hidden p-3 -mr-2 text-white/80 hover:text-white transition-colors"
+            aria-label="Menu"
+            onClick={() => { setMobileExpanded(null); setIsMobileMenuOpen(true); }}
           >
             <Menu className="w-6 h-6" />
           </button>
         </div>
+
+        {/* Mega Menus Overlay */}
+        <AnimatePresence>
+          {activeMega && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="hidden xl:block absolute top-full left-0 w-full max-h-[calc(100vh-88px)] overflow-y-auto bg-black border-b border-white/10 shadow-2xl"
+              onMouseEnter={() => handleMouseEnter(activeMega)}
+            >
+              <div className="w-full px-12 py-10">
+                <div className="grid grid-cols-4 gap-8 max-w-7xl mx-auto">
+                  <div className="col-span-1 border-r border-white/5 pr-8">
+                    <h3 className="text-white text-lg font-normal mb-4">{megaTitle[activeMega]}</h3>
+                    <p className="text-white/50 text-sm leading-relaxed">{menuIntro(activeMega)}</p>
+                    {!isOwnMenu(activeMega) && (
+                      <div className="mt-6">
+                        <a href={VIEW_MORE_HREF} target="_blank" rel="noopener noreferrer" className="text-blue-400 text-xs font-normal uppercase tracking-wider hover:text-blue-300 flex items-center gap-2 group">
+                          {menuText.view_more}
+                          <ExternalLink size={12} className="transition-transform group-hover:translate-x-1" />
+                        </a>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="col-span-3">
+                    <div className={activeMega === 'ecosystem' || activeMega === 'project' ? 'grid grid-cols-3 gap-x-4 gap-y-0' : 'grid grid-cols-2 gap-x-12 gap-y-1'}>
+                      {activeMega === 'ecosystem' && ECOSYSTEM_ASSETS.map((asset) => (
+                        <a
+                          key={asset.title}
+                          href={asset.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-3 p-2 rounded-xl transition-colors hover:bg-white/[0.03]"
+                        >
+                          <img src={asset.image} alt={asset.title} width={56} height={56} className="h-14 w-14 flex-shrink-0 rounded-xl object-cover" />
+                          <span className="text-[10px] font-semibold leading-relaxed tracking-wide text-white/80">{asset.title}</span>
+                        </a>
+                      ))}
+                      {megaMenus[activeMega].map((item, idx) => {
+                        const Icon = item.icon;
+                        const imageCard = activeMega === 'ecosystem' || activeMega === 'project';
+                        return (
+                          <a
+                            key={idx}
+                            href={item.href}
+                            target={item.local ? undefined : '_blank'}
+                            rel={item.local ? undefined : 'noopener noreferrer'}
+                            onClick={item.local ? () => setActiveMega(null) : undefined}
+                            className="flex items-center gap-4 p-2 transition-all hover:bg-white/[0.03] rounded-xl group"
+                          >
+                            {item.image ? (
+                              <div className="flex-shrink-0 w-14 h-14">
+                                <img src={item.image} alt={item.title} width={56} height={56} className="h-14 w-14 rounded-full object-cover grayscale opacity-80 group-hover:grayscale-0 group-hover:opacity-100 transition-all" />
+                              </div>
+                            ) : (
+                              <div className="flex-shrink-0 w-14 h-14 flex items-center justify-center">
+                                <Icon size={40} className="transition-colors text-blue-500 group-hover:text-blue-400" strokeWidth={1.5} />
+                              </div>
+                            )}
+                            <div className={imageCard ? '' : 'pt-1'}>
+                              <h4 className="text-white font-normal text-sm mb-1">{item.title}</h4>
+                              <p className="text-white/40 text-[11px] leading-relaxed">{item.desc}</p>
+                            </div>
+                          </a>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.nav>
 
       {/* Mobile Menu Overlay */}
@@ -141,7 +225,7 @@ export const LandingNavbar = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-2xl xl:hidden flex flex-col p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
+            className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-2xl xl:hidden flex flex-col p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain"
           >
             <div className="flex justify-between items-center mb-8">
               <div className="flex items-center gap-3">
@@ -183,38 +267,85 @@ export const LandingNavbar = () => {
               </button>
             </div>
 
-            <div className="flex flex-col gap-3">
-              {navLinks.map((link, i) => (
-                <motion.div
-                  key={link.name}
-                  initial={{ x: -20, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  transition={{ delay: i * 0.1 }}
-                >
-                  <Link 
-                    href={link.href}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className="text-lg font-light tracking-tight text-white/40 hover:text-white transition-colors flex items-center justify-between group py-0.5"
-                  >
-                    {link.name}
-                    <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-all -translate-x-4 group-hover:translate-x-0" />
-                  </Link>
-                </motion.div>
-              ))}
-            </div>
-
-            <div className="mt-auto space-y-2 pb-2">
+            <div className="flex flex-col gap-4 mb-8">
               <Link href="/login?mode=login" onClick={() => setIsMobileMenuOpen(false)}>
-                <Button className="w-full h-10 rounded-lg bg-transparent text-white border border-white/20 hover:bg-white hover:text-black text-xs font-normal transition-all duration-300">
+                <Button className="w-full h-14 rounded-full bg-transparent text-white border border-white/20 hover:bg-white hover:text-black text-2xl font-light transition-all duration-300">
                   {t('nav.signIn')}
                 </Button>
               </Link>
               <Link href="/login?register=true" onClick={() => setIsMobileMenuOpen(false)}>
-                <Button className="w-full h-10 rounded-lg bg-transparent text-white border border-blue-500/50 hover:bg-gradient-to-r hover:from-blue-400 hover:to-blue-600 hover:border-transparent text-xs font-normal transition-all duration-300">
+                <Button className="w-full h-14 rounded-full bg-[#2563EB] hover:bg-[#1d4ed8] text-white border-0 shadow-lg shadow-blue-500/20 text-2xl font-light transition-all duration-300">
                   {t('nav.signUp')}
                 </Button>
               </Link>
             </div>
+
+            <div className="flex flex-col gap-1">
+              {MENU_IDS.map((id, i) => {
+                const isExpanded = mobileExpanded === id;
+                return (
+                  <motion.div
+                    key={id}
+                    initial={{ x: -20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ delay: i * 0.05 }}
+                    className="flex flex-col"
+                  >
+                    <button
+                      onClick={() => setMobileExpanded(isExpanded ? null : id)}
+                      className="text-2xl font-light tracking-tight text-white transition-colors flex items-center justify-between py-2.5 min-h-[48px]"
+                    >
+                      {menuLabel(id)}
+                      <ChevronDown className={cn('w-5 h-5 text-white/40 transition-transform', isExpanded && 'rotate-180')} />
+                    </button>
+                    <AnimatePresence>
+                      {isExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden flex flex-col gap-3 pl-4 border-l border-white/5 my-1"
+                        >
+                          {id === 'ecosystem' && ECOSYSTEM_ASSETS.map((asset) => (
+                            <a
+                              key={asset.title}
+                              href={asset.href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-base text-white/60 hover:text-white transition-colors py-1 flex items-center gap-3"
+                            >
+                              <img src={asset.image} alt={asset.title} width={28} height={28} className="h-7 w-7 rounded-lg object-cover" />
+                              {asset.title}
+                            </a>
+                          ))}
+                          {megaMenus[id].map((sub, sIdx) => (
+                            <a
+                              key={sIdx}
+                              href={sub.href}
+                              target={sub.local ? undefined : '_blank'}
+                              rel={sub.local ? undefined : 'noopener noreferrer'}
+                              onClick={sub.local ? () => setIsMobileMenuOpen(false) : undefined}
+                              className="text-base text-white/60 hover:text-white transition-colors py-1 flex items-center gap-3"
+                            >
+                              <sub.icon size={16} className="text-blue-500" />
+                              {sub.title}
+                            </a>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                );
+              })}
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-white/5">
+              <span className="text-[9px] text-white/20 uppercase font-bold tracking-widest block mb-3">
+                {menuText.followUs}
+              </span>
+              <SocialIcons className="!grid grid-cols-4 gap-y-7 w-full justify-items-center text-white/70 [&_svg]:h-6 [&_svg]:w-6" />
+            </div>
+
           </motion.div>
         )}
       </AnimatePresence>

@@ -51,7 +51,7 @@ Next.js 16 (App Router, webpack en dev), React 18, TypeScript, Tailwind 3, Radix
 ## Entorno de desarrollo (leer antes de iniciar el servidor)
 - El código corre en una VM de Google Cloud (`luxor-the-intelligence-of-vale`, zona `us-west3-a`, proyecto `excelsior1`). El navegador del usuario está en su PC: `localhost:3000` solo funciona con un túnel/reenvío de puerto.
 - **No reiniciar `npm run dev` repetidas veces:** cada reinicio puede soltar el reenvío automático de la app. Hacer cambios con hot reload; reiniciar solo si es imprescindible, y avisar al usuario. Para detenerlo no usar `pkill -f` ni `pgrep -f "next..."` (matan la propia shell); usar el PID exacto.
-- El usuario inicia el servidor desde el panel Terminal de la app (`npm run dev`); el agente no puede abrir pestañas nuevas ahí. Si el reenvío automático falla, túnel manual desde Windows PowerShell: `Start-Process ssh -WindowStyle Hidden -ArgumentList '-N','-L','3000:localhost:3000','-i',"$HOME\.ssh\google_compute_engine",'josep@34.22.36.96'` (cerrar con `Stop-Process -Name ssh`; no usarlo a la vez que el automático).
+- El usuario inicia el servidor desde el panel Terminal de la app (`npm run dev`); el agente no puede abrir pestañas nuevas ahí.
 - `.env.local` apunta a **producción** (Firebase real). Tratar el entorno local con cuidado: no ejecutar scripts de escritura sin respaldo.
 - Herramientas locales fuera del repo: `~/backups/` (respaldo Firestore del 2026-10-04 y reglas anteriores), `~/tools/` (JRE para el emulador de Firestore).
 - Git: `origin` = github.com/itsroosevelt/land-rai; un push a `main` despliega a producción en Vercel. Probar con `npx tsc --noEmit` y `npm run build` antes de subir.
